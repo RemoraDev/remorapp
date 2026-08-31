@@ -28,7 +28,7 @@ Luego abre la URL que muestre Vite (por defecto http://localhost:5173).
 - `src/context/AuthContext.tsx` — sesión de Supabase Auth disponible vía
   `useAuth()`.
 - `src/lib/supabaseClient.ts` — cliente único de Supabase.
-- `src/styles/halcon.css` — sistema de diseño (tema dorado).
+- `src/styles/halcon.css` — sistema de diseño (tema neón azul/cian).
 
 La lógica de datos vive separada de las páginas para facilitar una futura
 migración a Next.js si hace falta.

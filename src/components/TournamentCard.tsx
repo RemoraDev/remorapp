@@ -32,7 +32,7 @@ export default function TournamentCard({ torneo }: TournamentCardProps) {
         {torneo.pozo && (
           <div className="tournament-card-stat-right">
             <p className="tournament-card-stat-label">Pozo</p>
-            <p className="tournament-card-stat-value tournament-card-stat-value-gold">
+            <p className="tournament-card-stat-value tournament-card-stat-value-accent">
               {torneo.pozo}
             </p>
           </div>

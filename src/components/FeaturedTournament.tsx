@@ -24,7 +24,7 @@ export default function FeaturedTournament({ torneo }: FeaturedTournamentProps) 
           <div className="featured-stats">
             <div>
               <p className="featured-stat-label">Pozo</p>
-              <p className="featured-stat-value featured-stat-value-gold">{torneo.pozo}</p>
+              <p className="featured-stat-value featured-stat-value-accent">{torneo.pozo}</p>
             </div>
             <div>
               <p className="featured-stat-label">Cupos</p>

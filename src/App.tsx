@@ -7,6 +7,7 @@ import TournamentsPage from "./pages/TournamentsPage";
 import CreateTournamentPage from "./pages/CreateTournamentPage";
 import TournamentDetailPage from "./pages/TournamentDetailPage";
 import TournamentHistoryPage from "./pages/TournamentHistoryPage";
+import ProfilePage from "./pages/ProfilePage";
 import NewsPage from "./pages/NewsPage";
 import StorePage from "./pages/StorePage";
 import LoginPage from "./pages/LoginPage";
@@ -25,6 +26,7 @@ export default function App() {
               <Route path="/tournaments/create" element={<CreateTournamentPage />} />
               <Route path="/tournaments/history" element={<TournamentHistoryPage />} />
               <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
+              <Route path="/perfil" element={<ProfilePage />} />
               <Route path="/news" element={<NewsPage />} />
               <Route path="/store" element={<StorePage />} />
               <Route path="/login" element={<LoginPage />} />

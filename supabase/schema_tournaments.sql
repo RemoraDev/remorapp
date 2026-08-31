@@ -26,11 +26,42 @@ create table public.profiles (
 alter table public.profiles enable row level security;
 
 -- Cualquiera puede leer perfiles (nombre, tipo, si es admin);
--- no hay datos sensibles acá. No hay policy de UPDATE: es_admin
--- solo se activa a mano desde este editor SQL (ver abajo).
+-- no hay datos sensibles acá.
 create policy "profiles_select_publico"
   on public.profiles for select
   using (true);
+
+-- Cada usuario puede editar su propia fila (nombre, perfil_tipo,
+-- elegido en /perfil). es_admin queda protegido aparte por el
+-- trigger de abajo: sigue activándose solo a mano en este editor.
+create policy "profiles_update_propio"
+  on public.profiles for update
+  to authenticated
+  using (id = auth.uid())
+  with check (id = auth.uid());
+
+-- current_setting('request.jwt.claims', true) solo existe cuando la
+-- consulta llega a través de la API de Supabase (con sesión anon o
+-- authenticated); es null cuando se corre directo en el SQL Editor.
+-- Así, este trigger bloquea cambios a es_admin que vengan de la app,
+-- pero no interfiere con activarlo a mano.
+create or replace function public.proteger_es_admin()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if current_setting('request.jwt.claims', true) is not null then
+    new.es_admin := old.es_admin;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger before_update_profiles_proteger_admin
+  before update on public.profiles
+  for each row execute function public.proteger_es_admin();
 
 create or replace function public.handle_new_user()
 returns trigger
@@ -348,6 +379,7 @@ create trigger after_update_confirmacion_staff
 grant usage on schema public to anon, authenticated;
 
 grant select on public.profiles to anon, authenticated;
+grant update on public.profiles to authenticated;
 grant select on public.maps to anon, authenticated;
 
 grant select on public.tournaments to anon, authenticated;

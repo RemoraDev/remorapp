@@ -3,7 +3,7 @@ import Logo from "./Logo";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header() {
-  const { user, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
 
   return (
     <header className="header">
@@ -14,7 +14,9 @@ export default function Header() {
         <div className="header-actions">
           {user ? (
             <>
-              <span className="header-user">{user.email}</span>
+              {/* Mientras carga el perfil (o si por algún motivo no tiene
+                  nombre) se cae de vuelta al correo, para no dejarlo vacío. */}
+              <span className="header-user">{profile?.nombre ?? user.email}</span>
               <button className="btn btn-ghost" onClick={() => void signOut()}>
                 Cerrar sesión
               </button>

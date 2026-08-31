@@ -28,7 +28,7 @@ export default function TournamentListCard({ torneo }: TournamentListCardProps) 
       <div className="tournament-card-foot">
         <div>
           <p className="tournament-card-stat-label">Pozo</p>
-          <p className="tournament-card-stat-value tournament-card-stat-value-gold">
+          <p className="tournament-card-stat-value tournament-card-stat-value-accent">
             {formatPozo(torneo.pozo_premio)}
           </p>
         </div>

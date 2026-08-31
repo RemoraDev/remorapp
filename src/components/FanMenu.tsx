@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import SuggestionModal from "./SuggestionModal";
 
@@ -22,6 +23,7 @@ const FAN_ITEMS: FanItem[] = [
 
 export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [notice, setNotice] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -35,6 +37,12 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
 
     if (item.key === "sugerencias") {
       setShowSuggestions(true);
+      return;
+    }
+
+    if (item.key === "mi-perfil") {
+      navigate("/perfil");
+      onClose();
       return;
     }
 

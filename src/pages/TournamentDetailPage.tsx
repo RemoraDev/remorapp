@@ -171,7 +171,7 @@ export default function TournamentDetailPage() {
       <div className="detail-stats">
         <div>
           <p className="featured-stat-label">Pozo</p>
-          <p className="featured-stat-value featured-stat-value-gold">
+          <p className="featured-stat-value featured-stat-value-accent">
             {formatPozo(torneo.pozo_premio)}
           </p>
         </div>

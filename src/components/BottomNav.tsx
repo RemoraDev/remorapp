@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import Logo from "./Logo";
 import FanMenu from "./FanMenu";
+import HexPattern from "./HexPattern";
 import { useAuth } from "../context/AuthContext";
 
 const strokeProps = {
@@ -55,6 +55,13 @@ export default function BottomNav() {
 
   return (
     <nav className="bottom-nav">
+      {/* Decoración: panal de hexágonos + brillo lento, puramente visual
+          (aria-hidden) y detrás del contenido real de la barra. */}
+      <div className="bottom-nav-hex" aria-hidden="true">
+        <HexPattern id="bottom-nav-hex-pattern" className="hex-pattern bottom-nav-hex-svg" />
+        <div className="bottom-nav-hex-glow" />
+      </div>
+
       <div className="bottom-nav-inner">
         <NavLink to="/" end className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
           <HomeIcon />
@@ -76,7 +83,12 @@ export default function BottomNav() {
             aria-label="Menú rápido"
             onClick={() => setFanOpen((open) => !open)}
           >
-            <Logo />
+            {/* Logo estilizado como una sola "R", en vez del isotipo de
+                rémora: gris apagado (filtro grayscale de .is-dimmed) sin
+                sesión, color de acento (--h-accent) con sesión. */}
+            <span className="center-nav-r" aria-hidden="true">
+              R
+            </span>
           </button>
           <FanMenu isOpen={fanOpen} onClose={() => setFanOpen(false)} />
         </div>

@@ -3,20 +3,11 @@ import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
-type PerfilTipo = "jugador" | "caster" | "lider_clan";
-
-const PERFIL_OPTIONS: { value: PerfilTipo; label: string }[] = [
-  { value: "jugador", label: "Jugador" },
-  { value: "caster", label: "Caster" },
-  { value: "lider_clan", label: "Líder de clan" },
-];
-
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [perfilTipo, setPerfilTipo] = useState<PerfilTipo>("jugador");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
@@ -30,10 +21,10 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        data: {
-          nombre,
-          perfil_tipo: perfilTipo,
-        },
+        // perfil_tipo no se manda: queda null hasta que el usuario lo
+        // elija en /perfil (handle_new_user() en el schema lo deja así
+        // cuando la clave no viene en los metadatos).
+        data: { nombre },
         emailRedirectTo: window.location.origin,
       },
     });
@@ -126,27 +117,6 @@ export default function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
-        </div>
-
-        <div className="form-group">
-          <span className="form-label">Tipo de perfil</span>
-          <div className="form-radio-group">
-            {PERFIL_OPTIONS.map((option) => (
-              <label
-                key={option.value}
-                className={`form-radio-option ${perfilTipo === option.value ? "selected" : ""}`}
-              >
-                <input
-                  type="radio"
-                  name="perfilTipo"
-                  value={option.value}
-                  checked={perfilTipo === option.value}
-                  onChange={() => setPerfilTipo(option.value)}
-                />
-                {option.label}
-              </label>
-            ))}
-          </div>
         </div>
 
         <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
