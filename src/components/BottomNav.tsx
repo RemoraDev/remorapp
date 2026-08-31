@@ -52,6 +52,15 @@ function StoreIcon() {
 export default function BottomNav() {
   const { user } = useAuth();
   const [fanOpen, setFanOpen] = useState(false);
+  // Dispara la animación "poder" (ver .animar-poder en halcon.css) cada
+  // vez que se toca el botón central; se saca sola al terminar, vía
+  // onAnimationEnd, no con un temporizador en JS.
+  const [presionado, setPresionado] = useState(false);
+
+  const handleCentralClick = () => {
+    setFanOpen((open) => !open);
+    setPresionado(true);
+  };
 
   return (
     <nav className="bottom-nav">
@@ -79,9 +88,10 @@ export default function BottomNav() {
         <div className="bottom-nav-center">
           <button
             type="button"
-            className={`logo-nav-btn ${!user ? "is-dimmed" : ""}`}
+            className={`logo-nav-btn ${!user ? "is-dimmed" : ""} ${presionado ? "animar-poder" : ""}`}
             aria-label="Menú rápido"
-            onClick={() => setFanOpen((open) => !open)}
+            onClick={handleCentralClick}
+            onAnimationEnd={() => setPresionado(false)}
           >
             {/* Logo estilizado como una sola "R", en vez del isotipo de
                 rémora: gris apagado (filtro grayscale de .is-dimmed) sin

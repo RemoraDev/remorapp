@@ -5,9 +5,14 @@
 
 :root {
   --color-bg: #06070a;
-  --color-panel: #100e0a;
-  --color-card: #15120c;
-  --color-border: rgba(255, 255, 255, 0.08);
+  /* Superficies sólidas y opacas (sin alfa): fondos de tarjetas, menús
+     flotantes, modales. Nunca dejan ver el contenido de atrás. */
+  --h-surface: #100e0a;
+  --h-surface-2: #15120c;
+  --color-panel: var(--h-surface);
+  --color-card: var(--h-surface-2);
+  --h-border: rgba(255, 255, 255, 0.08);
+  --color-border: var(--h-border);
 
   /* Acento de marca de RemorApp — único lugar donde se define el hex. */
   --h-accent: #22d3ee;
@@ -191,8 +196,14 @@ input[type="radio"] {
 
 .header-user {
   font-size: 0.85rem;
+  font-weight: 600;
   color: var(--color-text-muted);
   margin-right: 0.25rem;
+  transition: color 0.15s ease;
+}
+
+.header-user:hover {
+  color: var(--color-accent);
 }
 
 /* ---------- Logo ---------- */
@@ -623,6 +634,68 @@ input[type="radio"] {
   flex-shrink: 0;
 }
 
+/* ---------- Foro (vista de ejemplo) ---------- */
+
+.foro-list {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.foro-post {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  padding: 1rem 1.25rem;
+}
+
+.foro-post-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.foro-post-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+  margin: 0;
+}
+
+.foro-post-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.foro-post-replies {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.foro-post-replies-count {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--color-accent);
+}
+
+.foro-post-replies-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+}
+
 /* ---------- Historial ---------- */
 
 .history-list {
@@ -805,7 +878,8 @@ input[type="radio"] {
   inset-inline: 0;
   bottom: 0;
   z-index: 40;
-  border-top: 1px solid var(--color-border);
+  /* Separación visual clara contra el contenido que hace scroll detrás. */
+  border-top: 1px solid var(--h-border);
   background: rgba(6, 7, 10, 0.92);
   backdrop-filter: blur(10px);
 }
@@ -933,6 +1007,32 @@ input[type="radio"] {
   transform: translateY(-0.9rem) scale(0.96);
 }
 
+/* Efecto "poder" al presionar: crece un poco y vuelve a su tamaño.
+   Una sola pasada (sin "infinite"), disparada al hacer clic agregando
+   esta clase por un instante (ver BottomNav.tsx) — nada de JS
+   calculando la animación en sí, eso lo hace por completo el CSS. */
+.logo-nav-btn.animar-poder {
+  animation: boton-poder 260ms ease-out;
+}
+
+@keyframes boton-poder {
+  0% {
+    transform: translateY(-0.9rem) scale(1);
+  }
+  45% {
+    transform: translateY(-0.9rem) scale(1.15);
+  }
+  100% {
+    transform: translateY(-0.9rem) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-nav-btn.animar-poder {
+    animation: none;
+  }
+}
+
 .center-nav-r {
   font-family: var(--font-display);
   font-weight: 900;
@@ -968,70 +1068,97 @@ input[type="radio"] {
   left: 50%;
   width: 0;
   height: 0;
-  z-index: 50;
+  /* Bien por encima del panal de fondo (z-index 0) y de la barra
+     (z-index 1 su contenido, 40 la barra en sí): así nunca se ve el
+     panal superpuesto sobre el abanico abierto. */
+  z-index: 100;
 }
 
 .fan-menu-item {
   /* Flota por encima del contenido (absoluta + z-index alto, anclada
      a la barra que ya es position:fixed) — nunca ocupa espacio del
      documento. Las 4 miden exactamente lo mismo: ancho y alto fijos,
-     no según el largo del texto. */
+     no según el largo del texto. Tamaño en px (no rem) porque tiene
+     que coincidir exactamente con FAN_HEX_SIZE_PX de
+     src/lib/fanMenuLayout.ts, que calcula la separación real contra
+     este mismo número. */
   position: absolute;
   left: 50%;
   bottom: 0;
-  z-index: 50;
-  width: 5.5rem;
-  height: 5.5rem;
+  /* Mismo z-index alto que .fan-menu: por encima del panal de fondo
+     y de todo el contenido de la página, siempre. */
+  z-index: 100;
+  width: 68px;
+  height: 68px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 0.6rem;
+  padding: 0 0.3rem;
   text-align: center;
-  /* Hexágono (celda de panal), no píldora. */
-  clip-path: polygon(25% 3%, 75% 3%, 100% 50%, 75% 97%, 25% 97%, 0% 50%);
+  overflow: hidden;
+  /* Hexágono (celda de panal), no píldora. Los bordes superior/inferior
+     quedan menos angostos que un hexágono "clásico" (32%-68% en vez de
+     25%-75%) para dejarle más aire real al texto de dos líneas antes
+     de tocar el recorte. */
+  clip-path: polygon(32% 4%, 68% 4%, 100% 50%, 68% 96%, 32% 96%, 0% 50%);
   border: 1px solid rgba(34, 211, 238, 0.45);
-  background: var(--color-panel);
-  font-size: 0.7rem;
+  /* Sólido y opaco a propósito (ver --h-surface-2): nunca se debe ver
+     el contenido de la página a través del menú. */
+  background: var(--h-surface-2);
+  font-size: 0.62rem;
   line-height: 1.15;
   font-weight: 600;
   color: var(--color-text);
   opacity: 0;
+  /* Como el componente ya no se desmonta al cerrar, hay que apagar la
+     interacción a mano mientras está invisible (además del tabIndex=-1
+     que ya pone FanMenu.tsx en este estado). */
+  pointer-events: none;
   /* box-shadow no sigue el recorte del clip-path; drop-shadow del
      filtro sí, por eso la sombra/el brillo van acá y no en box-shadow. */
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
-  /* Cerrado: todo colapsado en el punto de anclaje (el botón). */
+  /* Cerrado: todo colapsado en el punto de anclaje (el botón). Como el
+     componente ya no se desmonta al cerrar (ver FanMenu.tsx), este es
+     un estado real desde el que sí se puede transicionar/animar, no
+     el estado inicial de un elemento recién insertado. */
   transform: translate(-50%, 0) scale(0.3);
   transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
     filter 0.15s ease, border-color 0.15s ease;
 }
 
-/* Posición de cada opción en el arco (ángulo medido desde arriba,
-   radio 135px, separación amplia para que los hexágonos —de 5.5rem—
-   no se toquen entre sí): de izquierda a derecha, -66°, -22°, 22°, 66°. */
-.fan-menu-item:nth-child(1) {
-  --fan-x: -123px;
-  --fan-y: -55px;
-  transition-delay: 0ms;
-}
-.fan-menu-item:nth-child(2) {
-  --fan-x: -51px;
-  --fan-y: -125px;
-  transition-delay: 40ms;
-}
-.fan-menu-item:nth-child(3) {
-  --fan-x: 51px;
-  --fan-y: -125px;
-  transition-delay: 80ms;
-}
-.fan-menu-item:nth-child(4) {
-  --fan-x: 123px;
-  --fan-y: -55px;
-  transition-delay: 120ms;
-}
+/* La posición (--fan-x/--fan-y) y la demora de cada opción se calculan
+   en JS según el ancho real de pantalla (src/lib/fanMenuLayout.ts) y
+   se pasan como estilo inline desde FanMenu.tsx — ya no son valores
+   fijos por nth-child acá. */
 
 .fan-menu.is-open .fan-menu-item {
   opacity: 1;
+  pointer-events: auto;
   transform: translate(calc(-50% + var(--fan-x)), var(--fan-y)) scale(1);
+  /* Efecto "encendido": el brillo se intensifica y se asienta al
+     aparecer. Es una animación de una sola pasada (sin "infinite"):
+     termina y no queda nada corriendo. Un transition normal no puede
+     subir y volver a bajar en un solo tramo, por eso esto usa
+     @keyframes en vez de solo "transition" en filter. */
+  animation: hex-encendido 320ms ease-out;
+}
+
+@keyframes hex-encendido {
+  0% {
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+  }
+  55% {
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 20px rgba(34, 211, 238, 0.9));
+  }
+  100% {
+    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fan-menu.is-open .fan-menu-item {
+    animation: none;
+  }
 }
 
 .fan-menu-item.disabled {

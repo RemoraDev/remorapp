@@ -15,8 +15,11 @@ export default function Header() {
           {user ? (
             <>
               {/* Mientras carga el perfil (o si por algún motivo no tiene
-                  nombre) se cae de vuelta al correo, para no dejarlo vacío. */}
-              <span className="header-user">{profile?.nombre ?? user.email}</span>
+                  nombre) se cae de vuelta al correo, para no dejarlo vacío.
+                  Lleva a /perfil: "Mi perfil" ya no vive en el abanico. */}
+              <Link to="/perfil" className="header-user">
+                {profile?.nombre ?? user.email}
+              </Link>
               <button className="btn btn-ghost" onClick={() => void signOut()}>
                 Cerrar sesión
               </button>
