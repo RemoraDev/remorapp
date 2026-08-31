@@ -1355,6 +1355,28 @@ input[type="radio"] {
   font-weight: 600;
 }
 
+/* ---------- Identidad de jugador (Nick#ID) ---------- */
+
+.profile-nick-display {
+  margin: 0.5rem 0 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.4rem;
+  color: var(--color-text);
+}
+
+.profile-nick-id {
+  margin-left: 0.15rem;
+  color: var(--color-text-faint);
+  font-weight: 600;
+}
+
+.profile-gate-banner {
+  margin: 1.5rem 0 0;
+  text-align: center;
+}
+
 /* ---------- Modal (sugerencias / cuenta express) ---------- */
 
 .modal-backdrop {

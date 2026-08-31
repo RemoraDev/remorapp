@@ -1,10 +1,16 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
+import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
+
+const AVISO_SESION_ACTIVA =
+  "Ya tienes una sesión iniciada. Cierra sesión primero si quieres crear o entrar con otra cuenta.";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [nombre, setNombre] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -12,8 +18,22 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [pendingConfirmation, setPendingConfirmation] = useState(false);
 
+  // No se puede crear una cuenta nueva mientras hay una sesión activa:
+  // hay que cerrar sesión primero, a propósito, no "de pasada" acá.
+  if (!authLoading && user) {
+    return <Navigate to="/perfil" replace state={{ aviso: AVISO_SESION_ACTIVA }} />;
+  }
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+
+    // El nombre se muestra públicamente (header, lista de participantes
+    // de un torneo), así que pasa por el mismo filtro que el nick.
+    if (contieneLenguajeInapropiado(nombre)) {
+      setError("Ese nombre no está permitido wn, elige otro.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 

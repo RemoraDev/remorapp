@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import InfoTooltip from "../components/InfoTooltip";
 import { MODOS } from "../lib/tournamentOptions";
+import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import type { MapRow, TorneoFormato, TorneoModo } from "../types/tournaments";
 
 const FORMATOS: TorneoFormato[] = ["1v1", "2v2", "3v3", "4v4"];
@@ -58,6 +59,13 @@ export default function CreateTournamentPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
+
+    // El nombre del torneo se muestra públicamente (listado y detalle),
+    // así que pasa por el mismo filtro que el nick.
+    if (contieneLenguajeInapropiado(nombre)) {
+      setError("Ese nombre no está permitido wn, elige otro.");
+      return;
+    }
 
     setLoading(true);
     setError(null);

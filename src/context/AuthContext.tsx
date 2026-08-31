@@ -2,14 +2,9 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import type { ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
-import type { PerfilTipo } from "../types/profile";
+import type { Profile } from "../types/profile";
 
-export interface Profile {
-  id: string;
-  nombre: string | null;
-  perfil_tipo: PerfilTipo | null;
-  es_admin: boolean;
-}
+export type { Profile };
 
 interface AuthContextValue {
   session: Session | null;
@@ -33,7 +28,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const cargarPerfil = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, nombre, perfil_tipo, es_admin")
+      .select(
+        "id, nombre, perfil_tipo, es_admin, nick, unique_id, country, sc2_region, sc2_id, avatar_url, bio, cuenta_validada"
+      )
       .eq("id", userId)
       .single();
 

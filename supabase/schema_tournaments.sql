@@ -20,6 +20,23 @@ create table public.profiles (
   nombre text,
   perfil_tipo text check (perfil_tipo in ('jugador', 'caster', 'lider_clan')),
   es_admin boolean not null default false,
+  -- Identidad de jugador (Fase 1 del módulo de Equipos/Clanes). Todo
+  -- nullable salvo unique_id: se completa en el gate de /perfil, no
+  -- al registrarse.
+  nick text check (nick is null or nick ~ '^[A-Za-z0-9_]{3,16}$'),
+  unique_id text not null unique,
+  -- country: país del jugador (no el servidor de juego).
+  country text check (country is null or country in ('chile', 'guatemala', 'puerto_rico', 'argentina', 'peru', 'bolivia')),
+  -- sc2_region: servidor real de StarCraft II, elegido libremente
+  -- por el jugador (no se detecta por IP).
+  sc2_region text check (sc2_region is null or sc2_region in ('america', 'europe', 'asia')),
+  sc2_id text,
+  avatar_url text,
+  bio text,
+  -- Se recalcula sola (ver trigger actualizar_cuenta_validada): la
+  -- app nunca la setea a mano, alcanza con guardar nick/country/
+  -- sc2_region/sc2_id.
+  cuenta_validada boolean not null default false,
   creado_en timestamptz not null default now()
 );
 
@@ -63,18 +80,68 @@ create trigger before_update_profiles_proteger_admin
   before update on public.profiles
   for each row execute function public.proteger_es_admin();
 
+-- cuenta_validada se recalcula sola en cada insert/update, a partir
+-- de si nick, country, sc2_region y sc2_id están completos.
+create or replace function public.actualizar_cuenta_validada()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.cuenta_validada := (
+    new.nick is not null
+    and new.country is not null
+    and new.sc2_region is not null
+    and new.sc2_id is not null
+  );
+  return new;
+end;
+$$;
+
+create trigger before_upsert_profiles_validar_cuenta
+  before insert or update on public.profiles
+  for each row execute function public.actualizar_cuenta_validada();
+
+-- unique_id es inmutable: una vez asignado, ningún UPDATE puede
+-- volver a generarlo o cambiarlo.
+create or replace function public.proteger_unique_id()
+returns trigger
+language plpgsql
+as $$
+begin
+  if old.unique_id is not null then
+    new.unique_id := old.unique_id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger before_update_profiles_proteger_unique_id
+  before update on public.profiles
+  for each row execute function public.proteger_unique_id();
+
+-- Genera un unique_id de 5 dígitos (10000-99999) que no se repita
+-- con ninguno ya asignado. nick queda null: se completa recién en
+-- el gate de /perfil, no al registrarse.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_unique_id text;
 begin
-  insert into public.profiles (id, nombre, perfil_tipo)
+  loop
+    v_unique_id := (floor(random() * 90000) + 10000)::int::text;
+    exit when not exists (select 1 from public.profiles where unique_id = v_unique_id);
+  end loop;
+
+  insert into public.profiles (id, nombre, perfil_tipo, unique_id)
   values (
     new.id,
     new.raw_user_meta_data ->> 'nombre',
-    new.raw_user_meta_data ->> 'perfil_tipo'
+    new.raw_user_meta_data ->> 'perfil_tipo',
+    v_unique_id
   );
   return new;
 end;

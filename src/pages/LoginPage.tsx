@@ -1,14 +1,25 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
+
+const AVISO_SESION_ACTIVA =
+  "Ya tienes una sesión iniciada. Cierra sesión primero si quieres crear o entrar con otra cuenta.";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // No se puede entrar con otra cuenta mientras hay una sesión activa:
+  // hay que cerrar sesión primero, a propósito, no "de pasada" acá.
+  if (!authLoading && user) {
+    return <Navigate to="/perfil" replace state={{ aviso: AVISO_SESION_ACTIVA }} />;
+  }
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
