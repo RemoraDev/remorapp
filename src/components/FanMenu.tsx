@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import SuggestionModal from "./SuggestionModal";
@@ -46,6 +47,16 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
     return () => window.removeEventListener("resize", actualizarRadio);
   }, []);
 
+  // El overlay atenúa todo por igual, pero un color muy saturado (los
+  // botones cian) sigue leyéndose "vivo" incluso ya oscurecido. Esta
+  // clase le da a esos botones un empujón extra de atenuación mientras
+  // el abanico está abierto (ver .btn-primary bajo body.abanico-abierto
+  // en halcon.css), además del overlay que ya los cubre a todos.
+  useEffect(() => {
+    document.body.classList.toggle("abanico-abierto", isOpen);
+    return () => document.body.classList.remove("abanico-abierto");
+  }, [isOpen]);
+
   const posiciones = calcularPosiciones(radio);
 
   const handleItemClick = (item: FanItem) => {
@@ -73,7 +84,25 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
 
   return (
     <>
-      {isOpen && <div className="fan-menu-backdrop" onClick={onClose} />}
+      {/* Portal a document.body a propósito: .bottom-nav tiene
+          backdrop-filter (para el blur de la barra), y eso convierte a
+          .bottom-nav en el "containing block" de cualquier descendiente
+          position:fixed — el overlay quedaba con top y bottom
+          coincidiendo en el mismo punto (alto 0), pegado a la barra en
+          vez de cubrir la pantalla. Sacándolo del árbol de .bottom-nav
+          via portal, vuelve a medirse contra la ventana real.
+          Igual que .fan-menu-item: siempre montado, se anima por clase,
+          no por mount/unmount (si no, no habría transición de opacidad
+          real en la entrada). Cerrado, pointer-events:none lo saca de
+          encima para no bloquear el resto de la página. */}
+      {createPortal(
+        <div
+          className={`fan-menu-backdrop ${isOpen ? "is-open" : ""}`}
+          aria-hidden={!isOpen}
+          onClick={onClose}
+        />,
+        document.body
+      )}
       {/* Se mantiene siempre montado (no se desmonta al cerrar): así el
           cambio cerrado -> abierto es un cambio de clase real sobre un
           elemento que ya existe, que el navegador sí puede animar. Si se
@@ -105,7 +134,13 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
               }`}
               onClick={() => handleItemClick(item)}
             >
-              {item.label}
+              {/* Doble capa para el hexágono: este botón es el "borde"
+                  (fondo de color, recortado al hexágono completo) y
+                  fan-menu-item-fill es el "relleno" (recortado al mismo
+                  hexágono, un poco más chico y centrado encima). Evita
+                  el defecto de un border directo sobre clip-path, que
+                  no calza limpio en los vértices agudos. */}
+              <span className="fan-menu-item-fill">{item.label}</span>
             </button>
           );
         })}

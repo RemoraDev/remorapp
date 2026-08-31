@@ -123,6 +123,18 @@ input[type="radio"] {
   color: var(--color-bg);
   padding: 0.65rem 1.5rem;
   box-shadow: var(--shadow-accent);
+  transition: filter 0.28s ease;
+}
+
+/* El overlay del abanico (.fan-menu-backdrop) ya atenúa toda la página
+   por igual, pero un cian tan saturado sigue leyéndose "vivo" encima
+   incluso oscurecido al 50% -- un blanco o gris al mismo 50% se ve casi
+   apagado del todo. Mientras el abanico está abierto (FanMenu.tsx le
+   agrega esta clase a <body>), les baja un poco más la saturación y el
+   brillo a los botones cian en particular, para que se sientan tan
+   atenuados como el resto del contenido. */
+body.abanico-abierto .btn-primary {
+  filter: saturate(0.5) brightness(0.7);
 }
 
 .btn-primary:hover {
@@ -233,10 +245,38 @@ input[type="radio"] {
 /* ---------- Hero ---------- */
 
 .hero {
+  position: relative;
   max-width: 72rem;
   margin: 0 auto;
   padding: 3.5rem 1.25rem 4rem;
   text-align: center;
+}
+
+/* Contenido por encima del panal decorativo (que es z-index: 0). */
+.hero-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Panal a los costados: mismo componente que la barra de navegación,
+   pero sin el brillo animado — acá es solo textura fija, sutil y
+   detrás de todo el contenido. */
+.hero-hex {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100px;
+  z-index: 0;
+  opacity: 0.07;
+  pointer-events: none;
+}
+
+.hero-hex-izq {
+  left: 0;
+}
+
+.hero-hex-der {
+  right: 0;
 }
 
 .hero-tag {
@@ -261,11 +301,22 @@ input[type="radio"] {
   color: var(--color-accent);
 }
 
-.hero-sub {
-  max-width: 36rem;
+.hero-phrase {
+  max-width: 34rem;
   margin: 1.25rem auto 0;
+  /* Reserva alto para 2 líneas: las frases varían bastante de largo, y
+     sin esto el botón de abajo "saltaría" cada vez que cambia. */
+  min-height: 3em;
   color: var(--color-text-muted);
   font-size: 1rem;
+  font-style: italic;
+  line-height: 1.5;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.hero-phrase.visible {
+  opacity: 1;
 }
 
 .hero-cta {
@@ -279,8 +330,11 @@ input[type="radio"] {
   .hero-title {
     font-size: 3.75rem;
   }
-  .hero-sub {
+  .hero-phrase {
     font-size: 1.125rem;
+  }
+  .hero-hex {
+    width: 160px;
   }
 }
 
@@ -1051,10 +1105,28 @@ input[type="radio"] {
 /* ---------- Menú en abanico ---------- */
 
 .fan-menu-backdrop {
+  /* Oscurece la página mientras el abanico está abierto, para
+     separarlo visualmente del contenido de atrás — igual que hicimos
+     con los hexágonos, queda siempre montado y solo cambia de clase,
+     así la transición de opacidad es real y no un salto. Termina justo
+     arriba de la barra de navegación (bottom: var(--nav-height), no
+     inset:0) a propósito: lo que se pidió oscurecer es el área de la
+     página, no la barra en sí. */
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: var(--nav-height);
   z-index: 45;
-  background: transparent;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+
+.fan-menu-backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .fan-menu {
@@ -1081,7 +1153,17 @@ input[type="radio"] {
      no según el largo del texto. Tamaño en px (no rem) porque tiene
      que coincidir exactamente con FAN_HEX_SIZE_PX de
      src/lib/fanMenuLayout.ts, que calcula la separación real contra
-     este mismo número. */
+     este mismo número.
+
+     Esta capa exterior ES el "borde": un hexágono relleno con el
+     color de acento, sin usar la propiedad border. Un border directo
+     sobre un elemento con clip-path se recorta con la misma forma que
+     el relleno, y en los vértices agudos del hexágono no calza
+     perfecto (se alcanza a escapar un pixel). Con dos capas de
+     clip-path del mismo hexágono, una un poco más chica encima de la
+     otra (ver .fan-menu-item-fill), el "borde" queda siendo el aro
+     sólido que sobra entre las dos, sin depender de que el navegador
+     recorte un border. */
   position: absolute;
   left: 50%;
   bottom: 0;
@@ -1090,24 +1172,16 @@ input[type="radio"] {
   z-index: 100;
   width: 68px;
   height: 68px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 0.3rem;
-  text-align: center;
   overflow: hidden;
   /* Hexágono (celda de panal), no píldora. Los bordes superior/inferior
      quedan menos angostos que un hexágono "clásico" (32%-68% en vez de
      25%-75%) para dejarle más aire real al texto de dos líneas antes
-     de tocar el recorte. */
+     de tocar el recorte. Mismo polígono en .fan-menu-item-fill. */
   clip-path: polygon(32% 4%, 68% 4%, 100% 50%, 68% 96%, 32% 96%, 0% 50%);
-  border: 1px solid rgba(34, 211, 238, 0.45);
-  /* Sólido y opaco a propósito (ver --h-surface-2): nunca se debe ver
-     el contenido de la página a través del menú. */
-  background: var(--h-surface-2);
-  font-size: 0.62rem;
-  line-height: 1.15;
-  font-weight: 600;
+  /* El color de "borde": antes era border-color, ahora es el fondo de
+     esta capa completa (la capa de encima, más chica, lo tapa casi
+     todo salvo el aro de 1.5px). */
+  background: rgba(34, 211, 238, 0.45);
   color: var(--color-text);
   opacity: 0;
   /* Como el componente ya no se desmonta al cerrar, hay que apagar la
@@ -1123,7 +1197,30 @@ input[type="radio"] {
      el estado inicial de un elemento recién insertado. */
   transform: translate(-50%, 0) scale(0.3);
   transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
-    filter 0.15s ease, border-color 0.15s ease;
+    filter 0.15s ease, background-color 0.15s ease;
+}
+
+.fan-menu-item-fill {
+  /* La capa de "relleno": el mismo hexágono, 1.5px más chico y
+     centrado (inset la hace automáticamente relativa al tamaño real
+     del botón, sin recalcular nada a mano) sobre la capa de "borde".
+     Lo que sobra alrededor de esta capa es exactamente el aro de
+     color de acento — un hexágono dentro de otro, no un border. */
+  position: absolute;
+  inset: 1.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.3rem;
+  text-align: center;
+  clip-path: polygon(32% 4%, 68% 4%, 100% 50%, 68% 96%, 32% 96%, 0% 50%);
+  /* Sólido y opaco a propósito (ver --h-surface-2): nunca se debe ver
+     el contenido de la página a través del menú. */
+  background: var(--h-surface-2);
+  color: inherit;
+  font-size: 0.62rem;
+  line-height: 1.15;
+  font-weight: 600;
 }
 
 /* La posición (--fan-x/--fan-y) y la demora de cada opción se calculan
@@ -1163,19 +1260,19 @@ input[type="radio"] {
 
 .fan-menu-item.disabled {
   color: var(--color-text-faint);
-  border-color: var(--color-border);
+  background: var(--color-border);
   cursor: not-allowed;
 }
 
 .fan-menu-item.suggestion {
-  border-color: var(--color-accent);
+  background: var(--color-accent);
   color: var(--color-accent-soft);
 }
 
 /* Brillo sutil con el color de acento al pasar el mouse (los
    deshabilitados no lo tienen: no es una opción real todavía). */
 .fan-menu-item:not(.disabled):hover {
-  border-color: var(--h-accent);
+  background: var(--h-accent);
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 10px rgba(34, 211, 238, 0.65));
 }
 
