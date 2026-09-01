@@ -47,3 +47,31 @@ export interface TeamKickLogRow {
   kicked_by: string;
   kicked_at: string;
 }
+
+export type XpLogOrigen = "partida_ganada" | "partida_perdida" | "apuesta";
+
+export interface TeamXpLogRow {
+  id: string;
+  team_id: string;
+  // null cuando origen = 'apuesta' -- ahí el XP es del equipo, no de
+  // una persona jugando.
+  user_id: string | null;
+  cantidad: number;
+  origen: XpLogOrigen;
+  created_at: string;
+}
+
+export type WagerStatus = "pendiente" | "aceptada" | "rechazada" | "resuelta" | "en_disputa";
+
+export interface TeamXpWagerRow {
+  id: string;
+  challenger_team_id: string;
+  challenged_team_id: string;
+  monto: number;
+  status: WagerStatus;
+  reporte_challenger: string | null;
+  reporte_challenged: string | null;
+  ganador_final: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}

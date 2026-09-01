@@ -37,6 +37,24 @@ interface ExpulsadoConNombre {
   kickedAt: string;
 }
 
+interface AporteXp {
+  userId: string;
+  nick: string | null;
+  uniqueId: string | null;
+  total: number;
+}
+
+interface ApuestaConNombres {
+  id: string;
+  challengerTeamId: string;
+  challengerNombre: string;
+  challengedTeamId: string;
+  challengedNombre: string;
+  monto: number;
+  status: string;
+  ganadorFinal: string | null;
+}
+
 // team_kicks_log.user_id apunta a profiles.id, igual que
 // team_members.user_id -- mismo patrón de extracción.
 function extraerPerfilBasico(profiles: unknown): { nick: string | null; unique_id: string | null } {
@@ -104,6 +122,19 @@ export default function TeamDetailPage() {
   // --- Panel de control: jugadores expulsados ---
   const [expulsados, setExpulsados] = useState<ExpulsadoConNombre[]>([]);
 
+  // --- Panel de control: aporte de XP ---
+  const [aportes, setAportes] = useState<AporteXp[]>([]);
+
+  // --- Panel de control: apuestas de XP contra otros equipos ---
+  const [apuestas, setApuestas] = useState<ApuestaConNombres[]>([]);
+  const [tagRival, setTagRival] = useState("");
+  const [montoApuesta, setMontoApuesta] = useState("");
+  const [proponiendo, setProponiendo] = useState(false);
+  const [errorApuesta, setErrorApuesta] = useState<string | null>(null);
+  const [apuestaEnviada, setApuestaEnviada] = useState(false);
+  const [respondiendoApuesta, setRespondiendoApuesta] = useState<string | null>(null);
+  const [reportandoApuesta, setReportandoApuesta] = useState<string | null>(null);
+
   const cargar = async () => {
     if (!tag) return;
 
@@ -164,8 +195,67 @@ export default function TeamDetailPage() {
           };
         })
       );
+      // Aporte de XP: suma por miembro (solo filas con user_id --
+      // las de origen 'apuesta' tienen user_id null a propósito,
+      // porque ahí el XP es del equipo, no de una persona jugando).
+      const { data: logData } = await supabase
+        .from("team_xp_log")
+        .select("user_id, cantidad, profiles!user_id(nick, unique_id)")
+        .eq("team_id", equipoData.id)
+        .not("user_id", "is", null);
+
+      const totalesPorUsuario = new Map<string, AporteXp>();
+      for (const fila of logData ?? []) {
+        const perfil = extraerPerfilBasico(fila.profiles);
+        const actual = totalesPorUsuario.get(fila.user_id as string) ?? {
+          userId: fila.user_id as string,
+          nick: perfil.nick,
+          uniqueId: perfil.unique_id,
+          total: 0,
+        };
+        actual.total += fila.cantidad;
+        totalesPorUsuario.set(fila.user_id as string, actual);
+      }
+      setAportes([...totalesPorUsuario.values()].sort((a, b) => b.total - a.total));
+
+      // Apuestas de XP: tanto las que este equipo propuso como las
+      // que le propusieron a él.
+      const { data: apuestasData } = await supabase
+        .from("team_xp_wagers")
+        .select("*")
+        .or(`challenger_team_id.eq.${equipoData.id},challenged_team_id.eq.${equipoData.id}`)
+        .order("created_at", { ascending: false });
+
+      const teamIdsApuestas = [
+        ...new Set((apuestasData ?? []).flatMap((a) => [a.challenger_team_id, a.challenged_team_id])),
+      ];
+      let nombrePorTeamIdApuesta: Record<string, string> = {};
+      if (teamIdsApuestas.length > 0) {
+        const { data: equiposApuestaData } = await supabase
+          .from("teams")
+          .select("id, name, tag")
+          .in("id", teamIdsApuestas);
+        nombrePorTeamIdApuesta = Object.fromEntries(
+          (equiposApuestaData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        );
+      }
+
+      setApuestas(
+        (apuestasData ?? []).map((a) => ({
+          id: a.id,
+          challengerTeamId: a.challenger_team_id,
+          challengerNombre: nombrePorTeamIdApuesta[a.challenger_team_id] ?? "Equipo",
+          challengedTeamId: a.challenged_team_id,
+          challengedNombre: nombrePorTeamIdApuesta[a.challenged_team_id] ?? "Equipo",
+          monto: a.monto,
+          status: a.status,
+          ganadorFinal: a.ganador_final,
+        }))
+      );
     } else {
       setExpulsados([]);
+      setAportes([]);
+      setApuestas([]);
     }
 
     setLoading(false);
@@ -401,6 +491,96 @@ export default function TeamDetailPage() {
     setBusquedaNick("");
   };
 
+  const handleProponerApuesta = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorApuesta(null);
+    setApuestaEnviada(false);
+
+    const tag = tagRival.trim().toUpperCase();
+    const monto = Number(montoApuesta);
+
+    if (!tag) {
+      setErrorApuesta("Escribe el tag del equipo rival.");
+      return;
+    }
+    if (!monto || monto <= 0) {
+      setErrorApuesta("El monto tiene que ser mayor a 0.");
+      return;
+    }
+
+    setProponiendo(true);
+
+    const { data: equipoRival, error: buscarError } = await supabase
+      .from("teams")
+      .select("id")
+      .eq("tag", tag)
+      .maybeSingle();
+
+    if (buscarError || !equipoRival) {
+      setErrorApuesta("No encontré ningún equipo con ese tag.");
+      setProponiendo(false);
+      return;
+    }
+
+    // proponer_apuesta() (en la base) es la que de verdad chequea que
+    // seas dueño y que el monto no supere el XP de tu equipo -- esto
+    // de acá es solo el formulario.
+    const { error } = await supabase.rpc("proponer_apuesta", {
+      p_challenged_team_id: equipoRival.id,
+      p_monto: monto,
+    });
+
+    setProponiendo(false);
+
+    if (error) {
+      setErrorApuesta(error.message);
+      return;
+    }
+
+    setApuestaEnviada(true);
+    setTagRival("");
+    setMontoApuesta("");
+    await cargar();
+  };
+
+  const handleResponderApuesta = async (wagerId: string, aceptar: boolean) => {
+    setRespondiendoApuesta(wagerId);
+    setErrorApuesta(null);
+
+    const { error } = await supabase.rpc("responder_apuesta", {
+      p_wager_id: wagerId,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoApuesta(null);
+
+    if (error) {
+      setErrorApuesta(error.message);
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleReportarApuesta = async (wagerId: string, ganadorTeamId: string) => {
+    setReportandoApuesta(wagerId);
+    setErrorApuesta(null);
+
+    const { error } = await supabase.rpc("reportar_resultado_apuesta", {
+      p_wager_id: wagerId,
+      p_ganador_team_id: ganadorTeamId,
+    });
+
+    setReportandoApuesta(null);
+
+    if (error) {
+      setErrorApuesta(error.message);
+      return;
+    }
+
+    await cargar();
+  };
+
   const renderMiembro = (m: MiembroConNombre, conControles: boolean) => (
     <div key={m.userId} className="detail-participant-item">
       <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" />
@@ -610,6 +790,138 @@ export default function TeamDetailPage() {
                       {e.nick ?? "Jugador de RemorApp"}
                       {e.uniqueId && <span className="profile-nick-id">#{e.uniqueId}</span>}
                       <span className="tournament-card-meta">{formatFecha(e.kickedAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 className="detail-subtitle">Aporte de XP</h3>
+              {aportes.length === 0 ? (
+                <p className="detail-empty">Todavía no hay aportes registrados.</p>
+              ) : (
+                <ol className="ranking-list">
+                  {aportes.map((a, i) => (
+                    <li key={a.userId} className="ranking-item">
+                      <span className="ranking-position">{i + 1}</span>
+                      <span className="ranking-name">
+                        {a.nick ?? "Jugador de RemorApp"}
+                        {a.uniqueId && <span className="profile-nick-id">#{a.uniqueId}</span>}
+                      </span>
+                      <span className="ranking-points">{a.total} XP</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+
+              <h3 className="detail-subtitle">Apostar XP contra otro equipo</h3>
+              <form className="auth-form" onSubmit={handleProponerApuesta}>
+                {errorApuesta && <div className="form-error">{errorApuesta}</div>}
+                {apuestaEnviada && <div className="form-success">¡Apuesta propuesta!</div>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="apuesta-tag">
+                    Tag del equipo rival
+                  </label>
+                  <input
+                    id="apuesta-tag"
+                    className="form-input"
+                    type="text"
+                    placeholder="QSQD"
+                    value={tagRival}
+                    onChange={(e) => setTagRival(e.target.value.toUpperCase())}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="apuesta-monto">
+                    Monto de XP (tu equipo tiene {equipo.xp})
+                  </label>
+                  <input
+                    id="apuesta-monto"
+                    className="form-input"
+                    type="number"
+                    min={1}
+                    max={equipo.xp}
+                    value={montoApuesta}
+                    onChange={(e) => setMontoApuesta(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendo}>
+                  {proponiendo ? "Proponiendo..." : "Proponer apuesta"}
+                </button>
+              </form>
+
+              <h3 className="detail-subtitle">Apuestas de XP</h3>
+              {apuestas.length === 0 ? (
+                <p className="detail-empty">Todavía no hay apuestas.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {apuestas.map((a) => (
+                    <div key={a.id} className="wager-item">
+                      <p className="wager-desc">
+                        {a.challengerNombre} vs {a.challengedNombre} · {a.monto} XP
+                        <span className="wager-status">{a.status}</span>
+                      </p>
+
+                      {a.status === "pendiente" && a.challengedTeamId === equipo.id && (
+                        <div className="invitation-actions">
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={respondiendoApuesta === a.id}
+                            onClick={() => handleResponderApuesta(a.id, true)}
+                          >
+                            Aceptar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={respondiendoApuesta === a.id}
+                            onClick={() => handleResponderApuesta(a.id, false)}
+                          >
+                            Rechazar
+                          </button>
+                        </div>
+                      )}
+
+                      {a.status === "pendiente" && a.challengerTeamId === equipo.id && (
+                        <p className="tournament-card-meta">Esperando respuesta del equipo rival.</p>
+                      )}
+
+                      {a.status === "aceptada" && (
+                        <div className="bracket-report">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={reportandoApuesta === a.id}
+                            onClick={() => handleReportarApuesta(a.id, a.challengerTeamId)}
+                          >
+                            Ganó {a.challengerNombre}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={reportandoApuesta === a.id}
+                            onClick={() => handleReportarApuesta(a.id, a.challengedTeamId)}
+                          >
+                            Ganó {a.challengedNombre}
+                          </button>
+                        </div>
+                      )}
+
+                      {a.status === "en_disputa" && (
+                        <p className="bracket-disputa">
+                          Resultado en disputa, un administrador debe resolverlo.
+                        </p>
+                      )}
+
+                      {a.status === "resuelta" && (
+                        <p className="tournament-card-meta">
+                          Ganó{" "}
+                          {a.ganadorFinal === a.challengerTeamId ? a.challengerNombre : a.challengedNombre}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

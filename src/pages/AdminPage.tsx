@@ -18,6 +18,15 @@ interface DisputaConNombres extends BracketMatchRow {
   reportedP2Nombre: string | null;
 }
 
+interface DisputaApuestaConNombres {
+  id: string;
+  challengerTeamId: string;
+  challengerNombre: string;
+  challengedTeamId: string;
+  challengedNombre: string;
+  monto: number;
+}
+
 export default function AdminPage() {
   const { user, profile, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("torneos");
@@ -41,6 +50,13 @@ export default function AdminPage() {
   const [errorDisputas, setErrorDisputas] = useState<string | null>(null);
   const [resolviendo, setResolviendo] = useState<string | null>(null);
   const [erroresResolver, setErroresResolver] = useState<Record<string, string>>({});
+
+  // --- Disputas de apuestas de XP entre clanes ---
+  const [disputasApuestas, setDisputasApuestas] = useState<DisputaApuestaConNombres[]>([]);
+  const [cargandoDisputasApuestas, setCargandoDisputasApuestas] = useState(true);
+  const [errorDisputasApuestas, setErrorDisputasApuestas] = useState<string | null>(null);
+  const [resolviendoApuesta, setResolviendoApuesta] = useState<string | null>(null);
+  const [erroresResolverApuesta, setErroresResolverApuesta] = useState<Record<string, string>>({});
 
   const esAdmin = !!profile?.es_admin;
 
@@ -138,6 +154,46 @@ export default function AdminPage() {
     };
 
     cargarDisputas();
+
+    const cargarDisputasApuestas = async () => {
+      const { data: apuestas, error } = await supabase
+        .from("team_xp_wagers")
+        .select("id, challenger_team_id, challenged_team_id, monto")
+        .eq("status", "en_disputa");
+
+      if (error) {
+        setErrorDisputasApuestas(error.message);
+        setCargandoDisputasApuestas(false);
+        return;
+      }
+
+      const filas = apuestas ?? [];
+      if (filas.length === 0) {
+        setDisputasApuestas([]);
+        setCargandoDisputasApuestas(false);
+        return;
+      }
+
+      const teamIds = [...new Set(filas.flatMap((a) => [a.challenger_team_id, a.challenged_team_id]))];
+      const { data: equiposData } = await supabase.from("teams").select("id, name, tag").in("id", teamIds);
+      const nombrePorTeamId = Object.fromEntries(
+        (equiposData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+      );
+
+      setDisputasApuestas(
+        filas.map((a) => ({
+          id: a.id,
+          challengerTeamId: a.challenger_team_id,
+          challengerNombre: nombrePorTeamId[a.challenger_team_id] ?? "Equipo",
+          challengedTeamId: a.challenged_team_id,
+          challengedNombre: nombrePorTeamId[a.challenged_team_id] ?? "Equipo",
+          monto: a.monto,
+        }))
+      );
+      setCargandoDisputasApuestas(false);
+    };
+
+    cargarDisputasApuestas();
   }, [esAdmin]);
 
   // Orden importa: primero la sesión, después el perfil (llega por una
@@ -217,6 +273,25 @@ export default function AdminPage() {
     setDisputas((prev) => prev.filter((d) => d.id !== matchId));
   };
 
+  const handleResolverDisputaApuesta = async (wagerId: string, ganadorTeamId: string) => {
+    setResolviendoApuesta(wagerId);
+    setErroresResolverApuesta((prev) => ({ ...prev, [wagerId]: "" }));
+
+    const { error } = await supabase.rpc("resolver_disputa_apuesta", {
+      p_wager_id: wagerId,
+      p_ganador_team_id: ganadorTeamId,
+    });
+
+    setResolviendoApuesta(null);
+
+    if (error) {
+      setErroresResolverApuesta((prev) => ({ ...prev, [wagerId]: error.message }));
+      return;
+    }
+
+    setDisputasApuestas((prev) => prev.filter((d) => d.id !== wagerId));
+  };
+
   return (
     <section className="section section-page">
       <h1 className="section-title">Administración</h1>
@@ -241,7 +316,8 @@ export default function AdminPage() {
           className={`admin-tab ${tab === "disputas" ? "active" : ""}`}
           onClick={() => setTab("disputas")}
         >
-          Disputas{disputas.length > 0 && ` (${disputas.length})`}
+          Disputas
+          {disputas.length + disputasApuestas.length > 0 && ` (${disputas.length + disputasApuestas.length})`}
         </button>
       </div>
 
@@ -375,6 +451,46 @@ export default function AdminPage() {
                     onClick={() => handleResolverDisputa(d.id, d.participant2_id as string)}
                   >
                     Ganó {d.p2Nombre}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <h2 className="detail-subtitle">Apuestas de XP en disputa</h2>
+          {errorDisputasApuestas && <div className="form-error">{errorDisputasApuestas}</div>}
+          {cargandoDisputasApuestas && <p className="tournament-card-meta">Cargando apuestas...</p>}
+          {!cargandoDisputasApuestas && disputasApuestas.length === 0 && (
+            <p className="tournament-card-meta">No hay ninguna apuesta en disputa.</p>
+          )}
+          <div className="admin-list">
+            {disputasApuestas.map((d) => (
+              <div key={d.id} className="admin-row admin-row-disputa">
+                <div className="admin-row-info">
+                  <p className="admin-row-title">
+                    {d.challengerNombre} vs {d.challengedNombre}
+                  </p>
+                  <p className="admin-row-meta">Apuesta de {d.monto} XP</p>
+                  {erroresResolverApuesta[d.id] && (
+                    <div className="form-error">{erroresResolverApuesta[d.id]}</div>
+                  )}
+                </div>
+                <div className="admin-row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={resolviendoApuesta === d.id}
+                    onClick={() => handleResolverDisputaApuesta(d.id, d.challengerTeamId)}
+                  >
+                    Ganó {d.challengerNombre}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={resolviendoApuesta === d.id}
+                    onClick={() => handleResolverDisputaApuesta(d.id, d.challengedTeamId)}
+                  >
+                    Ganó {d.challengedNombre}
                   </button>
                 </div>
               </div>
