@@ -11,6 +11,9 @@ interface AuthContextValue {
   user: User | null;
   profile: Profile | null;
   loading: boolean;
+  // Invitaciones de equipo pendientes para el usuario logueado -- el
+  // contador que se ve en el header. Se recarga junto con el perfil.
+  invitacionesPendientes: number;
   signOut: () => Promise<void>;
   // Vuelve a cargar el perfil desde la tabla profiles. Se usa después de
   // guardar cambios (por ejemplo, elegir el tipo de perfil en /perfil) para
@@ -23,13 +26,14 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [invitacionesPendientes, setInvitacionesPendientes] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const cargarPerfil = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, nombre, perfil_tipo, es_admin, nick, unique_id, country, sc2_region, sc2_id, avatar_url, bio, cuenta_validada"
+        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, xp, nivel, avatar_url, bio, cuenta_validada, suspendido"
       )
       .eq("id", userId)
       .single();
@@ -41,6 +45,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setProfile(data);
+
+    const { count } = await supabase
+      .from("team_invitations")
+      .select("*", { count: "exact", head: true })
+      .eq("invited_user_id", userId)
+      .eq("status", "pendiente");
+
+    setInvitacionesPendientes(count ?? 0);
   }, []);
 
   useEffect(() => {
@@ -58,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cargarPerfil(newSession.user.id);
       } else {
         setProfile(null);
+        setInvitacionesPendientes(0);
       }
     });
 
@@ -76,7 +89,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, user: session?.user ?? null, profile, loading, signOut, refreshProfile }}
+      value={{
+        session,
+        user: session?.user ?? null,
+        profile,
+        loading,
+        invitacionesPendientes,
+        signOut,
+        refreshProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

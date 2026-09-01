@@ -33,6 +33,12 @@ export interface TournamentRow {
   creador_id: string;
   confirmado_por_staff: boolean;
   creado_en: string;
+  // Se llena sola cuando se juega la final de la llave (ver
+  // avanzar_ganador() en supabase/migration_006_bracket.sql).
+  campeon_participant_id: string | null;
+  // Check-in antes de generar la llave (migración 010): mientras está
+  // en true, los inscritos pueden confirmar que van a jugar.
+  check_in_abierto: boolean;
 }
 
 export interface TournamentMapRow {
@@ -43,11 +49,17 @@ export interface TournamentMapRow {
   vetado: boolean;
 }
 
+// user_id y team_id son mutuamente excluyentes (ver migración 009):
+// en un torneo 1v1 se inscribe un jugador (user_id), en uno 2v2/3v3/4v4
+// se inscribe un equipo completo (team_id) -- nunca los dos juntos.
 export interface TournamentParticipantRow {
   id: string;
   tournament_id: string;
-  user_id: string;
+  user_id: string | null;
+  team_id: string | null;
   inscrito_en: string;
+  checked_in: boolean;
+  checked_in_at: string | null;
 }
 
 export interface TournamentResultRow {

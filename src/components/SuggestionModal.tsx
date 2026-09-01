@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { useAuth } from "../context/AuthContext";
 import QuickAccountStep, { type QuickAccountData } from "./QuickAccountStep";
 
@@ -30,7 +31,13 @@ export default function SuggestionModal({ onClose }: SuggestionModalProps) {
     setStep("done");
   };
 
-  return (
+  // Portal a document.body a propósito: se abre desde FanMenu, que
+  // vive dentro de .bottom-nav (tiene backdrop-filter, así que es su
+  // propio contexto de apilamiento). Sin el portal, el z-index de este
+  // modal solo compite contra el z-index: 100 interno de .fan-menu, no
+  // contra el resto de la página -- y pierde, quedando tapado por el
+  // panel del abanico en vez de por encima de todo.
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
         <button className="modal-close" onClick={onClose} aria-label="Cerrar">
@@ -81,6 +88,7 @@ export default function SuggestionModal({ onClose }: SuggestionModalProps) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

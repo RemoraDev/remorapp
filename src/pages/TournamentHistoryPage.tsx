@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { obtenerNombresDeParticipantes } from "../lib/participants";
+import { obtenerNombresDeParticipantes, obtenerNombreDeParticipante } from "../lib/participants";
 import { getModoLabel } from "../lib/tournamentOptions";
 import { formatFecha, formatPozo } from "../lib/formatters";
 import type { TournamentRow } from "../types/tournaments";
@@ -16,6 +16,8 @@ interface ResultadoConNombre {
 interface TorneoFinalizado {
   torneo: TournamentRow;
   resultados: ResultadoConNombre[];
+  // Solo para modo eliminacion_simple (llave) -- ver migración 006.
+  campeonNombre: string | null;
 }
 
 interface PosicionRanking {
@@ -68,6 +70,24 @@ export default function TournamentHistoryPage() {
       const resultado: TorneoFinalizado[] = [];
 
       for (const torneo of torneosData as TournamentRow[]) {
+        // La llave (eliminación simple) guarda su propio campeón en
+        // tournaments.campeon_participant_id -- no pasa por
+        // tournament_results, que es el sistema genérico que ya
+        // existía para los demás modos.
+        if (torneo.modo === "eliminacion_simple") {
+          let campeonNombre: string | null = null;
+          if (torneo.campeon_participant_id) {
+            // obtenerNombreDeParticipante() (no el plural) resuelve un
+            // participante que puede ser jugador O equipo -- acá no se
+            // sabe de antemano cuál de los dos es sin mirar el torneo,
+            // y esta función ya lo resuelve sola.
+            const resuelto = await obtenerNombreDeParticipante(torneo.campeon_participant_id);
+            campeonNombre = resuelto?.nombre ?? "Jugador de RemorApp";
+          }
+          resultado.push({ torneo, resultados: [], campeonNombre });
+          continue;
+        }
+
         const { data: resultadosData } = await supabase
           .from("tournament_results")
           .select("participant_id, gano, puntaje")
@@ -75,16 +95,21 @@ export default function TournamentHistoryPage() {
 
         const filas = resultadosData ?? [];
         const participantIds = [...new Set(filas.map((r) => r.participant_id as string))];
-        const nombresPorParticipante = await obtenerNombresDeParticipantes(participantIds);
+        const infoPorParticipante = await obtenerNombresDeParticipantes(participantIds);
 
+        // Las cuentas suspendidas no aparecen en listados públicos,
+        // incluido el historial de resultados/ranking.
         resultado.push({
           torneo,
-          resultados: filas.map((r) => ({
-            participantId: r.participant_id as string,
-            nombre: nombresPorParticipante[r.participant_id as string] ?? "Jugador de RemorApp",
-            gano: r.gano as boolean,
-            puntaje: r.puntaje as number | null,
-          })),
+          campeonNombre: null,
+          resultados: filas
+            .filter((r) => !infoPorParticipante[r.participant_id as string]?.suspendido)
+            .map((r) => ({
+              participantId: r.participant_id as string,
+              nombre: infoPorParticipante[r.participant_id as string]?.nombre ?? "Jugador de RemorApp",
+              gano: r.gano as boolean,
+              puntaje: r.puntaje as number | null,
+            })),
         });
       }
 
@@ -111,8 +136,9 @@ export default function TournamentHistoryPage() {
       )}
 
       <div className="history-list">
-        {items.map(({ torneo, resultados }) => {
+        {items.map(({ torneo, resultados, campeonNombre }) => {
           const esReyDeLaColina = torneo.modo === "rey_de_la_colina";
+          const esEliminacionSimple = torneo.modo === "eliminacion_simple";
           const ranking = esReyDeLaColina ? calcularRanking(resultados) : [];
 
           return (
@@ -127,7 +153,9 @@ export default function TournamentHistoryPage() {
                 {formatFecha(torneo.fecha_inicio)} · Pozo: {formatPozo(torneo.pozo_premio)}
               </p>
 
-              {esReyDeLaColina ? (
+              {esEliminacionSimple ? (
+                <p className="form-success">🏆 Campeón: {campeonNombre ?? "Sin definir todavía"}</p>
+              ) : esReyDeLaColina ? (
                 ranking.length === 0 ? (
                   <p className="detail-empty">Sin resultados registrados todavía.</p>
                 ) : (

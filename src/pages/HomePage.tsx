@@ -1,16 +1,9 @@
 import Hero from "../components/Hero";
-import FeaturedTournament from "../components/FeaturedTournament";
-import ActiveTournaments from "../components/ActiveTournaments";
-import CommissionInfo from "../components/CommissionInfo";
-import { torneoDestacado } from "../data/mockTournaments";
 
+// Inicio se achicó a propósito: solo el Hero (título, países, CTA y el
+// panal decorativo). "Torneo destacado" y "Torneos activos" salieron de
+// acá; el bloque de la comisión del 5% se movió a /torneos, arriba de
+// la grilla (ver TournamentsPage.tsx).
 export default function HomePage() {
-  return (
-    <>
-      <Hero />
-      <FeaturedTournament torneo={torneoDestacado} />
-      <ActiveTournaments />
-      <CommissionInfo />
-    </>
-  );
+  return <Hero />;
 }

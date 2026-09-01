@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Mismo diseño que el botón central de la barra de navegación:
+       círculo oscuro con anillo del color de acento. La "R" se dibuja
+       con rectángulos (estilo bitmap/blocky) en vez de <text>, porque
+       un favicon no carga la tipografía Orbitron de la página -- así
+       se ve igual en cualquier navegador. -->
+  <circle cx="32" cy="32" r="30" fill="#06070a" stroke="#22d3ee" stroke-width="3" />
+
+  <!-- "R" -->
+  <rect x="12" y="4" width="32" height="8" fill="#22d3ee" />
+  <rect x="12" y="12" width="8" height="8" fill="#22d3ee" />
+  <rect x="44" y="12" width="8" height="8" fill="#22d3ee" />
+  <rect x="12" y="20" width="8" height="8" fill="#22d3ee" />
+  <rect x="44" y="20" width="8" height="8" fill="#22d3ee" />
+  <rect x="12" y="28" width="32" height="8" fill="#22d3ee" />
+  <rect x="12" y="36" width="8" height="8" fill="#22d3ee" />
+  <rect x="28" y="36" width="8" height="8" fill="#22d3ee" />
+  <rect x="12" y="44" width="8" height="8" fill="#22d3ee" />
+  <rect x="36" y="44" width="8" height="8" fill="#22d3ee" />
+  <rect x="12" y="52" width="8" height="8" fill="#22d3ee" />
+  <rect x="44" y="52" width="8" height="8" fill="#22d3ee" />
+</svg>

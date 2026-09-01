@@ -41,9 +41,9 @@ export default function RegisterPage() {
       email,
       password,
       options: {
-        // perfil_tipo no se manda: queda null hasta que el usuario lo
-        // elija en /perfil (handle_new_user() en el schema lo deja así
-        // cuando la clave no viene en los metadatos).
+        // perfil_tipo no se manda -- nadie lo elige a mano (migración
+        // 011): arranca en 'jugador' solo, por el default de la
+        // columna en la base.
         data: { nombre },
         emailRedirectTo: window.location.origin,
       },

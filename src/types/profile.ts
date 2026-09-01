@@ -1,12 +1,61 @@
 // Coincide con el check constraint de profiles.perfil_tipo en
-// supabase/schema_tournaments.sql. Puede ser null: el usuario recién
-// registrado todavía no eligió su rol (se elige después en /perfil).
-export type PerfilTipo = "jugador" | "caster" | "lider_clan";
+// supabase/schema_tournaments.sql. Nadie lo elige a mano (migración
+// 011): 'jugador' es el default, y pasa solo a 'lider_clan' al crear
+// un equipo (ver crear_membresia_owner() en la base). "Caster" no es
+// un valor de perfil_tipo -- es la columna es_caster, independiente y
+// no excluyente (ver Profile.es_caster más abajo).
+export type PerfilTipo = "jugador" | "lider_clan";
 
 export const PERFIL_TIPO_OPTIONS: { value: PerfilTipo; label: string }[] = [
   { value: "jugador", label: "Jugador" },
-  { value: "caster", label: "Caster" },
   { value: "lider_clan", label: "Líder de clan" },
+];
+
+// Rango competitivo del jugador -- opcional, no bloqueante. Coincide
+// con el check constraint de profiles.liga.
+export type Liga =
+  | "Bronce 3"
+  | "Bronce 2"
+  | "Bronce 1"
+  | "Plata 3"
+  | "Plata 2"
+  | "Plata 1"
+  | "Oro 3"
+  | "Oro 2"
+  | "Oro 1"
+  | "Platino 3"
+  | "Platino 2"
+  | "Platino 1"
+  | "Diamante 3"
+  | "Diamante 2"
+  | "Diamante 1"
+  | "Master 3"
+  | "Master 2"
+  | "Master 1"
+  | "Gran Maestro";
+
+// Ya son el label -- no hace falta un value/label separado como en
+// las otras opciones.
+export const LIGA_OPTIONS: Liga[] = [
+  "Bronce 3",
+  "Bronce 2",
+  "Bronce 1",
+  "Plata 3",
+  "Plata 2",
+  "Plata 1",
+  "Oro 3",
+  "Oro 2",
+  "Oro 1",
+  "Platino 3",
+  "Platino 2",
+  "Platino 1",
+  "Diamante 3",
+  "Diamante 2",
+  "Diamante 1",
+  "Master 3",
+  "Master 2",
+  "Master 1",
+  "Gran Maestro",
 ];
 
 // País del jugador (de dónde es), no el servidor de juego al que se
@@ -35,20 +84,33 @@ export const SC2_REGION_OPTIONS: { value: Sc2Region; label: string }[] = [
   { value: "asia", label: "Asia" },
 ];
 
-// Coincide con la fila completa de profiles tras la migración 003.
+// Coincide con la fila completa de profiles tras la migración 004.
 export interface Profile {
   id: string;
   nombre: string | null;
-  perfil_tipo: PerfilTipo | null;
+  perfil_tipo: PerfilTipo;
+  // Independiente de perfil_tipo: alguien puede ser líder de clan Y
+  // caster a la vez, no son excluyentes. Lo prende/apaga el propio
+  // usuario en /perfil cuando quiera.
+  es_caster: boolean;
   es_admin: boolean;
   nick: string | null;
   unique_id: string;
   country: Country | null;
   sc2_region: Sc2Region | null;
   sc2_id: string | null;
+  liga: Liga | null;
+  // Sistema de experiencia (migración 013, Fase A): xp se acumula
+  // jugando torneos, nivel se recalcula solo en la base a partir de
+  // xp (columna GENERATED) -- nunca se manda a mano.
+  xp: number;
+  nivel: number;
   avatar_url: string | null;
   bio: string | null;
   cuenta_validada: boolean;
+  // Cuenta suspendida desde /admin: no puede crear torneos ni
+  // inscribirse (bloqueado también a nivel de RLS, no solo acá).
+  suspendido: boolean;
 }
 
 // Los 4 campos que exige el gate de /perfil. Se usa tanto para

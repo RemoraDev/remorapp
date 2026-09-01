@@ -1,4 +1,4 @@
-import type { TorneoModo } from "../types/tournaments";
+import type { TorneoFormato, TorneoModo } from "../types/tournaments";
 
 // Compartido entre el formulario de creación y las páginas de
 // listado/detalle, para no repetir las mismas etiquetas dos veces.
@@ -33,4 +33,26 @@ export function getModoLabel(modo: TorneoModo): string {
 
 export function getModoDescripcion(modo: TorneoModo): string {
   return MODOS.find((m) => m.value === modo)?.descripcion ?? "";
+}
+
+// 1v1 inscribe a un jugador individual; el resto de los formatos
+// inscribe a un equipo completo (ver migración 009).
+export function esFormatoPorEquipo(formato: TorneoFormato): boolean {
+  return formato !== "1v1";
+}
+
+// Miembros mínimos que necesita un equipo para poder inscribirse a un
+// torneo de este formato -- coincide con el mínimo que valida
+// inscribir_equipo() en la base.
+export function getMinimoMiembrosEquipo(formato: TorneoFormato): number {
+  switch (formato) {
+    case "2v2":
+      return 2;
+    case "3v3":
+      return 3;
+    case "4v4":
+      return 4;
+    default:
+      return 1;
+  }
 }

@@ -1,9 +1,11 @@
 import { Link } from "react-router-dom";
 import Logo from "./Logo";
+import Avatar from "./Avatar";
+import NivelBadge from "./NivelBadge";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header() {
-  const { user, profile, signOut } = useAuth();
+  const { user, profile, invitacionesPendientes, signOut } = useAuth();
 
   return (
     <header className="header">
@@ -18,8 +20,20 @@ export default function Header() {
                   nombre) se cae de vuelta al correo, para no dejarlo vacío.
                   Lleva a /perfil: "Mi perfil" ya no vive en el abanico. */}
               <Link to="/perfil" className="header-user">
+                <Avatar url={profile?.avatar_url} nombre={profile?.nombre} className="header-avatar" />
                 {profile?.nombre ?? user.email}
+                {profile && <NivelBadge nivel={profile.nivel} />}
+                {/* Invitaciones de equipo pendientes -- se responden en
+                    /perfil, este es solo el aviso. */}
+                {invitacionesPendientes > 0 && (
+                  <span className="header-invite-badge">{invitacionesPendientes}</span>
+                )}
               </Link>
+              {profile?.es_admin && (
+                <Link to="/admin" className="btn btn-ghost">
+                  Admin
+                </Link>
+              )}
               <button className="btn btn-ghost" onClick={() => void signOut()}>
                 Cerrar sesión
               </button>

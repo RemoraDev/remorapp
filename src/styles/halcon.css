@@ -99,6 +99,16 @@ input[type="radio"] {
   padding-bottom: calc(var(--nav-height) + 24px);
 }
 
+.suspended-banner {
+  background: rgba(248, 113, 113, 0.12);
+  border-bottom: 1px solid rgba(248, 113, 113, 0.35);
+  color: #fca5a5;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.6rem 1rem;
+}
+
 .container {
   margin: 0 auto;
   max-width: 72rem;
@@ -123,18 +133,6 @@ input[type="radio"] {
   color: var(--color-bg);
   padding: 0.65rem 1.5rem;
   box-shadow: var(--shadow-accent);
-  transition: filter 0.28s ease;
-}
-
-/* El overlay del abanico (.fan-menu-backdrop) ya atenúa toda la página
-   por igual, pero un cian tan saturado sigue leyéndose "vivo" encima
-   incluso oscurecido al 50% -- un blanco o gris al mismo 50% se ve casi
-   apagado del todo. Mientras el abanico está abierto (FanMenu.tsx le
-   agrega esta clase a <body>), les baja un poco más la saturación y el
-   brillo a los botones cian en particular, para que se sientan tan
-   atenuados como el resto del contenido. */
-body.abanico-abierto .btn-primary {
-  filter: saturate(0.5) brightness(0.7);
 }
 
 .btn-primary:hover {
@@ -207,6 +205,9 @@ body.abanico-abierto .btn-primary {
 }
 
 .header-user {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--color-text-muted);
@@ -216,6 +217,31 @@ body.abanico-abierto .btn-primary {
 
 .header-user:hover {
   color: var(--color-accent);
+}
+
+.header-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  object-fit: cover;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* Contador de invitaciones de equipo pendientes. */
+.header-invite-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1rem;
+  height: 1.1rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--h-accent);
+  color: var(--color-bg);
+  font-size: 0.65rem;
+  font-weight: 800;
+  line-height: 1;
 }
 
 /* ---------- Logo ---------- */
@@ -265,10 +291,14 @@ body.abanico-abierto .btn-primary {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 100px;
+  /* Porcentaje del ancho de .hero (que es el "contenedor posicionado"
+     más cercano), no píxeles fijos: así nunca pasa del 12% por lado,
+     ni siquiera en una pantalla angosta de 320-375px. */
+  width: 12%;
   z-index: 0;
-  opacity: 0.07;
+  opacity: 0.05;
   pointer-events: none;
+  overflow: hidden;
 }
 
 .hero-hex-izq {
@@ -332,9 +362,6 @@ body.abanico-abierto .btn-primary {
   }
   .hero-phrase {
     font-size: 1.125rem;
-  }
-  .hero-hex {
-    width: 160px;
   }
 }
 
@@ -678,14 +705,22 @@ body.abanico-abierto .btn-primary {
   width: 1.75rem;
   height: 1.75rem;
   border-radius: 50%;
+  object-fit: cover;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+/* Estilo del círculo "sin foto" (con la inicial adentro), compartido
+   por el componente Avatar en todos los tamaños: header, listas de
+   participantes/miembros y /perfil. */
+.avatar-placeholder {
   background: rgba(34, 211, 238, 0.15);
   color: var(--color-accent-soft);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.75rem;
   font-weight: 700;
-  flex-shrink: 0;
+  font-family: var(--font-display);
 }
 
 /* ---------- Foro (vista de ejemplo) ---------- */
@@ -748,6 +783,454 @@ body.abanico-abierto .btn-primary {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--color-text-faint);
+}
+
+/* ---------- Panel de administración ---------- */
+
+.admin-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.admin-tab {
+  padding: 0.6rem 0.25rem;
+  margin-bottom: -1px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.admin-tab.active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+.admin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  padding: 1rem 1.25rem;
+}
+
+.admin-row-info {
+  min-width: 0;
+}
+
+.admin-row-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+  margin: 0;
+}
+
+.admin-row-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 0.25rem 0 0;
+}
+
+.admin-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.admin-row-actions .form-select {
+  width: auto;
+}
+
+/* ---------- Equipos ---------- */
+
+.team-logo-preview {
+  margin-top: 0.6rem;
+  width: 5rem;
+  height: 5rem;
+  border-radius: 0.6rem;
+  object-fit: cover;
+  border: 1px solid var(--color-border);
+}
+
+.team-join-box {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+}
+
+.team-join-row {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.team-join-row .form-input {
+  flex: 1;
+}
+
+.team-search-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1.5rem;
+}
+
+.team-search-bar .form-input {
+  flex: 1;
+  min-width: 12rem;
+}
+
+.team-search-bar .form-select {
+  width: auto;
+}
+
+.team-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 640px) {
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .team-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.team-card {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  background: var(--color-card);
+  padding: 1.25rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.team-card:hover {
+  border-color: rgba(34, 211, 238, 0.6);
+  box-shadow: var(--shadow-accent);
+}
+
+.team-card-logo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.team-card-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--color-accent-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.team-card-info {
+  min-width: 0;
+}
+
+.team-card-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+  margin: 0;
+}
+
+.team-card-tag {
+  font-size: 0.8rem;
+  color: var(--color-text-faint);
+  margin: 0.15rem 0 0.5rem;
+}
+
+.team-card-regions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.team-card-meta {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* Banner arriba de todo, con el logo superpuesto sobre el borde
+   inferior (mismo look que portada + foto de perfil de cualquier red
+   social): el logo queda mitad sobre el banner, mitad debajo, así
+   .team-detail-header (título/meta) necesita un margen extra arriba
+   para no quedar tapado. */
+.team-detail-banner-wrap {
+  position: relative;
+  margin-bottom: 2.75rem;
+}
+
+.team-detail-banner {
+  width: 100%;
+  aspect-ratio: 4 / 1;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  display: block;
+  border: 1px solid var(--color-border);
+}
+
+.team-detail-banner-placeholder {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(34, 211, 238, 0.04));
+}
+
+.team-detail-logo-overlap {
+  position: absolute;
+  left: 1.25rem;
+  bottom: -2rem;
+  border: 3px solid var(--color-bg);
+  border-radius: 0.85rem;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.team-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.team-detail-logo {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 0.75rem;
+  object-fit: cover;
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.team-detail-description {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
+}
+
+.team-owner-badge {
+  margin-left: 0.5rem;
+  border-radius: 999px;
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--color-accent-soft);
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+}
+
+/* Nivel (sistema de XP, Fase A) -- chico y reusado en listas; la
+   variante .nivel-badge-grande se usa para el nivel del clan, bien
+   destacado en /equipos/:tag. */
+.nivel-badge {
+  margin-left: 0.5rem;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  white-space: nowrap;
+}
+
+.nivel-badge-grande {
+  margin-left: 0;
+  font-size: 0.95rem;
+  padding: 0.3rem 0.85rem;
+  font-family: var(--font-display);
+}
+
+/* Liga del jugador, junto al Nick#ID en listas de miembros. */
+.liga-badge {
+  margin-left: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.55rem;
+}
+
+.team-control-panel-wrap {
+  margin-top: 2rem;
+}
+
+.team-control-panel-wrap .team-leader-panel {
+  margin-top: 1rem;
+}
+
+/* ---------- Panel de líder (solo el dueño del equipo lo ve) ---------- */
+
+.team-leader-panel {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  background: var(--color-panel);
+}
+
+.team-leader-invite {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.6rem;
+  border: 1px dashed rgba(34, 211, 238, 0.4);
+  background: rgba(34, 211, 238, 0.06);
+}
+
+.team-leader-invite-code {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.2rem;
+  letter-spacing: 0.15em;
+  color: var(--color-text);
+}
+
+.team-kick-btn {
+  margin-left: auto;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.7rem;
+  color: #fca5a5;
+  border-color: rgba(248, 113, 113, 0.35);
+}
+
+.team-kick-btn:hover {
+  border-color: rgba(248, 113, 113, 0.7);
+  color: #fca5a5;
+}
+
+.team-banner-preview {
+  margin-top: 0.6rem;
+  width: 100%;
+  max-width: 20rem;
+  aspect-ratio: 4 / 1;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+}
+
+/* ---------- Llave de eliminación simple ---------- */
+
+.bracket {
+  display: flex;
+  gap: 2.5rem;
+  margin-top: 1rem;
+  padding-bottom: 1rem;
+  overflow-x: auto;
+}
+
+.bracket-round {
+  display: flex;
+  flex-direction: column;
+  /* Reparte las partidas de esta ronda a lo largo del mismo alto que
+     la ronda 1 (fijado en JS, ver BracketView.tsx): con menos
+     partidas, space-around las centra solas -- así se ve el
+     achicamiento típico de una llave sin calcular la posición exacta
+     de cada una a mano. */
+  justify-content: space-around;
+  min-width: 15rem;
+  flex-shrink: 0;
+}
+
+.bracket-round-title {
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+  margin-bottom: 0.5rem;
+}
+
+.bracket-match {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  padding: 0.6rem;
+}
+
+.bracket-slot {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 0.4rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+/* Logo de equipo en cada casillero -- solo aparece en torneos por
+   equipo (2v2/3v3/4v4), ver BracketView.tsx. */
+.bracket-slot-logo {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 0.3rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.bracket-slot.winner {
+  color: var(--color-accent);
+  font-weight: 700;
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.bracket-slot.loser {
+  color: var(--color-text-faint);
+  text-decoration: line-through;
+}
+
+.bracket-report {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.bracket-report .btn {
+  font-size: 0.78rem;
+  padding: 0.45rem 0.6rem;
+}
+
+.bracket-disputa {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: #fca5a5;
 }
 
 /* ---------- Historial ---------- */
@@ -931,7 +1414,17 @@ body.abanico-abierto .btn-primary {
   position: fixed;
   inset-inline: 0;
   bottom: 0;
-  z-index: 40;
+  /* Tiene que ganarle a .fan-menu-click-catcher (z-index: 45, portal a
+     document.body): backdrop-filter acá abajo vuelve a .bottom-nav su
+     propio contexto de apilamiento, así que el z-index: 100 interno de
+     .fan-menu solo compite DENTRO de .bottom-nav -- comparado contra el
+     resto de la página, todo .bottom-nav vale lo que valga este
+     z-index. Con 40 quedaba por debajo del catcher y le tapaba los
+     clics (y el :hover, por eso tampoco se veía el brillo) a los
+     botones del abanico. Se mantiene por debajo de .modal-backdrop
+     (z-index: 60) a propósito, para que un modal siga tapando la barra.
+  */
+  z-index: 50;
   /* Separación visual clara contra el contenido que hace scroll detrás. */
   border-top: 1px solid var(--h-border);
   background: rgba(6, 7, 10, 0.92);
@@ -1102,207 +1595,164 @@ body.abanico-abierto .btn-primary {
   filter: grayscale(1) opacity(0.55);
 }
 
-/* ---------- Menú en abanico ---------- */
+/* ---------- Menú del botón central (panel simple) ---------- */
+/* El panel en sí sigue siendo un rectángulo simple (sin clip-path ni
+   geometría de arco): la prioridad sigue siendo que funcione bien en
+   cualquier parte de la página. Lo que cambia acá es la forma de cada
+   botón adentro: hexágonos dibujados con SVG real (<polygon> con fill
+   y stroke nativos), no con clip-path -- eso fue lo que causaba
+   bordes escapados en las puntas. El texto de cada botón no se dibuja
+   dentro del SVG: es un <span> HTML aparte, position:absolute encima,
+   para que quede nítido y accesible. */
 
-.fan-menu-backdrop {
-  /* Oscurece la página mientras el abanico está abierto, para
-     separarlo visualmente del contenido de atrás — igual que hicimos
-     con los hexágonos, queda siempre montado y solo cambia de clase,
-     así la transición de opacidad es real y no un salto. Termina justo
-     arriba de la barra de navegación (bottom: var(--nav-height), no
-     inset:0) a propósito: lo que se pidió oscurecer es el área de la
-     página, no la barra en sí. */
+.fan-menu-click-catcher {
+  /* Transparente a propósito (no hay overlay que oscurezca la
+     página): solo existe para detectar el click afuera del panel y
+     cerrarlo. Portal a document.body por el mismo motivo que antes:
+     .bottom-nav tiene backdrop-filter, que vuelve a .bottom-nav el
+     "containing block" de cualquier descendiente position:fixed y
+     rompe la medida contra la ventana real. */
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: var(--nav-height);
+  inset: 0;
   z-index: 45;
-  background: rgba(0, 0, 0, 0.5);
-  opacity: 0;
+  background: transparent;
   pointer-events: none;
-  transition: opacity 0.28s ease;
 }
 
-.fan-menu-backdrop.is-open {
-  opacity: 1;
+.fan-menu-click-catcher.is-open {
   pointer-events: auto;
 }
 
 .fan-menu {
-  /* Ancla en el mismo punto que el botón central: cada opción se
-     posiciona en abanico (absoluta) desde acá, no en una columna, y
-     no reserva ningún espacio propio (por eso 0x0): así garantizamos
-     que nunca empuja ni corre el resto del layout de la página,
-     abierto o cerrado. */
+  /* Se despliega hacia arriba desde el botón central. Queda siempre
+     montado (no se desmonta al cerrar) para que la transición de
+     apertura sea real y no un salto. */
   position: absolute;
-  bottom: calc(var(--nav-height) + 0.6rem);
+  bottom: calc(var(--nav-height) + 0.75rem);
   left: 50%;
-  width: 0;
-  height: 0;
-  /* Bien por encima del panal de fondo (z-index 0) y de la barra
-     (z-index 1 su contenido, 40 la barra en sí): así nunca se ve el
-     panal superpuesto sobre el abanico abierto. */
   z-index: 100;
+  width: 14rem;
+  max-width: calc(100vw - 2rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  /* Sólido y opaco a propósito: nunca se debe ver el contenido de la
+     página a través del menú. */
+  background: var(--h-surface-2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-50%) translateY(0.5rem) scale(0.97);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.fan-menu.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(-50%) translateY(0) scale(1);
 }
 
 .fan-menu-item {
-  /* Flota por encima del contenido (absoluta + z-index alto, anclada
-     a la barra que ya es position:fixed) — nunca ocupa espacio del
-     documento. Las 4 miden exactamente lo mismo: ancho y alto fijos,
-     no según el largo del texto. Tamaño en px (no rem) porque tiene
-     que coincidir exactamente con FAN_HEX_SIZE_PX de
-     src/lib/fanMenuLayout.ts, que calcula la separación real contra
-     este mismo número.
-
-     Esta capa exterior ES el "borde": un hexágono relleno con el
-     color de acento, sin usar la propiedad border. Un border directo
-     sobre un elemento con clip-path se recorta con la misma forma que
-     el relleno, y en los vértices agudos del hexágono no calza
-     perfecto (se alcanza a escapar un pixel). Con dos capas de
-     clip-path del mismo hexágono, una un poco más chica encima de la
-     otra (ver .fan-menu-item-fill), el "borde" queda siendo el aro
-     sólido que sobra entre las dos, sin depender de que el navegador
-     recorte un border. */
-  position: absolute;
-  left: 50%;
-  bottom: 0;
-  /* Mismo z-index alto que .fan-menu: por encima del panal de fondo
-     y de todo el contenido de la página, siempre. */
-  z-index: 100;
-  width: 68px;
-  height: 68px;
-  overflow: hidden;
-  /* Hexágono (celda de panal), no píldora. Los bordes superior/inferior
-     quedan menos angostos que un hexágono "clásico" (32%-68% en vez de
-     25%-75%) para dejarle más aire real al texto de dos líneas antes
-     de tocar el recorte. Mismo polígono en .fan-menu-item-fill. */
-  clip-path: polygon(32% 4%, 68% 4%, 100% 50%, 68% 96%, 32% 96%, 0% 50%);
-  /* El color de "borde": antes era border-color, ahora es el fondo de
-     esta capa completa (la capa de encima, más chica, lo tapa casi
-     todo salvo el aro de 1.5px). */
-  background: rgba(34, 211, 238, 0.45);
+  position: relative;
+  width: 100%;
+  height: 2.75rem;
+  border: none;
+  background: transparent;
+  padding: 0;
   color: var(--color-text);
-  opacity: 0;
-  /* Como el componente ya no se desmonta al cerrar, hay que apagar la
-     interacción a mano mientras está invisible (además del tabIndex=-1
-     que ya pone FanMenu.tsx en este estado). */
-  pointer-events: none;
-  /* box-shadow no sigue el recorte del clip-path; drop-shadow del
-     filtro sí, por eso la sombra/el brillo van acá y no en box-shadow. */
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5));
-  /* Cerrado: todo colapsado en el punto de anclaje (el botón). Como el
-     componente ya no se desmonta al cerrar (ver FanMenu.tsx), este es
-     un estado real desde el que sí se puede transicionar/animar, no
-     el estado inicial de un elemento recién insertado. */
-  transform: translate(-50%, 0) scale(0.3);
-  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1),
-    filter 0.15s ease, background-color 0.15s ease;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: color 0.15s ease;
 }
 
-.fan-menu-item-fill {
-  /* La capa de "relleno": el mismo hexágono, 1.5px más chico y
-     centrado (inset la hace automáticamente relativa al tamaño real
-     del botón, sin recalcular nada a mano) sobre la capa de "borde".
-     Lo que sobra alrededor de esta capa es exactamente el aro de
-     color de acento — un hexágono dentro de otro, no un border. */
+/* El hexágono es el fondo: fill/stroke nativos de SVG, sin clip-path
+   y sin la capa doble que se usaba antes para tapar el borde en las
+   puntas -- un <polygon> con stroke ya dibuja el borde limpio ahí. */
+.fan-menu-item-hex {
   position: absolute;
-  inset: 1.5px;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.fan-menu-item-hex polygon {
+  fill: var(--h-surface-2);
+  stroke: rgba(34, 211, 238, 0.45);
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 0.15s ease, filter 0.15s ease;
+}
+
+.fan-menu-item-label {
+  position: absolute;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 0.3rem;
+  padding: 0 1.1rem;
   text-align: center;
-  clip-path: polygon(32% 4%, 68% 4%, 100% 50%, 68% 96%, 32% 96%, 0% 50%);
-  /* Sólido y opaco a propósito (ver --h-surface-2): nunca se debe ver
-     el contenido de la página a través del menú. */
-  background: var(--h-surface-2);
-  color: inherit;
-  font-size: 0.62rem;
   line-height: 1.15;
-  font-weight: 600;
+  pointer-events: none;
 }
 
-/* La posición (--fan-x/--fan-y) y la demora de cada opción se calculan
-   en JS según el ancho real de pantalla (src/lib/fanMenuLayout.ts) y
-   se pasan como estilo inline desde FanMenu.tsx — ya no son valores
-   fijos por nth-child acá. */
-
-.fan-menu.is-open .fan-menu-item {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translate(calc(-50% + var(--fan-x)), var(--fan-y)) scale(1);
-  /* Efecto "encendido": el brillo se intensifica y se asienta al
-     aparecer. Es una animación de una sola pasada (sin "infinite"):
-     termina y no queda nada corriendo. Un transition normal no puede
-     subir y volver a bajar en un solo tramo, por eso esto usa
-     @keyframes en vez de solo "transition" en filter. */
-  animation: hex-encendido 320ms ease-out;
+.fan-menu-item:not(.disabled):hover {
+  color: var(--h-accent);
 }
 
-@keyframes hex-encendido {
-  0% {
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 0 rgba(34, 211, 238, 0));
-  }
-  55% {
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 20px rgba(34, 211, 238, 0.9));
-  }
-  100% {
-    filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 0 rgba(34, 211, 238, 0));
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fan-menu.is-open .fan-menu-item {
-    animation: none;
-  }
+.fan-menu-item:not(.disabled):hover .fan-menu-item-hex polygon {
+  stroke: var(--h-accent);
+  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.65));
 }
 
 .fan-menu-item.disabled {
   color: var(--color-text-faint);
-  background: var(--color-border);
   cursor: not-allowed;
 }
 
+.fan-menu-item.disabled .fan-menu-item-hex polygon {
+  stroke: var(--color-border);
+}
+
 .fan-menu-item.suggestion {
-  background: var(--color-accent);
-  color: var(--color-accent-soft);
+  color: var(--h-accent);
 }
 
-/* Brillo sutil con el color de acento al pasar el mouse (los
-   deshabilitados no lo tienen: no es una opción real todavía). */
-.fan-menu-item:not(.disabled):hover {
-  background: var(--h-accent);
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 10px rgba(34, 211, 238, 0.65));
+.fan-menu-item.suggestion .fan-menu-item-hex polygon {
+  stroke: var(--h-accent);
 }
 
-.fan-menu.is-open .fan-menu-item:not(.disabled):hover {
-  transform: translate(calc(-50% + var(--fan-x)), var(--fan-y)) scale(1.08);
+/* Efecto "energizado": brillo breve cuando el abanico aparece. Se
+   dispara cada vez que .fan-menu suma la clase .is-open (el panel
+   queda siempre montado, así que esto sí vuelve a correr en cada
+   apertura, no solo la primera vez). */
+@keyframes hex-encendido {
+  0% {
+    filter: drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+  }
+  40% {
+    filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.85));
+  }
+  100% {
+    filter: drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+  }
+}
+
+.fan-menu.is-open .fan-menu-item-hex polygon {
+  animation: hex-encendido 420ms ease-out;
 }
 
 .fan-menu-notice {
-  /* Centrada, por encima de todo el arco (el punto más alto llega a
-     ~125px del ancla) para que nunca se superponga a una opción. */
-  position: absolute;
-  left: 50%;
-  bottom: 165px;
-  width: max-content;
-  max-width: 13rem;
-  transform: translateX(-50%) translateY(0.4rem);
-  border-radius: 0.5rem;
-  background: rgba(21, 18, 12, 0.95);
-  border: 1px solid var(--color-border);
   padding: 0.5rem 0.85rem;
+  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
   font-size: 0.75rem;
   color: var(--color-text-muted);
   text-align: center;
-  opacity: 0;
-  transition: opacity 0.15s ease, transform 0.15s ease;
-}
-
-.fan-menu.is-open .fan-menu-notice.visible {
-  opacity: 1;
-  transform: translateX(-50%) translateY(0);
 }
 
 /* ---------- Formularios (login / registro / modales) ---------- */
@@ -1599,6 +2049,136 @@ body.abanico-abierto .btn-primary {
 .profile-gate-banner {
   margin: 1.5rem 0 0;
   text-align: center;
+}
+
+/* ---------- Foto de perfil ---------- */
+
+.profile-avatar-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 1rem 0 0;
+}
+
+.profile-avatar {
+  width: 6rem;
+  height: 6rem;
+  border-radius: 50%;
+  object-fit: cover;
+  font-size: 2rem;
+  border: 2px solid var(--color-border);
+}
+
+.profile-avatar-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  max-width: 20rem;
+}
+
+.profile-avatar-form {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.profile-avatar-form .form-input {
+  max-width: 20rem;
+}
+
+/* ---------- Indicador de progreso del perfil ---------- */
+
+.profile-progress {
+  margin: 1.25rem 0 1.5rem;
+}
+
+.profile-progress-bar {
+  height: 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.profile-progress-fill {
+  height: 100%;
+  background: var(--h-accent);
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.profile-progress-text {
+  margin: 0.45rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+/* ---------- Invitaciones de equipo (/perfil) ---------- */
+
+.invitation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.invitation-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  border-radius: 0.6rem;
+  border: 1px solid rgba(34, 211, 238, 0.3);
+  background: rgba(34, 211, 238, 0.06);
+  padding: 0.7rem 0.85rem;
+}
+
+.invitation-info {
+  flex: 1;
+  min-width: 8rem;
+}
+
+.invitation-team {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-text);
+}
+
+.invitation-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+/* ---------- Switch "Soy caster" ---------- */
+
+.profile-caster-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--color-border);
+  padding: 0.6rem 0.85rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.profile-caster-toggle:has(input:checked) {
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.profile-caster-toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--color-accent);
 }
 
 /* ---------- Modal (sugerencias / cuenta express) ---------- */

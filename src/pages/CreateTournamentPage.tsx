@@ -11,7 +11,7 @@ import type { MapRow, TorneoFormato, TorneoModo } from "../types/tournaments";
 const FORMATOS: TorneoFormato[] = ["1v1", "2v2", "3v3", "4v4"];
 
 export default function CreateTournamentPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   const [nombre, setNombre] = useState("");
@@ -59,6 +59,14 @@ export default function CreateTournamentPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
+
+    // También bloqueado a nivel de RLS (tournaments_insert_propio, ver
+    // migración 004) -- este chequeo acá es solo para no dejar mandar
+    // el formulario y mostrar el aviso al toque, no la única barrera.
+    if (profile?.suspendido) {
+      setError("Tu cuenta está suspendida.");
+      return;
+    }
 
     // El nombre del torneo se muestra públicamente (listado y detalle),
     // así que pasa por el mismo filtro que el nick.
