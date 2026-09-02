@@ -10,7 +10,15 @@ import type { AdminUserRow } from "../types/admin";
 import type { TournamentRow } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
 
-type Tab = "torneos" | "usuarios" | "equipos" | "disputas";
+type Tab = "torneos" | "usuarios" | "equipos" | "disputas" | "reportes";
+
+interface ReporteConNombre {
+  id: string;
+  asunto: string;
+  descripcion: string;
+  createdAt: string;
+  reportadoPorNombre: string;
+}
 
 interface EquipoEncontrado {
   id: string;
@@ -61,6 +69,11 @@ export default function AdminPage() {
   const [errorDisputas, setErrorDisputas] = useState<string | null>(null);
   const [resolviendo, setResolviendo] = useState<string | null>(null);
   const [erroresResolver, setErroresResolver] = useState<Record<string, string>>({});
+
+  // --- Reportes de problemas (migración 033) ---
+  const [reportes, setReportes] = useState<ReporteConNombre[]>([]);
+  const [cargandoReportes, setCargandoReportes] = useState(true);
+  const [errorReportes, setErrorReportes] = useState<string | null>(null);
 
   const esAdmin = !!profile?.es_admin;
 
@@ -158,6 +171,36 @@ export default function AdminPage() {
     };
 
     cargarDisputas();
+
+    const cargarReportes = async () => {
+      const { data, error } = await supabase
+        .from("reportes_staff")
+        .select("id, asunto, descripcion, created_at, profiles!reportado_por(nombre, nick, unique_id)")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setErrorReportes(error.message);
+        setCargandoReportes(false);
+        return;
+      }
+
+      setReportes(
+        (data ?? []).map((r) => {
+          const perfil = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+          const p = perfil as { nombre: string | null; nick: string | null; unique_id: string | null } | null;
+          return {
+            id: r.id,
+            asunto: r.asunto,
+            descripcion: r.descripcion,
+            createdAt: r.created_at,
+            reportadoPorNombre: p?.nick ? `${p.nick}#${p.unique_id}` : p?.nombre ?? "Jugador de RemorApp",
+          };
+        })
+      );
+      setCargandoReportes(false);
+    };
+
+    cargarReportes();
   }, [esAdmin]);
 
   // Orden importa: primero la sesión, después el perfil (llega por una
@@ -348,6 +391,14 @@ export default function AdminPage() {
         >
           Disputas
           {disputas.length > 0 && ` (${disputas.length})`}
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${tab === "reportes" ? "active" : ""}`}
+          onClick={() => setTab("reportes")}
+        >
+          Reportes
+          {reportes.length > 0 && ` (${reportes.length})`}
         </button>
       </div>
 
@@ -546,6 +597,29 @@ export default function AdminPage() {
                   >
                     Ganó {d.p2Nombre}
                   </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "reportes" && (
+        <div className="admin-panel">
+          {errorReportes && <div className="form-error">{errorReportes}</div>}
+          {cargandoReportes && <p className="tournament-card-meta">Cargando reportes...</p>}
+          {!cargandoReportes && reportes.length === 0 && (
+            <p className="tournament-card-meta">No hay reportes.</p>
+          )}
+          <div className="admin-list">
+            {reportes.map((r) => (
+              <div key={r.id} className="admin-row">
+                <div className="admin-row-info">
+                  <p className="admin-row-title">{r.asunto}</p>
+                  <p className="admin-row-meta">
+                    {r.reportadoPorNombre} · {formatFecha(r.createdAt)}
+                  </p>
+                  <p className="admin-row-meta">{r.descripcion}</p>
                 </div>
               </div>
             ))}

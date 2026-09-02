@@ -7,8 +7,9 @@ import { recortarImagenCuadrada, recortarImagenConProporcion } from "../lib/team
 import { formatFecha } from "../lib/formatters";
 import { SC2_REGION_OPTIONS } from "../types/profile";
 import type { AvatarForma } from "../types/profile";
-import { CLAN_WAR_MOTIVO_RECHAZO_OPTIONS, CLAN_WAR_REPORTE_MOTIVO_OPTIONS } from "../types/teams";
-import type { ClanWarMotivoRechazo, ClanWarReporteMotivo, ClanWarStatus, TeamRow } from "../types/teams";
+import { CLAN_WAR_MOTIVO_RECHAZO_OPTIONS, CLAN_WAR_REPORTE_MOTIVO_OPTIONS, TEMAS_EQUIPO } from "../types/teams";
+import type { ClanWarMotivoRechazo, ClanWarReporteMotivo, ClanWarStatus, TeamRow, TemaEquipo } from "../types/teams";
+import { NICK_REGEX, validarNick } from "../lib/nickValidation";
 import { datetimeLocalAIso, dentroDeVentanaCheckIn, formatearHoraCet, formatearHoraLocal } from "../lib/clanWars";
 import type { InvestigacionJugador } from "../types/investigacion";
 import Avatar from "../components/Avatar";
@@ -120,6 +121,16 @@ interface TituloConNombre {
   aceptado: boolean;
 }
 
+interface TempPlayerConNombre {
+  id: string;
+  nickTemporal: string;
+  reemplazadoPorId: string | null;
+  reemplazadoPorNick: string | null;
+  reemplazadoPorUniqueId: string | null;
+  reemplazadoPorAvatarUrl: string | null;
+  reemplazadoPorAvatarForma: AvatarForma;
+}
+
 interface TorneoParticipadoConResultado {
   id: string;
   nombre: string;
@@ -127,10 +138,10 @@ interface TorneoParticipadoConResultado {
   resultado: string;
 }
 
-// Las 5 secciones del Panel de control (más "configuracion", que hoy
-// no tiene nada real que mostrar). null = se ve el menú con las 5
-// tarjetas, no una sección puntual.
-type SeccionPanel = "configuracion" | "equipo" | "jugadores" | "eventos" | "historial";
+// Las secciones del Panel de control (más el acceso directo a Hall of
+// Fame, que no es una sección con contenido propio, solo un link).
+// null = se ve el menú con las tarjetas, no una sección puntual.
+type SeccionPanel = "configuracion" | "editar-equipo" | "eventos" | "logros" | "reportar";
 
 // team_kicks_log.user_id apunta a profiles.id, igual que
 // team_members.user_id -- mismo patrón de extracción.
@@ -312,6 +323,30 @@ export default function TeamDetailPage() {
   // los que participó este equipo, ya finalizados, con su resultado ---
   const [torneosParticipados, setTorneosParticipados] = useState<TorneoParticipadoConResultado[]>([]);
 
+  // --- Apariencia del equipo: 7 paletas fijas (migración 033) ---
+  const [guardandoTema, setGuardandoTema] = useState(false);
+  const [errorTema, setErrorTema] = useState<string | null>(null);
+
+  // --- Jugador temporal (migración 033) ---
+  const [jugadoresTemporales, setJugadoresTemporales] = useState<TempPlayerConNombre[]>([]);
+  const [nickTemporalNuevo, setNickTemporalNuevo] = useState("");
+  const [creandoTemporal, setCreandoTemporal] = useState(false);
+  const [errorTemporal, setErrorTemporal] = useState<string | null>(null);
+  const [busquedaReemplazoPorTemp, setBusquedaReemplazoPorTemp] = useState<Record<string, string>>({});
+  const [reemplazandoTemp, setReemplazandoTemp] = useState<string | null>(null);
+  const [erroresReemplazoPorTemp, setErroresReemplazoPorTemp] = useState<Record<string, string>>({});
+
+  // --- Logros y Recompensas: solo vitrina, sin catálogo real todavía
+  // (ver el comentario largo en migration_033_tema_temporal_logros_ayuda.sql) ---
+  const [vistaLogros, setVistaLogros] = useState<"desbloqueados" | "compradas">("desbloqueados");
+
+  // --- Reportar un problema al staff ---
+  const [asuntoReporte, setAsuntoReporte] = useState("");
+  const [descripcionReporte, setDescripcionReporte] = useState("");
+  const [enviandoReporte, setEnviandoReporte] = useState(false);
+  const [errorReporte, setErrorReporte] = useState<string | null>(null);
+  const [reporteEnviado, setReporteEnviado] = useState(false);
+
   useEffect(() => {
     const intervalo = setInterval(() => setAhora(Date.now()), 30_000);
     return () => clearInterval(intervalo);
@@ -380,6 +415,35 @@ export default function TeamDetailPage() {
           responsabilidadCw: perfil.responsabilidad_cw,
           pocoConfiable: perfil.poco_confiable,
           roles: m.roles as string[],
+        };
+      })
+    );
+
+    // Jugadores temporales (migración 033): públicos, igual que el
+    // resto del roster -- si ya fueron reemplazados, se resuelve acá
+    // el perfil real de una vez, para no repreguntar en el render.
+    const { data: temporalesData } = await supabase
+      .from("team_temp_players")
+      .select("id, nick_temporal, reemplazado_por, profiles!reemplazado_por(nick, unique_id, avatar_url, avatar_forma)")
+      .eq("team_id", equipoData.id)
+      .order("created_at", { ascending: true });
+
+    setJugadoresTemporales(
+      (temporalesData ?? []).map((t) => {
+        const perfil = t.reemplazado_por
+          ? (Array.isArray(t.profiles) ? t.profiles[0] : t.profiles)
+          : null;
+        const p = perfil as
+          | { nick: string | null; unique_id: string | null; avatar_url: string | null; avatar_forma: AvatarForma }
+          | null;
+        return {
+          id: t.id,
+          nickTemporal: t.nick_temporal,
+          reemplazadoPorId: t.reemplazado_por,
+          reemplazadoPorNick: p?.nick ?? null,
+          reemplazadoPorUniqueId: p?.unique_id ?? null,
+          reemplazadoPorAvatarUrl: p?.avatar_url ?? null,
+          reemplazadoPorAvatarForma: p?.avatar_forma ?? "cuadrado",
         };
       })
     );
@@ -895,6 +959,24 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
+  const handleCambiarTema = async (nuevoTema: TemaEquipo) => {
+    if (!user || !equipo || nuevoTema === equipo.tema_equipo) return;
+
+    setGuardandoTema(true);
+    setErrorTema(null);
+
+    const { error } = await supabase.from("teams").update({ tema_equipo: nuevoTema }).eq("id", equipo.id);
+
+    setGuardandoTema(false);
+
+    if (error) {
+      setErrorTema(error.message);
+      return;
+    }
+
+    await cargar();
+  };
+
   const handleCopiarCodigo = async () => {
     await navigator.clipboard.writeText(equipo.invite_code);
     setCodigoCopiado(true);
@@ -1325,6 +1407,37 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
+  const handleEnviarReporte = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user) return;
+
+    if (!asuntoReporte.trim() || !descripcionReporte.trim()) {
+      setErrorReporte("Completa el asunto y la descripción.");
+      return;
+    }
+
+    setEnviandoReporte(true);
+    setErrorReporte(null);
+    setReporteEnviado(false);
+
+    const { error } = await supabase.from("reportes_staff").insert({
+      reportado_por: user.id,
+      asunto: asuntoReporte.trim(),
+      descripcion: descripcionReporte.trim(),
+    });
+
+    setEnviandoReporte(false);
+
+    if (error) {
+      setErrorReporte(error.message);
+      return;
+    }
+
+    setAsuntoReporte("");
+    setDescripcionReporte("");
+    setReporteEnviado(true);
+  };
+
   const handleBuscarJugador = async (event: FormEvent) => {
     event.preventDefault();
     setErrorBusqueda(null);
@@ -1387,6 +1500,66 @@ export default function TeamDetailPage() {
     setBusquedaNick("");
   };
 
+  const handleCrearTemporal = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!equipo) return;
+
+    const errorNick = validarNick(nickTemporalNuevo);
+    if (errorNick) {
+      setErrorTemporal(errorNick);
+      return;
+    }
+
+    setCreandoTemporal(true);
+    setErrorTemporal(null);
+
+    const { error } = await supabase.rpc("crear_jugador_temporal", {
+      p_team_id: equipo.id,
+      p_nick_temporal: nickTemporalNuevo,
+    });
+
+    setCreandoTemporal(false);
+
+    if (error) {
+      setErrorTemporal(error.message);
+      return;
+    }
+
+    setNickTemporalNuevo("");
+    await cargar();
+  };
+
+  const handleReemplazarTemporal = async (tempId: string) => {
+    const busqueda = (busquedaReemplazoPorTemp[tempId] ?? "").trim();
+    const partes = busqueda.split("#");
+    if (partes.length !== 2 || !partes[0] || !partes[1]) {
+      setErroresReemplazoPorTemp((prev) => ({
+        ...prev,
+        [tempId]: "Escribe el Nick#ID completo, por ejemplo CarpeDiem#12345.",
+      }));
+      return;
+    }
+
+    setReemplazandoTemp(tempId);
+    setErroresReemplazoPorTemp((prev) => ({ ...prev, [tempId]: "" }));
+
+    const { error } = await supabase.rpc("reemplazar_jugador_temporal", {
+      p_temp_id: tempId,
+      p_nick: partes[0],
+      p_unique_id: partes[1],
+    });
+
+    setReemplazandoTemp(null);
+
+    if (error) {
+      setErroresReemplazoPorTemp((prev) => ({ ...prev, [tempId]: error.message }));
+      return;
+    }
+
+    setBusquedaReemplazoPorTemp((prev) => ({ ...prev, [tempId]: "" }));
+    await cargar();
+  };
+
   const handleInvestigar = async (userId: string) => {
     setInvestigando(true);
     setErrorInvestigacion(null);
@@ -1432,7 +1605,7 @@ export default function TeamDetailPage() {
   );
 
   return (
-    <section className="section section-page">
+    <section className="section section-page" data-tema-equipo={equipo.tema_equipo}>
       <div className="team-detail-banner-wrap">
         {equipo.banner_url ? (
           <img src={equipo.banner_url} alt="" className="team-detail-banner" />
@@ -1506,7 +1679,28 @@ export default function TeamDetailPage() {
       </div>
 
       <h2 className="detail-subtitle">Miembros</h2>
-      <div className="detail-participant-list">{miembros.map((m) => renderMiembro(m, false))}</div>
+      <div className="detail-participant-list">
+        {miembros.map((m) => renderMiembro(m, false))}
+        {jugadoresTemporales.map((t) =>
+          t.reemplazadoPorId ? (
+            <div key={t.id} className="detail-participant-item">
+              <Avatar
+                url={t.reemplazadoPorAvatarUrl}
+                nombre={t.reemplazadoPorNick}
+                className="detail-participant-avatar"
+                forma={t.reemplazadoPorAvatarForma}
+              />
+              {t.reemplazadoPorNick ?? "Jugador de RemorApp"}
+              {t.reemplazadoPorUniqueId && <span className="profile-nick-id">#{t.reemplazadoPorUniqueId}</span>}
+            </div>
+          ) : (
+            <div key={t.id} className="detail-participant-item">
+              {t.nickTemporal}
+              <span className="team-temp-badge">Temporal</span>
+            </div>
+          )
+        )}
+      </div>
 
       {esMiembroNoOwner && (
         <div className="detail-register-box">
@@ -1545,43 +1739,43 @@ export default function TeamDetailPage() {
                     onClick={() => setSeccionPanel("configuracion")}
                   >
                     <span className="team-panel-menu-item-title">Configuración</span>
-                    <span className="team-panel-menu-item-desc">Apariencia visual del equipo</span>
-                  </button>
-                  <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("equipo")}>
-                    <span className="team-panel-menu-item-title">Editar equipo</span>
                     <span className="team-panel-menu-item-desc">
-                      Logo, banner, descripción, título Padre/Hijo y eliminar equipo
+                      Logo, banner, título Padre/Hijo activo y eliminar equipo
                     </span>
                   </button>
                   <button
                     type="button"
                     className="team-panel-menu-item"
-                    onClick={() => setSeccionPanel("jugadores")}
+                    onClick={() => setSeccionPanel("editar-equipo")}
                   >
-                    <span className="team-panel-menu-item-title">Editar jugadores</span>
+                    <span className="team-panel-menu-item-title">Editar equipo</span>
                     <span className="team-panel-menu-item-desc">
-                      Invitar, miembros, liderazgo y jugadores expulsados
+                      Lista de jugadores, invitar, quitar e investigar jugador
                     </span>
                   </button>
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("eventos")}>
                     <span className="team-panel-menu-item-title">Gestor de eventos</span>
                     <span className="team-panel-menu-item-desc">
-                      Clan Wars activas, retos pendientes y propuestos
+                      Solicitudes de Clan War, retos y su historial
+                    </span>
+                  </button>
+                  <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("logros")}>
+                    <span className="team-panel-menu-item-title">Logros y Recompensas</span>
+                    <span className="team-panel-menu-item-desc">
+                      Skins desbloqueadas por nivel y elementos comprados
                     </span>
                   </button>
                   <button
                     type="button"
                     className="team-panel-menu-item"
-                    onClick={() => setSeccionPanel("historial")}
+                    onClick={() => setSeccionPanel("reportar")}
                   >
-                    <span className="team-panel-menu-item-title">Mi historial de eventos</span>
-                    <span className="team-panel-menu-item-desc">
-                      Clan Wars finalizadas y torneos ya jugados
-                    </span>
+                    <span className="team-panel-menu-item-title">Reportar un problema</span>
+                    <span className="team-panel-menu-item-desc">Avisa al staff sobre algo puntual</span>
                   </button>
-
-                  <Link to={`/sala-de-la-fama?clan=${equipo.tag}`} className="btn-link">
-                    Ver Hall of Fame
+                  <Link to={`/sala-de-la-fama?clan=${equipo.tag}`} className="team-panel-menu-item">
+                    <span className="team-panel-menu-item-title">Hall of Fame</span>
+                    <span className="team-panel-menu-item-desc">Ver este equipo en la Sala de la Fama</span>
                   </Link>
                 </div>
               ) : (
@@ -1592,18 +1786,12 @@ export default function TeamDetailPage() {
                     </button>
                   </div>
 
-                  {seccionPanel === "configuracion" && (
-                    <p className="detail-empty">
-                      Próximamente: personalización visual del equipo.
-                    </p>
-                  )}
-
               {/* El dueño no puede simplemente "salir": si hay más
                   miembros, primero tiene que transferir el liderazgo.
                   Recién cuando queda como único miembro, salir del
                   equipo disuelve el equipo en vez de dejarlo sin
                   dueño. */}
-              {seccionPanel === "jugadores" && (miembros.length > 1 ? (
+              {seccionPanel === "editar-equipo" && (miembros.length > 1 ? (
                 <>
                   <h3 className="detail-subtitle">Transferir liderazgo</h3>
                   {errorTransferir && <div className="form-error">{errorTransferir}</div>}
@@ -1657,7 +1845,28 @@ export default function TeamDetailPage() {
                 </>
               ))}
 
-              {seccionPanel === "equipo" && (
+              {seccionPanel === "configuracion" && (
+                <>
+                  <h3 className="detail-subtitle">Apariencia</h3>
+                  {errorTema && <div className="form-error">{errorTema}</div>}
+                  <div className="team-tema-options">
+                    {TEMAS_EQUIPO.map((t) => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        className={`team-tema-option ${equipo.tema_equipo === t.value ? "selected" : ""}`}
+                        disabled={guardandoTema}
+                        onClick={() => handleCambiarTema(t.value)}
+                      >
+                        <span className="team-tema-swatch" style={{ background: t.color }} />
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {seccionPanel === "configuracion" && (
               <form className="auth-form" onSubmit={handleGuardarEquipo}>
             {errorEquipo && <div className="form-error">{errorEquipo}</div>}
             {equipoGuardado && <div className="form-success">Los cambios del equipo se guardaron.</div>}
@@ -1725,14 +1934,14 @@ export default function TeamDetailPage() {
           </form>
               )}
 
-              {seccionPanel === "equipo" && (
+              {seccionPanel === "configuracion" && (
                 <>
                   <h3 className="detail-subtitle">Título Padre/Hijo activo</h3>
                   <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
                 </>
               )}
 
-              {seccionPanel === "jugadores" && (
+              {seccionPanel === "editar-equipo" && (
               <>
               <h3 className="detail-subtitle">Invitar jugador</h3>
               <form className="auth-form" onSubmit={handleBuscarJugador}>
@@ -1793,6 +2002,72 @@ export default function TeamDetailPage() {
               <h3 className="detail-subtitle">Miembros del equipo</h3>
               {errorQuitar && <div className="form-error">{errorQuitar}</div>}
               <div className="detail-participant-list">{miembros.map((m) => renderMiembro(m, true))}</div>
+
+              <h3 className="detail-subtitle">Jugador temporal</h3>
+              <p className="tournament-card-meta">
+                Para el line-up cuando todavía no tienes la cuenta real del jugador. Sin Nick#ID, sin
+                MMR y sin historial hasta que lo reemplaces por una cuenta real.
+              </p>
+              {errorTemporal && <div className="form-error">{errorTemporal}</div>}
+              <form className="auth-form" onSubmit={handleCrearTemporal}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="team-nick-temporal">
+                    Nick temporal
+                  </label>
+                  <input
+                    id="team-nick-temporal"
+                    className="form-input"
+                    type="text"
+                    pattern={NICK_REGEX.source}
+                    value={nickTemporalNuevo}
+                    onChange={(e) => setNickTemporalNuevo(e.target.value)}
+                  />
+                </div>
+                <button type="submit" className="btn btn-ghost btn-block" disabled={creandoTemporal}>
+                  {creandoTemporal ? "Creando..." : "Crear jugador temporal"}
+                </button>
+              </form>
+
+              {jugadoresTemporales.filter((t) => !t.reemplazadoPorId).length > 0 && (
+                <div className="detail-participant-list">
+                  {jugadoresTemporales
+                    .filter((t) => !t.reemplazadoPorId)
+                    .map((t) => (
+                      <div key={t.id} className="reto-item">
+                        <p className="reto-desc">
+                          {t.nickTemporal}
+                          <span className="team-temp-badge">Temporal</span>
+                        </p>
+                        {erroresReemplazoPorTemp[t.id] && (
+                          <div className="form-error">{erroresReemplazoPorTemp[t.id]}</div>
+                        )}
+                        <div className="form-group">
+                          <label className="form-label" htmlFor={`temp-reemplazo-${t.id}`}>
+                            Nick#ID de la cuenta real
+                          </label>
+                          <input
+                            id={`temp-reemplazo-${t.id}`}
+                            className="form-input"
+                            type="text"
+                            placeholder="CarpeDiem#12345"
+                            value={busquedaReemplazoPorTemp[t.id] ?? ""}
+                            onChange={(e) =>
+                              setBusquedaReemplazoPorTemp((prev) => ({ ...prev, [t.id]: e.target.value }))
+                            }
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={reemplazandoTemp === t.id}
+                          onClick={() => handleReemplazarTemporal(t.id)}
+                        >
+                          {reemplazandoTemp === t.id ? "Reemplazando..." : "Reemplazar por cuenta real"}
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
 
               <h3 className="detail-subtitle">Jugadores expulsados</h3>
               {expulsados.length === 0 ? (
@@ -2355,7 +2630,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {seccionPanel === "historial" && (
+              {seccionPanel === "eventos" && (
               <>
               <h4 className="detail-subtitle">Historial de retos</h4>
               {historialRetos.length === 0 ? (
@@ -2413,7 +2688,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {seccionPanel === "equipo" && (
+              {seccionPanel === "configuracion" && (
               <>
               <h3 className="detail-subtitle">Títulos Padre/Hijo</h3>
               <p className="tournament-card-meta">
@@ -2530,6 +2805,74 @@ export default function TeamDetailPage() {
                 </button>
               </div>
               </>
+              )}
+
+              {seccionPanel === "logros" && (
+                <>
+                  <h3 className="detail-subtitle">Desbloqueadas por nivel</h3>
+                  <p className="detail-empty">
+                    Todavía no existe un catálogo de skins o recompensas por nivel -- esta vitrina va a
+                    mostrarlas acá en cuanto ese catálogo esté listo.
+                  </p>
+
+                  <div className="team-panel-menu">
+                    <button
+                      type="button"
+                      className="team-panel-menu-item"
+                      onClick={() => setVistaLogros(vistaLogros === "compradas" ? "desbloqueados" : "compradas")}
+                    >
+                      <span className="team-panel-menu-item-title">Adquiridas por compra</span>
+                      <span className="team-panel-menu-item-desc">Elementos comprados en la Tienda</span>
+                    </button>
+                  </div>
+
+                  {vistaLogros === "compradas" && (
+                    <p className="detail-empty">
+                      Aún no tienes elementos comprados -- la Tienda estará disponible próximamente.
+                    </p>
+                  )}
+                </>
+              )}
+
+              {seccionPanel === "reportar" && (
+                <>
+                  <h3 className="detail-subtitle">Reportar un problema</h3>
+                  <p className="tournament-card-meta">
+                    Se envía directo al staff, no es público ni lo ve el resto del equipo.
+                  </p>
+                  {errorReporte && <div className="form-error">{errorReporte}</div>}
+                  {reporteEnviado && <div className="form-success">Reporte enviado. Gracias.</div>}
+                  <form className="auth-form" onSubmit={handleEnviarReporte}>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="reporte-asunto">
+                        Asunto
+                      </label>
+                      <input
+                        id="reporte-asunto"
+                        className="form-input"
+                        type="text"
+                        maxLength={150}
+                        value={asuntoReporte}
+                        onChange={(e) => setAsuntoReporte(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="reporte-descripcion">
+                        Descripción
+                      </label>
+                      <textarea
+                        id="reporte-descripcion"
+                        className="form-textarea"
+                        maxLength={2000}
+                        value={descripcionReporte}
+                        onChange={(e) => setDescripcionReporte(e.target.value)}
+                      />
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block" disabled={enviandoReporte}>
+                      {enviandoReporte ? "Enviando..." : "Enviar reporte"}
+                    </button>
+                  </form>
+                </>
               )}
                 </div>
               )}

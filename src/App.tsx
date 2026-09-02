@@ -17,7 +17,7 @@ import TeamsPage from "./pages/TeamsPage";
 import CreateTeamPage from "./pages/CreateTeamPage";
 import TeamDetailPage from "./pages/TeamDetailPage";
 import NewsPage from "./pages/NewsPage";
-import ForumPage from "./pages/ForumPage";
+import AyudaPage from "./pages/AyudaPage";
 import StorePage from "./pages/StorePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
@@ -53,7 +53,7 @@ function AppContent() {
           <Route path="/equipos/crear" element={<CreateTeamPage />} />
           <Route path="/equipos/:tag" element={<TeamDetailPage />} />
           <Route path="/news" element={<NewsPage />} />
-          <Route path="/foro" element={<ForumPage />} />
+          <Route path="/ayuda" element={<AyudaPage />} />
           <Route path="/store" element={<StorePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />

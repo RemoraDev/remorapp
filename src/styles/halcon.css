@@ -272,10 +272,10 @@ input[type="radio"] {
 }
 
 .header-avatar {
-  width: 2.25rem;
-  height: 2.25rem;
+  width: 3rem;
+  height: 3rem;
   object-fit: cover;
-  font-size: 0.9rem;
+  font-size: 1.1rem;
   flex-shrink: 0;
 }
 
@@ -848,68 +848,6 @@ input[type="radio"] {
 
 .avatar-shape-cuadrado {
   border-radius: var(--radius-md);
-}
-
-/* ---------- Foro (vista de ejemplo) ---------- */
-
-.foro-list {
-  margin-top: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.9rem;
-}
-
-.foro-post {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-card);
-  padding: 1rem 1.25rem;
-}
-
-.foro-post-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.foro-post-title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1rem;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.foro-post-meta {
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-  margin: 0;
-}
-
-.foro-post-replies {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.foro-post-replies-count {
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: var(--color-accent);
-}
-
-.foro-post-replies-label {
-  font-size: 0.65rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--color-text-faint);
 }
 
 /* ---------- Panel de administración ---------- */
@@ -2203,6 +2141,129 @@ input[type="radio"] {
 .team-panel-danger-zone .btn-ghost:hover {
   border-color: #f87171;
   background: rgba(248, 113, 113, 0.1);
+}
+
+/* ---------- Apariencia del equipo: 7 paletas fijas (migración 033) ----------
+   Se aplican vía atributo data-tema-equipo en la raíz de la página
+   pública del equipo (/equipos/:tag) -- solo redefinen los tokens de
+   acento, y solo alcanzan a los descendientes de ese elemento (nunca
+   al resto de la app). "cian" es el acento original, se deja explícito
+   igual para que el catálogo sea completo y fácil de mantener. */
+[data-tema-equipo="cian"] {
+  --h-accent: #22d3ee;
+  --h-accent-hover: #06b6d4;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #a5f3fc;
+  --shadow-accent: 0 0 0 1px rgba(34, 211, 238, 0.4), 0 0 24px rgba(34, 211, 238, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(34, 211, 238, 0.55), 0 0 40px rgba(34, 211, 238, 0.35);
+}
+
+[data-tema-equipo="purpura"] {
+  --h-accent: #a78bfa;
+  --h-accent-hover: #8b5cf6;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #ddd6fe;
+  --shadow-accent: 0 0 0 1px rgba(167, 139, 250, 0.4), 0 0 24px rgba(167, 139, 250, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(167, 139, 250, 0.55), 0 0 40px rgba(167, 139, 250, 0.35);
+}
+
+[data-tema-equipo="esmeralda"] {
+  --h-accent: #34d399;
+  --h-accent-hover: #10b981;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #a7f3d0;
+  --shadow-accent: 0 0 0 1px rgba(52, 211, 153, 0.4), 0 0 24px rgba(52, 211, 153, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(52, 211, 153, 0.55), 0 0 40px rgba(52, 211, 153, 0.35);
+}
+
+[data-tema-equipo="ambar"] {
+  --h-accent: #fbbf24;
+  --h-accent-hover: #f59e0b;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #fde68a;
+  --shadow-accent: 0 0 0 1px rgba(251, 191, 36, 0.4), 0 0 24px rgba(251, 191, 36, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(251, 191, 36, 0.55), 0 0 40px rgba(251, 191, 36, 0.35);
+}
+
+[data-tema-equipo="rosa"] {
+  --h-accent: #f472b6;
+  --h-accent-hover: #ec4899;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #fbcfe8;
+  --shadow-accent: 0 0 0 1px rgba(244, 114, 182, 0.4), 0 0 24px rgba(244, 114, 182, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(244, 114, 182, 0.55), 0 0 40px rgba(244, 114, 182, 0.35);
+}
+
+[data-tema-equipo="carmesi"] {
+  --h-accent: #fb7185;
+  --h-accent-hover: #f43f5e;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #fecdd3;
+  --shadow-accent: 0 0 0 1px rgba(251, 113, 133, 0.4), 0 0 24px rgba(251, 113, 133, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(251, 113, 133, 0.55), 0 0 40px rgba(251, 113, 133, 0.35);
+}
+
+[data-tema-equipo="azul"] {
+  --h-accent: #60a5fa;
+  --h-accent-hover: #3b82f6;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #bfdbfe;
+  --shadow-accent: 0 0 0 1px rgba(96, 165, 250, 0.4), 0 0 24px rgba(96, 165, 250, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(96, 165, 250, 0.55), 0 0 40px rgba(96, 165, 250, 0.35);
+}
+
+/* ---------- Selector visual de tema del equipo (Configuración) ---------- */
+
+.team-tema-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  gap: 0.6rem;
+}
+
+.team-tema-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: none;
+  padding: 0.75rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.team-tema-option.selected {
+  border-color: var(--color-text);
+  color: var(--color-text);
+}
+
+.team-tema-swatch {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+}
+
+/* ---------- Jugador temporal (Editar equipo) ---------- */
+
+.team-temp-badge {
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  white-space: nowrap;
 }
 
 /* ---------- Selector visual de forma de avatar (Apariencia) ---------- */

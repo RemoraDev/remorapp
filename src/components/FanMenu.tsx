@@ -17,12 +17,13 @@ interface FanItem {
 }
 
 // "Mi perfil" se movió fuera del abanico: ahora el nombre en el header
-// lleva directo a /perfil. En su lugar queda "Foro". Sugerencias sigue
+// lleva directo a /perfil. En su lugar queda "Ayuda" (antes "Foro",
+// reemplazado por completo -- ver AyudaPage.tsx). Sugerencias sigue
 // exactamente igual (sin requiresAuth, con su propio flujo aparte).
 const FAN_ITEMS: FanItem[] = [
   { key: "torneos-inscritos", label: "Torneos inscritos", requiresAuth: true },
   { key: "mi-equipo", label: "Mi equipo", requiresAuth: true },
-  { key: "foro", label: "Foro", requiresAuth: false },
+  { key: "ayuda", label: "Ayuda", requiresAuth: false },
   { key: "sugerencias", label: "Sugerencias", requiresAuth: false },
 ];
 
@@ -62,8 +63,8 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
       return;
     }
 
-    if (item.key === "foro") {
-      navigate("/foro");
+    if (item.key === "ayuda") {
+      navigate("/ayuda");
       onClose();
       return;
     }

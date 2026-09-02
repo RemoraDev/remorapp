@@ -3728,6 +3728,143 @@ $$;
 
 grant execute on function public.registrar_actividad_dueno(text, text) to authenticated;
 
+-- ------------------------------------------------------------
+-- Migración 033: Apariencia del equipo (7 paletas fijas), Jugador
+-- temporal, y Ayuda (sugerencias de líder + reportes al staff).
+-- ------------------------------------------------------------
+
+alter table public.teams
+  add column tema_equipo text not null default 'cian'
+    check (tema_equipo in ('cian', 'purpura', 'esmeralda', 'ambar', 'rosa', 'carmesi', 'azul'));
+
+revoke update on public.teams from authenticated;
+
+grant update (description, logo_url, banner_url, tema_equipo) on public.teams to authenticated;
+
+create table public.team_temp_players (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams (id) on delete cascade,
+  nick_temporal text not null check (nick_temporal ~ '^[A-Za-z0-9_Øø]{3,13}$'),
+  creado_por uuid not null references public.profiles (id),
+  created_at timestamptz not null default now(),
+  reemplazado_por uuid references public.profiles (id)
+);
+
+alter table public.team_temp_players enable row level security;
+
+create policy "team_temp_players_select_publico"
+  on public.team_temp_players for select
+  using (true);
+
+grant select on public.team_temp_players to anon, authenticated;
+
+create or replace function public.crear_jugador_temporal(p_team_id uuid, p_nick_temporal text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id uuid;
+begin
+  if not exists (select 1 from public.teams where id = p_team_id and owner_id = auth.uid()) then
+    raise exception 'Solo el dueño del equipo puede crear un jugador temporal.';
+  end if;
+
+  if p_nick_temporal !~ '^[A-Za-z0-9_Øø]{3,13}$' then
+    raise exception 'El nick temporal debe tener entre 3 y 13 caracteres: letras, números, guion bajo y Ø/ø.';
+  end if;
+
+  insert into public.team_temp_players (team_id, nick_temporal, creado_por)
+  values (p_team_id, p_nick_temporal, auth.uid())
+  returning id into v_id;
+
+  return v_id;
+end;
+$$;
+
+grant execute on function public.crear_jugador_temporal(uuid, text) to authenticated;
+
+create or replace function public.reemplazar_jugador_temporal(p_temp_id uuid, p_nick text, p_unique_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_temp record;
+  v_perfil_id uuid;
+begin
+  select * into v_temp from public.team_temp_players where id = p_temp_id for update;
+  if v_temp is null then
+    raise exception 'Ese jugador temporal no existe.';
+  end if;
+  if v_temp.reemplazado_por is not null then
+    raise exception 'Ese jugador temporal ya fue reemplazado.';
+  end if;
+
+  if not exists (select 1 from public.teams where id = v_temp.team_id and owner_id = auth.uid()) then
+    raise exception 'Solo el dueño del equipo puede reemplazar un jugador temporal.';
+  end if;
+
+  select id into v_perfil_id from public.profiles where nick = p_nick and unique_id = p_unique_id;
+  if v_perfil_id is null then
+    raise exception 'No encontré ningún jugador con ese Nick#ID.';
+  end if;
+
+  update public.team_temp_players set reemplazado_por = v_perfil_id where id = p_temp_id;
+end;
+$$;
+
+grant execute on function public.reemplazar_jugador_temporal(uuid, text, text) to authenticated;
+
+create table public.sugerencias_lider (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams (id) on delete cascade,
+  autor_id uuid not null references public.profiles (id),
+  texto text not null check (char_length(texto) between 1 and 1000),
+  created_at timestamptz not null default now()
+);
+
+alter table public.sugerencias_lider enable row level security;
+
+create policy "sugerencias_lider_select_admin"
+  on public.sugerencias_lider for select
+  to authenticated
+  using (public.is_admin());
+
+create policy "sugerencias_lider_insert_propio"
+  on public.sugerencias_lider for insert
+  to authenticated
+  with check (
+    autor_id = auth.uid()
+    and exists (select 1 from public.teams where owner_id = auth.uid())
+  );
+
+grant select, insert on public.sugerencias_lider to authenticated;
+
+create table public.reportes_staff (
+  id uuid primary key default gen_random_uuid(),
+  reportado_por uuid not null references public.profiles (id),
+  asunto text not null check (char_length(asunto) between 1 and 150),
+  descripcion text not null check (char_length(descripcion) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+
+alter table public.reportes_staff enable row level security;
+
+create policy "reportes_staff_select_admin"
+  on public.reportes_staff for select
+  to authenticated
+  using (public.is_admin());
+
+create policy "reportes_staff_insert_propio"
+  on public.reportes_staff for insert
+  to authenticated
+  with check (reportado_por = auth.uid());
+
+grant select, insert on public.reportes_staff to authenticated;
+
 -- ============================================================
 -- Después de correr todo lo de arriba, activa tu propio usuario
 -- como administrador (cambia el email):
