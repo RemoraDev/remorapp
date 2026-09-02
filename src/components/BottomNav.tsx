@@ -28,16 +28,6 @@ function VoiceIcon() {
   );
 }
 
-function NewsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...strokeProps}>
-      <path d="M5 4h11v14a2 2 0 0 0 2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
-      <path d="M9 8h5M9 12h5M9 16h3" />
-      <path d="M16 4h3v2a2 2 0 0 1-2 2h-1V4Z" />
-    </svg>
-  );
-}
-
 function StoreIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-6 w-6" {...strokeProps}>
@@ -82,14 +72,12 @@ export default function BottomNav() {
           <span>Inicio</span>
         </NavLink>
 
-        <NavLink to="/news" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <NewsIcon />
-          <span>Noticias</span>
-        </NavLink>
-
+        {/* Noticias salió de acá -- su contenido ahora vive dentro de
+            Inicio (ver HomePage.tsx). La ruta /news sigue existiendo
+            aparte, sin ícono propio en la barra. */}
         <NavLink to="/voice" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
           <VoiceIcon />
-          <span>Voice</span>
+          <span>Delfin Mode</span>
         </NavLink>
 
         <div className="bottom-nav-center">

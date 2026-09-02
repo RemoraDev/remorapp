@@ -486,6 +486,15 @@ input[type="radio"] {
   color: var(--color-text-muted);
 }
 
+/* ---------- Noticias dentro de Inicio ---------- */
+
+.home-news-section {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem;
+  text-align: center;
+}
+
 .hero-phrase {
   max-width: 34rem;
   margin: 1.25rem auto 0;
