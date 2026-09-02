@@ -19,12 +19,11 @@ function HomeIcon() {
   );
 }
 
-function TournamentsIcon() {
+function VoiceIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-6 w-6" {...strokeProps}>
-      <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
-      <path d="M7 6H4v1a3 3 0 0 0 3 3M17 6h3v1a3 3 0 0 1-3 3" />
-      <path d="M12 14v4M9 20h6" />
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
     </svg>
   );
 }
@@ -83,12 +82,14 @@ export default function BottomNav() {
           <span>Inicio</span>
         </NavLink>
 
-        <NavLink
-          to="/tournaments"
-          className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}
-        >
-          <TournamentsIcon />
-          <span>Torneos</span>
+        <NavLink to="/news" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <NewsIcon />
+          <span>Noticias</span>
+        </NavLink>
+
+        <NavLink to="/voice" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <VoiceIcon />
+          <span>Voice</span>
         </NavLink>
 
         <div className="bottom-nav-center">
@@ -108,11 +109,6 @@ export default function BottomNav() {
           </button>
           <FanMenu isOpen={fanOpen} onClose={() => setFanOpen(false)} />
         </div>
-
-        <NavLink to="/news" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <NewsIcon />
-          <span>Noticias</span>
-        </NavLink>
 
         <NavLink to="/store" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
           <StoreIcon />

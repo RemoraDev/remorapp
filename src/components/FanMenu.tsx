@@ -23,9 +23,13 @@ interface FanItem {
 // reemplazado por completo -- ver AyudaPage.tsx). Sugerencias sigue
 // exactamente igual (sin requiresAuth, con su propio flujo aparte).
 // "Check-in" es nuevo (migración 037, Lineup de Clan War) -- no existía
-// ningún botón de check-in en el abanico antes de esto.
+// ningún botón de check-in en el abanico antes de esto. "Torneos" se
+// sumó acá al reordenar la barra inferior (Torneos salió de ahí, Voice
+// ocupó ese lugar) -- mismo destino de siempre, solo cambió de menú.
+// "Torneos inscritos" pasó a llamarse "Mis torneos" (mismo destino).
 const FAN_ITEMS: FanItem[] = [
-  { key: "torneos-inscritos", label: "Torneos inscritos", requiresAuth: true },
+  { key: "torneos", label: "Torneos", requiresAuth: false },
+  { key: "torneos-inscritos", label: "Mis torneos", requiresAuth: true },
   { key: "mi-equipo", label: "Mi equipo", requiresAuth: true },
   { key: "checkin", label: "Check-in", requiresAuth: true },
   { key: "ayuda", label: "Ayuda", requiresAuth: false },
@@ -56,6 +60,12 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
     }
 
     setNotice(null);
+
+    if (item.key === "torneos") {
+      navigate("/tournaments");
+      onClose();
+      return;
+    }
 
     if (item.key === "torneos-inscritos") {
       navigate("/tournaments/inscritos");
