@@ -915,9 +915,6 @@ export default function ProfilePage() {
               />
               Soy caster
             </label>
-            <p className="form-hint">
-              Independiente de tu rol de jugador o líder de clan -- podés ser las dos cosas a la vez.
-            </p>
           </div>
         </div>
       )}

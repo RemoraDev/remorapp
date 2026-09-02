@@ -217,7 +217,16 @@ input[type="radio"] {
 .header {
   position: sticky;
   top: 0;
-  z-index: 40;
+  /* Tiene que ganarle a .header-user-click-catcher (z-index: 45, portal
+     a document.body): backdrop-filter + z-index acá abajo vuelven a
+     .header su propio contexto de apilamiento, así que el z-index: 50
+     interno de .header-user-menu solo compite DENTRO de .header --
+     comparado contra el resto de la página, todo .header vale lo que
+     valga este z-index. Con 40 quedaba por debajo del catcher y le
+     tapaba los clics a "Admin" y "Cerrar sesión" en el menú (mismo bug
+     que ya se había resuelto en .bottom-nav, ver ese comentario). Se
+     mantiene por debajo de .modal-backdrop (z-index: 60) a propósito. */
+  z-index: 50;
   border-bottom: 1px solid var(--color-border);
   background: rgba(6, 7, 10, 0.82);
   backdrop-filter: blur(10px);
