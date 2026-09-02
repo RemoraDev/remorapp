@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { calcularNivelLineal } from "../lib/ligas";
 import { construirGaleria } from "../lib/hallOfFame";
@@ -183,17 +184,16 @@ export default function HallOfFamePage() {
     cargarGaleria();
   }, [juegoActivo]);
 
-  const handleFiltrarClan = async (event: FormEvent) => {
-    event.preventDefault();
+  const aplicarFiltroClan = async (tagBuscado: string) => {
     setErrorFiltro(null);
 
-    if (!filtroTag.trim()) {
+    if (!tagBuscado.trim()) {
       setIdClanFiltro(null);
       setNombreClanFiltro(null);
       return;
     }
 
-    const tag = filtroTag.trim().toUpperCase();
+    const tag = tagBuscado.trim().toUpperCase();
     const { data } = await supabase.from("teams").select("id, tag").eq("tag", tag).maybeSingle();
     if (!data) {
       setErrorFiltro("No encontré ningún equipo con ese tag.");
@@ -202,6 +202,24 @@ export default function HallOfFamePage() {
     setIdClanFiltro(data.id);
     setNombreClanFiltro(data.tag);
   };
+
+  const handleFiltrarClan = async (event: FormEvent) => {
+    event.preventDefault();
+    await aplicarFiltroClan(filtroTag);
+  };
+
+  // Acceso directo desde /equipos/:tag ("Ver Hall of Fame"): con
+  // ?clan=TAG en la URL, aplica el mismo filtro solo. El resto de
+  // esta página no depende de ningún otro parámetro de la URL.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const tagDesdeUrl = searchParams.get("clan");
+    if (tagDesdeUrl) {
+      setFiltroTag(tagDesdeUrl.toUpperCase());
+      aplicarFiltroClan(tagDesdeUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleFiltrarJugador = async (event: FormEvent) => {
     event.preventDefault();

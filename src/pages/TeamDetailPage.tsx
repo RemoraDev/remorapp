@@ -120,6 +120,18 @@ interface TituloConNombre {
   aceptado: boolean;
 }
 
+interface TorneoParticipadoConResultado {
+  id: string;
+  nombre: string;
+  fechaInicio: string;
+  resultado: string;
+}
+
+// Las 5 secciones del Panel de control (más "configuracion", que hoy
+// no tiene nada real que mostrar). null = se ve el menú con las 5
+// tarjetas, no una sección puntual.
+type SeccionPanel = "configuracion" | "equipo" | "jugadores" | "eventos" | "historial";
+
 // team_kicks_log.user_id apunta a profiles.id, igual que
 // team_members.user_id -- mismo patrón de extracción.
 function extraerPerfilBasico(profiles: unknown): { nick: string | null; unique_id: string | null } {
@@ -187,7 +199,10 @@ export default function TeamDetailPage() {
   const [errorQuitar, setErrorQuitar] = useState<string | null>(null);
   // El panel entero vive colapsado atrás de un botón -- nada de esto
   // se ve desperdigado en la página, solo cuando el dueño lo abre.
+  // Adentro, el panel es un menú de 5 secciones (más "configuracion");
+  // seccionPanel === null muestra el menú, no una sección puntual.
   const [panelAbierto, setPanelAbierto] = useState(false);
+  const [seccionPanel, setSeccionPanel] = useState<SeccionPanel | null>(null);
 
   // --- Salir del equipo (cualquier miembro que no sea el dueño, o el
   // dueño cuando es el único miembro que queda) ---
@@ -292,6 +307,10 @@ export default function TeamDetailPage() {
   const [solicitudesHistoricas, setSolicitudesHistoricas] = useState<SolicitudHistoricaConNombre[]>([]);
   const [respondiendoHistorico, setRespondiendoHistorico] = useState<string | null>(null);
   const [erroresResponderHistorico, setErroresResponderHistorico] = useState<Record<string, string>>({});
+
+  // --- Mi historial de eventos: torneos (dentro de la plataforma) en
+  // los que participó este equipo, ya finalizados, con su resultado ---
+  const [torneosParticipados, setTorneosParticipados] = useState<TorneoParticipadoConResultado[]>([]);
 
   useEffect(() => {
     const intervalo = setInterval(() => setAhora(Date.now()), 30_000);
@@ -604,6 +623,53 @@ export default function TeamDetailPage() {
           };
         })
       );
+
+      // Mi historial de eventos: torneos DENTRO de la plataforma en
+      // los que participó este equipo, ya finalizados. Solo hace
+      // falta el resultado de LA PROPIA fila de participación -- el
+      // ranking completo de cada torneo ya se ve en /tournaments/:id.
+      const { data: participacionesData } = await supabase
+        .from("tournament_participants")
+        .select("id, tournaments(id, nombre, fecha_inicio, estado, modo, campeon_participant_id)")
+        .eq("team_id", equipoData.id);
+
+      const finalizadas = (participacionesData ?? [])
+        .map((p) => {
+          const torneo = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
+          return {
+            participantId: p.id as string,
+            torneo: torneo as
+              | { id: string; nombre: string; fecha_inicio: string; estado: string; modo: string; campeon_participant_id: string | null }
+              | undefined,
+          };
+        })
+        .filter((p) => p.torneo?.estado === "finalizado");
+
+      const torneosResueltos: TorneoParticipadoConResultado[] = [];
+      for (const { participantId, torneo } of finalizadas) {
+        if (!torneo) continue;
+        let resultado = "Participó";
+        if (torneo.modo === "eliminacion_simple") {
+          resultado = torneo.campeon_participant_id === participantId ? "Campeón 🏆" : "Participó";
+        } else {
+          const { data: resultadosData } = await supabase
+            .from("tournament_results")
+            .select("gano")
+            .eq("tournament_id", torneo.id)
+            .eq("participant_id", participantId);
+          if (resultadosData && resultadosData.length > 0) {
+            resultado = resultadosData.some((r) => r.gano) ? "Ganó" : "Perdió";
+          }
+        }
+        torneosResueltos.push({
+          id: torneo.id,
+          nombre: torneo.nombre,
+          fechaInicio: torneo.fecha_inicio,
+          resultado,
+        });
+      }
+      torneosResueltos.sort((a, b) => new Date(b.fechaInicio).getTime() - new Date(a.fechaInicio).getTime());
+      setTorneosParticipados(torneosResueltos);
     } else {
       setExpulsados([]);
       setRetosPendientesResponder([]);
@@ -616,6 +682,7 @@ export default function TeamDetailPage() {
       setTitulosPendientesResponder([]);
       setTitulosPropuestosPorMi([]);
       setSolicitudesHistoricas([]);
+      setTorneosParticipados([]);
     }
 
     setLoading(false);
@@ -1407,6 +1474,19 @@ export default function TeamDetailPage() {
         </div>
       </div>
 
+      {/* El código de invitación queda a mano en la página principal,
+          fuera del Panel de control -- no hace falta abrir ningún
+          submenú para encontrarlo. Solo lo ve el dueño, igual que
+          antes. */}
+      {esDueño && (
+        <div className="team-leader-invite">
+          <span className="team-leader-invite-code">{equipo.invite_code}</span>
+          <button type="button" className="btn btn-ghost" onClick={handleCopiarCodigo}>
+            {codigoCopiado ? "¡Copiado!" : "Copiar código"}
+          </button>
+        </div>
+      )}
+
       {/* Acceso adicional a /equipos, no un reemplazo: "Mi equipo" en
           el abanico sigue llevando directo acá cuando ya tienes clan,
           así que sin esto no había ninguna forma de volver al
@@ -1447,26 +1527,83 @@ export default function TeamDetailPage() {
           <button
             type="button"
             className="btn btn-primary btn-block"
-            onClick={() => setPanelAbierto((abierto) => !abierto)}
+            onClick={() => {
+              setPanelAbierto((abierto) => !abierto);
+              setSeccionPanel(null);
+            }}
           >
             {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
           </button>
 
           {panelAbierto && (
             <div className="team-leader-panel">
-              <div className="team-leader-invite">
-                <span className="team-leader-invite-code">{equipo.invite_code}</span>
-                <button type="button" className="btn btn-ghost" onClick={handleCopiarCodigo}>
-                  {codigoCopiado ? "¡Copiado!" : "Copiar código"}
-                </button>
-              </div>
+              {seccionPanel === null ? (
+                <div className="team-panel-menu">
+                  <button
+                    type="button"
+                    className="team-panel-menu-item"
+                    onClick={() => setSeccionPanel("configuracion")}
+                  >
+                    <span className="team-panel-menu-item-title">Configuración</span>
+                    <span className="team-panel-menu-item-desc">Apariencia visual del equipo</span>
+                  </button>
+                  <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("equipo")}>
+                    <span className="team-panel-menu-item-title">Editar equipo</span>
+                    <span className="team-panel-menu-item-desc">
+                      Logo, banner, descripción, título Padre/Hijo y eliminar equipo
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="team-panel-menu-item"
+                    onClick={() => setSeccionPanel("jugadores")}
+                  >
+                    <span className="team-panel-menu-item-title">Editar jugadores</span>
+                    <span className="team-panel-menu-item-desc">
+                      Invitar, miembros, liderazgo y jugadores expulsados
+                    </span>
+                  </button>
+                  <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("eventos")}>
+                    <span className="team-panel-menu-item-title">Gestor de eventos</span>
+                    <span className="team-panel-menu-item-desc">
+                      Clan Wars activas, retos pendientes y propuestos
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="team-panel-menu-item"
+                    onClick={() => setSeccionPanel("historial")}
+                  >
+                    <span className="team-panel-menu-item-title">Mi historial de eventos</span>
+                    <span className="team-panel-menu-item-desc">
+                      Clan Wars finalizadas y torneos ya jugados
+                    </span>
+                  </button>
+
+                  <Link to={`/sala-de-la-fama?clan=${equipo.tag}`} className="btn-link">
+                    Ver Hall of Fame
+                  </Link>
+                </div>
+              ) : (
+                <div className="team-panel-section">
+                  <div className="team-panel-section-header">
+                    <button type="button" className="team-panel-back" onClick={() => setSeccionPanel(null)}>
+                      ← Volver al panel
+                    </button>
+                  </div>
+
+                  {seccionPanel === "configuracion" && (
+                    <p className="detail-empty">
+                      Próximamente: personalización visual del equipo.
+                    </p>
+                  )}
 
               {/* El dueño no puede simplemente "salir": si hay más
                   miembros, primero tiene que transferir el liderazgo.
                   Recién cuando queda como único miembro, salir del
                   equipo disuelve el equipo en vez de dejarlo sin
                   dueño. */}
-              {miembros.length > 1 ? (
+              {seccionPanel === "jugadores" && (miembros.length > 1 ? (
                 <>
                   <h3 className="detail-subtitle">Transferir liderazgo</h3>
                   {errorTransferir && <div className="form-error">{errorTransferir}</div>}
@@ -1518,8 +1655,9 @@ export default function TeamDetailPage() {
                     {saliendo ? "Saliendo..." : "Salir del equipo"}
                   </button>
                 </>
-              )}
+              ))}
 
+              {seccionPanel === "equipo" && (
               <form className="auth-form" onSubmit={handleGuardarEquipo}>
             {errorEquipo && <div className="form-error">{errorEquipo}</div>}
             {equipoGuardado && <div className="form-success">Los cambios del equipo se guardaron.</div>}
@@ -1585,7 +1723,17 @@ export default function TeamDetailPage() {
               {guardandoEquipo ? "Guardando..." : "Guardar cambios"}
             </button>
           </form>
+              )}
 
+              {seccionPanel === "equipo" && (
+                <>
+                  <h3 className="detail-subtitle">Título Padre/Hijo activo</h3>
+                  <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
+                </>
+              )}
+
+              {seccionPanel === "jugadores" && (
+              <>
               <h3 className="detail-subtitle">Invitar jugador</h3>
               <form className="auth-form" onSubmit={handleBuscarJugador}>
                 {errorBusqueda && <div className="form-error">{errorBusqueda}</div>}
@@ -1659,6 +1807,46 @@ export default function TeamDetailPage() {
                     </div>
                   ))}
                 </div>
+              )}
+              </>
+              )}
+
+              {seccionPanel === "eventos" && (
+              <>
+              {solicitudesHistoricas.length > 0 && (
+                <>
+                  <h3 className="detail-subtitle">Torneos Históricos: consentimiento pendiente</h3>
+                  <div className="detail-participant-list">
+                    {solicitudesHistoricas.map((s) => (
+                      <div key={s.id} className="reto-item">
+                        <p className="reto-desc">
+                          "{s.torneoNombre}" dice que tu equipo participó -- ¿aceptas que sea público?
+                        </p>
+                        {erroresResponderHistorico[s.id] && (
+                          <div className="form-error">{erroresResponderHistorico[s.id]}</div>
+                        )}
+                        <div className="invitation-actions">
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={respondiendoHistorico === s.id}
+                            onClick={() => handleResponderHistorico(s.id, true)}
+                          >
+                            Aceptar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={respondiendoHistorico === s.id}
+                            onClick={() => handleResponderHistorico(s.id, false)}
+                          >
+                            Rechazar
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
 
               <h3 className="detail-subtitle">Clan Wars</h3>
@@ -2164,7 +2352,11 @@ export default function TeamDetailPage() {
                   {proponiendoReto ? "Proponiendo..." : "Proponer reto"}
                 </button>
               </form>
+              </>
+              )}
 
+              {seccionPanel === "historial" && (
+              <>
               <h4 className="detail-subtitle">Historial de retos</h4>
               {historialRetos.length === 0 ? (
                 <p className="detail-empty">Todavía no hay retos resueltos.</p>
@@ -2199,6 +2391,30 @@ export default function TeamDetailPage() {
                 </div>
               )}
 
+              <h4 className="detail-subtitle">Torneos jugados</h4>
+              {torneosParticipados.length === 0 ? (
+                <p className="detail-empty">Todavía no participaste en ningún torneo finalizado.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {torneosParticipados.map((t) => (
+                    <div key={t.id} className="reto-item">
+                      <p className="reto-desc">
+                        {t.nombre}
+                        <span className="reto-status">{t.resultado}</span>
+                      </p>
+                      <p className="reto-fecha">{formatFecha(t.fechaInicio)}</p>
+                      <Link to={`/tournaments/${t.id}`} className="btn-link">
+                        Ver torneo
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+              </>
+              )}
+
+              {seccionPanel === "equipo" && (
+              <>
               <h3 className="detail-subtitle">Títulos Padre/Hijo</h3>
               <p className="tournament-card-meta">
                 Se resuelven solos cuando se cierra una Clan War real entre los dos equipos.
@@ -2297,39 +2513,24 @@ export default function TeamDetailPage() {
                 </button>
               </form>
 
-              <h3 className="detail-subtitle">Torneos Históricos: consentimiento pendiente</h3>
-              {solicitudesHistoricas.length === 0 ? (
-                <p className="detail-empty">No tienes solicitudes de consentimiento pendientes.</p>
-              ) : (
-                <div className="detail-participant-list">
-                  {solicitudesHistoricas.map((s) => (
-                    <div key={s.id} className="reto-item">
-                      <p className="reto-desc">
-                        "{s.torneoNombre}" dice que tu equipo participó -- ¿aceptas que sea público?
-                      </p>
-                      {erroresResponderHistorico[s.id] && (
-                        <div className="form-error">{erroresResponderHistorico[s.id]}</div>
-                      )}
-                      <div className="invitation-actions">
-                        <button
-                          type="button"
-                          className="btn btn-primary"
-                          disabled={respondiendoHistorico === s.id}
-                          onClick={() => handleResponderHistorico(s.id, true)}
-                        >
-                          Aceptar
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          disabled={respondiendoHistorico === s.id}
-                          onClick={() => handleResponderHistorico(s.id, false)}
-                        >
-                          Rechazar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+              <div className="team-panel-danger-zone">
+                <h3 className="detail-subtitle">Zona de peligro</h3>
+                <p className="tournament-card-meta">
+                  Eliminar el equipo es una acción irreversible. Solo se puede hacer si no tiene otros
+                  miembros y no tiene historial de Clan Wars ni de torneos.
+                </p>
+                {errorEliminarEquipo && <div className="form-error">{errorEliminarEquipo}</div>}
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-block"
+                  disabled={eliminandoEquipoDefinitivo}
+                  onClick={handleEliminarEquipoDefinitivo}
+                >
+                  {eliminandoEquipoDefinitivo ? "Eliminando..." : "Eliminar equipo"}
+                </button>
+              </div>
+              </>
+              )}
                 </div>
               )}
             </div>
