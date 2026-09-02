@@ -1866,7 +1866,7 @@ export default function TeamDetailPage() {
           trae la Valentía del clan, la única barra que aplica a
           equipos por ahora. */}
       <div className="stats-card-group">
-        <PercentBar label="Valentía del clan" value={equipo.valentia} />
+        <PercentBar label="Valentía del clan" value={equipo.valentia} vertical />
       </div>
 
       <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />

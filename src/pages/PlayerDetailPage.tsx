@@ -236,12 +236,12 @@ export default function PlayerDetailPage() {
           debajo -- cuando es caster. */}
       <div className="player-detail-stats-row">
         <div className="player-detail-stats-column stats-card-group">
-          <PercentBar label="Valentía del jugador" value={perfil.valentiaJugador} />
-          <PercentBar label="Responsabilidad en Torneos" value={perfil.responsabilidadTorneos} />
+          <PercentBar label="Valentía del jugador" value={perfil.valentiaJugador} vertical />
+          <PercentBar label="Responsabilidad en Torneos" value={perfil.responsabilidadTorneos} vertical />
           {equipoActual && (
-            <PercentBar label="Responsabilidad en Clan War" value={perfil.responsabilidadCw} />
+            <PercentBar label="Responsabilidad en Clan War" value={perfil.responsabilidadCw} vertical />
           )}
-          {perfil.esCaster && <PercentBar label="Carisma" value={perfil.carisma} />}
+          {perfil.esCaster && <PercentBar label="Carisma" value={perfil.carisma} vertical />}
         </div>
 
         {perfil.esCaster && (

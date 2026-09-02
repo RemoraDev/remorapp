@@ -1160,7 +1160,12 @@ input[type="radio"] {
    lo reciben de .avatar-shape-cuadrado/.avatar-shape-redondo. */
 .player-detail-banner-wrap {
   position: relative;
-  margin-bottom: 2.75rem;
+  /* Más que los 2.75rem que sobresale el avatar (bottom: -2.75rem en
+     .player-detail-avatar-overlap): la insignia "Nv. X" sobresale
+     todavía más allá del propio avatar (bottom: -0.5rem adicional en
+     .nivel-badge-corner), así que con exactamente 2.75rem la insignia
+     quedaba pisando el nombre del jugador debajo. */
+  margin-bottom: 3.75rem;
 }
 
 .player-detail-banner {
@@ -1223,12 +1228,65 @@ input[type="radio"] {
 
 /* Tarjeta que agrupa las barras verticales (Valentía, Responsabilidad,
    Carisma) con un fondo propio, apenas distinto del fondo general de
-   la página -- así se leen como un solo bloque de estadísticas. */
+   la página -- así se leen como un solo bloque de estadísticas. Las
+   barras van EN FILA (una al lado de la otra), ancladas abajo, para
+   que cada columna pueda crecer hacia arriba a su propia altura. */
 .stats-card-group {
   background: var(--color-panel);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+}
+
+/* Una barra vertical: pista angosta y alta que crece hacia ARRIBA
+   (height variable, no width) -- flex-direction: column-reverse hace
+   que el relleno, al ser el único hijo, se apile desde el borde
+   INFERIOR de la pista hacia arriba, como una columna de gráfico de
+   barras, no como una barra de carga horizontal. */
+.percent-bar-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 4rem;
+}
+
+.percent-bar-vertical-track {
+  width: 1.1rem;
+  height: 7rem;
+  border-radius: 999px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column-reverse;
+  overflow: hidden;
+}
+
+.percent-bar-vertical-fill {
+  width: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transition: height 0.3s ease;
+}
+
+.percent-bar-vertical-label {
+  margin: 0.6rem 0 0;
+  font-size: 0.7rem;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+.percent-bar-vertical-value {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+  color: var(--color-text);
 }
 
 /* Columna vertical de barras + columna de transmisión AL COSTADO
@@ -1242,11 +1300,13 @@ input[type="radio"] {
   margin: 0.75rem 0;
 }
 
+/* El layout en fila (flex-direction: row) lo pone .stats-card-group,
+   la otra clase que siempre acompaña a esta en el mismo elemento --
+   acá solo se define cómo se comporta como hijo de
+   .player-detail-stats-row (ancho mínimo, puede crecer). */
 .player-detail-stats-column {
   flex: 1 1 16rem;
   min-width: 16rem;
-  display: flex;
-  flex-direction: column;
 }
 
 .player-detail-stream-column {
