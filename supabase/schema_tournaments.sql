@@ -63,6 +63,18 @@ create table public.profiles (
   -- concepto que teams.banner_url, recorte 4:1.
   banner_url text,
   bio text,
+  -- Links de transmisión del jugador (migración 035): array de
+  -- {plataforma, url}, sin límite de cantidad -- Twitch, YouTube,
+  -- Kick, etc. a la vez. Distinto de clan_wars.caster_nombre/link, que
+  -- es por guerra puntual, no del jugador.
+  links_transmision jsonb not null default '[]'::jsonb,
+  -- Horario habitual de transmisión (migración 036): texto libre, sin
+  -- estructura de días/horas por ahora.
+  horario_stream text,
+  -- Carisma (migración 036): mismo formato que valentia_jugador, pero
+  -- todavía SIN ninguna lógica que lo suba o baje -- valor fijo hasta
+  -- que se defina cómo debería cambiar.
+  carisma integer not null default 50 check (carisma >= 0 and carisma <= 100),
   -- Se recalcula sola (ver trigger actualizar_cuenta_validada): la
   -- app nunca la setea a mano, alcanza con guardar nick/country/
   -- sc2_region/sc2_id.
@@ -758,10 +770,10 @@ grant usage on schema public to anon, authenticated;
 grant select (
   id, nombre, perfil_tipo, es_admin, es_caster, nick, unique_id,
   country, sc2_region, sc2_id, liga, avatar_url, avatar_forma,
-  banner_url, bio,
+  banner_url, bio, links_transmision, horario_stream,
   cuenta_validada, suspendido, creado_en,
   mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos,
-  valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable,
+  valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, carisma,
   gran_maestro_alcanzado_en
 ) on public.profiles to anon, authenticated;
 
@@ -782,7 +794,7 @@ grant select (
 -- admin_listar_usuarios()), security definer, exige is_admin().
 grant update (
   nombre, es_caster, nick, country, sc2_region,
-  sc2_id, liga, avatar_url, avatar_forma, banner_url, bio
+  sc2_id, liga, avatar_url, avatar_forma, banner_url, bio, links_transmision, horario_stream
 ) on public.profiles to authenticated;
 
 grant select on public.maps to anon, authenticated;
@@ -1559,15 +1571,20 @@ create table public.clan_wars (
   -- 'Otro' -- en cualquier otro caso el motivo fijo ya lo dice todo.
   motivo_detalle text,
   created_at timestamptz not null default now(),
-  -- Fase 2 (migración 022, check-in). check_in_abierto existe pero no
-  -- es la fuente de verdad de si la ventana está abierta -- eso se
-  -- calcula comparando fecha_hora_cet con el instante actual (15
-  -- minutos antes), tanto en el frontend como adentro de
-  -- confirmar_alineacion(), porque mantenerlo sincronizado como un
-  -- booleano exigiría un proceso en segundo plano que no hace falta.
-  -- Queda creada para uso futuro; ninguna función la lee ni la
-  -- escribe todavía.
+  -- Fase 2 (migración 022, check-in). La VENTANA de tiempo del
+  -- check-in se sigue calculando comparando fecha_hora_cet con el
+  -- instante actual (15 minutos antes) -- eso nunca dependió de este
+  -- booleano. Desde la migración 037, check_in_abierto sí es la
+  -- fuente de verdad de si el LINEUP ya fue aprobado por los dos
+  -- capitanes (se prende en confirmar_lineup_cw()): confirmar_alineacion()
+  -- exige las dos condiciones a la vez (ventana de tiempo Y lineup
+  -- aprobado) antes de aceptar un check-in real.
   check_in_abierto boolean not null default false,
+  -- Migración 037: lineup armado y aprobado por cada capitán, paso
+  -- previo al check-in -- ver clan_war_lineup, armar_lineup_cw() y
+  -- confirmar_lineup_cw() más abajo.
+  lineup_visto_bueno_challenger boolean not null default false,
+  lineup_visto_bueno_challenged boolean not null default false,
   challenger_confirmado boolean not null default false,
   challenged_confirmado boolean not null default false,
   caster_nombre text,
@@ -1754,6 +1771,180 @@ grant execute on function public.responder_clan_war(uuid, boolean, text, text) t
 -- siguiente, con las tablas de ganancia/pérdida de MMR.
 -- ------------------------------------------------------------
 
+-- ------------------------------------------------------------
+-- Lineup de Clan War (migración 037): el paso entre aceptar el reto y
+-- el check-in. Cada capitán arma el lineup de SU propio equipo (nunca
+-- del rival), con jugadores reales de su roster o jugadores
+-- temporales, y un link de verificación opcional por jugador. Solo
+-- cuando los dos capitanes dan su visto bueno se habilita el check-in.
+-- ------------------------------------------------------------
+
+create table public.clan_war_lineup (
+  id uuid primary key default gen_random_uuid(),
+  clan_war_id uuid not null references public.clan_wars (id) on delete cascade,
+  team_id uuid not null references public.teams (id),
+  jugador_id uuid references public.profiles (id),
+  jugador_temporal_id uuid references public.team_temp_players (id),
+  link_verificacion text,
+  agregado_por uuid not null references public.profiles (id),
+  created_at timestamptz not null default now(),
+  check (
+    (jugador_id is not null and jugador_temporal_id is null)
+    or (jugador_id is null and jugador_temporal_id is not null)
+  ),
+  unique (clan_war_id, jugador_id),
+  unique (clan_war_id, jugador_temporal_id)
+);
+
+alter table public.clan_war_lineup enable row level security;
+
+create policy "clan_war_lineup_select_propio"
+  on public.clan_war_lineup for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.clan_wars cw
+      join public.teams t on t.id in (cw.challenger_team_id, cw.challenged_team_id)
+      where cw.id = clan_war_id and t.owner_id = auth.uid()
+    )
+  );
+
+grant select on public.clan_war_lineup to authenticated;
+
+create or replace function public.armar_lineup_cw(
+  p_clan_war_id uuid,
+  p_accion text,
+  p_jugador_id uuid default null,
+  p_jugador_temporal_id uuid default null,
+  p_link_verificacion text default null,
+  p_lineup_id uuid default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+  v_mi_team_id uuid;
+  v_soy_challenger boolean;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
+  if v_reto is null then
+    raise exception 'Ese reto no existe.';
+  end if;
+
+  if v_reto.status not in ('aceptada', 'en_curso') then
+    raise exception 'El lineup solo se arma después de aceptar el reto.';
+  end if;
+
+  select exists (
+    select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid()
+  ) into v_soy_challenger;
+
+  if v_soy_challenger then
+    v_mi_team_id := v_reto.challenger_team_id;
+  elsif exists (
+    select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid()
+  ) then
+    v_mi_team_id := v_reto.challenged_team_id;
+    v_soy_challenger := false;
+  else
+    raise exception 'Solo el capitán de alguno de los dos equipos puede armar el lineup.';
+  end if;
+
+  if p_accion = 'agregar' then
+    if (p_jugador_id is null) = (p_jugador_temporal_id is null) then
+      raise exception 'Tiene que ser un jugador real o uno temporal, nunca los dos ni ninguno.';
+    end if;
+
+    if p_jugador_id is not null and not exists (
+      select 1 from public.team_members where team_id = v_mi_team_id and user_id = p_jugador_id
+    ) then
+      raise exception 'Ese jugador no es miembro de tu equipo.';
+    end if;
+
+    if p_jugador_temporal_id is not null and not exists (
+      select 1 from public.team_temp_players where id = p_jugador_temporal_id and team_id = v_mi_team_id
+    ) then
+      raise exception 'Ese jugador temporal no es de tu equipo.';
+    end if;
+
+    insert into public.clan_war_lineup (
+      clan_war_id, team_id, jugador_id, jugador_temporal_id, link_verificacion, agregado_por
+    )
+    values (p_clan_war_id, v_mi_team_id, p_jugador_id, p_jugador_temporal_id, p_link_verificacion, auth.uid());
+
+  elsif p_accion = 'quitar' then
+    if p_lineup_id is null then
+      raise exception 'Falta indicar qué fila del lineup quitar.';
+    end if;
+
+    delete from public.clan_war_lineup
+    where id = p_lineup_id and clan_war_id = p_clan_war_id and team_id = v_mi_team_id;
+
+    if not found then
+      raise exception 'Esa fila del lineup no existe o no es de tu equipo.';
+    end if;
+
+  else
+    raise exception 'Acción inválida: tiene que ser agregar o quitar.';
+  end if;
+
+  if v_soy_challenger then
+    update public.clan_wars
+      set lineup_visto_bueno_challenger = false, check_in_abierto = false
+      where id = p_clan_war_id;
+  else
+    update public.clan_wars
+      set lineup_visto_bueno_challenged = false, check_in_abierto = false
+      where id = p_clan_war_id;
+  end if;
+end;
+$$;
+
+grant execute on function public.armar_lineup_cw(uuid, text, uuid, uuid, text, uuid) to authenticated;
+
+create or replace function public.confirmar_lineup_cw(p_clan_war_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+  v_soy_challenger boolean;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
+  if v_reto is null then
+    raise exception 'Ese reto no existe.';
+  end if;
+
+  select exists (
+    select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid()
+  ) into v_soy_challenger;
+
+  if v_soy_challenger then
+    update public.clan_wars set lineup_visto_bueno_challenger = true where id = p_clan_war_id;
+  elsif exists (
+    select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid()
+  ) then
+    update public.clan_wars set lineup_visto_bueno_challenged = true where id = p_clan_war_id;
+  else
+    raise exception 'Solo el capitán de alguno de los dos equipos puede confirmar el lineup.';
+  end if;
+
+  update public.clan_wars
+    set check_in_abierto = true
+    where id = p_clan_war_id
+      and lineup_visto_bueno_challenger
+      and lineup_visto_bueno_challenged;
+end;
+$$;
+
+grant execute on function public.confirmar_lineup_cw(uuid) to authenticated;
+
 -- Reportes durante el check-in: cualquiera de los dos capitanes puede
 -- reportar un problema sobre un jugador del roster RIVAL (nunca del
 -- propio). 'no_se_presento' queda registrado acá nada más por ahora
@@ -1847,6 +2038,13 @@ begin
 
   if not v_soy_challenger and not v_soy_challenged then
     raise exception 'No eres capitán de ninguno de los dos equipos de este reto.';
+  end if;
+
+  -- Migración 037: el lineup tiene que estar aprobado por los dos
+  -- capitanes ANTES de que el check-in real pueda empezar -- el
+  -- check-in pasa a ser el paso siguiente al lineup, no el primero.
+  if not v_reto.lineup_visto_bueno_challenger or not v_reto.lineup_visto_bueno_challenged then
+    raise exception 'Todavía falta que los dos capitanes den el visto bueno al lineup.';
   end if;
 
   -- La ventana se abre 15 minutos antes de fecha_hora_cet -- se

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import HexPattern from "./HexPattern";
+import { useAuth } from "../context/AuthContext";
 
 // Frases exactas pedidas, tal cual — no se inventan variantes.
 const frasesGaming = [
@@ -15,6 +16,7 @@ const frasesGaming = [
 ];
 
 export default function Hero() {
+  const { user, profile } = useAuth();
   const [indice, setIndice] = useState(0);
   const [visible, setVisible] = useState(true);
 
@@ -51,11 +53,25 @@ export default function Hero() {
       <HexPattern id="hero-hex-der" className="hex-pattern hero-hex hero-hex-der" />
 
       <div className="hero-content">
-        <h1 className="hero-title">Bienvenidos a RemorApp</h1>
+        <h1 className="hero-title">
+          Bienvenidos a RemorApp<span className="hero-title-gaming"> Gaming</span>
+        </h1>
         <p className={`hero-phrase ${visible ? "visible" : ""}`}>{frasesGaming[indice]}</p>
-        <Link to="/register" className="btn btn-primary btn-primary-lg hero-cta">
-          Crear mi cuenta
-        </Link>
+        {/* Con sesión iniciada no tiene sentido ofrecer crear una cuenta
+            nueva -- se reemplaza por el mismo destino que "Mi perfil"
+            de la barra inferior, para no dejar el Hero sin CTA. */}
+        {user ? (
+          <Link
+            to={profile?.nick ? `/jugador/${profile.nick}/${profile.unique_id}` : "/perfil"}
+            className="btn btn-primary btn-primary-lg hero-cta"
+          >
+            Mi perfil
+          </Link>
+        ) : (
+          <Link to="/register" className="btn btn-primary btn-primary-lg hero-cta">
+            Crear mi cuenta
+          </Link>
+        )}
       </div>
     </section>
   );

@@ -94,6 +94,13 @@ export const SC2_REGION_OPTIONS: { value: Sc2Region; label: string }[] = [
   { value: "asia", label: "Asia" },
 ];
 
+// Un link de transmisión (migración 035) -- "plataforma" es texto
+// libre (Twitch, YouTube, Kick, etc.), no un enum cerrado.
+export interface LinkTransmision {
+  plataforma: string;
+  url: string;
+}
+
 // Coincide con la fila completa de profiles tras la migración 004.
 export interface Profile {
   id: string;
@@ -139,6 +146,14 @@ export interface Profile {
   avatar_forma: AvatarForma;
   banner_url: string | null;
   bio: string | null;
+  // Links de transmisión (migración 035): array libre de {plataforma,
+  // url} -- Twitch, YouTube, Kick, etc. a la vez, sin límite.
+  links_transmision: LinkTransmision[];
+  // Horario habitual de transmisión (migración 036): texto libre.
+  horario_stream: string | null;
+  // Carisma (migración 036): 0-100, mismo formato que valentia_jugador
+  // -- sin ninguna lógica todavía que lo suba o baje.
+  carisma: number;
   cuenta_validada: boolean;
   // Cuenta suspendida desde /admin: no puede crear torneos ni
   // inscribirse (bloqueado también a nivel de RLS, no solo acá).

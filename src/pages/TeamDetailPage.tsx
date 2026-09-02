@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { recortarImagenCuadrada, recortarImagenConProporcion } from "../lib/teams";
@@ -74,6 +74,9 @@ interface ClanWarConNombres {
   status: ClanWarStatus;
   motivoRechazo: ClanWarMotivoRechazo | null;
   motivoDetalle: string | null;
+  // Lineup de Clan War (migración 037), paso previo al check-in.
+  lineupVistoBuenoChallenger: boolean;
+  lineupVistoBuenoChallenged: boolean;
   // Fase 2 (migración 022, check-in).
   challengerConfirmado: boolean;
   challengedConfirmado: boolean;
@@ -93,6 +96,13 @@ interface MiembroRoster {
   sc2Id: string | null;
   razaPrincipal: RazaSc2 | null;
   razaSecundaria: RazaSc2 | null;
+}
+
+interface LineupEntry {
+  id: string;
+  nombre: string;
+  esTemporal: boolean;
+  linkVerificacion: string | null;
 }
 
 interface ReporteConNombres {
@@ -149,7 +159,7 @@ interface TorneoParticipadoConResultado {
 // Las secciones del Panel de control (más el acceso directo a Hall of
 // Fame, que no es una sección con contenido propio, solo un link).
 // null = se ve el menú con las tarjetas, no una sección puntual.
-type SeccionPanel = "configuracion" | "editar-equipo" | "eventos" | "logros" | "reportar";
+type SeccionPanel = "configuracion" | "editar-equipo" | "eventos" | "titulos" | "logros" | "reportar";
 
 // team_kicks_log.user_id apunta a profiles.id, igual que
 // team_members.user_id -- mismo patrón de extracción.
@@ -223,6 +233,18 @@ export default function TeamDetailPage() {
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [seccionPanel, setSeccionPanel] = useState<SeccionPanel | null>(null);
 
+  // Acceso rápido desde "Check-in" en el abanico: ?panel=eventos abre
+  // el Panel de control directo en Gestor de eventos, para no tener
+  // que buscar manualmente en qué estado quedó la Clan War activa.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("panel") === "eventos") {
+      setPanelAbierto(true);
+      setSeccionPanel("eventos");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // --- Salir del equipo (cualquier miembro que no sea el dueño, o el
   // dueño cuando es el único miembro que queda) ---
   const [saliendo, setSaliendo] = useState(false);
@@ -278,6 +300,17 @@ export default function TeamDetailPage() {
   // los DOS equipos -- el rival para el check-in, y los dos para
   // elegir jugadores al agregar una partida.
   const [rosterPorTeamId, setRosterPorTeamId] = useState<Record<string, MiembroRoster[]>>({});
+  // --- Lineup de Clan War (migración 037): paso previo al check-in ---
+  const [lineupPorReto, setLineupPorReto] = useState<Record<string, { propio: LineupEntry[]; rival: LineupEntry[] }>>(
+    {}
+  );
+  const [jugadorLineupNuevo, setJugadorLineupNuevo] = useState<Record<string, string>>({});
+  const [linkLineupNuevo, setLinkLineupNuevo] = useState<Record<string, string>>({});
+  const [agregandoLineup, setAgregandoLineup] = useState<string | null>(null);
+  const [quitandoLineup, setQuitandoLineup] = useState<string | null>(null);
+  const [erroresLineup, setErroresLineup] = useState<Record<string, string>>({});
+  const [confirmandoLineup, setConfirmandoLineup] = useState<string | null>(null);
+  const [erroresConfirmarLineup, setErroresConfirmarLineup] = useState<Record<string, string>>({});
   const [reportesPorReto, setReportesPorReto] = useState<Record<string, ReporteConNombres[]>>({});
   const [partidasPorReto, setPartidasPorReto] = useState<Record<string, PartidaConNombres[]>>({});
   // Se recalcula cada 30 segundos -- así la ventana de check-in
@@ -539,6 +572,8 @@ export default function TeamDetailPage() {
         status: r.status,
         motivoRechazo: r.motivo_rechazo,
         motivoDetalle: r.motivo_detalle,
+        lineupVistoBuenoChallenger: r.lineup_visto_bueno_challenger,
+        lineupVistoBuenoChallenged: r.lineup_visto_bueno_challenged,
         challengerConfirmado: r.challenger_confirmado,
         challengedConfirmado: r.challenged_confirmado,
         casterNombre: r.caster_nombre,
@@ -626,6 +661,52 @@ export default function TeamDetailPage() {
         }
 
         const retoIds = activos.map((r) => r.id);
+
+        // Lineup de Clan War (migración 037): se separa acá mismo en
+        // "propio" (team_id === equipo.id, esta página) y "rival".
+        const { data: lineupData, error: lineupError } = await supabase
+          .from("clan_war_lineup")
+          .select(
+            // clan_war_lineup tiene DOS relaciones con profiles
+            // (jugador_id y agregado_por) -- hay que especificar la
+            // columna, si no PostgREST tira PGRST201 por ambigüedad
+            // (mismo caso ya visto con team_invitations).
+            "id, clan_war_id, team_id, jugador_id, jugador_temporal_id, link_verificacion, profiles!jugador_id(nick, unique_id), team_temp_players(nick_temporal)"
+          )
+          .in("clan_war_id", retoIds);
+
+        if (lineupError) {
+          console.error("Error cargando el lineup de Clan War:", lineupError);
+        }
+
+        const lineupPorRetoTmp: Record<string, { propio: LineupEntry[]; rival: LineupEntry[] }> = {};
+        for (const fila of lineupData ?? []) {
+          const perfil = extraerPerfilBasico(fila.profiles);
+          const tempRaw = fila.team_temp_players as unknown as
+            | { nick_temporal: string }
+            | { nick_temporal: string }[]
+            | null;
+          const temp = Array.isArray(tempRaw) ? tempRaw[0] : tempRaw;
+          const entry: LineupEntry = {
+            id: fila.id,
+            nombre: fila.jugador_id
+              ? perfil.nick
+                ? `${perfil.nick}#${perfil.unique_id}`
+                : "Jugador de RemorApp"
+              : `Temporal: ${temp?.nick_temporal ?? "?"}`,
+            esTemporal: !!fila.jugador_temporal_id,
+            linkVerificacion: fila.link_verificacion,
+          };
+          const bucket = lineupPorRetoTmp[fila.clan_war_id] ?? { propio: [], rival: [] };
+          if (fila.team_id === equipoData.id) {
+            bucket.propio.push(entry);
+          } else {
+            bucket.rival.push(entry);
+          }
+          lineupPorRetoTmp[fila.clan_war_id] = bucket;
+        }
+        setLineupPorReto(lineupPorRetoTmp);
+
         const { data: reportesData } = await supabase
           .from("clan_war_reportes")
           .select("id, clan_war_id, reportado_por, jugador_afectado_id, motivo, created_at, profiles!jugador_afectado_id(nick, unique_id)")
@@ -675,6 +756,7 @@ export default function TeamDetailPage() {
         setPartidasPorReto(partidasPorRetoTmp);
       } else {
         setRosterPorTeamId({});
+        setLineupPorReto({});
         setReportesPorReto({});
         setPartidasPorReto({});
       }
@@ -795,6 +877,7 @@ export default function TeamDetailPage() {
       setRetosPropuestosPorMi([]);
       setRetosActivos([]);
       setRosterPorTeamId({});
+      setLineupPorReto({});
       setReportesPorReto({});
       setPartidasPorReto({});
       setHistorialRetos([]);
@@ -1198,6 +1281,73 @@ export default function TeamDetailPage() {
 
     if (error) {
       setErroresResponderReto((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleAgregarLineup = async (retoId: string) => {
+    const seleccion = jugadorLineupNuevo[retoId];
+    if (!seleccion) {
+      setErroresLineup((prev) => ({ ...prev, [retoId]: "Selecciona un jugador." }));
+      return;
+    }
+    const [tipo, id] = seleccion.split(":");
+
+    setAgregandoLineup(retoId);
+    setErroresLineup((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("armar_lineup_cw", {
+      p_clan_war_id: retoId,
+      p_accion: "agregar",
+      p_jugador_id: tipo === "real" ? id : null,
+      p_jugador_temporal_id: tipo === "temp" ? id : null,
+      p_link_verificacion: linkLineupNuevo[retoId]?.trim() || null,
+    });
+
+    setAgregandoLineup(null);
+
+    if (error) {
+      setErroresLineup((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    setJugadorLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
+    setLinkLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
+    await cargar();
+  };
+
+  const handleQuitarLineup = async (retoId: string, lineupId: string) => {
+    setQuitandoLineup(lineupId);
+    setErroresLineup((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("armar_lineup_cw", {
+      p_clan_war_id: retoId,
+      p_accion: "quitar",
+      p_lineup_id: lineupId,
+    });
+
+    setQuitandoLineup(null);
+
+    if (error) {
+      setErroresLineup((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleConfirmarLineup = async (retoId: string) => {
+    setConfirmandoLineup(retoId);
+    setErroresConfirmarLineup((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("confirmar_lineup_cw", { p_clan_war_id: retoId });
+
+    setConfirmandoLineup(null);
+
+    if (error) {
+      setErroresConfirmarLineup((prev) => ({ ...prev, [retoId]: error.message }));
       return;
     }
 
@@ -1820,6 +1970,10 @@ export default function TeamDetailPage() {
                       Solicitudes de Clan War, retos y su historial
                     </span>
                   </button>
+                  <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("titulos")}>
+                    <span className="team-panel-menu-item-title">Títulos</span>
+                    <span className="team-panel-menu-item-desc">Responder, proponer y ver Títulos Padre/Hijo</span>
+                  </button>
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("logros")}>
                     <span className="team-panel-menu-item-title">Logros y Recompensas</span>
                     <span className="team-panel-menu-item-desc">
@@ -2302,6 +2456,18 @@ export default function TeamDetailPage() {
                       ? r.challengedCierreConfirmado
                       : r.challengerCierreConfirmado;
                     const dentroVentana = dentroDeVentanaCheckIn(r.fechaHoraCet, ahora);
+                    // Lineup (migración 037): paso previo al check-in.
+                    // "check-in" recién se habilita cuando los dos
+                    // capitanes dieron su visto bueno.
+                    const lineupAprobado = r.lineupVistoBuenoChallenger && r.lineupVistoBuenoChallenged;
+                    const miVistoBuenoLineup = soyChallenger
+                      ? r.lineupVistoBuenoChallenger
+                      : r.lineupVistoBuenoChallenged;
+                    const vistoBuenoLineupRival = soyChallenger
+                      ? r.lineupVistoBuenoChallenged
+                      : r.lineupVistoBuenoChallenger;
+                    const lineupDeReto = lineupPorReto[r.id] ?? { propio: [], rival: [] };
+                    const temporalesPropiosDisponibles = jugadoresTemporales.filter((t) => !t.reemplazadoPorId);
                     const roster = rosterPorTeamId[rivalTeamId] ?? [];
                     const rosterChallenger = rosterPorTeamId[r.challengerTeamId] ?? [];
                     const rosterChallenged = rosterPorTeamId[r.challengedTeamId] ?? [];
@@ -2325,13 +2491,139 @@ export default function TeamDetailPage() {
                           {formatearHoraCet(r.fechaHoraCet)}
                         </p>
 
-                        {!dentroVentana && (
-                          <p className="tournament-card-meta">
-                            El check-in se abre 15 minutos antes de la hora del reto.
-                          </p>
-                        )}
+                        {!lineupAprobado ? (
+                          <>
+                            <h5 className="detail-subtitle">Lineup: tu equipo</h5>
+                            {erroresLineup[r.id] && <div className="form-error">{erroresLineup[r.id]}</div>}
+                            {lineupDeReto.propio.length === 0 ? (
+                              <p className="detail-empty">Todavía no agregaste jugadores al lineup.</p>
+                            ) : (
+                              <div className="detail-participant-list">
+                                {lineupDeReto.propio.map((entry) => (
+                                  <div key={entry.id} className="detail-participant-item">
+                                    {entry.nombre}
+                                    {entry.esTemporal && <span className="team-temp-badge">Temporal</span>}
+                                    {entry.linkVerificacion && (
+                                      <a
+                                        href={entry.linkVerificacion}
+                                        target="_blank"
+                                        rel="noreferrer noopener"
+                                        className="btn-link"
+                                      >
+                                        Verificación
+                                      </a>
+                                    )}
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      disabled={quitandoLineup === entry.id}
+                                      onClick={() => handleQuitarLineup(r.id, entry.id)}
+                                    >
+                                      {quitandoLineup === entry.id ? "Quitando..." : "Quitar"}
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
 
-                        {dentroVentana && (
+                            <div className="form-group">
+                              <label className="form-label" htmlFor={`lineup-jugador-${r.id}`}>
+                                Agregar jugador
+                              </label>
+                              <select
+                                id={`lineup-jugador-${r.id}`}
+                                className="form-select"
+                                value={jugadorLineupNuevo[r.id] ?? ""}
+                                onChange={(e) =>
+                                  setJugadorLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                }
+                              >
+                                <option value="">Selecciona un jugador</option>
+                                {miembros.map((m) => (
+                                  <option key={`real:${m.userId}`} value={`real:${m.userId}`}>
+                                    {m.nick ?? "Jugador de RemorApp"}
+                                    {m.uniqueId ? `#${m.uniqueId}` : ""}
+                                  </option>
+                                ))}
+                                {temporalesPropiosDisponibles.map((t) => (
+                                  <option key={`temp:${t.id}`} value={`temp:${t.id}`}>
+                                    {t.nickTemporal} (Temporal)
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label" htmlFor={`lineup-link-${r.id}`}>
+                                Link de verificación (opcional)
+                              </label>
+                              <input
+                                id={`lineup-link-${r.id}`}
+                                className="form-input"
+                                type="text"
+                                placeholder="https://sc2pulse.nephest.com/..."
+                                value={linkLineupNuevo[r.id] ?? ""}
+                                onChange={(e) =>
+                                  setLinkLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                }
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={agregandoLineup === r.id}
+                              onClick={() => handleAgregarLineup(r.id)}
+                            >
+                              {agregandoLineup === r.id ? "Agregando..." : "Agregar al lineup"}
+                            </button>
+
+                            <h5 className="detail-subtitle">Lineup de {rivalNombre}</h5>
+                            {lineupDeReto.rival.length === 0 ? (
+                              <p className="detail-empty">{rivalNombre} todavía no armó su lineup.</p>
+                            ) : (
+                              <div className="detail-participant-list">
+                                {lineupDeReto.rival.map((entry) => (
+                                  <div key={entry.id} className="detail-participant-item">
+                                    {entry.nombre}
+                                    {entry.esTemporal && <span className="team-temp-badge">Temporal</span>}
+                                    {entry.linkVerificacion && (
+                                      <a
+                                        href={entry.linkVerificacion}
+                                        target="_blank"
+                                        rel="noreferrer noopener"
+                                        className="btn-link"
+                                      >
+                                        Verificación
+                                      </a>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <p className="tournament-card-meta">
+                              Tu visto bueno: {miVistoBuenoLineup ? "Confirmado" : "Pendiente"} · Visto bueno de{" "}
+                              {rivalNombre}: {vistoBuenoLineupRival ? "Confirmado" : "Pendiente"}
+                            </p>
+                            {erroresConfirmarLineup[r.id] && (
+                              <div className="form-error">{erroresConfirmarLineup[r.id]}</div>
+                            )}
+                            {!miVistoBuenoLineup && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={confirmandoLineup === r.id || lineupDeReto.propio.length === 0}
+                                onClick={() => handleConfirmarLineup(r.id)}
+                              >
+                                {confirmandoLineup === r.id ? "Confirmando..." : "Dar el visto bueno al lineup"}
+                              </button>
+                            )}
+                          </>
+                        ) : !dentroVentana ? (
+                          <p className="tournament-card-meta">
+                            Lineup aprobado por los dos capitanes. El check-in se abre 15 minutos antes de la
+                            hora del reto.
+                          </p>
+                        ) : (
                           <>
                             <h5 className="detail-subtitle">Roster de {rivalNombre}</h5>
                             {roster.length === 0 ? (
@@ -2755,7 +3047,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {seccionPanel === "configuracion" && (
+              {seccionPanel === "titulos" && (
               <>
               <h3 className="detail-subtitle">Títulos Padre/Hijo</h3>
               <p className="tournament-card-meta">
@@ -2854,7 +3146,10 @@ export default function TeamDetailPage() {
                   {proponiendoTitulo ? "Proponiendo..." : "Proponer título"}
                 </button>
               </form>
+              </>
+              )}
 
+              {seccionPanel === "configuracion" && (
               <div className="team-panel-danger-zone">
                 <h3 className="detail-subtitle">Zona de peligro</h3>
                 <p className="tournament-card-meta">
@@ -2871,7 +3166,6 @@ export default function TeamDetailPage() {
                   {eliminandoEquipoDefinitivo ? "Eliminando..." : "Eliminar equipo"}
                 </button>
               </div>
-              </>
               )}
 
               {seccionPanel === "logros" && (

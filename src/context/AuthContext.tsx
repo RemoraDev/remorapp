@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, gran_maestro_alcanzado_en, avatar_url, avatar_forma, banner_url, bio, cuenta_validada, suspendido"
+        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, gran_maestro_alcanzado_en, avatar_url, avatar_forma, banner_url, bio, links_transmision, horario_stream, carisma, cuenta_validada, suspendido"
       )
       .eq("id", userId)
       .single();

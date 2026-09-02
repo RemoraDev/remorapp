@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabaseClient";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
+import type { EquipoDelUsuario } from "../lib/teams";
 import SuggestionModal from "./SuggestionModal";
 
 interface FanMenuProps {
@@ -20,9 +22,12 @@ interface FanItem {
 // lleva directo a /perfil. En su lugar queda "Ayuda" (antes "Foro",
 // reemplazado por completo -- ver AyudaPage.tsx). Sugerencias sigue
 // exactamente igual (sin requiresAuth, con su propio flujo aparte).
+// "Check-in" es nuevo (migración 037, Lineup de Clan War) -- no existía
+// ningún botón de check-in en el abanico antes de esto.
 const FAN_ITEMS: FanItem[] = [
   { key: "torneos-inscritos", label: "Torneos inscritos", requiresAuth: true },
   { key: "mi-equipo", label: "Mi equipo", requiresAuth: true },
+  { key: "checkin", label: "Check-in", requiresAuth: true },
   { key: "ayuda", label: "Ayuda", requiresAuth: false },
   { key: "sugerencias", label: "Sugerencias", requiresAuth: false },
 ];
@@ -32,19 +37,19 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
   const navigate = useNavigate();
   const [notice, setNotice] = useState<string | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  // Tag del equipo del usuario (si tiene uno), para que "Mi equipo"
-  // mande directo a su perfil de equipo en vez de al buscador.
-  const [miEquipoTag, setMiEquipoTag] = useState<string | null>(null);
+  // Equipo del usuario (si tiene uno), para "Mi equipo" y "Check-in" --
+  // hace falta el id (para buscar la Clan War) y el tag (para navegar).
+  const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
 
   useEffect(() => {
     if (!user) {
-      setMiEquipoTag(null);
+      setMiEquipo(null);
       return;
     }
-    obtenerEquipoDelUsuario(user.id).then((equipo) => setMiEquipoTag(equipo?.teamTag ?? null));
+    obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
   }, [user]);
 
-  const handleItemClick = (item: FanItem) => {
+  const handleItemClick = async (item: FanItem) => {
     if (item.requiresAuth && !user) {
       setNotice("Inicia sesión para ver esto");
       return;
@@ -70,7 +75,36 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
     }
 
     if (item.key === "mi-equipo") {
-      navigate(miEquipoTag ? `/equipos/${miEquipoTag}` : "/equipos");
+      navigate(miEquipo ? `/equipos/${miEquipo.teamTag}` : "/equipos");
+      onClose();
+      return;
+    }
+
+    if (item.key === "checkin") {
+      if (!miEquipo?.teamTag) {
+        setNotice("Primero necesitas pertenecer a un equipo.");
+        return;
+      }
+
+      // La Clan War activa más próxima de mi equipo -- 'aceptada'
+      // (armando lineup o esperando la ventana de check-in) o
+      // 'en_curso'. Manda directo a Gestor de eventos, ya en la etapa
+      // en la que quedó, en vez de hacer buscar manualmente.
+      const { data } = await supabase
+        .from("clan_wars")
+        .select("id")
+        .in("status", ["aceptada", "en_curso"])
+        .or(`challenger_team_id.eq.${miEquipo.team_id},challenged_team_id.eq.${miEquipo.team_id}`)
+        .order("fecha_hora_cet", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+
+      if (!data) {
+        setNotice("No tienes ninguna Clan War activa en este momento.");
+        return;
+      }
+
+      navigate(`/equipos/${miEquipo.teamTag}?panel=eventos`);
       onClose();
       return;
     }

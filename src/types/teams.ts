@@ -134,10 +134,19 @@ export interface ClanWarRow {
   motivo_rechazo: ClanWarMotivoRechazo | null;
   motivo_detalle: string | null;
   created_at: string;
-  // Fase 2 (migración 022, check-in). check_in_abierto no se usa
-  // desde el frontend -- la ventana se calcula comparando
-  // fecha_hora_cet con la hora actual, ver lib/clanWars.ts.
+  // Fase 2 (migración 022, check-in). Desde la migración 037,
+  // check_in_abierto SÍ se usa: es la fuente de verdad de si el
+  // lineup ya fue aprobado por los dos capitanes (se prende en
+  // confirmar_lineup_cw()). La VENTANA DE TIEMPO del check-in se
+  // sigue calculando aparte, comparando fecha_hora_cet con la hora
+  // actual (ver lib/clanWars.ts) -- las dos condiciones son
+  // necesarias, ninguna reemplaza a la otra.
   check_in_abierto: boolean;
+  // Lineup de Clan War (migración 037): true cuando ESE capitán ya
+  // dio el visto bueno al lineup completo (el propio y el del rival).
+  // Se resetea a false solo del lado que cambió su lineup.
+  lineup_visto_bueno_challenger: boolean;
+  lineup_visto_bueno_challenged: boolean;
   challenger_confirmado: boolean;
   challenged_confirmado: boolean;
   caster_nombre: string | null;
@@ -181,5 +190,19 @@ export interface ClanWarReporteRow {
   reportado_por: string;
   jugador_afectado_id: string;
   motivo: ClanWarReporteMotivo;
+  created_at: string;
+}
+
+// Lineup de Clan War (migración 037): uno de jugador_id/jugador_temporal_id
+// siempre está lleno, el otro siempre null -- mismo patrón que
+// tournament_participants.
+export interface ClanWarLineupRow {
+  id: string;
+  clan_war_id: string;
+  team_id: string;
+  jugador_id: string | null;
+  jugador_temporal_id: string | null;
+  link_verificacion: string | null;
+  agregado_por: string;
   created_at: string;
 }

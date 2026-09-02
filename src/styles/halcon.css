@@ -447,6 +447,45 @@ input[type="radio"] {
   margin: 0;
 }
 
+.hero-title-gaming {
+  color: var(--color-accent);
+}
+
+/* ---------- Barra de estadísticas de Inicio ---------- */
+
+.stats-bar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2.5rem;
+  padding: 2rem 1.25rem;
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.stats-bar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 8rem;
+}
+
+.stats-bar-number {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 2.25rem;
+  color: var(--color-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-bar-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+}
+
 .hero-phrase {
   max-width: 34rem;
   margin: 1.25rem auto 0;
@@ -1150,6 +1189,40 @@ input[type="radio"] {
   object-fit: cover;
   font-size: 1.5rem;
   flex-shrink: 0;
+}
+
+/* Columna vertical de barras + columna de transmisión AL COSTADO
+   (solo caster) -- en pantallas angostas cae a una sola columna sola,
+   nunca se superponen. */
+.player-detail-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 2rem;
+  margin: 0.75rem 0;
+}
+
+.player-detail-stats-column {
+  flex: 1 1 16rem;
+  min-width: 16rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-detail-stream-column {
+  flex: 1 1 16rem;
+  min-width: 16rem;
+  border-left: 1px solid var(--color-border);
+  padding-left: 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .player-detail-stream-column {
+    border-left: none;
+    padding-left: 0;
+    border-top: 1px solid var(--color-border);
+    padding-top: 1rem;
+  }
 }
 
 .team-owner-badge {

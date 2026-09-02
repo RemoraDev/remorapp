@@ -5,9 +5,9 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { validarNick } from "../lib/nickValidation";
-import { recortarImagenCuadrada } from "../lib/teams";
+import { recortarImagenConProporcion, recortarImagenCuadrada } from "../lib/teams";
 import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
-import type { AvatarForma, Country, Liga, Sc2Region, Profile } from "../types/profile";
+import type { AvatarForma, Country, Liga, LinkTransmision, Sc2Region, Profile } from "../types/profile";
 import { RAZA_SC2_OPTIONS } from "../types/juegos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
@@ -17,6 +17,7 @@ import PercentBar from "../components/PercentBar";
 import TitulosActivosList from "../components/TitulosActivosList";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+const BANNER_MAX_BYTES = 3 * 1024 * 1024;
 
 interface InvitacionConEquipo {
   id: string;
@@ -114,6 +115,16 @@ export default function ProfilePage() {
   const [errorRaza, setErrorRaza] = useState<string | null>(null);
   const [razaGuardada, setRazaGuardada] = useState(false);
 
+  // --- Links de transmisión (migración 035): array libre, se edita
+  // entero en memoria y se guarda de una sola vez. ---
+  const [linksTransmision, setLinksTransmision] = useState<LinkTransmision[]>([]);
+  const [nuevaPlataforma, setNuevaPlataforma] = useState("");
+  const [nuevaUrlLink, setNuevaUrlLink] = useState("");
+  const [horarioStream, setHorarioStream] = useState("");
+  const [guardandoLinks, setGuardandoLinks] = useState(false);
+  const [errorLinks, setErrorLinks] = useState<string | null>(null);
+  const [linksGuardados, setLinksGuardados] = useState(false);
+
   // --- "Soy caster": switch independiente de perfil_tipo, se guarda
   // solo al tocarlo (no hace falta un botón "Guardar" aparte). ---
   const [esCaster, setEsCaster] = useState(false);
@@ -131,6 +142,16 @@ export default function ProfilePage() {
   const [guardandoAvatar, setGuardandoAvatar] = useState(false);
   const [errorAvatar, setErrorAvatar] = useState<string | null>(null);
   const [avatarGuardado, setAvatarGuardado] = useState(false);
+
+  // --- Portada (banner) y descripción del perfil público -- se movió
+  // acá desde /jugador/:nick/:uniqueId (esa página ahora es solo
+  // vitrina, sin ningún campo editable). ---
+  const [perfilBio, setPerfilBio] = useState("");
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  const [guardandoPerfilPublico, setGuardandoPerfilPublico] = useState(false);
+  const [errorPerfilPublico, setErrorPerfilPublico] = useState<string | null>(null);
+  const [perfilPublicoGuardado, setPerfilPublicoGuardado] = useState(false);
 
   // --- Invitaciones de equipo pendientes ---
   const [invitaciones, setInvitaciones] = useState<InvitacionConEquipo[]>([]);
@@ -164,6 +185,9 @@ export default function ProfilePage() {
     setSc2Id(profile.sc2_id ?? "");
     setLiga(profile.liga ?? "");
     setEsCaster(profile.es_caster);
+    setLinksTransmision(profile.links_transmision ?? []);
+    setHorarioStream(profile.horario_stream ?? "");
+    setPerfilBio(profile.bio ?? "");
   }, [profile]);
 
   useEffect(() => {
@@ -470,6 +494,47 @@ export default function ProfilePage() {
     setRazaGuardada(true);
   };
 
+  const handleAgregarLink = () => {
+    if (!nuevaPlataforma.trim() || !nuevaUrlLink.trim()) {
+      setErrorLinks("Completa la plataforma y el link.");
+      return;
+    }
+
+    setErrorLinks(null);
+    setLinksGuardados(false);
+    setLinksTransmision((prev) => [...prev, { plataforma: nuevaPlataforma.trim(), url: nuevaUrlLink.trim() }]);
+    setNuevaPlataforma("");
+    setNuevaUrlLink("");
+  };
+
+  const handleQuitarLink = (indice: number) => {
+    setLinksGuardados(false);
+    setLinksTransmision((prev) => prev.filter((_, i) => i !== indice));
+  };
+
+  const handleGuardarLinks = async () => {
+    if (!user) return;
+
+    setGuardandoLinks(true);
+    setErrorLinks(null);
+    setLinksGuardados(false);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ links_transmision: linksTransmision, horario_stream: horarioStream.trim() || null })
+      .eq("id", user.id);
+
+    setGuardandoLinks(false);
+
+    if (error) {
+      setErrorLinks(error.message);
+      return;
+    }
+
+    await refreshProfile();
+    setLinksGuardados(true);
+  };
+
   const handleToggleCaster = async () => {
     if (!user) return;
 
@@ -581,6 +646,78 @@ export default function ProfilePage() {
     } finally {
       setGuardandoAvatar(false);
     }
+  };
+
+  const handleBannerChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const archivo = event.target.files?.[0] ?? null;
+    setErrorPerfilPublico(null);
+    setPerfilPublicoGuardado(false);
+
+    if (!archivo) {
+      setBannerFile(null);
+      setBannerPreview(null);
+      return;
+    }
+
+    if (archivo.size > BANNER_MAX_BYTES) {
+      setErrorPerfilPublico("El banner no puede pesar más de 3MB.");
+      event.target.value = "";
+      return;
+    }
+
+    setBannerFile(archivo);
+    setBannerPreview(URL.createObjectURL(archivo));
+  };
+
+  const handleGuardarPerfilPublico = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user) return;
+
+    setGuardandoPerfilPublico(true);
+    setErrorPerfilPublico(null);
+    setPerfilPublicoGuardado(false);
+
+    const cambios: { bio: string | null; banner_url?: string } = {
+      bio: perfilBio.trim() || null,
+    };
+
+    try {
+      if (bannerFile) {
+        const recorte = await recortarImagenConProporcion(bannerFile, 4);
+        const extension = bannerFile.type === "image/png" ? "png" : "jpg";
+        const ruta = `${user.id}/${Date.now()}-banner.${extension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("player-banners")
+          .upload(ruta, recorte, { contentType: recorte.type });
+
+        if (uploadError) {
+          setErrorPerfilPublico("No se pudo subir el banner: " + uploadError.message);
+          setGuardandoPerfilPublico(false);
+          return;
+        }
+
+        cambios.banner_url = supabase.storage.from("player-banners").getPublicUrl(ruta).data.publicUrl;
+      }
+    } catch {
+      setErrorPerfilPublico("No se pudo procesar el banner, prueba con otra imagen.");
+      setGuardandoPerfilPublico(false);
+      return;
+    }
+
+    const { error: updateError } = await supabase.from("profiles").update(cambios).eq("id", user.id);
+
+    setGuardandoPerfilPublico(false);
+
+    if (updateError) {
+      setErrorPerfilPublico(updateError.message);
+      return;
+    }
+
+    setBannerFile(null);
+    setBannerPreview(null);
+    await refreshProfile();
+    setPerfilPublicoGuardado(true);
   };
 
   const completo = perfilEstaCompleto(profile);
@@ -871,6 +1008,49 @@ export default function ProfilePage() {
             </form>
           </div>
 
+          <h3 className="detail-subtitle">Portada y descripción</h3>
+          <form className="auth-form" onSubmit={handleGuardarPerfilPublico}>
+            {errorPerfilPublico && <div className="form-error">{errorPerfilPublico}</div>}
+            {perfilPublicoGuardado && <div className="form-success">Tu perfil público se guardó correctamente.</div>}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-banner">
+                Banner (opcional, máx. 3MB, se recorta a 4:1)
+              </label>
+              <input
+                id="perfil-banner"
+                className="form-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleBannerChange}
+              />
+              {(bannerPreview ?? profile?.banner_url) && (
+                <img
+                  src={bannerPreview ?? profile?.banner_url ?? ""}
+                  alt="Vista previa del banner"
+                  className="team-banner-preview"
+                />
+              )}
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-bio">
+                Descripción
+              </label>
+              <textarea
+                id="perfil-bio"
+                className="form-textarea"
+                maxLength={280}
+                value={perfilBio}
+                onChange={(e) => setPerfilBio(e.target.value)}
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={guardandoPerfilPublico}>
+              {guardandoPerfilPublico ? "Guardando..." : "Guardar"}
+            </button>
+          </form>
+
           <form className="auth-form" onSubmit={handleGuardarIdentidad}>
             {errorIdentidad && <div className="form-error">{errorIdentidad}</div>}
             {identidadGuardada && <div className="form-success">Tu perfil se guardó correctamente.</div>}
@@ -1039,6 +1219,79 @@ export default function ProfilePage() {
               />
               Soy caster
             </label>
+          </div>
+
+          <h3 className="detail-subtitle">Links de transmisión</h3>
+          {errorLinks && <div className="form-error">{errorLinks}</div>}
+          {linksGuardados && <div className="form-success">Tus links se guardaron correctamente.</div>}
+
+          {linksTransmision.length > 0 && (
+            <div className="detail-participant-list">
+              {linksTransmision.map((link, indice) => (
+                <div key={`${link.plataforma}-${indice}`} className="detail-participant-item">
+                  {link.plataforma}
+                  <span className="profile-nick-id">{link.url}</span>
+                  <button type="button" className="btn btn-ghost" onClick={() => handleQuitarLink(indice)}>
+                    Quitar
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="auth-form">
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-link-plataforma">
+                Plataforma
+              </label>
+              <input
+                id="perfil-link-plataforma"
+                className="form-input"
+                type="text"
+                placeholder="Twitch, YouTube, Kick..."
+                value={nuevaPlataforma}
+                onChange={(e) => setNuevaPlataforma(e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-link-url">
+                Link
+              </label>
+              <input
+                id="perfil-link-url"
+                className="form-input"
+                type="text"
+                placeholder="https://twitch.tv/tu-canal"
+                value={nuevaUrlLink}
+                onChange={(e) => setNuevaUrlLink(e.target.value)}
+              />
+            </div>
+            <button type="button" className="btn btn-ghost btn-block" onClick={handleAgregarLink}>
+              Agregar link
+            </button>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-horario-stream">
+                Horario habitual de transmisión (opcional)
+              </label>
+              <input
+                id="perfil-horario-stream"
+                className="form-input"
+                type="text"
+                placeholder="Ej: Martes y jueves, 20:00 (hora Chile)"
+                value={horarioStream}
+                onChange={(e) => setHorarioStream(e.target.value)}
+              />
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-primary btn-block"
+              disabled={guardandoLinks}
+              onClick={handleGuardarLinks}
+            >
+              {guardandoLinks ? "Guardando..." : "Guardar links"}
+            </button>
           </div>
         </div>
       )}
