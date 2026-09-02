@@ -15,6 +15,7 @@ import BracketView from "../components/BracketView";
 import Avatar from "../components/Avatar";
 import LigaBadge from "../components/LigaBadge";
 import type { TournamentRow } from "../types/tournaments";
+import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
 
 interface MapaSeleccionado {
@@ -35,6 +36,9 @@ interface ParticipanteConNombre {
   teamId: string | null;
   nombre: string | null;
   avatarUrl: string | null;
+  // Solo se completa para participantes jugador (1v1) -- un equipo
+  // muestra su logo, que no está sujeto a esta preferencia personal.
+  avatarForma: AvatarForma | undefined;
   // MMR y liga (migración 020): en 1v1 son los del jugador (mmr_1v1);
   // en un torneo por equipo son los del equipo (teams.mmr) -- nunca
   // hay nivel acá para un equipo, ese cálculo todavía no existe (ver
@@ -157,6 +161,7 @@ export default function TournamentDetailPage() {
         teamId: p.team_id,
         nombre: p.team_id ? nombrePorTeamId[p.team_id] ?? "Equipo de RemorApp" : null,
         avatarUrl: p.team_id ? logoPorTeamId[p.team_id] ?? null : null,
+        avatarForma: undefined,
         mmr: p.team_id ? mmrPorTeamId[p.team_id] ?? null : null,
         liga: p.team_id ? ligaPorTeamId[p.team_id] ?? null : null,
         nivel: null,
@@ -169,6 +174,7 @@ export default function TournamentDetailPage() {
       let nombresPorId: Record<string, string | null> = {};
       let suspendidoPorId: Record<string, boolean> = {};
       let avatarPorId: Record<string, string | null> = {};
+      let avatarFormaPorId: Record<string, AvatarForma> = {};
       let mmrPorId: Record<string, number> = {};
       let ligaPorId: Record<string, string> = {};
       let nivelPorId: Record<string, number> = {};
@@ -180,12 +186,13 @@ export default function TournamentDetailPage() {
       if (userIds.length > 0) {
         const { data: perfilesData } = await supabase
           .from("profiles")
-          .select("id, nombre, suspendido, avatar_url, mmr_1v1, liga_1v1, nivel_1v1, banca_rota")
+          .select("id, nombre, suspendido, avatar_url, avatar_forma, mmr_1v1, liga_1v1, nivel_1v1, banca_rota")
           .in("id", userIds);
 
         nombresPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nombre]));
         suspendidoPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.suspendido]));
         avatarPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.avatar_url]));
+        avatarFormaPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.avatar_forma]));
         mmrPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.mmr_1v1]));
         ligaPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.liga_1v1]));
         nivelPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nivel_1v1]));
@@ -198,6 +205,7 @@ export default function TournamentDetailPage() {
         teamId: null,
         nombre: p.user_id ? nombresPorId[p.user_id] ?? null : null,
         avatarUrl: p.user_id ? avatarPorId[p.user_id] ?? null : null,
+        avatarForma: p.user_id ? avatarFormaPorId[p.user_id] : undefined,
         mmr: p.user_id ? mmrPorId[p.user_id] ?? null : null,
         liga: p.user_id ? ligaPorId[p.user_id] ?? null : null,
         nivel: p.user_id ? nivelPorId[p.user_id] ?? 0 : null,
@@ -569,7 +577,7 @@ export default function TournamentDetailPage() {
         <div className="detail-participant-list">
           {participantesVisibles.map((p) => (
             <div key={p.id} className="detail-participant-item">
-              <Avatar url={p.avatarUrl} nombre={p.nombre} className="detail-participant-avatar" />
+              <Avatar url={p.avatarUrl} nombre={p.nombre} className="detail-participant-avatar" forma={p.avatarForma} />
               {p.nombre ?? "Jugador de RemorApp"}
               {p.liga !== null && p.mmr !== null && (
                 <LigaBadge

@@ -58,6 +58,16 @@ export const LIGA_OPTIONS: Liga[] = [
   "Gran Maestro",
 ];
 
+// Forma del avatar del usuario (migración 031) -- se respeta en
+// cualquier lugar donde se muestre SU avatar (header, listas de
+// participantes, miembros de equipo). No afecta a logos de equipo.
+export type AvatarForma = "cuadrado" | "redondo";
+
+export const AVATAR_FORMA_OPTIONS: { value: AvatarForma; label: string }[] = [
+  { value: "cuadrado", label: "Cuadrado" },
+  { value: "redondo", label: "Redondo" },
+];
+
 // País del jugador (de dónde es), no el servidor de juego al que se
 // conecta -- ese es sc2_region. Valores guardados en snake_case sin
 // tildes para que no haya líos de comparación/codificación; el label
@@ -113,7 +123,20 @@ export interface Profile {
   nivel_1v1: number;
   liga_1v1: string;
   liga_equipos: string;
+  // Sistema de Valentía y Responsabilidad -- Fase 1 (migración 024),
+  // conectado a Clan Wars. responsabilidad_torneos todavía no se
+  // mueve -- eso se conecta con las reglas de asistencia a torneos,
+  // en otra fase. poco_confiable es el nombre interno de la columna;
+  // el texto visible siempre es "Poco Responsable".
+  valentia_jugador: number;
+  responsabilidad_cw: number;
+  responsabilidad_torneos: number;
+  poco_confiable: boolean;
+  // Sala de la Fama (migración 030): cuándo llegó por primera vez a
+  // Gran Maestro -- null si nunca. Se llena sola, nunca a mano.
+  gran_maestro_alcanzado_en: string | null;
   avatar_url: string | null;
+  avatar_forma: AvatarForma;
   bio: string | null;
   cuenta_validada: boolean;
   // Cuenta suspendida desde /admin: no puede crear torneos ni

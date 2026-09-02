@@ -16,6 +16,10 @@ export interface TeamRow {
   mmr: number;
   banca_rota: boolean;
   liga: string;
+  // Sistema de Valentía y Responsabilidad -- Fase 1 (migración 024).
+  // Sube al aceptar un reto o al proponerlo cuando el rival rechaza;
+  // baja al rechazar un reto propio.
+  valentia: number;
   is_public: boolean;
   invite_code: string;
   owner_id: string;
@@ -54,4 +58,95 @@ export interface TeamKickLogRow {
   kicked_by: string;
   kicked_at: string;
   motivo: TeamKickMotivo;
+}
+
+// Clan Wars -- Fase 1 (migración 021), Fase 2 (migración 022) y Fase
+// 3 (migración 023): proponer/responder retos, el check-in antes de
+// la guerra, y el resultado con ajuste de MMR. Coincide con los check
+// constraints de clan_wars en supabase/schema_tournaments.sql.
+export type ClanWarStatus =
+  | "pendiente"
+  | "aceptada"
+  | "rechazada"
+  | "cancelada"
+  | "en_curso"
+  | "finalizada"
+  | "empatada";
+
+export type ClanWarMotivoRechazo =
+  | "Falta de jugadores"
+  | "Conflicto de horario"
+  | "Ya tenemos guerra ese día"
+  | "Roster incompleto"
+  | "Otro";
+
+export const CLAN_WAR_MOTIVO_RECHAZO_OPTIONS: ClanWarMotivoRechazo[] = [
+  "Falta de jugadores",
+  "Conflicto de horario",
+  "Ya tenemos guerra ese día",
+  "Roster incompleto",
+  "Otro",
+];
+
+export interface ClanWarRow {
+  id: string;
+  challenger_team_id: string;
+  challenged_team_id: string;
+  // Guardado como instante absoluto (timestamptz), no como una hora
+  // local fijada a CET -- ver la explicación larga en la migración
+  // 021. "CET" es solo el huso horario de referencia que se usa para
+  // mostrarla, no la forma en la que se guarda.
+  fecha_hora_cet: string;
+  status: ClanWarStatus;
+  motivo_rechazo: ClanWarMotivoRechazo | null;
+  motivo_detalle: string | null;
+  created_at: string;
+  // Fase 2 (migración 022, check-in). check_in_abierto no se usa
+  // desde el frontend -- la ventana se calcula comparando
+  // fecha_hora_cet con la hora actual, ver lib/clanWars.ts.
+  check_in_abierto: boolean;
+  challenger_confirmado: boolean;
+  challenged_confirmado: boolean;
+  caster_nombre: string | null;
+  caster_link: string | null;
+  // Nullable hasta que el organizador lo define -- obligatorio antes
+  // de que la guerra pueda pasar a 'en_curso'.
+  tiene_delay: boolean | null;
+  // Fase 3 (migración 023, resultado). Mismo patrón de doble
+  // confirmación que challenger_confirmado/challenged_confirmado,
+  // pero para el cierre de la guerra.
+  challenger_cierre_confirmado: boolean;
+  challenged_cierre_confirmado: boolean;
+  // Solo se llena cuando status = 'finalizada' -- en 'empatada' queda
+  // null, nadie ganó la CW completa.
+  ganador_team_id: string | null;
+}
+
+export type ClanWarMatchStatus = "pendiente" | "jugado";
+
+export interface ClanWarMatchRow {
+  id: string;
+  clan_war_id: string;
+  jugador_challenger_id: string;
+  jugador_challenged_id: string;
+  ganador_id: string | null;
+  status: ClanWarMatchStatus;
+  created_at: string;
+}
+
+export type ClanWarReporteMotivo = "cuenta_no_coincide" | "sospecha_smurf" | "no_se_presento";
+
+export const CLAN_WAR_REPORTE_MOTIVO_OPTIONS: { value: ClanWarReporteMotivo; label: string }[] = [
+  { value: "cuenta_no_coincide", label: "Cuenta no coincide" },
+  { value: "sospecha_smurf", label: "Sospecha de smurf" },
+  { value: "no_se_presento", label: "No se presentó" },
+];
+
+export interface ClanWarReporteRow {
+  id: string;
+  clan_war_id: string;
+  reportado_por: string;
+  jugador_afectado_id: string;
+  motivo: ClanWarReporteMotivo;
+  created_at: string;
 }

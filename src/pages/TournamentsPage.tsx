@@ -42,6 +42,10 @@ export default function TournamentsPage() {
         <Link to="/tournaments/history" className="btn-link">
           Ver historial de torneos finalizados
         </Link>
+        {" · "}
+        <Link to="/torneos-historicos" className="btn-link">
+          Ver torneos históricos (pre-RemorApp)
+        </Link>
       </p>
 
       {/* Se movió acá desde Inicio, tal cual estaba -- quien busca

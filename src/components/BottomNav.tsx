@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
 import FanMenu from "./FanMenu";
-import HexPattern from "./HexPattern";
 import { useAuth } from "../context/AuthContext";
 
 const strokeProps = {
@@ -64,13 +63,6 @@ export default function BottomNav() {
 
   return (
     <nav className="bottom-nav">
-      {/* Decoración: panal de hexágonos + brillo lento, puramente visual
-          (aria-hidden) y detrás del contenido real de la barra. */}
-      <div className="bottom-nav-hex" aria-hidden="true">
-        <HexPattern id="bottom-nav-hex-pattern" className="hex-pattern bottom-nav-hex-svg" />
-        <div className="bottom-nav-hex-glow" />
-      </div>
-
       <div className="bottom-nav-inner">
         <NavLink to="/" end className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
           <HomeIcon />

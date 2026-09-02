@@ -54,6 +54,11 @@ create table public.profiles (
     'Gran Maestro'
   )),
   avatar_url text,
+  -- Preferencia visual de forma de avatar (migración 031): se respeta
+  -- en cualquier lugar donde se muestre el avatar de ESTE usuario
+  -- (header, listas de participantes, miembros de equipo) -- no
+  -- afecta a los logos de equipo, que son un concepto aparte.
+  avatar_forma text not null default 'cuadrado' check (avatar_forma in ('cuadrado', 'redondo')),
   bio text,
   -- Se recalcula sola (ver trigger actualizar_cuenta_validada): la
   -- app nunca la setea a mano, alcanza con guardar nick/country/
@@ -97,6 +102,20 @@ create policy "profiles_update_propio"
   using (id = auth.uid())
   with check (id = auth.uid());
 
+-- Historial de nicks (migración 025): quién se llamaba cómo antes de
+-- cambiarse el nick -- se llena solo, desde el trigger de más abajo,
+-- cada vez que un update de profiles cambia el nick. Nadie la lee
+-- directo (sin política de select, sin grant): la única puerta es
+-- investigar_jugador(), security definer, más abajo en el archivo.
+create table public.nick_history (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id),
+  nick_anterior text not null,
+  cambiado_en timestamptz not null default now()
+);
+
+alter table public.nick_history enable row level security;
+
 -- current_setting('request.jwt.claims', true) solo existe cuando la
 -- consulta llega a través de la API de Supabase (con sesión anon o
 -- authenticated); es null cuando se corre directo en el SQL Editor.
@@ -113,11 +132,25 @@ security definer
 set search_path = public
 as $$
 begin
+  -- Historial de nicks (migración 025): se registra siempre que
+  -- cambia, sin importar el camino por el que se guardó -- no es una
+  -- protección de seguridad, es un registro para investigar_jugador().
+  if new.nick is distinct from old.nick and old.nick is not null then
+    insert into public.nick_history (user_id, nick_anterior, cambiado_en)
+    values (old.id, old.nick, now());
+  end if;
+
   if current_setting('request.jwt.claims', true) is not null then
     new.es_admin := old.es_admin;
     new.es_dueno_plataforma := old.es_dueno_plataforma;
 
+    -- Migración 017: el dueño de la plataforma nunca puede quedar
+    -- suspendido; cualquier otro cambio de suspendido por esta vía
+    -- (API) exige ser admin -- si no, se revierte, así una cuenta
+    -- suspendida no puede reactivarse a sí misma con un update común.
     if old.es_dueno_plataforma then
+      new.suspendido := old.suspendido;
+    elsif new.suspendido is distinct from old.suspendido and not public.is_admin() then
       new.suspendido := old.suspendido;
     end if;
   end if;
@@ -248,7 +281,14 @@ returns table (
   perfil_tipo text,
   cuenta_validada boolean,
   suspendido boolean,
-  es_admin boolean
+  es_admin boolean,
+  -- Migración 028: quién suspendió la cuenta, por qué, y cuándo --
+  -- visible para CUALQUIER administrador, no solo quien la suspendió.
+  -- suspendido_por_nick se resuelve acá (join) en vez de mandar el
+  -- uuid crudo, para que sea legible sin una consulta aparte.
+  suspendido_por_nick text,
+  suspendido_motivo text,
+  suspendido_en timestamptz
 )
 language plpgsql
 security definer
@@ -261,8 +301,10 @@ begin
 
   return query
     select p.id, p.nick, p.unique_id, p.email, p.country, p.perfil_tipo,
-           p.cuenta_validada, p.suspendido, p.es_admin
+           p.cuenta_validada, p.suspendido, p.es_admin,
+           sp.nick, p.suspendido_motivo, p.suspendido_en
     from public.profiles p
+    left join public.profiles sp on sp.id = p.suspendido_por
     order by p.creado_en desc;
 end;
 $$;
@@ -293,6 +335,45 @@ end;
 $$;
 
 grant execute on function public.admin_cambiar_perfil_tipo(uuid, text) to authenticated;
+
+-- admin_suspender_usuario() (migración 028): único camino para
+-- suspender/reactivar una cuenta -- suspendido ya no tiene grant de
+-- columna para nadie (ver más arriba). Exige un motivo obligatorio
+-- para suspender, y deja registro de quién y cuándo. El dueño de la
+-- plataforma nunca puede quedar suspendido, ni por acá.
+create or replace function public.admin_suspender_usuario(
+  p_usuario_id uuid,
+  p_suspender boolean,
+  p_motivo text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Solo un administrador puede suspender o reactivar una cuenta.';
+  end if;
+
+  if p_suspender and (p_motivo is null or trim(p_motivo) = '') then
+    raise exception 'Tienes que escribir un motivo para suspender la cuenta.';
+  end if;
+
+  if exists (select 1 from public.profiles where id = p_usuario_id and es_dueno_plataforma) then
+    raise exception 'No se puede suspender al dueño de la plataforma.';
+  end if;
+
+  update public.profiles
+    set suspendido = p_suspender,
+        suspendido_por = case when p_suspender then auth.uid() else null end,
+        suspendido_motivo = case when p_suspender then trim(p_motivo) else null end,
+        suspendido_en = case when p_suspender then now() else null end
+    where id = p_usuario_id;
+end;
+$$;
+
+grant execute on function public.admin_suspender_usuario(uuid, boolean, text) to authenticated;
 
 -- ------------------------------------------------------------
 -- maps: catálogo de mapas de StarCraft II (ficticios, de
@@ -666,32 +747,38 @@ grant usage on schema public to anon, authenticated;
 -- mmr_1v1/mmr_equipos y sus columnas derivadas (migración 020)
 -- reemplazan a xp/nivel -- ultima_actividad queda afuera a propósito,
 -- es de uso interno nada más (restauración de banca rota).
+-- valentia_jugador/responsabilidad_cw/responsabilidad_torneos/
+-- poco_confiable (migración 024) son públicas igual que el MMR y la
+-- liga.
+-- gran_maestro_alcanzado_en (migración 030) es un logro -- se muestra
+-- en la Sala de la Fama para cualquiera.
 grant select (
   id, nombre, perfil_tipo, es_admin, es_caster, nick, unique_id,
-  country, sc2_region, sc2_id, liga, avatar_url, bio,
+  country, sc2_region, sc2_id, liga, avatar_url, avatar_forma, bio,
   cuenta_validada, suspendido, creado_en,
-  mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos
+  mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos,
+  valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable,
+  gran_maestro_alcanzado_en
 ) on public.profiles to anon, authenticated;
 
--- suspendido queda acá porque un admin necesita poder tocarlo desde
--- /admin -- pero como un admin también corre como "authenticated",
--- igual que cualquier usuario, un grant de columna no alcanza para
--- distinguir "admin suspendiendo a otro" de "usuario reactivándose a
--- sí mismo". Eso lo bloquea proteger_es_admin() (ver más arriba), que
--- exige is_admin() para poder cambiar suspendido.
+-- Migración 028: suspendido sale de esta lista -- mismo motivo que
+-- perfil_tipo (ver el párrafo de abajo): ahora hace falta guardar
+-- también quién, por qué y cuándo, y eso solo lo puede hacer
+-- atómicamente una función, no un grant de columna. La única puerta
+-- pasa a ser admin_suspender_usuario() (más abajo), security definer,
+-- exige is_admin() y un motivo obligatorio para suspender.
 --
--- perfil_tipo NO va en esta lista (a diferencia de suspendido): no
--- hay forma de que un grant de columna distinga "admin cambiando el
--- rol de otro" de "usuario cambiándose el suyo propio" -- y a
--- diferencia de suspendido, acá no alcanza con un trigger (el cambio
--- de perfil_tipo también tiene que validar que el nuevo valor sea
--- válido). Por eso queda totalmente afuera de este grant -- ni
+-- perfil_tipo tampoco va en esta lista: no hay forma de que un grant
+-- de columna distinga "admin cambiando el rol de otro" de "usuario
+-- cambiándose el suyo propio" -- y acá no alcanza con un trigger (el
+-- cambio de perfil_tipo también tiene que validar que el nuevo valor
+-- sea válido). Por eso queda totalmente afuera de este grant -- ni
 -- siquiera un admin puede tocarlo con un update directo -- y la única
 -- puerta es admin_cambiar_perfil_tipo() (ver más abajo, junto a
 -- admin_listar_usuarios()), security definer, exige is_admin().
 grant update (
   nombre, es_caster, nick, country, sc2_region,
-  sc2_id, liga, avatar_url, suspendido
+  sc2_id, liga, avatar_url, avatar_forma
 ) on public.profiles to authenticated;
 
 grant select on public.maps to anon, authenticated;
@@ -982,7 +1069,13 @@ create table public.team_kicks_log (
   -- kicked_by en los dos casos cuando es el propio jugador (uno se
   -- "expulsa a sí mismo" en los datos), pero el motivo deja clara la
   -- diferencia al mirar el historial.
-  motivo text not null default 'expulsado' check (motivo in ('expulsado', 'renuncia'))
+  motivo text not null default 'expulsado' check (motivo in ('expulsado', 'renuncia')),
+  -- Migración 025: cuándo había entrado a ese equipo (team_members.
+  -- joined_at, que se pierde en cuanto se borra la fila) -- para que
+  -- investigar_jugador() pueda mostrar el historial de equipos
+  -- completo, no solo la fecha de salida. Nullable: los registros de
+  -- antes de esta migración no lo tienen.
+  entrada_en timestamptz
 );
 
 alter table public.team_kicks_log enable row level security;
@@ -1119,6 +1212,7 @@ set search_path = public
 as $$
 declare
   v_owner_id uuid;
+  v_entrada_en timestamptz;
 begin
   select owner_id into v_owner_id from public.teams where id = p_team_id;
 
@@ -1134,8 +1228,12 @@ begin
     raise exception 'No te puedes sacar a ti mismo del equipo.';
   end if;
 
-  insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo)
-  values (p_team_id, p_user_id, auth.uid(), 'expulsado');
+  select joined_at into v_entrada_en
+  from public.team_members
+  where team_id = p_team_id and user_id = p_user_id;
+
+  insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo, entrada_en)
+  values (p_team_id, p_user_id, auth.uid(), 'expulsado', v_entrada_en);
 
   delete from public.team_members
   where team_id = p_team_id and user_id = p_user_id;
@@ -1164,9 +1262,10 @@ as $$
 declare
   v_team_id uuid;
   v_roles text[];
+  v_entrada_en timestamptz;
   v_total_miembros int;
 begin
-  select tm.team_id, tm.roles into v_team_id, v_roles
+  select tm.team_id, tm.roles, tm.joined_at into v_team_id, v_roles, v_entrada_en
   from public.team_members tm
   where tm.user_id = auth.uid();
 
@@ -1183,8 +1282,8 @@ begin
       raise exception 'Como dueño del equipo, primero debes transferir el liderazgo a otro miembro antes de salir.';
     end if;
 
-    insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo)
-    values (v_team_id, auth.uid(), auth.uid(), 'renuncia');
+    insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo, entrada_en)
+    values (v_team_id, auth.uid(), auth.uid(), 'renuncia', v_entrada_en);
 
     delete from public.team_members where user_id = auth.uid();
     update public.teams set disuelto = true where id = v_team_id;
@@ -1192,8 +1291,8 @@ begin
     return;
   end if;
 
-  insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo)
-  values (v_team_id, auth.uid(), auth.uid(), 'renuncia');
+  insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo, entrada_en)
+  values (v_team_id, auth.uid(), auth.uid(), 'renuncia', v_entrada_en);
 
   delete from public.team_members where user_id = auth.uid();
 end;
@@ -1253,6 +1352,1228 @@ end;
 $$;
 
 grant execute on function public.transferir_liderazgo(uuid) to authenticated;
+
+-- eliminar_equipo_definitivo() (migración 028): borra la fila de
+-- teams de verdad, no solo la marca disuelta. Solo el dueño (o un
+-- admin, para el caso de /admin) -- y solo si el equipo ya está
+-- disuelto, o si no tiene otros miembros además del dueño (en ese
+-- caso no hace falta pasar por salir_equipo()/disolver primero).
+-- team_members, team_invitations y team_kicks_log caen en cascada
+-- solos (on delete cascade); clan_wars/tournament_participants NO
+-- tienen cascade a propósito -- si el equipo tiene historial de Clan
+-- Wars o de torneos, la eliminación se bloquea para no perder esa
+-- historia. titulos_padre_hijo no tiene foreign key (es polimórfica)
+-- así que se limpia a mano antes de borrar -- si llegó hasta acá sin
+-- historial de Clan Wars, cualquier título que la mencione todavía
+-- está 'pendiente' o 'rechazado', nunca 'activo'.
+create or replace function public.eliminar_equipo_definitivo(p_team_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_team record;
+  v_otros_miembros int;
+begin
+  select * into v_team from public.teams where id = p_team_id for update;
+  if v_team is null then
+    raise exception 'Ese equipo no existe.';
+  end if;
+
+  if v_team.owner_id <> auth.uid() and not public.is_admin() then
+    raise exception 'No tienes permiso para eliminar este equipo.';
+  end if;
+
+  if not v_team.disuelto then
+    select count(*) into v_otros_miembros
+    from public.team_members
+    where team_id = p_team_id and user_id <> v_team.owner_id;
+
+    if v_otros_miembros > 0 then
+      raise exception 'Este equipo todavía tiene otros miembros -- primero tiene que disolverse (o quedar sin otros miembros) antes de poder eliminarlo definitivamente.';
+    end if;
+  end if;
+
+  if exists (
+    select 1 from public.clan_wars where challenger_team_id = p_team_id or challenged_team_id = p_team_id
+  ) or exists (
+    select 1 from public.tournament_participants where team_id = p_team_id
+  ) then
+    raise exception 'Este equipo tiene historial de Clan Wars o de torneos y no se puede eliminar definitivamente -- esa historia queda protegida.';
+  end if;
+
+  delete from public.titulos_padre_hijo where tipo = 'clan' and (retador_id = p_team_id or retado_id = p_team_id);
+
+  delete from public.teams where id = p_team_id;
+end;
+$$;
+
+grant execute on function public.eliminar_equipo_definitivo(uuid) to authenticated;
+
+-- investigar_jugador() (migración 025): revisar el historial completo
+-- de un jugador antes de invitarlo -- nicks anteriores, en qué clanes
+-- estuvo (con fecha de entrada y de salida, y si fue expulsión o
+-- renuncia), reportes de 'no_se_presento' en su contra, y sus
+-- valores actuales de responsabilidad/valentía. Solo para líderes de
+-- clan (dueños de algún equipo) o administradores -- ni siquiera un
+-- jugador puede usarla para investigarse a sí mismo por acá, ya tiene
+-- su propio /perfil para eso. Devuelve todo junto en un jsonb, porque
+-- la forma de la respuesta es heterogénea (identidad + tres listas).
+create or replace function public.investigar_jugador(p_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_puede_investigar boolean;
+  v_resultado jsonb;
+begin
+  select exists (select 1 from public.teams where owner_id = auth.uid()) or public.is_admin()
+    into v_puede_investigar;
+
+  if not v_puede_investigar then
+    raise exception 'No tienes permiso para investigar jugadores.';
+  end if;
+
+  if not exists (select 1 from public.profiles where id = p_user_id) then
+    raise exception 'Ese jugador no existe.';
+  end if;
+
+  select jsonb_build_object(
+    'identidad', (
+      select jsonb_build_object(
+        'id', p.id,
+        'nick', p.nick,
+        'unique_id', p.unique_id,
+        'suspendido', p.suspendido,
+        'poco_confiable', p.poco_confiable,
+        'valentia_jugador', p.valentia_jugador,
+        'responsabilidad_cw', p.responsabilidad_cw,
+        'responsabilidad_torneos', p.responsabilidad_torneos,
+        'liga_1v1', p.liga_1v1
+      )
+      from public.profiles p
+      where p.id = p_user_id
+    ),
+    'historial_nicks', (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object('nick_anterior', nh.nick_anterior, 'cambiado_en', nh.cambiado_en)
+          order by nh.cambiado_en desc
+        ),
+        '[]'::jsonb
+      )
+      from public.nick_history nh
+      where nh.user_id = p_user_id
+    ),
+    'historial_equipos', (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'team_id', team_id, 'nombre', nombre, 'tag', tag,
+            'entrada_en', entrada_en, 'salida_en', salida_en, 'motivo_salida', motivo_salida
+          )
+          order by entrada_en desc nulls last
+        ),
+        '[]'::jsonb
+      )
+      from (
+        -- Equipo actual, si tiene -- todavía no salió.
+        select t.id as team_id, t.name as nombre, t.tag as tag, tm.joined_at as entrada_en,
+               null::timestamptz as salida_en, null::text as motivo_salida
+        from public.team_members tm
+        join public.teams t on t.id = tm.team_id
+        where tm.user_id = p_user_id
+
+        union all
+
+        -- Equipos anteriores -- team_members ya se borró al salir, la
+        -- única fuente que queda es team_kicks_log.
+        select t.id, t.name, t.tag, tkl.entrada_en, tkl.kicked_at, tkl.motivo
+        from public.team_kicks_log tkl
+        join public.teams t on t.id = tkl.team_id
+        where tkl.user_id = p_user_id
+      ) historial
+    ),
+    'reportes_no_presentado', (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'clan_war_id', cwr.clan_war_id,
+            'reportado_por_nombre', rt.name || ' [' || rt.tag || ']',
+            'created_at', cwr.created_at
+          )
+          order by cwr.created_at desc
+        ),
+        '[]'::jsonb
+      )
+      from public.clan_war_reportes cwr
+      join public.teams rt on rt.id = cwr.reportado_por
+      where cwr.jugador_afectado_id = p_user_id and cwr.motivo = 'no_se_presento'
+    )
+  ) into v_resultado;
+
+  return v_resultado;
+end;
+$$;
+
+grant execute on function public.investigar_jugador(uuid) to authenticated;
+
+-- ------------------------------------------------------------
+-- Clan Wars -- Fase 1 (migración 021): proponer y responder retos
+-- entre clanes. Sin check-in, sin ajuste de MMR, sin caster ni
+-- transmisión todavía -- eso son fases siguientes. banca_rota
+-- (migración 020) se aplica de verdad acá: un equipo en banca rota no
+-- puede proponer ni ser desafiado a un reto por puntos.
+--
+-- fecha_hora_cet se guarda como timestamptz (un instante absoluto),
+-- no como una hora local "ingenua" fijada a CET -- Europa cambia de
+-- CET (UTC+1) a CEST (UTC+2) con el horario de verano, así que "la
+-- hora CET" de un instante concreto no es un desplazamiento fijo todo
+-- el año. Guardando el instante real, "convertir a CET" y "convertir
+-- a la hora local de cada quien" son, en cualquier momento del año,
+-- una conversión de huso horario correcta -- nunca se desincronizan
+-- entre sí.
+-- ------------------------------------------------------------
+create table public.clan_wars (
+  id uuid primary key default gen_random_uuid(),
+  challenger_team_id uuid not null references public.teams (id),
+  challenged_team_id uuid not null references public.teams (id),
+  fecha_hora_cet timestamptz not null,
+  status text not null default 'pendiente'
+    check (status in (
+      'pendiente', 'aceptada', 'rechazada', 'cancelada', 'en_curso', 'finalizada', 'empatada'
+    )),
+  motivo_rechazo text
+    check (motivo_rechazo in (
+      'Falta de jugadores', 'Conflicto de horario', 'Ya tenemos guerra ese día',
+      'Roster incompleto', 'Otro'
+    )),
+  -- Solo tiene sentido (y solo puede estar lleno) cuando el motivo es
+  -- 'Otro' -- en cualquier otro caso el motivo fijo ya lo dice todo.
+  motivo_detalle text,
+  created_at timestamptz not null default now(),
+  -- Fase 2 (migración 022, check-in). check_in_abierto existe pero no
+  -- es la fuente de verdad de si la ventana está abierta -- eso se
+  -- calcula comparando fecha_hora_cet con el instante actual (15
+  -- minutos antes), tanto en el frontend como adentro de
+  -- confirmar_alineacion(), porque mantenerlo sincronizado como un
+  -- booleano exigiría un proceso en segundo plano que no hace falta.
+  -- Queda creada para uso futuro; ninguna función la lee ni la
+  -- escribe todavía.
+  check_in_abierto boolean not null default false,
+  challenger_confirmado boolean not null default false,
+  challenged_confirmado boolean not null default false,
+  caster_nombre text,
+  caster_link text,
+  -- Nullable a propósito: obligatorio definirlo ANTES de que la
+  -- guerra pueda pasar a 'en_curso' (intentar_iniciar_clan_war() más
+  -- abajo lo exige), pero al proponerse el reto todavía no se sabe.
+  tiene_delay boolean,
+  -- Fase 3 (migración 023, resultado). Mismo patrón de doble
+  -- confirmación que challenger_confirmado/challenged_confirmado,
+  -- pero para el cierre: cualquiera de los dos capitanes llama a
+  -- cerrar_clan_war(), pero recién se cierra de verdad cuando los dos
+  -- la llamaron.
+  challenger_cierre_confirmado boolean not null default false,
+  challenged_cierre_confirmado boolean not null default false,
+  ganador_team_id uuid references public.teams (id),
+  check (challenger_team_id <> challenged_team_id),
+  check (motivo_rechazo = 'Otro' or motivo_detalle is null),
+  check (motivo_rechazo is distinct from 'Otro' or motivo_detalle is not null)
+);
+
+alter table public.clan_wars enable row level security;
+
+-- Solo los dueños de los dos equipos involucrados ven el detalle de
+-- un reto -- ni siquiera otro miembro del mismo equipo.
+create policy "clan_wars_select_propio"
+  on public.clan_wars for select
+  to authenticated
+  using (
+    exists (select 1 from public.teams t where t.id = challenger_team_id and t.owner_id = auth.uid())
+    or exists (select 1 from public.teams t where t.id = challenged_team_id and t.owner_id = auth.uid())
+  );
+
+grant select on public.clan_wars to authenticated;
+
+-- Sin política de insert/update para authenticated a propósito -- la
+-- única forma de escribir acá es proponer_clan_war() y
+-- responder_clan_war(), security definer, mismo patrón que
+-- reportar_resultado() y el resto de las mutaciones sensibles del
+-- proyecto.
+create or replace function public.proponer_clan_war(p_challenged_team_id uuid, p_fecha_hora_cet timestamptz)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_challenger record;
+  v_challenged record;
+  v_ultimo_reto timestamptz;
+begin
+  -- Migración 028: not disuelto -- si no, un ex-dueño de un equipo ya
+  -- disuelto podría seguir proponiendo retos como si el equipo
+  -- siguiera existiendo (owner_id no se limpia solo al disolverse).
+  select * into v_challenger from public.teams where owner_id = auth.uid() and not disuelto;
+  if v_challenger is null then
+    raise exception 'No eres dueño de ningún equipo.';
+  end if;
+
+  if v_challenger.disuelto then
+    raise exception 'Tu equipo está disuelto.';
+  end if;
+  if v_challenger.banca_rota then
+    raise exception 'Tu equipo está en banca rota y no puede retar por puntos.';
+  end if;
+
+  select * into v_challenged from public.teams where id = p_challenged_team_id;
+  if v_challenged is null then
+    raise exception 'Ese equipo no existe.';
+  end if;
+  if v_challenged.id = v_challenger.id then
+    raise exception 'Un equipo no puede retarse a sí mismo.';
+  end if;
+  if v_challenged.disuelto then
+    raise exception 'Ese equipo está disuelto.';
+  end if;
+  if v_challenged.banca_rota then
+    raise exception 'Ese equipo está en banca rota y no puede ser retado por puntos.';
+  end if;
+
+  if p_fecha_hora_cet <= now() then
+    raise exception 'La fecha y hora del reto debe ser en el futuro.';
+  end if;
+
+  -- Cooldown de 7 días desde el último reto entre estos dos equipos,
+  -- en cualquier dirección y sin importar el resultado (pendiente,
+  -- aceptada, rechazada o cancelada cuentan igual).
+  select max(created_at) into v_ultimo_reto
+  from public.clan_wars
+  where (challenger_team_id = v_challenger.id and challenged_team_id = p_challenged_team_id)
+     or (challenger_team_id = p_challenged_team_id and challenged_team_id = v_challenger.id);
+
+  if v_ultimo_reto is not null and now() - v_ultimo_reto < interval '7 days' then
+    raise exception 'Ya hubo un reto entre estos dos equipos hace menos de 7 días. Puedes proponer otro a partir del %.',
+      to_char(v_ultimo_reto + interval '7 days', 'DD/MM/YYYY HH24:MI');
+  end if;
+
+  insert into public.clan_wars (challenger_team_id, challenged_team_id, fecha_hora_cet)
+  values (v_challenger.id, p_challenged_team_id, p_fecha_hora_cet);
+end;
+$$;
+
+grant execute on function public.proponer_clan_war(uuid, timestamptz) to authenticated;
+
+create or replace function public.responder_clan_war(
+  p_clan_war_id uuid,
+  p_aceptar boolean,
+  p_motivo_rechazo text default null,
+  p_motivo_detalle text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+  v_soy_desafiado boolean;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
+  if v_reto is null then
+    raise exception 'Ese reto no existe.';
+  end if;
+
+  select exists (
+    select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid()
+  ) into v_soy_desafiado;
+
+  if not v_soy_desafiado then
+    raise exception 'Solo el dueño del equipo desafiado puede responder este reto.';
+  end if;
+
+  if v_reto.status <> 'pendiente' then
+    raise exception 'Este reto ya no está pendiente de respuesta.';
+  end if;
+
+  if p_aceptar then
+    update public.clan_wars set status = 'aceptada' where id = p_clan_war_id;
+
+    -- Valentía de clan (migración 024): aceptar sube la del
+    -- desafiado. Sin mirar la liga de cada equipo todavía -- eso es
+    -- un ajuste posterior.
+    update public.teams
+      set valentia = greatest(0, least(100, valentia + 2))
+      where id = v_reto.challenged_team_id;
+    return;
+  end if;
+
+  if p_motivo_rechazo is null then
+    raise exception 'Tienes que elegir un motivo para rechazar el reto.';
+  end if;
+  if p_motivo_rechazo not in (
+    'Falta de jugadores', 'Conflicto de horario', 'Ya tenemos guerra ese día',
+    'Roster incompleto', 'Otro'
+  ) then
+    raise exception 'Ese motivo no es válido.';
+  end if;
+  if p_motivo_rechazo = 'Otro' and (p_motivo_detalle is null or trim(p_motivo_detalle) = '') then
+    raise exception 'Tienes que escribir un detalle cuando el motivo es "Otro".';
+  end if;
+
+  update public.clan_wars
+    set status = 'rechazada',
+        motivo_rechazo = p_motivo_rechazo,
+        motivo_detalle = case when p_motivo_rechazo = 'Otro' then p_motivo_detalle else null end
+    where id = p_clan_war_id;
+
+  -- Valentía de clan: rechazar sube la del que propuso el reto y baja
+  -- la del que rechazó.
+  update public.teams
+    set valentia = greatest(0, least(100, valentia + 5))
+    where id = v_reto.challenger_team_id;
+  update public.teams
+    set valentia = greatest(0, least(100, valentia - 5))
+    where id = v_reto.challenged_team_id;
+end;
+$$;
+
+grant execute on function public.responder_clan_war(uuid, boolean, text, text) to authenticated;
+
+-- ------------------------------------------------------------
+-- Clan Wars -- Fase 2 (migración 022): check-in antes de la guerra.
+-- Sin ajuste de MMR ni reporte de resultado todavía -- eso es la fase
+-- siguiente, con las tablas de ganancia/pérdida de MMR.
+-- ------------------------------------------------------------
+
+-- Reportes durante el check-in: cualquiera de los dos capitanes puede
+-- reportar un problema sobre un jugador del roster RIVAL (nunca del
+-- propio). 'no_se_presento' queda registrado acá nada más por ahora
+-- -- bajarle la confiabilidad a ese jugador es una fase aparte,
+-- todavía no construida.
+create table public.clan_war_reportes (
+  id uuid primary key default gen_random_uuid(),
+  clan_war_id uuid not null references public.clan_wars (id),
+  reportado_por uuid not null references public.teams (id),
+  jugador_afectado_id uuid not null references public.profiles (id),
+  motivo text not null check (motivo in ('cuenta_no_coincide', 'sospecha_smurf', 'no_se_presento')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.clan_war_reportes enable row level security;
+
+-- Mismo criterio que clan_wars: solo los capitanes de los dos equipos
+-- del reto en cuestión ven sus reportes.
+create policy "clan_war_reportes_select_propio"
+  on public.clan_war_reportes for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.clan_wars cw
+      join public.teams t on t.id in (cw.challenger_team_id, cw.challenged_team_id)
+      where cw.id = clan_war_id and t.owner_id = auth.uid()
+    )
+  );
+
+grant select on public.clan_war_reportes to authenticated;
+
+-- Sin política de insert para authenticated a propósito -- la única
+-- forma de escribir acá es reportar_problema(), security definer.
+
+-- Helper interno: se llama desde confirmar_alineacion() y
+-- completar_datos_transmision() después de cada cambio, porque
+-- cualquiera de las dos puede ser la pieza que faltaba para arrancar
+-- la guerra. Sin grant execute para authenticated -- no hace falta,
+-- nunca se llama directo desde el cliente, mismo patrón que
+-- avanzar_ganador() con generar_llave()/reportar_resultado().
+create or replace function public.intentar_iniciar_clan_war(p_clan_war_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id;
+
+  if v_reto.status = 'aceptada'
+     and v_reto.challenger_confirmado
+     and v_reto.challenged_confirmado
+     and v_reto.tiene_delay is not null
+  then
+    update public.clan_wars set status = 'en_curso' where id = p_clan_war_id;
+  end if;
+end;
+$$;
+
+-- confirmar_alineacion(): el capitán verificó por su cuenta, fuera de
+-- la plataforma (en el lobby de SC2), que las cuentas del roster
+-- rival coinciden con lo declarado -- esto no valida nada contra
+-- Battle.net, es una confirmación manual de que ya lo revisó.
+create or replace function public.confirmar_alineacion(p_clan_war_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+  v_soy_challenger boolean;
+  v_soy_challenged boolean;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
+  if v_reto is null then
+    raise exception 'Ese reto no existe.';
+  end if;
+
+  if v_reto.status <> 'aceptada' then
+    raise exception 'Este reto todavía no fue aceptado, o la guerra ya empezó.';
+  end if;
+
+  select exists (select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid())
+    into v_soy_challenger;
+  select exists (select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid())
+    into v_soy_challenged;
+
+  if not v_soy_challenger and not v_soy_challenged then
+    raise exception 'No eres capitán de ninguno de los dos equipos de este reto.';
+  end if;
+
+  -- La ventana se abre 15 minutos antes de fecha_hora_cet -- se
+  -- recalcula acá mismo con el instante actual, no depende de ningún
+  -- booleano guardado.
+  if now() < v_reto.fecha_hora_cet - interval '15 minutes' then
+    raise exception 'Todavía no se abrió la ventana de check-in (se abre 15 minutos antes de la hora del reto).';
+  end if;
+
+  if v_soy_challenger then
+    update public.clan_wars set challenger_confirmado = true where id = p_clan_war_id;
+  else
+    update public.clan_wars set challenged_confirmado = true where id = p_clan_war_id;
+  end if;
+
+  perform public.intentar_iniciar_clan_war(p_clan_war_id);
+end;
+$$;
+
+grant execute on function public.confirmar_alineacion(uuid) to authenticated;
+
+-- reportar_problema(): siempre sobre un jugador del roster RIVAL,
+-- nunca del propio equipo.
+create or replace function public.reportar_problema(
+  p_clan_war_id uuid,
+  p_jugador_afectado_id uuid,
+  p_motivo text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+  v_mi_team_id uuid;
+  v_rival_team_id uuid;
+  v_reportes_recientes int;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id;
+  if v_reto is null then
+    raise exception 'Ese reto no existe.';
+  end if;
+
+  if exists (select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid()) then
+    v_mi_team_id := v_reto.challenger_team_id;
+    v_rival_team_id := v_reto.challenged_team_id;
+  elsif exists (select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid()) then
+    v_mi_team_id := v_reto.challenged_team_id;
+    v_rival_team_id := v_reto.challenger_team_id;
+  else
+    raise exception 'No eres capitán de ninguno de los dos equipos de este reto.';
+  end if;
+
+  if v_reto.status not in ('aceptada', 'en_curso') then
+    raise exception 'Este reto no está en un estado que permita reportar un problema.';
+  end if;
+
+  if p_motivo not in ('cuenta_no_coincide', 'sospecha_smurf', 'no_se_presento') then
+    raise exception 'Ese motivo no es válido.';
+  end if;
+
+  if not exists (
+    select 1 from public.team_members where team_id = v_rival_team_id and user_id = p_jugador_afectado_id
+  ) then
+    raise exception 'Ese jugador no pertenece al roster del equipo rival.';
+  end if;
+
+  insert into public.clan_war_reportes (clan_war_id, reportado_por, jugador_afectado_id, motivo)
+  values (p_clan_war_id, v_mi_team_id, p_jugador_afectado_id, p_motivo);
+
+  -- Responsabilidad (migración 024): 'no_se_presento' baja
+  -- responsabilidad_cw y valentia_jugador del jugador reportado en el
+  -- momento del reporte. Acumular 3 reportes de ese motivo en los
+  -- últimos 30 días marca poco_confiable = true (texto visible:
+  -- "Poco Responsable", nunca "confiable").
+  if p_motivo = 'no_se_presento' then
+    update public.profiles
+      set responsabilidad_cw = greatest(0, least(100, responsabilidad_cw - 15)),
+          valentia_jugador = greatest(0, least(100, valentia_jugador - 10))
+      where id = p_jugador_afectado_id;
+
+    select count(*) into v_reportes_recientes
+    from public.clan_war_reportes
+    where jugador_afectado_id = p_jugador_afectado_id
+      and motivo = 'no_se_presento'
+      and created_at >= now() - interval '30 days';
+
+    if v_reportes_recientes >= 3 then
+      update public.profiles set poco_confiable = true where id = p_jugador_afectado_id;
+    end if;
+  end if;
+end;
+$$;
+
+grant execute on function public.reportar_problema(uuid, uuid, text) to authenticated;
+
+-- completar_datos_transmision(): solo el organizador (quien propuso
+-- el reto, challenger_team_id). caster_nombre y caster_link son
+-- opcionales -- si llegan vacíos se guardan como null. tiene_delay es
+-- obligatorio (true o false, nunca queda sin definir).
+create or replace function public.completar_datos_transmision(
+  p_clan_war_id uuid,
+  p_caster_nombre text,
+  p_caster_link text,
+  p_tiene_delay boolean
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
+  if v_reto is null then
+    raise exception 'Ese reto no existe.';
+  end if;
+
+  if not exists (select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid()) then
+    raise exception 'Solo el organizador (quien propuso el reto) puede completar los datos de transmisión.';
+  end if;
+
+  if v_reto.status <> 'aceptada' then
+    raise exception 'Este reto todavía no fue aceptado, o la guerra ya empezó.';
+  end if;
+
+  if p_tiene_delay is null then
+    raise exception 'Tienes que definir si la transmisión tiene delay o no.';
+  end if;
+
+  update public.clan_wars
+    set caster_nombre = nullif(trim(p_caster_nombre), ''),
+        caster_link = nullif(trim(p_caster_link), ''),
+        tiene_delay = p_tiene_delay
+    where id = p_clan_war_id;
+
+  perform public.intentar_iniciar_clan_war(p_clan_war_id);
+end;
+$$;
+
+grant execute on function public.completar_datos_transmision(uuid, text, text, boolean) to authenticated;
+
+-- ------------------------------------------------------------
+-- Títulos Padre/Hijo -- entre clanes y entre jugadores 1v1 (migración
+-- 026). Se resuelven solos con un enfrentamiento real -- una Clan War
+-- que se cierra (clanes, ver cerrar_clan_war() más abajo) o una
+-- partida 1v1 que se resuelve en cualquier torneo (jugadores, ver
+-- avanzar_ganador() más abajo) -- reutilizando esas dos funciones, no
+-- unas paralelas.
+--
+-- retador_id/retado_id son polimórficos (team_id o profile_id, según
+-- tipo) -- no llevan foreign key porque apuntan a una tabla u otra
+-- según el caso; cada función valida que el id exista adentro.
+--
+-- Sobre "queda pendiente hasta que se resuelve": aceptar NO cambia el
+-- status (sigue en 'pendiente'). La columna aceptado es la única
+-- forma de distinguir "todavía sin responder" de "ya se acordó,
+-- esperando el partido/CW que lo resuelva".
+-- ------------------------------------------------------------
+create table public.titulos_padre_hijo (
+  id uuid primary key default gen_random_uuid(),
+  tipo text not null check (tipo in ('clan', 'jugador')),
+  retador_id uuid not null,
+  retado_id uuid not null,
+  duracion_dias integer not null check (duracion_dias between 7 and 90),
+  -- Obligatorios solo para tipo = 'jugador' -- el check de abajo lo
+  -- exige.
+  caster_nombre text,
+  caster_link text,
+  status text not null default 'pendiente' check (status in ('pendiente', 'activo', 'expirado', 'rechazado')),
+  aceptado boolean not null default false,
+  -- null hasta resolverse.
+  ganador_id uuid,
+  fecha_inicio timestamptz,
+  fecha_fin timestamptz,
+  created_at timestamptz not null default now(),
+  check (retador_id <> retado_id),
+  check (tipo <> 'jugador' or (caster_nombre is not null and caster_link is not null)),
+  check (ganador_id is null or ganador_id in (retador_id, retado_id))
+);
+
+alter table public.titulos_padre_hijo enable row level security;
+
+-- Cualquiera ve los títulos donde participa su propio equipo o su
+-- propia cuenta -- pendientes de responder y propios, en el Panel de
+-- control / en /perfil. Los títulos ACTIVOS que se muestran en el
+-- perfil público de un tercero van por titulos_activos_de() más
+-- abajo, que sí es pública -- no por esta política.
+create policy "titulos_padre_hijo_select_propio"
+  on public.titulos_padre_hijo for select
+  to authenticated
+  using (
+    (tipo = 'jugador' and (retador_id = auth.uid() or retado_id = auth.uid()))
+    or (tipo = 'clan' and (
+      exists (select 1 from public.teams where id = retador_id and owner_id = auth.uid())
+      or exists (select 1 from public.teams where id = retado_id and owner_id = auth.uid())
+    ))
+  );
+
+grant select on public.titulos_padre_hijo to authenticated;
+
+-- Sin política de insert/update para authenticated a propósito -- la
+-- única forma de escribir acá es proponer_titulo_padre_hijo(),
+-- responder_titulo_padre_hijo(), y la resolución automática desde
+-- cerrar_clan_war()/avanzar_ganador(), todas security definer.
+
+create or replace function public.proponer_titulo_padre_hijo(
+  p_tipo text,
+  p_retado_id uuid,
+  p_duracion_dias integer,
+  p_caster_nombre text default null,
+  p_caster_link text default null
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_retador_id uuid;
+begin
+  if p_tipo not in ('clan', 'jugador') then
+    raise exception 'Ese tipo de título no es válido.';
+  end if;
+
+  if p_duracion_dias < 7 or p_duracion_dias > 90 then
+    raise exception 'La duración tiene que ser entre 7 y 90 días.';
+  end if;
+
+  if p_tipo = 'clan' then
+    -- Migración 028: not disuelto, mismo motivo que en proponer_clan_war().
+    select id into v_retador_id from public.teams where owner_id = auth.uid() and not disuelto;
+    if v_retador_id is null then
+      raise exception 'No eres dueño de ningún equipo.';
+    end if;
+    if not exists (select 1 from public.teams where id = p_retado_id) then
+      raise exception 'Ese equipo no existe.';
+    end if;
+  else
+    v_retador_id := auth.uid();
+    if not exists (select 1 from public.profiles where id = p_retado_id) then
+      raise exception 'Ese jugador no existe.';
+    end if;
+    if p_caster_nombre is null or trim(p_caster_nombre) = '' then
+      raise exception 'El caster es obligatorio para un título entre jugadores.';
+    end if;
+    if p_caster_link is null or trim(p_caster_link) = '' then
+      raise exception 'El link del caster es obligatorio para un título entre jugadores.';
+    end if;
+  end if;
+
+  if v_retador_id = p_retado_id then
+    raise exception 'No puedes retarte a ti mismo.';
+  end if;
+
+  insert into public.titulos_padre_hijo (
+    tipo, retador_id, retado_id, duracion_dias, caster_nombre, caster_link
+  ) values (
+    p_tipo, v_retador_id, p_retado_id, p_duracion_dias,
+    case when p_tipo = 'jugador' then p_caster_nombre else null end,
+    case when p_tipo = 'jugador' then p_caster_link else null end
+  );
+end;
+$$;
+
+grant execute on function public.proponer_titulo_padre_hijo(text, uuid, integer, text, text) to authenticated;
+
+create or replace function public.responder_titulo_padre_hijo(p_titulo_id uuid, p_aceptar boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_titulo record;
+  v_soy_retado boolean;
+begin
+  select * into v_titulo from public.titulos_padre_hijo where id = p_titulo_id for update;
+  if v_titulo is null then
+    raise exception 'Ese título no existe.';
+  end if;
+
+  if v_titulo.status <> 'pendiente' or v_titulo.aceptado then
+    raise exception 'Este título ya fue respondido.';
+  end if;
+
+  if v_titulo.tipo = 'clan' then
+    select exists (select 1 from public.teams where id = v_titulo.retado_id and owner_id = auth.uid())
+      into v_soy_retado;
+  else
+    v_soy_retado := (v_titulo.retado_id = auth.uid());
+  end if;
+
+  if not v_soy_retado then
+    raise exception 'Solo el retado puede responder este título.';
+  end if;
+
+  if p_aceptar then
+    update public.titulos_padre_hijo set aceptado = true where id = p_titulo_id;
+  else
+    update public.titulos_padre_hijo set status = 'rechazado' where id = p_titulo_id;
+  end if;
+end;
+$$;
+
+grant execute on function public.responder_titulo_padre_hijo(uuid, boolean) to authenticated;
+
+-- Cuando fecha_fin ya pasó, un título activo deja de mostrarse como
+-- tal -- se evalúa al cargar el perfil o el equipo (mismo patrón que
+-- restaurar_banca_rota_perfil()/_equipo()), no hace falta un proceso
+-- en segundo plano.
+create or replace function public.expirar_titulos_vencidos()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.titulos_padre_hijo
+    set status = 'expirado'
+    where status = 'activo' and fecha_fin < now();
+end;
+$$;
+
+grant execute on function public.expirar_titulos_vencidos() to authenticated;
+
+-- Títulos activos de un equipo o jugador, para mostrar en su perfil
+-- público -- se acumulan, no se reemplazan. A propósito NO usa la
+-- política de RLS de arriba (esa es "solo los involucrados"): esto es
+-- información pública.
+create or replace function public.titulos_activos_de(p_tipo text, p_id uuid)
+returns table (
+  id uuid,
+  otro_id uuid,
+  soy_padre boolean,
+  fecha_fin timestamptz
+)
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select
+    t.id,
+    case when t.retador_id = p_id then t.retado_id else t.retador_id end as otro_id,
+    (t.ganador_id = p_id) as soy_padre,
+    t.fecha_fin
+  from public.titulos_padre_hijo t
+  where t.tipo = p_tipo and t.status = 'activo' and (t.retador_id = p_id or t.retado_id = p_id);
+$$;
+
+grant execute on function public.titulos_activos_de(text, uuid) to anon, authenticated;
+
+-- Sala de la Fama (migración 030): todos los títulos activos de un
+-- tipo, de una sola vez -- pública, sin restricción de participante
+-- (a diferencia de la RLS de la tabla base). El Muro de Campeones/
+-- Jugadores y la Galería la usan para no pedir uno por uno.
+create or replace function public.titulos_activos_todos(p_tipo text)
+returns table (
+  id uuid,
+  retador_id uuid,
+  retado_id uuid,
+  ganador_id uuid,
+  duracion_dias integer,
+  fecha_inicio timestamptz,
+  fecha_fin timestamptz
+)
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select t.id, t.retador_id, t.retado_id, t.ganador_id, t.duracion_dias, t.fecha_inicio, t.fecha_fin
+  from public.titulos_padre_hijo t
+  where t.tipo = p_tipo and t.status = 'activo';
+$$;
+
+grant execute on function public.titulos_activos_todos(text) to anon, authenticated;
+
+-- ------------------------------------------------------------
+-- Clan Wars -- Fase 3 (migración 023): resultado, con ajuste real de
+-- MMR para jugadores y para el equipo. Bonos de torneo y actividad
+-- semanal quedan afuera a propósito -- dependen de cosas que todavía
+-- no están diseñadas.
+-- ------------------------------------------------------------
+
+-- Partidas individuales de la guerra: los capitanes las van agregando
+-- a medida que se juegan, sin un número fijo predefinido -- el
+-- organizador decide cuándo hay suficientes para cerrar la CW.
+create table public.clan_war_matches (
+  id uuid primary key default gen_random_uuid(),
+  clan_war_id uuid not null references public.clan_wars (id),
+  jugador_challenger_id uuid not null references public.profiles (id),
+  jugador_challenged_id uuid not null references public.profiles (id),
+  -- null hasta reportarse.
+  ganador_id uuid references public.profiles (id),
+  status text not null default 'pendiente' check (status in ('pendiente', 'jugado')),
+  created_at timestamptz not null default now(),
+  check (jugador_challenger_id <> jugador_challenged_id),
+  check (ganador_id is null or ganador_id in (jugador_challenger_id, jugador_challenged_id))
+);
+
+alter table public.clan_war_matches enable row level security;
+
+-- Mismo criterio que clan_wars/clan_war_reportes: solo los capitanes
+-- de los dos equipos de la guerra ven sus partidas.
+create policy "clan_war_matches_select_propio"
+  on public.clan_war_matches for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.clan_wars cw
+      join public.teams t on t.id in (cw.challenger_team_id, cw.challenged_team_id)
+      where cw.id = clan_war_id and t.owner_id = auth.uid()
+    )
+  );
+
+grant select on public.clan_war_matches to authenticated;
+
+-- Sin política de insert/update para authenticated a propósito -- la
+-- única forma de escribir acá es agregar_partida_cw() y
+-- reportar_partida_cw(), security definer.
+
+-- Tabla de MMR apostado -- exacta, según la liga de quien gana y de
+-- quien pierde. No es security definer ni necesita grant execute: es
+-- puro cálculo, sin tocar ninguna tabla.
+create or replace function public.calcular_ajuste_mmr(
+  mmr_ganador integer,
+  mmr_perdedor integer,
+  out ajuste_ganador integer,
+  out ajuste_perdedor integer
+)
+language plpgsql
+immutable
+as $$
+declare
+  v_liga_ganador text;
+  v_liga_perdedor text;
+begin
+  v_liga_ganador := public.calcular_liga(mmr_ganador);
+  v_liga_perdedor := public.calcular_liga(mmr_perdedor);
+
+  if v_liga_ganador in ('Bronce 3', 'Bronce 2', 'Bronce 1', 'Banca Rota') then
+    -- La "hazaña": el ganador está en Bronce (o banca rota, mismo
+    -- piso) y el perdedor está en Platino o superior.
+    if v_liga_perdedor in (
+      'Platino 3', 'Platino 2', 'Platino 1',
+      'Diamante 3', 'Diamante 2', 'Diamante 1',
+      'Maestro 3', 'Maestro 2', 'Maestro 1',
+      'Gran Maestro'
+    ) then
+      ajuste_ganador := 80;
+    else
+      ajuste_ganador := 48;
+    end if;
+    ajuste_perdedor := -12;
+
+  elsif v_liga_ganador in ('Plata 3', 'Plata 2', 'Plata 1') then
+    ajuste_ganador := 36;
+    ajuste_perdedor := -16;
+
+  elsif v_liga_ganador in ('Oro 3', 'Oro 2', 'Oro 1') then
+    ajuste_ganador := 28;
+    ajuste_perdedor := -20;
+
+  else
+    -- Platino, Diamante, Maestro o Gran Maestro: competitivo real,
+    -- simétrico según quién tenía más MMR antes de jugar. Un empate
+    -- exacto de MMR se trata como "el ganador era favorito" (>=).
+    if mmr_ganador >= mmr_perdedor then
+      ajuste_ganador := 24;
+      ajuste_perdedor := -38;
+    else
+      ajuste_ganador := 38;
+      ajuste_perdedor := -24;
+    end if;
+  end if;
+end;
+$$;
+
+-- agregar_partida_cw(): cualquiera de los dos capitanes puede agregar
+-- una partida, eligiendo un jugador de cada roster -- solo mientras
+-- la guerra está 'en_curso' (recién ahí terminó el check-in).
+create or replace function public.agregar_partida_cw(
+  p_clan_war_id uuid,
+  p_jugador_challenger_id uuid,
+  p_jugador_challenged_id uuid
+)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id;
+  if v_reto is null then
+    raise exception 'Esa guerra no existe.';
+  end if;
+
+  if not exists (
+    select 1 from public.teams
+    where (id = v_reto.challenger_team_id or id = v_reto.challenged_team_id) and owner_id = auth.uid()
+  ) then
+    raise exception 'No eres capitán de ninguno de los dos equipos de esta guerra.';
+  end if;
+
+  if v_reto.status <> 'en_curso' then
+    raise exception 'Esta guerra todavía no está en curso.';
+  end if;
+
+  if not exists (
+    select 1 from public.team_members
+    where team_id = v_reto.challenger_team_id and user_id = p_jugador_challenger_id
+  ) then
+    raise exception 'Ese jugador no pertenece al roster del equipo desafiante.';
+  end if;
+
+  if not exists (
+    select 1 from public.team_members
+    where team_id = v_reto.challenged_team_id and user_id = p_jugador_challenged_id
+  ) then
+    raise exception 'Ese jugador no pertenece al roster del equipo desafiado.';
+  end if;
+
+  insert into public.clan_war_matches (clan_war_id, jugador_challenger_id, jugador_challenged_id)
+  values (p_clan_war_id, p_jugador_challenger_id, p_jugador_challenged_id);
+end;
+$$;
+
+grant execute on function public.agregar_partida_cw(uuid, uuid, uuid) to authenticated;
+
+-- reportar_partida_cw(): ajusta mmr_equipos de los dos jugadores al
+-- toque, no espera al cierre de la CW.
+create or replace function public.reportar_partida_cw(p_match_id uuid, p_ganador_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_match record;
+  v_reto record;
+  v_perdedor_id uuid;
+  v_mmr_ganador int;
+  v_mmr_perdedor int;
+  v_ajuste record;
+begin
+  select * into v_match from public.clan_war_matches where id = p_match_id for update;
+  if v_match is null then
+    raise exception 'Esa partida no existe.';
+  end if;
+  if v_match.status <> 'pendiente' then
+    raise exception 'Esta partida ya tiene resultado.';
+  end if;
+
+  select * into v_reto from public.clan_wars where id = v_match.clan_war_id;
+
+  if not exists (
+    select 1 from public.teams
+    where (id = v_reto.challenger_team_id or id = v_reto.challenged_team_id) and owner_id = auth.uid()
+  ) then
+    raise exception 'No eres capitán de ninguno de los dos equipos de esta guerra.';
+  end if;
+
+  if p_ganador_id <> v_match.jugador_challenger_id and p_ganador_id <> v_match.jugador_challenged_id then
+    raise exception 'Ese jugador no juega esta partida.';
+  end if;
+
+  v_perdedor_id := case
+    when p_ganador_id = v_match.jugador_challenger_id then v_match.jugador_challenged_id
+    else v_match.jugador_challenger_id
+  end;
+
+  select mmr_equipos into v_mmr_ganador from public.profiles where id = p_ganador_id;
+  select mmr_equipos into v_mmr_perdedor from public.profiles where id = v_perdedor_id;
+
+  select * into v_ajuste from public.calcular_ajuste_mmr(v_mmr_ganador, v_mmr_perdedor);
+
+  -- greatest(500, ...) en vez de dejar que el check constraint de la
+  -- columna lo rechace: acá se quiere recortar en el piso, no fallar
+  -- con un error.
+  update public.profiles
+    set mmr_equipos = greatest(500, mmr_equipos + v_ajuste.ajuste_ganador)
+    where id = p_ganador_id;
+  update public.profiles
+    set mmr_equipos = greatest(500, mmr_equipos + v_ajuste.ajuste_perdedor)
+    where id = v_perdedor_id;
+
+  -- Valentía de jugador (migración 024): participar suma, sin
+  -- importar quién ganó.
+  update public.profiles
+    set valentia_jugador = greatest(0, least(100, valentia_jugador + 1))
+    where id in (v_match.jugador_challenger_id, v_match.jugador_challenged_id);
+
+  -- Responsabilidad_cw: solo para el jugador cuyo capitán confirmó el
+  -- check-in dentro de la ventana -- challenger_confirmado /
+  -- challenged_confirmado solo pueden ser true si
+  -- confirmar_alineacion() pasó ese chequeo (migración 022), así que
+  -- basta con leerlos acá.
+  if v_reto.challenger_confirmado then
+    update public.profiles
+      set responsabilidad_cw = greatest(0, least(100, responsabilidad_cw + 1))
+      where id = v_match.jugador_challenger_id;
+  end if;
+  if v_reto.challenged_confirmado then
+    update public.profiles
+      set responsabilidad_cw = greatest(0, least(100, responsabilidad_cw + 1))
+      where id = v_match.jugador_challenged_id;
+  end if;
+
+  update public.clan_war_matches
+    set ganador_id = p_ganador_id, status = 'jugado'
+    where id = p_match_id;
+end;
+$$;
+
+grant execute on function public.reportar_partida_cw(uuid, uuid) to authenticated;
+
+-- cerrar_clan_war(): cualquiera de los dos capitanes la llama, pero
+-- recién se cierra de verdad cuando los dos la llamaron. El equipo
+-- con más partidas individuales ganadas gana la CW completa y ajusta
+-- su MMR de clan una sola vez; empate en partidas ganadas deja la CW
+-- 'empatada' sin tocar el MMR de ningún equipo (el MMR individual de
+-- cada partida ya se movió al reportarse, eso no se revierte).
+create or replace function public.cerrar_clan_war(p_clan_war_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_reto record;
+  v_soy_challenger boolean;
+  v_soy_challenged boolean;
+  v_ganadas_challenger int;
+  v_ganadas_challenged int;
+  v_mmr_ganador int;
+  v_mmr_perdedor int;
+  v_ajuste record;
+  v_team_ganador_id uuid;
+  v_team_perdedor_id uuid;
+begin
+  select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
+  if v_reto is null then
+    raise exception 'Esa guerra no existe.';
+  end if;
+
+  if v_reto.status <> 'en_curso' then
+    raise exception 'Esta guerra no está en curso.';
+  end if;
+
+  select exists (select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid())
+    into v_soy_challenger;
+  select exists (select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid())
+    into v_soy_challenged;
+
+  if not v_soy_challenger and not v_soy_challenged then
+    raise exception 'No eres capitán de ninguno de los dos equipos de esta guerra.';
+  end if;
+
+  if v_soy_challenger then
+    update public.clan_wars set challenger_cierre_confirmado = true where id = p_clan_war_id;
+  else
+    update public.clan_wars set challenged_cierre_confirmado = true where id = p_clan_war_id;
+  end if;
+
+  select * into v_reto from public.clan_wars where id = p_clan_war_id;
+  if not (v_reto.challenger_cierre_confirmado and v_reto.challenged_cierre_confirmado) then
+    -- Falta que confirme el otro capitán -- todavía no se cierra.
+    return;
+  end if;
+
+  select count(*) into v_ganadas_challenger
+  from public.clan_war_matches
+  where clan_war_id = p_clan_war_id and status = 'jugado' and ganador_id = jugador_challenger_id;
+
+  select count(*) into v_ganadas_challenged
+  from public.clan_war_matches
+  where clan_war_id = p_clan_war_id and status = 'jugado' and ganador_id = jugador_challenged_id;
+
+  if v_ganadas_challenger = v_ganadas_challenged then
+    update public.clan_wars set status = 'empatada' where id = p_clan_war_id;
+    return;
+  end if;
+
+  if v_ganadas_challenger > v_ganadas_challenged then
+    v_team_ganador_id := v_reto.challenger_team_id;
+    v_team_perdedor_id := v_reto.challenged_team_id;
+  else
+    v_team_ganador_id := v_reto.challenged_team_id;
+    v_team_perdedor_id := v_reto.challenger_team_id;
+  end if;
+
+  select mmr into v_mmr_ganador from public.teams where id = v_team_ganador_id;
+  select mmr into v_mmr_perdedor from public.teams where id = v_team_perdedor_id;
+
+  select * into v_ajuste from public.calcular_ajuste_mmr(v_mmr_ganador, v_mmr_perdedor);
+
+  update public.teams set mmr = greatest(500, mmr + v_ajuste.ajuste_ganador) where id = v_team_ganador_id;
+  update public.teams set mmr = greatest(500, mmr + v_ajuste.ajuste_perdedor) where id = v_team_perdedor_id;
+
+  update public.clan_wars
+    set status = 'finalizada', ganador_team_id = v_team_ganador_id
+    where id = p_clan_war_id;
+
+  -- Títulos Padre/Hijo entre clanes (migración 026): si estos dos
+  -- equipos tenían un título ya acordado (aceptado, todavía
+  -- 'pendiente') entre ellos, esta CW lo resuelve con el mismo
+  -- ganador. Un empate no resuelve ningún título -- no hay ganador
+  -- real que transferir.
+  update public.titulos_padre_hijo
+    set status = 'activo',
+        ganador_id = v_team_ganador_id,
+        fecha_inicio = now(),
+        fecha_fin = now() + (duracion_dias || ' days')::interval
+    where tipo = 'clan'
+      and aceptado = true
+      and status = 'pendiente'
+      and (
+        (retador_id = v_reto.challenger_team_id and retado_id = v_reto.challenged_team_id)
+        or (retador_id = v_reto.challenged_team_id and retado_id = v_reto.challenger_team_id)
+      );
+end;
+$$;
+
+grant execute on function public.cerrar_clan_war(uuid) to authenticated;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -1495,6 +2816,9 @@ declare
   v_target_match_number int;
   v_target record;
   v_es_impar boolean;
+  v_user1 uuid;
+  v_user2 uuid;
+  v_user_ganador uuid;
 begin
   select * into v_match from public.bracket_matches where id = p_match_id;
 
@@ -1508,6 +2832,30 @@ begin
   if v_match.participant1_id is not null and v_match.participant2_id is not null then
     perform public.registrar_actividad_participante(v_match.participant1_id);
     perform public.registrar_actividad_participante(v_match.participant2_id);
+
+    -- Títulos Padre/Hijo entre jugadores (migración 026): se
+    -- resuelven con cualquier partida 1v1 real entre ambos, en
+    -- cualquier torneo -- nunca con una partida de equipo (ahí
+    -- participant*_id no tiene user_id, tiene team_id).
+    select user_id into v_user1 from public.tournament_participants where id = v_match.participant1_id;
+    select user_id into v_user2 from public.tournament_participants where id = v_match.participant2_id;
+
+    if v_user1 is not null and v_user2 is not null then
+      select user_id into v_user_ganador from public.tournament_participants where id = v_match.winner_id;
+
+      update public.titulos_padre_hijo
+        set status = 'activo',
+            ganador_id = v_user_ganador,
+            fecha_inicio = now(),
+            fecha_fin = now() + (duracion_dias || ' days')::interval
+        where tipo = 'jugador'
+          and aceptado = true
+          and status = 'pendiente'
+          and (
+            (retador_id = v_user1 and retado_id = v_user2)
+            or (retador_id = v_user2 and retado_id = v_user1)
+          );
+    end if;
   end if;
 
   select count(*) into v_total_en_ronda
@@ -1692,6 +3040,235 @@ alter table public.tournament_participants
     or (user_id is null and team_id is not null)
   );
 
+-- ------------------------------------------------------------
+-- Torneos Históricos (migración 029): competencias jugadas antes de
+-- que existiera RemorApp, con el flujo de consentimiento: solo se
+-- confirman (y solo entonces dan el bono de cortesía de MMR) cuando
+-- todos los clanes vinculados a un equipo real aceptan que quede
+-- público. Se integra visualmente con la Sala de la Fama en una fase
+-- aparte -- por ahora es una página simple.
+-- ------------------------------------------------------------
+create table public.historical_tournaments (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  fecha_aproximada date not null,
+  servidor text not null check (servidor in ('america', 'europe', 'asia')),
+  primer_lugar_nombre text not null,
+  -- Nullable: solo se vincula si ese clan está registrado hoy en
+  -- RemorApp -- muchos torneos históricos son de clanes que ya no
+  -- existen o nunca se registraron acá.
+  primer_lugar_team_id uuid references public.teams (id),
+  segundo_lugar_nombre text not null,
+  segundo_lugar_team_id uuid references public.teams (id),
+  creado_por uuid not null references public.profiles (id),
+  estado text not null default 'pendiente_consentimiento'
+    check (estado in ('pendiente_consentimiento', 'confirmado', 'referencia_historica')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.historical_tournaments enable row level security;
+
+-- Público: la página /torneos-historicos lista todos, sin importar el
+-- estado -- un registro rechazado sigue siendo "referencia histórica
+-- visible", tal como se pidió.
+create policy "historical_tournaments_select_publico"
+  on public.historical_tournaments for select
+  using (true);
+
+grant select on public.historical_tournaments to anon, authenticated;
+
+-- Roster completo del torneo (incluye 1° y 2° lugar, que también
+-- aparecen resumidos arriba en historical_tournaments -- acá es donde
+-- vive el consentimiento de cada uno). nombre_clan es siempre texto
+-- libre; team_id solo si el creador lo vinculó a un equipo real.
+create table public.historical_tournament_participants (
+  id uuid primary key default gen_random_uuid(),
+  historical_tournament_id uuid not null references public.historical_tournaments (id) on delete cascade,
+  nombre_clan text not null,
+  team_id uuid references public.teams (id),
+  -- null hasta que responda (o para siempre, si no está vinculado --
+  -- no hay a quién pedirle consentimiento).
+  consentimiento boolean,
+  created_at timestamptz not null default now()
+);
+
+alter table public.historical_tournament_participants enable row level security;
+
+create policy "historical_tournament_participants_select_publico"
+  on public.historical_tournament_participants for select
+  using (true);
+
+grant select on public.historical_tournament_participants to anon, authenticated;
+
+-- Sin política de insert/update para authenticated en ninguna de las
+-- dos tablas -- la única forma de escribir es
+-- registrar_torneo_historico() y responder_consentimiento_historico(),
+-- security definer.
+
+-- registrar_torneo_historico(): cualquier usuario puede registrar uno.
+-- p_participantes es un jsonb con el RESTO de los clanes (sin contar
+-- 1° y 2° lugar, que van por sus propios parámetros) -- cada elemento
+-- es {"nombre_clan": "...", "team_id": "..." o null}. Si no queda
+-- ningún participante vinculado a un equipo real, no hay nadie a
+-- quien pedirle consentimiento -- el torneo se confirma directo.
+create or replace function public.registrar_torneo_historico(
+  p_nombre text,
+  p_fecha_aproximada date,
+  p_servidor text,
+  p_primer_lugar_nombre text,
+  p_primer_lugar_team_id uuid,
+  p_segundo_lugar_nombre text,
+  p_segundo_lugar_team_id uuid,
+  p_participantes jsonb default '[]'::jsonb
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_torneo_id uuid;
+  v_participante jsonb;
+  v_hay_vinculados boolean;
+begin
+  if p_nombre is null or trim(p_nombre) = '' then
+    raise exception 'El torneo necesita un nombre.';
+  end if;
+  if p_servidor not in ('america', 'europe', 'asia') then
+    raise exception 'Ese servidor no es válido.';
+  end if;
+  if p_primer_lugar_nombre is null or trim(p_primer_lugar_nombre) = '' then
+    raise exception 'Falta el nombre del primer lugar.';
+  end if;
+  if p_segundo_lugar_nombre is null or trim(p_segundo_lugar_nombre) = '' then
+    raise exception 'Falta el nombre del segundo lugar.';
+  end if;
+
+  insert into public.historical_tournaments (
+    nombre, fecha_aproximada, servidor,
+    primer_lugar_nombre, primer_lugar_team_id,
+    segundo_lugar_nombre, segundo_lugar_team_id,
+    creado_por
+  ) values (
+    trim(p_nombre), p_fecha_aproximada, p_servidor,
+    trim(p_primer_lugar_nombre), p_primer_lugar_team_id,
+    trim(p_segundo_lugar_nombre), p_segundo_lugar_team_id,
+    auth.uid()
+  ) returning id into v_torneo_id;
+
+  insert into public.historical_tournament_participants (historical_tournament_id, nombre_clan, team_id)
+  values
+    (v_torneo_id, trim(p_primer_lugar_nombre), p_primer_lugar_team_id),
+    (v_torneo_id, trim(p_segundo_lugar_nombre), p_segundo_lugar_team_id);
+
+  for v_participante in select * from jsonb_array_elements(coalesce(p_participantes, '[]'::jsonb))
+  loop
+    if trim(coalesce(v_participante->>'nombre_clan', '')) = '' then
+      continue;
+    end if;
+    insert into public.historical_tournament_participants (historical_tournament_id, nombre_clan, team_id)
+    values (
+      v_torneo_id,
+      trim(v_participante->>'nombre_clan'),
+      nullif(v_participante->>'team_id', '')::uuid
+    );
+  end loop;
+
+  select exists (
+    select 1 from public.historical_tournament_participants
+    where historical_tournament_id = v_torneo_id and team_id is not null
+  ) into v_hay_vinculados;
+
+  if not v_hay_vinculados then
+    update public.historical_tournaments set estado = 'confirmado' where id = v_torneo_id;
+  end if;
+
+  return v_torneo_id;
+end;
+$$;
+
+grant execute on function public.registrar_torneo_historico(text, date, text, text, uuid, text, uuid, jsonb) to authenticated;
+
+-- responder_consentimiento_historico(): solo el dueño del equipo
+-- vinculado a ese participante puntual. Rechazar deja el torneo como
+-- 'referencia_historica' para siempre -- ningún bono para nadie, pero
+-- el registro sigue visible. Aceptar solo confirma (+ bono, si
+-- corresponde) cuando TODOS los vinculados ya aceptaron.
+create or replace function public.responder_consentimiento_historico(p_participant_id uuid, p_acepta boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_participante record;
+  v_torneo record;
+  v_total_vinculados int;
+  v_total_aceptados int;
+begin
+  select * into v_participante
+  from public.historical_tournament_participants
+  where id = p_participant_id
+  for update;
+
+  if v_participante is null then
+    raise exception 'Ese participante no existe.';
+  end if;
+  if v_participante.team_id is null then
+    raise exception 'Este participante no está vinculado a ningún equipo.';
+  end if;
+
+  if not exists (
+    select 1 from public.teams where id = v_participante.team_id and owner_id = auth.uid()
+  ) then
+    raise exception 'Solo el dueño del equipo vinculado puede responder esta solicitud.';
+  end if;
+
+  select * into v_torneo
+  from public.historical_tournaments
+  where id = v_participante.historical_tournament_id
+  for update;
+
+  if v_torneo.estado <> 'pendiente_consentimiento' then
+    raise exception 'Este torneo histórico ya fue resuelto.';
+  end if;
+
+  if v_participante.consentimiento is not null then
+    raise exception 'Ya respondiste esta solicitud.';
+  end if;
+
+  update public.historical_tournament_participants
+    set consentimiento = p_acepta
+    where id = p_participant_id;
+
+  if not p_acepta then
+    update public.historical_tournaments set estado = 'referencia_historica' where id = v_torneo.id;
+    return;
+  end if;
+
+  select count(*) into v_total_vinculados
+  from public.historical_tournament_participants
+  where historical_tournament_id = v_torneo.id and team_id is not null;
+
+  select count(*) into v_total_aceptados
+  from public.historical_tournament_participants
+  where historical_tournament_id = v_torneo.id and team_id is not null and consentimiento = true;
+
+  if v_total_vinculados = v_total_aceptados then
+    update public.historical_tournaments set estado = 'confirmado' where id = v_torneo.id;
+
+    if v_torneo.primer_lugar_team_id is not null then
+      update public.teams set mmr = mmr + 25 where id = v_torneo.primer_lugar_team_id;
+    end if;
+    if v_torneo.segundo_lugar_team_id is not null then
+      update public.teams set mmr = mmr + 10 where id = v_torneo.segundo_lugar_team_id;
+    end if;
+  end if;
+end;
+$$;
+
+grant execute on function public.responder_consentimiento_historico(uuid, boolean) to authenticated;
+
 alter table public.tournament_participants
   add constraint tournament_participants_tournament_id_team_id_key unique (tournament_id, team_id);
 
@@ -1827,6 +3404,20 @@ begin
 
   if v_torneo.estado = 'abierto' then
     delete from public.tournament_participants where id = p_participant_id;
+
+    -- Migración 028: si quien abandona es el propio organizador y el
+    -- torneo queda sin NINGÚN participante, se borra por completo en
+    -- vez de quedar vacío y visible -- tournament_maps,
+    -- tournament_results, organizer_points y bracket_matches caen en
+    -- cascada solos (todos con on delete cascade hacia tournaments).
+    -- Si queda algún otro participante, el torneo sigue existiendo
+    -- tal cual -- esto no cambia ese caso.
+    if v_torneo.creador_id = auth.uid()
+       and not exists (select 1 from public.tournament_participants where tournament_id = v_torneo.id)
+    then
+      delete from public.tournaments where id = v_torneo.id;
+    end if;
+
     return;
   end if;
 
@@ -1949,6 +3540,63 @@ alter table public.teams add column mmr integer not null default 1441 check (mmr
 alter table public.teams add column ultima_actividad timestamptz not null default now();
 alter table public.teams add column banca_rota boolean generated always as (mmr <= 500) stored;
 alter table public.teams add column liga text generated always as (public.calcular_liga(mmr)) stored;
+
+-- ------------------------------------------------------------
+-- Sistema de Valentía y Responsabilidad -- Fase 1 (migración 024),
+-- conectado a las funciones de Clan Wars. La restricción de "la
+-- valentía solo se mueve entre clanes de liga similar" queda para un
+-- ajuste posterior. responsabilidad_torneos tiene su columna creada
+-- pero sin ninguna lógica que la mueva todavía -- eso se conecta con
+-- las reglas de asistencia a torneos, en otra fase.
+--
+-- poco_confiable es el nombre interno de la columna -- el texto
+-- visible para el usuario siempre es "Poco Responsable", nunca
+-- "confiable"/"confiabilidad".
+-- ------------------------------------------------------------
+alter table public.teams add column valentia integer not null default 50 check (valentia >= 0 and valentia <= 100);
+
+alter table public.profiles add column valentia_jugador integer not null default 50
+  check (valentia_jugador >= 0 and valentia_jugador <= 100);
+alter table public.profiles add column responsabilidad_cw integer not null default 100
+  check (responsabilidad_cw >= 0 and responsabilidad_cw <= 100);
+alter table public.profiles add column responsabilidad_torneos integer not null default 100
+  check (responsabilidad_torneos >= 0 and responsabilidad_torneos <= 100);
+alter table public.profiles add column poco_confiable boolean not null default false;
+
+-- Sala de la Fama (migración 030): cuándo llegó por primera vez a
+-- Gran Maestro -- liga_1v1 es GENERATED, solo refleja el estado
+-- actual, no guarda historia. Solo puede escribirse sola (no está en
+-- ninguna lista de columnas de UPDATE): el trigger de más abajo la
+-- llena la primera vez que liga_1v1 pasa a ser 'Gran Maestro', y
+-- nunca se vuelve a tocar después.
+alter table public.profiles add column gran_maestro_alcanzado_en timestamptz;
+
+create or replace function public.registrar_gran_maestro()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.liga_1v1 = 'Gran Maestro' and new.gran_maestro_alcanzado_en is null then
+    update public.profiles set gran_maestro_alcanzado_en = now() where id = new.id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger after_update_profiles_gran_maestro
+  after update of mmr_1v1 on public.profiles
+  for each row execute function public.registrar_gran_maestro();
+
+-- Suspensión administrada (migración 028): quién suspendió, por qué,
+-- y cuándo -- visible para cualquier administrador en /admin, no solo
+-- quien la aplicó. No son públicas (no están en el grant select de
+-- arriba): la única forma de leerlas es admin_listar_usuarios(), y la
+-- única forma de escribirlas es admin_suspender_usuario() (más abajo).
+alter table public.profiles add column suspendido_por uuid references public.profiles (id);
+alter table public.profiles add column suspendido_motivo text;
+alter table public.profiles add column suspendido_en timestamptz;
 
 -- Si pasaron 30 días corridos sin actividad y sigue en banca rota,
 -- vuelve a 1000 MMR (Bronce 3) -- fresco, no al punto de partida

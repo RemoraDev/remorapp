@@ -6,10 +6,17 @@ import { useAuth } from "../context/AuthContext";
 import { recortarImagenCuadrada, recortarImagenConProporcion } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
 import { SC2_REGION_OPTIONS } from "../types/profile";
-import type { TeamRow } from "../types/teams";
+import type { AvatarForma } from "../types/profile";
+import { CLAN_WAR_MOTIVO_RECHAZO_OPTIONS, CLAN_WAR_REPORTE_MOTIVO_OPTIONS } from "../types/teams";
+import type { ClanWarMotivoRechazo, ClanWarReporteMotivo, ClanWarStatus, TeamRow } from "../types/teams";
+import { datetimeLocalAIso, dentroDeVentanaCheckIn, formatearHoraCet, formatearHoraLocal } from "../lib/clanWars";
+import type { InvestigacionJugador } from "../types/investigacion";
 import Avatar from "../components/Avatar";
 import LigaBadge from "../components/LigaBadge";
 import MmrProgressBar from "../components/MmrProgressBar";
+import PercentBar from "../components/PercentBar";
+import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
+import TitulosActivosList from "../components/TitulosActivosList";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const BANNER_MAX_BYTES = 3 * 1024 * 1024;
@@ -19,6 +26,7 @@ interface MiembroConNombre {
   nick: string | null;
   uniqueId: string | null;
   avatarUrl: string | null;
+  avatarForma: AvatarForma;
   // Liga autodeclarada por el jugador en /perfil (independiente del
   // MMR calculado, ver types/profile.ts) -- se muestra aparte.
   liga: string | null;
@@ -27,6 +35,10 @@ interface MiembroConNombre {
   mmrEquipos: number;
   ligaEquipos: string;
   bancaRota: boolean;
+  // Valentía y Responsabilidad -- Fase 1 (migración 024).
+  valentiaJugador: number;
+  responsabilidadCw: number;
+  pocoConfiable: boolean;
   roles: string[];
 }
 
@@ -35,6 +47,7 @@ interface JugadorEncontrado {
   nick: string;
   uniqueId: string;
   avatarUrl: string | null;
+  avatarForma: AvatarForma;
 }
 
 interface ExpulsadoConNombre {
@@ -42,6 +55,69 @@ interface ExpulsadoConNombre {
   nick: string | null;
   uniqueId: string | null;
   kickedAt: string;
+}
+
+interface ClanWarConNombres {
+  id: string;
+  challengerTeamId: string;
+  challengerNombre: string;
+  challengedTeamId: string;
+  challengedNombre: string;
+  fechaHoraCet: string;
+  status: ClanWarStatus;
+  motivoRechazo: ClanWarMotivoRechazo | null;
+  motivoDetalle: string | null;
+  // Fase 2 (migración 022, check-in).
+  challengerConfirmado: boolean;
+  challengedConfirmado: boolean;
+  casterNombre: string | null;
+  casterLink: string | null;
+  tieneDelay: boolean | null;
+  // Fase 3 (migración 023, resultado).
+  challengerCierreConfirmado: boolean;
+  challengedCierreConfirmado: boolean;
+  ganadorTeamId: string | null;
+}
+
+interface MiembroRoster {
+  userId: string;
+  nick: string | null;
+  uniqueId: string | null;
+  sc2Id: string | null;
+}
+
+interface ReporteConNombres {
+  id: string;
+  reportadoPorNombre: string;
+  jugadorAfectadoId: string;
+  jugadorAfectadoNombre: string;
+  motivo: ClanWarReporteMotivo;
+  createdAt: string;
+}
+
+interface PartidaConNombres {
+  id: string;
+  jugadorChallengerId: string;
+  jugadorChallengerNombre: string;
+  jugadorChallengedId: string;
+  jugadorChallengedNombre: string;
+  ganadorId: string | null;
+  status: "pendiente" | "jugado";
+}
+
+interface SolicitudHistoricaConNombre {
+  id: string;
+  torneoNombre: string;
+}
+
+interface TituloConNombre {
+  id: string;
+  retadorId: string;
+  retadorNombre: string;
+  retadoId: string;
+  retadoNombre: string;
+  duracionDias: number;
+  aceptado: boolean;
 }
 
 // team_kicks_log.user_id apunta a profiles.id, igual que
@@ -61,20 +137,28 @@ function extraerPerfil(profiles: unknown): {
   nick: string | null;
   unique_id: string | null;
   avatar_url: string | null;
+  avatar_forma: AvatarForma;
   liga: string | null;
   mmr_equipos: number;
   liga_equipos: string;
   banca_rota: boolean;
+  valentia_jugador: number;
+  responsabilidad_cw: number;
+  poco_confiable: boolean;
 } {
   const perfil = Array.isArray(profiles) ? profiles[0] : profiles;
   return {
     nick: (perfil as { nick?: string } | undefined)?.nick ?? null,
     unique_id: (perfil as { unique_id?: string } | undefined)?.unique_id ?? null,
     avatar_url: (perfil as { avatar_url?: string } | undefined)?.avatar_url ?? null,
+    avatar_forma: (perfil as { avatar_forma?: AvatarForma } | undefined)?.avatar_forma ?? "cuadrado",
     liga: (perfil as { liga?: string } | undefined)?.liga ?? null,
     mmr_equipos: (perfil as { mmr_equipos?: number } | undefined)?.mmr_equipos ?? 1000,
     liga_equipos: (perfil as { liga_equipos?: string } | undefined)?.liga_equipos ?? "Bronce 3",
     banca_rota: (perfil as { banca_rota?: boolean } | undefined)?.banca_rota ?? false,
+    valentia_jugador: (perfil as { valentia_jugador?: number } | undefined)?.valentia_jugador ?? 50,
+    responsabilidad_cw: (perfil as { responsabilidad_cw?: number } | undefined)?.responsabilidad_cw ?? 100,
+    poco_confiable: (perfil as { poco_confiable?: boolean } | undefined)?.poco_confiable ?? false,
   };
 }
 
@@ -110,6 +194,10 @@ export default function TeamDetailPage() {
   const [saliendo, setSaliendo] = useState(false);
   const [errorSalir, setErrorSalir] = useState<string | null>(null);
 
+  // --- Equipo disuelto: eliminarlo definitivamente (migración 028) ---
+  const [eliminandoEquipoDefinitivo, setEliminandoEquipoDefinitivo] = useState(false);
+  const [errorEliminarEquipo, setErrorEliminarEquipo] = useState<string | null>(null);
+
   // --- Panel de control: transferir liderazgo ---
   const [nuevoLiderId, setNuevoLiderId] = useState("");
   const [transfiriendo, setTransfiriendo] = useState(false);
@@ -123,8 +211,92 @@ export default function TeamDetailPage() {
   const [invitando, setInvitando] = useState(false);
   const [invitacionEnviada, setInvitacionEnviada] = useState(false);
 
+  // --- Panel de control: investigar jugador (solo para líderes de
+  // clan o administradores -- el chequeo real vive en la base). ---
+  const [investigando, setInvestigando] = useState(false);
+  const [errorInvestigacion, setErrorInvestigacion] = useState<string | null>(null);
+  const [investigacion, setInvestigacion] = useState<InvestigacionJugador | null>(null);
+
   // --- Panel de control: jugadores expulsados ---
   const [expulsados, setExpulsados] = useState<ExpulsadoConNombre[]>([]);
+
+  // --- Panel de control: Clan Wars ---
+  const [retosPendientesResponder, setRetosPendientesResponder] = useState<ClanWarConNombres[]>([]);
+  const [retosPropuestosPorMi, setRetosPropuestosPorMi] = useState<ClanWarConNombres[]>([]);
+  const [historialRetos, setHistorialRetos] = useState<ClanWarConNombres[]>([]);
+
+  const [tagRivalReto, setTagRivalReto] = useState("");
+  const [fechaHoraReto, setFechaHoraReto] = useState("");
+  const [proponiendoReto, setProponiendoReto] = useState(false);
+  const [errorReto, setErrorReto] = useState<string | null>(null);
+  const [retoEnviado, setRetoEnviado] = useState(false);
+
+  const [respondiendoReto, setRespondiendoReto] = useState<string | null>(null);
+  const [erroresResponderReto, setErroresResponderReto] = useState<Record<string, string>>({});
+  const [motivoRechazoPorReto, setMotivoRechazoPorReto] = useState<Record<string, ClanWarMotivoRechazo | "">>({});
+  const [detalleRechazoPorReto, setDetalleRechazoPorReto] = useState<Record<string, string>>({});
+
+  // --- Panel de control: Clan Wars, retos activos (aceptados o en
+  // curso) -- check-in, roster de ambos equipos, reportes, datos de
+  // transmisión, partidas individuales y cierre ---
+  const [retosActivos, setRetosActivos] = useState<ClanWarConNombres[]>([]);
+  // Por team_id (no por reto): un reto en curso necesita el roster de
+  // los DOS equipos -- el rival para el check-in, y los dos para
+  // elegir jugadores al agregar una partida.
+  const [rosterPorTeamId, setRosterPorTeamId] = useState<Record<string, MiembroRoster[]>>({});
+  const [reportesPorReto, setReportesPorReto] = useState<Record<string, ReporteConNombres[]>>({});
+  const [partidasPorReto, setPartidasPorReto] = useState<Record<string, PartidaConNombres[]>>({});
+  // Se recalcula cada 30 segundos -- así la ventana de check-in
+  // aparece sola cuando corresponde, sin que haga falta recargar la
+  // página a mano.
+  const [ahora, setAhora] = useState(Date.now());
+
+  const [confirmando, setConfirmando] = useState<string | null>(null);
+  const [erroresConfirmar, setErroresConfirmar] = useState<Record<string, string>>({});
+
+  const [jugadorReportadoPorReto, setJugadorReportadoPorReto] = useState<Record<string, string>>({});
+  const [motivoReportePorReto, setMotivoReportePorReto] = useState<Record<string, ClanWarReporteMotivo | "">>({});
+  const [reportando, setReportando] = useState<string | null>(null);
+  const [erroresReportar, setErroresReportar] = useState<Record<string, string>>({});
+
+  const [casterNombrePorReto, setCasterNombrePorReto] = useState<Record<string, string>>({});
+  const [casterLinkPorReto, setCasterLinkPorReto] = useState<Record<string, string>>({});
+  const [tieneDelayPorReto, setTieneDelayPorReto] = useState<Record<string, string>>({});
+  const [guardandoTransmision, setGuardandoTransmision] = useState<string | null>(null);
+  const [erroresTransmision, setErroresTransmision] = useState<Record<string, string>>({});
+
+  // --- Panel de control: Clan Wars, partidas individuales y cierre ---
+  const [jugadorChallengerPorReto, setJugadorChallengerPorReto] = useState<Record<string, string>>({});
+  const [jugadorChallengedPorReto, setJugadorChallengedPorReto] = useState<Record<string, string>>({});
+  const [agregandoPartida, setAgregandoPartida] = useState<string | null>(null);
+  const [erroresAgregarPartida, setErroresAgregarPartida] = useState<Record<string, string>>({});
+
+  const [reportandoPartida, setReportandoPartida] = useState<string | null>(null);
+  const [erroresReportarPartida, setErroresReportarPartida] = useState<Record<string, string>>({});
+
+  const [cerrando, setCerrando] = useState<string | null>(null);
+  const [erroresCerrar, setErroresCerrar] = useState<Record<string, string>>({});
+
+  // --- Panel de control: Títulos Padre/Hijo entre clanes ---
+  const [titulosPendientesResponder, setTitulosPendientesResponder] = useState<TituloConNombre[]>([]);
+  const [titulosPropuestosPorMi, setTitulosPropuestosPorMi] = useState<TituloConNombre[]>([]);
+  const [tagRivalTitulo, setTagRivalTitulo] = useState("");
+  const [duracionTitulo, setDuracionTitulo] = useState("30");
+  const [proponiendoTitulo, setProponiendoTitulo] = useState(false);
+  const [errorTitulo, setErrorTitulo] = useState<string | null>(null);
+  const [tituloEnviado, setTituloEnviado] = useState(false);
+  const [respondiendoTitulo, setRespondiendoTitulo] = useState<string | null>(null);
+  const [erroresResponderTitulo, setErroresResponderTitulo] = useState<Record<string, string>>({});
+
+  // --- Panel de control: Torneos Históricos, consentimiento pendiente ---
+  const [solicitudesHistoricas, setSolicitudesHistoricas] = useState<SolicitudHistoricaConNombre[]>([]);
+  const [respondiendoHistorico, setRespondiendoHistorico] = useState<string | null>(null);
+  const [erroresResponderHistorico, setErroresResponderHistorico] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    const intervalo = setInterval(() => setAhora(Date.now()), 30_000);
+    return () => clearInterval(intervalo);
+  }, []);
 
   const cargar = async () => {
     if (!tag) return;
@@ -149,6 +321,10 @@ export default function TeamDetailPage() {
     // Solo tiene sentido si hay sesión (la función es authenticated).
     if (user) {
       await supabase.rpc("restaurar_banca_rota_equipo", { p_team_id: equipoData.id });
+      // Títulos Padre/Hijo (migración 026): mismo patrón, se evalúa al
+      // toque, sin cron -- un título vencido deja de mostrarse como
+      // activo. Barrido global, no depende de este equipo puntual.
+      await supabase.rpc("expirar_titulos_vencidos");
       const { data: equipoActualizado } = await supabase
         .from("teams")
         .select("*")
@@ -162,7 +338,9 @@ export default function TeamDetailPage() {
 
     const { data: miembrosData } = await supabase
       .from("team_members")
-      .select("user_id, roles, profiles(nick, unique_id, avatar_url, liga, mmr_equipos, liga_equipos, banca_rota)")
+      .select(
+        "user_id, roles, profiles(nick, unique_id, avatar_url, avatar_forma, liga, mmr_equipos, liga_equipos, banca_rota, valentia_jugador, responsabilidad_cw, poco_confiable)"
+      )
       .eq("team_id", equipoData.id)
       .order("joined_at", { ascending: true });
 
@@ -174,10 +352,14 @@ export default function TeamDetailPage() {
           nick: perfil.nick,
           uniqueId: perfil.unique_id,
           avatarUrl: perfil.avatar_url,
+          avatarForma: perfil.avatar_forma,
           liga: perfil.liga,
           mmrEquipos: perfil.mmr_equipos,
           ligaEquipos: perfil.liga_equipos,
           bancaRota: perfil.banca_rota,
+          valentiaJugador: perfil.valentia_jugador,
+          responsabilidadCw: perfil.responsabilidad_cw,
+          pocoConfiable: perfil.poco_confiable,
           roles: m.roles as string[],
         };
       })
@@ -204,8 +386,236 @@ export default function TeamDetailPage() {
           };
         })
       );
+
+      // Clan Wars: tanto los retos que le propusieron a este equipo
+      // como los que este equipo propuso -- la RLS de clan_wars ya
+      // exige ser dueño de uno de los dos equipos involucrados, esto
+      // de acá es solo para no pedirlo de más cuando no hace falta.
+      const { data: retosData } = await supabase
+        .from("clan_wars")
+        .select("*")
+        .or(`challenger_team_id.eq.${equipoData.id},challenged_team_id.eq.${equipoData.id}`)
+        .order("created_at", { ascending: false });
+
+      const teamIdsRetos = [
+        ...new Set((retosData ?? []).flatMap((r) => [r.challenger_team_id, r.challenged_team_id])),
+      ];
+      let nombrePorTeamIdReto: Record<string, string> = {};
+      if (teamIdsRetos.length > 0) {
+        const { data: equiposRetoData } = await supabase
+          .from("teams")
+          .select("id, name, tag")
+          .in("id", teamIdsRetos);
+        nombrePorTeamIdReto = Object.fromEntries(
+          (equiposRetoData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        );
+      }
+
+      const retosResueltos: ClanWarConNombres[] = (retosData ?? []).map((r) => ({
+        id: r.id,
+        challengerTeamId: r.challenger_team_id,
+        challengerNombre: nombrePorTeamIdReto[r.challenger_team_id] ?? "Equipo",
+        challengedTeamId: r.challenged_team_id,
+        challengedNombre: nombrePorTeamIdReto[r.challenged_team_id] ?? "Equipo",
+        fechaHoraCet: r.fecha_hora_cet,
+        status: r.status,
+        motivoRechazo: r.motivo_rechazo,
+        motivoDetalle: r.motivo_detalle,
+        challengerConfirmado: r.challenger_confirmado,
+        challengedConfirmado: r.challenged_confirmado,
+        casterNombre: r.caster_nombre,
+        casterLink: r.caster_link,
+        tieneDelay: r.tiene_delay,
+        challengerCierreConfirmado: r.challenger_cierre_confirmado,
+        challengedCierreConfirmado: r.challenged_cierre_confirmado,
+        ganadorTeamId: r.ganador_team_id,
+      }));
+
+      setRetosPendientesResponder(
+        retosResueltos.filter((r) => r.status === "pendiente" && r.challengedTeamId === equipoData.id)
+      );
+      setRetosPropuestosPorMi(
+        retosResueltos.filter((r) => r.status === "pendiente" && r.challengerTeamId === equipoData.id)
+      );
+
+      const activos = retosResueltos.filter((r) => r.status === "aceptada" || r.status === "en_curso");
+      setRetosActivos(activos);
+      setHistorialRetos(
+        retosResueltos.filter(
+          (r) => r.status === "rechazada" || r.status === "cancelada" || r.status === "finalizada" || r.status === "empatada"
+        )
+      );
+
+      // Roster de los DOS equipos de cada reto activo (no solo el
+      // rival): hace falta el propio también para elegir jugadores al
+      // agregar una partida (Fase 3). Se traen todos de una, la
+      // ventana de check-in solo decide qué se muestra, no qué se pide.
+      if (activos.length > 0) {
+        const teamIdsInvolucrados = [
+          ...new Set(activos.flatMap((r) => [r.challengerTeamId, r.challengedTeamId])),
+        ];
+
+        const { data: rosterData } = await supabase
+          .from("team_members")
+          .select("team_id, user_id, profiles(nick, unique_id, sc2_id)")
+          .in("team_id", teamIdsInvolucrados);
+
+        const rosterPorTeamIdTmp: Record<string, MiembroRoster[]> = {};
+        for (const fila of rosterData ?? []) {
+          const perfil = fila.profiles as unknown as
+            | { nick: string | null; unique_id: string | null; sc2_id: string | null }
+            | { nick: string | null; unique_id: string | null; sc2_id: string | null }[]
+            | null;
+          const p = Array.isArray(perfil) ? perfil[0] : perfil;
+          const lista = rosterPorTeamIdTmp[fila.team_id] ?? [];
+          lista.push({
+            userId: fila.user_id,
+            nick: p?.nick ?? null,
+            uniqueId: p?.unique_id ?? null,
+            sc2Id: p?.sc2_id ?? null,
+          });
+          rosterPorTeamIdTmp[fila.team_id] = lista;
+        }
+        setRosterPorTeamId(rosterPorTeamIdTmp);
+
+        const nombrePorUserId: Record<string, string> = {};
+        for (const lista of Object.values(rosterPorTeamIdTmp)) {
+          for (const m of lista) {
+            nombrePorUserId[m.userId] = m.nick
+              ? `${m.nick}${m.uniqueId ? `#${m.uniqueId}` : ""}`
+              : "Jugador de RemorApp";
+          }
+        }
+
+        const retoIds = activos.map((r) => r.id);
+        const { data: reportesData } = await supabase
+          .from("clan_war_reportes")
+          .select("id, clan_war_id, reportado_por, jugador_afectado_id, motivo, created_at, profiles!jugador_afectado_id(nick, unique_id)")
+          .in("clan_war_id", retoIds)
+          .order("created_at", { ascending: false });
+
+        const reportesPorRetoTmp: Record<string, ReporteConNombres[]> = {};
+        for (const rep of reportesData ?? []) {
+          const perfil = extraerPerfilBasico(rep.profiles);
+          const nombreJugador = perfil.nick
+            ? `${perfil.nick}${perfil.unique_id ? `#${perfil.unique_id}` : ""}`
+            : "Jugador de RemorApp";
+          const equipoReportante = nombrePorTeamIdReto[rep.reportado_por] ?? "Equipo";
+          const lista = reportesPorRetoTmp[rep.clan_war_id] ?? [];
+          lista.push({
+            id: rep.id,
+            reportadoPorNombre: equipoReportante,
+            jugadorAfectadoId: rep.jugador_afectado_id,
+            jugadorAfectadoNombre: nombreJugador,
+            motivo: rep.motivo,
+            createdAt: rep.created_at,
+          });
+          reportesPorRetoTmp[rep.clan_war_id] = lista;
+        }
+        setReportesPorReto(reportesPorRetoTmp);
+
+        const { data: partidasData } = await supabase
+          .from("clan_war_matches")
+          .select("*")
+          .in("clan_war_id", retoIds)
+          .order("created_at", { ascending: true });
+
+        const partidasPorRetoTmp: Record<string, PartidaConNombres[]> = {};
+        for (const p of partidasData ?? []) {
+          const lista = partidasPorRetoTmp[p.clan_war_id] ?? [];
+          lista.push({
+            id: p.id,
+            jugadorChallengerId: p.jugador_challenger_id,
+            jugadorChallengerNombre: nombrePorUserId[p.jugador_challenger_id] ?? "Jugador de RemorApp",
+            jugadorChallengedId: p.jugador_challenged_id,
+            jugadorChallengedNombre: nombrePorUserId[p.jugador_challenged_id] ?? "Jugador de RemorApp",
+            ganadorId: p.ganador_id,
+            status: p.status,
+          });
+          partidasPorRetoTmp[p.clan_war_id] = lista;
+        }
+        setPartidasPorReto(partidasPorRetoTmp);
+      } else {
+        setRosterPorTeamId({});
+        setReportesPorReto({});
+        setPartidasPorReto({});
+      }
+
+      // Títulos Padre/Hijo entre clanes: propuestas pendientes de
+      // responder y las mías propias, esperando respuesta -- los
+      // títulos ACTIVOS se muestran aparte, públicamente, con
+      // TitulosActivosList (no hace falta ser dueño para verlos).
+      const { data: titulosData } = await supabase
+        .from("titulos_padre_hijo")
+        .select("*")
+        .eq("tipo", "clan")
+        .eq("status", "pendiente")
+        .or(`retador_id.eq.${equipoData.id},retado_id.eq.${equipoData.id}`)
+        .order("created_at", { ascending: false });
+
+      const teamIdsTitulos = [
+        ...new Set((titulosData ?? []).flatMap((t) => [t.retador_id, t.retado_id])),
+      ];
+      let nombrePorTeamIdTitulo: Record<string, string> = {};
+      if (teamIdsTitulos.length > 0) {
+        const { data: equiposTituloData } = await supabase
+          .from("teams")
+          .select("id, name, tag")
+          .in("id", teamIdsTitulos);
+        nombrePorTeamIdTitulo = Object.fromEntries(
+          (equiposTituloData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        );
+      }
+
+      const titulosResueltos: TituloConNombre[] = (titulosData ?? []).map((t) => ({
+        id: t.id,
+        retadorId: t.retador_id,
+        retadorNombre: nombrePorTeamIdTitulo[t.retador_id] ?? "Equipo",
+        retadoId: t.retado_id,
+        retadoNombre: nombrePorTeamIdTitulo[t.retado_id] ?? "Equipo",
+        duracionDias: t.duracion_dias,
+        aceptado: t.aceptado,
+      }));
+
+      setTitulosPendientesResponder(
+        titulosResueltos.filter((t) => !t.aceptado && t.retadoId === equipoData.id)
+      );
+      setTitulosPropuestosPorMi(
+        titulosResueltos.filter((t) => t.retadorId === equipoData.id)
+      );
+
+      // Torneos Históricos (migración 029): solicitudes de
+      // consentimiento pendientes -- "este torneo dice que
+      // participaste, ¿aceptas que sea público?".
+      const { data: solicitudesData } = await supabase
+        .from("historical_tournament_participants")
+        .select("id, historical_tournament_id, historical_tournaments(nombre)")
+        .eq("team_id", equipoData.id)
+        .is("consentimiento", null);
+
+      setSolicitudesHistoricas(
+        (solicitudesData ?? []).map((s) => {
+          const torneo = Array.isArray(s.historical_tournaments)
+            ? s.historical_tournaments[0]
+            : s.historical_tournaments;
+          return {
+            id: s.id,
+            torneoNombre: (torneo as { nombre?: string } | undefined)?.nombre ?? "Torneo histórico",
+          };
+        })
+      );
     } else {
       setExpulsados([]);
+      setRetosPendientesResponder([]);
+      setRetosPropuestosPorMi([]);
+      setRetosActivos([]);
+      setRosterPorTeamId({});
+      setReportesPorReto({});
+      setPartidasPorReto({});
+      setHistorialRetos([]);
+      setTitulosPendientesResponder([]);
+      setTitulosPropuestosPorMi([]);
+      setSolicitudesHistoricas([]);
     }
 
     setLoading(false);
@@ -238,6 +648,72 @@ export default function TeamDetailPage() {
   }
 
   const esDueño = !!user && equipo.owner_id === user.id;
+
+  const handleEliminarEquipoDefinitivo = async () => {
+    if (
+      !window.confirm(
+        "¿Confirmas que quieres eliminar este equipo definitivamente? Esta acción no se puede deshacer."
+      )
+    ) {
+      return;
+    }
+
+    setEliminandoEquipoDefinitivo(true);
+    setErrorEliminarEquipo(null);
+
+    const { error } = await supabase.rpc("eliminar_equipo_definitivo", { p_team_id: equipo.id });
+
+    setEliminandoEquipoDefinitivo(false);
+
+    if (error) {
+      setErrorEliminarEquipo(error.message);
+      return;
+    }
+
+    navigate("/equipos");
+  };
+
+  // Diagnóstico (migración 028): un equipo disuelto seguía mostrando
+  // la página completa, con Panel de control y todo, porque
+  // owner_id nunca se limpia al disolverse -- acá se corta antes de
+  // llegar a esa UI. Para el ex-dueño, ofrece eliminarlo de verdad;
+  // para cualquier otro, es como si el equipo no existiera más.
+  if (equipo.disuelto) {
+    if (esDueño) {
+      return (
+        <section className="page-placeholder">
+          <h1>Equipo disuelto</h1>
+          <p>Este equipo fue disuelto y ya no tiene miembros ni aparece en el buscador público.</p>
+          {errorEliminarEquipo && <div className="form-error">{errorEliminarEquipo}</div>}
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={eliminandoEquipoDefinitivo}
+            onClick={handleEliminarEquipoDefinitivo}
+          >
+            {eliminandoEquipoDefinitivo ? "Eliminando..." : "Eliminar equipo definitivamente"}
+          </button>
+          <p>
+            <Link to="/equipos" className="btn-link">
+              Volver a equipos
+            </Link>
+          </p>
+        </section>
+      );
+    }
+
+    return (
+      <section className="page-placeholder">
+        <h1>Este equipo ya no existe</h1>
+        <p>
+          <Link to="/equipos" className="btn-link">
+            Volver a equipos
+          </Link>
+        </p>
+      </section>
+    );
+  }
+
   const miMembresia = miembros.find((m) => m.userId === user?.id);
   const esMiembroNoOwner = !!miMembresia && !miMembresia.roles.includes("owner");
 
@@ -430,6 +906,358 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
+  const handleProponerReto = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorReto(null);
+    setRetoEnviado(false);
+
+    const tagRival = tagRivalReto.trim().toUpperCase();
+    if (!tagRival) {
+      setErrorReto("Escribe el tag del equipo rival.");
+      return;
+    }
+    if (!fechaHoraReto) {
+      setErrorReto("Elige la fecha y hora del reto.");
+      return;
+    }
+
+    setProponiendoReto(true);
+
+    const { data: equipoRival, error: buscarError } = await supabase
+      .from("teams")
+      .select("id")
+      .eq("tag", tagRival)
+      .maybeSingle();
+
+    if (buscarError || !equipoRival) {
+      setErrorReto("No encontré ningún equipo con ese tag.");
+      setProponiendoReto(false);
+      return;
+    }
+
+    // Toda la validación real (dueño, banca rota, equipo disuelto,
+    // que la fecha sea futura, el cooldown de 7 días) vive en
+    // proponer_clan_war() en la base -- esto de acá es solo el
+    // formulario.
+    const { error } = await supabase.rpc("proponer_clan_war", {
+      p_challenged_team_id: equipoRival.id,
+      p_fecha_hora_cet: datetimeLocalAIso(fechaHoraReto),
+    });
+
+    setProponiendoReto(false);
+
+    if (error) {
+      setErrorReto(error.message);
+      return;
+    }
+
+    setRetoEnviado(true);
+    setTagRivalReto("");
+    setFechaHoraReto("");
+    await cargar();
+  };
+
+  const handleResponderReto = async (retoId: string, aceptar: boolean) => {
+    setRespondiendoReto(retoId);
+    setErroresResponderReto((prev) => ({ ...prev, [retoId]: "" }));
+
+    let motivo: ClanWarMotivoRechazo | undefined;
+    let detalle: string | undefined;
+
+    if (!aceptar) {
+      const motivoElegido = motivoRechazoPorReto[retoId];
+      if (!motivoElegido) {
+        setErroresResponderReto((prev) => ({ ...prev, [retoId]: "Elige un motivo para rechazar el reto." }));
+        setRespondiendoReto(null);
+        return;
+      }
+      if (motivoElegido === "Otro" && !detalleRechazoPorReto[retoId]?.trim()) {
+        setErroresResponderReto((prev) => ({
+          ...prev,
+          [retoId]: 'Escribe el detalle cuando el motivo es "Otro".',
+        }));
+        setRespondiendoReto(null);
+        return;
+      }
+      motivo = motivoElegido;
+      detalle = motivoElegido === "Otro" ? detalleRechazoPorReto[retoId] : undefined;
+    }
+
+    const { error } = await supabase.rpc("responder_clan_war", {
+      p_clan_war_id: retoId,
+      p_aceptar: aceptar,
+      p_motivo_rechazo: motivo ?? null,
+      p_motivo_detalle: detalle ?? null,
+    });
+
+    setRespondiendoReto(null);
+
+    if (error) {
+      setErroresResponderReto((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleConfirmarAlineacion = async (retoId: string) => {
+    setConfirmando(retoId);
+    setErroresConfirmar((prev) => ({ ...prev, [retoId]: "" }));
+
+    // confirmar_alineacion() (en la base) es la que de verdad exige
+    // estar dentro de la ventana de check-in -- esto de acá es solo
+    // para no mostrar el botón de más cuando no corresponde.
+    const { error } = await supabase.rpc("confirmar_alineacion", { p_clan_war_id: retoId });
+
+    setConfirmando(null);
+
+    if (error) {
+      setErroresConfirmar((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleReportarProblema = async (retoId: string) => {
+    setReportando(retoId);
+    setErroresReportar((prev) => ({ ...prev, [retoId]: "" }));
+
+    const jugadorId = jugadorReportadoPorReto[retoId];
+    const motivo = motivoReportePorReto[retoId];
+
+    if (!jugadorId) {
+      setErroresReportar((prev) => ({ ...prev, [retoId]: "Elige el jugador sobre el que quieres reportar." }));
+      setReportando(null);
+      return;
+    }
+    if (!motivo) {
+      setErroresReportar((prev) => ({ ...prev, [retoId]: "Elige un motivo para el reporte." }));
+      setReportando(null);
+      return;
+    }
+
+    const { error } = await supabase.rpc("reportar_problema", {
+      p_clan_war_id: retoId,
+      p_jugador_afectado_id: jugadorId,
+      p_motivo: motivo,
+    });
+
+    setReportando(null);
+
+    if (error) {
+      setErroresReportar((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    setJugadorReportadoPorReto((prev) => ({ ...prev, [retoId]: "" }));
+    setMotivoReportePorReto((prev) => ({ ...prev, [retoId]: "" }));
+    await cargar();
+  };
+
+  const handleCompletarTransmision = async (event: FormEvent, retoId: string) => {
+    event.preventDefault();
+    setGuardandoTransmision(retoId);
+    setErroresTransmision((prev) => ({ ...prev, [retoId]: "" }));
+
+    const tieneDelayTexto = tieneDelayPorReto[retoId];
+    if (tieneDelayTexto !== "si" && tieneDelayTexto !== "no") {
+      setErroresTransmision((prev) => ({
+        ...prev,
+        [retoId]: "Tienes que definir si la transmisión tiene delay o no.",
+      }));
+      setGuardandoTransmision(null);
+      return;
+    }
+
+    const { error } = await supabase.rpc("completar_datos_transmision", {
+      p_clan_war_id: retoId,
+      p_caster_nombre: casterNombrePorReto[retoId] ?? null,
+      p_caster_link: casterLinkPorReto[retoId] ?? null,
+      p_tiene_delay: tieneDelayTexto === "si",
+    });
+
+    setGuardandoTransmision(null);
+
+    if (error) {
+      setErroresTransmision((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleAgregarPartida = async (retoId: string) => {
+    setAgregandoPartida(retoId);
+    setErroresAgregarPartida((prev) => ({ ...prev, [retoId]: "" }));
+
+    const jugadorChallenger = jugadorChallengerPorReto[retoId];
+    const jugadorChallenged = jugadorChallengedPorReto[retoId];
+
+    if (!jugadorChallenger || !jugadorChallenged) {
+      setErroresAgregarPartida((prev) => ({
+        ...prev,
+        [retoId]: "Elige un jugador de cada equipo para agregar la partida.",
+      }));
+      setAgregandoPartida(null);
+      return;
+    }
+
+    const { error } = await supabase.rpc("agregar_partida_cw", {
+      p_clan_war_id: retoId,
+      p_jugador_challenger_id: jugadorChallenger,
+      p_jugador_challenged_id: jugadorChallenged,
+    });
+
+    setAgregandoPartida(null);
+
+    if (error) {
+      setErroresAgregarPartida((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    setJugadorChallengerPorReto((prev) => ({ ...prev, [retoId]: "" }));
+    setJugadorChallengedPorReto((prev) => ({ ...prev, [retoId]: "" }));
+    await cargar();
+  };
+
+  const handleReportarPartida = async (matchId: string, ganadorId: string) => {
+    setReportandoPartida(matchId);
+    setErroresReportarPartida((prev) => ({ ...prev, [matchId]: "" }));
+
+    // calcular_ajuste_mmr() (en la base) es la que de verdad decide
+    // cuánto sube y baja el mmr_equipos de cada jugador, según la
+    // tabla exacta de MMR apostado -- esto de acá solo manda el
+    // resultado.
+    const { error } = await supabase.rpc("reportar_partida_cw", {
+      p_match_id: matchId,
+      p_ganador_id: ganadorId,
+    });
+
+    setReportandoPartida(null);
+
+    if (error) {
+      setErroresReportarPartida((prev) => ({ ...prev, [matchId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleCerrarClanWar = async (retoId: string) => {
+    if (
+      !window.confirm(
+        "¿Confirmas que quieres cerrar esta Clan War? El equipo con más partidas ganadas se lleva el ajuste de MMR de clan. Hace falta que los dos capitanes confirmen el cierre."
+      )
+    ) {
+      return;
+    }
+
+    setCerrando(retoId);
+    setErroresCerrar((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("cerrar_clan_war", { p_clan_war_id: retoId });
+
+    setCerrando(null);
+
+    if (error) {
+      setErroresCerrar((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleProponerTitulo = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorTitulo(null);
+    setTituloEnviado(false);
+
+    const tagRival = tagRivalTitulo.trim().toUpperCase();
+    const duracion = Number(duracionTitulo);
+
+    if (!tagRival) {
+      setErrorTitulo("Escribe el tag del equipo rival.");
+      return;
+    }
+    if (!duracion || duracion < 7 || duracion > 90) {
+      setErrorTitulo("La duración tiene que ser entre 7 y 90 días.");
+      return;
+    }
+
+    setProponiendoTitulo(true);
+
+    const { data: equipoRival, error: buscarError } = await supabase
+      .from("teams")
+      .select("id")
+      .eq("tag", tagRival)
+      .maybeSingle();
+
+    if (buscarError || !equipoRival) {
+      setErrorTitulo("No encontré ningún equipo con ese tag.");
+      setProponiendoTitulo(false);
+      return;
+    }
+
+    // proponer_titulo_padre_hijo() (en la base) es la que de verdad
+    // chequea que seas dueño y valida la duración -- esto de acá es
+    // solo el formulario.
+    const { error } = await supabase.rpc("proponer_titulo_padre_hijo", {
+      p_tipo: "clan",
+      p_retado_id: equipoRival.id,
+      p_duracion_dias: duracion,
+    });
+
+    setProponiendoTitulo(false);
+
+    if (error) {
+      setErrorTitulo(error.message);
+      return;
+    }
+
+    setTituloEnviado(true);
+    setTagRivalTitulo("");
+    await cargar();
+  };
+
+  const handleResponderTitulo = async (tituloId: string, aceptar: boolean) => {
+    setRespondiendoTitulo(tituloId);
+    setErroresResponderTitulo((prev) => ({ ...prev, [tituloId]: "" }));
+
+    const { error } = await supabase.rpc("responder_titulo_padre_hijo", {
+      p_titulo_id: tituloId,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoTitulo(null);
+
+    if (error) {
+      setErroresResponderTitulo((prev) => ({ ...prev, [tituloId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleResponderHistorico = async (participantId: string, aceptar: boolean) => {
+    setRespondiendoHistorico(participantId);
+    setErroresResponderHistorico((prev) => ({ ...prev, [participantId]: "" }));
+
+    const { error } = await supabase.rpc("responder_consentimiento_historico", {
+      p_participant_id: participantId,
+      p_acepta: aceptar,
+    });
+
+    setRespondiendoHistorico(null);
+
+    if (error) {
+      setErroresResponderHistorico((prev) => ({ ...prev, [participantId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
   const handleBuscarJugador = async (event: FormEvent) => {
     event.preventDefault();
     setErrorBusqueda(null);
@@ -446,7 +1274,7 @@ export default function TeamDetailPage() {
     setBuscando(true);
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, nick, unique_id, avatar_url")
+      .select("id, nick, unique_id, avatar_url, avatar_forma")
       .eq("nick", nickBuscado)
       .eq("unique_id", uniqueIdBuscado)
       .maybeSingle();
@@ -462,6 +1290,7 @@ export default function TeamDetailPage() {
       nick: data.nick ?? nickBuscado,
       uniqueId: data.unique_id,
       avatarUrl: data.avatar_url,
+      avatarForma: data.avatar_forma,
     });
   };
 
@@ -491,13 +1320,36 @@ export default function TeamDetailPage() {
     setBusquedaNick("");
   };
 
+  const handleInvestigar = async (userId: string) => {
+    setInvestigando(true);
+    setErrorInvestigacion(null);
+    setInvestigacion(null);
+
+    // investigar_jugador() (en la base) es la que de verdad chequea
+    // que seas dueño de algún equipo o admin -- esto de acá no es la
+    // única barrera, solo abre el panel con lo que devuelve.
+    const { data, error } = await supabase.rpc("investigar_jugador", { p_user_id: userId });
+
+    setInvestigando(false);
+
+    if (error) {
+      setErrorInvestigacion(error.message);
+      return;
+    }
+
+    setInvestigacion(data as InvestigacionJugador);
+  };
+
   const renderMiembro = (m: MiembroConNombre, conControles: boolean) => (
     <div key={m.userId} className="detail-participant-item">
-      <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" />
+      <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
       {m.nick ?? "Jugador de RemorApp"}
       {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
       {m.liga && <span className="liga-badge">{m.liga}</span>}
       <LigaBadge liga={m.ligaEquipos} mmr={m.mmrEquipos} bancaRota={m.bancaRota} />
+      <span className="liga-badge">Valentía {m.valentiaJugador}%</span>
+      <span className="liga-badge">Responsabilidad {m.responsabilidadCw}%</span>
+      {m.pocoConfiable && <span className="nivel-badge nivel-badge-banca-rota">Poco Responsable</span>}
       {m.roles.includes("owner") && <span className="team-owner-badge">Dueño</span>}
       {conControles && !m.roles.includes("owner") && (
         <button
@@ -535,6 +1387,8 @@ export default function TeamDetailPage() {
       {equipo.description && <p className="team-detail-description">{equipo.description}</p>}
 
       <MmrProgressBar mmr={equipo.mmr} liga={equipo.liga} bancaRota={equipo.banca_rota} />
+      <PercentBar label="Valentía del clan" value={equipo.valentia} />
+      <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
 
       <div className="team-detail-header">
         <div>
@@ -762,6 +1616,7 @@ export default function TeamDetailPage() {
                     url={resultadoBusqueda.avatarUrl}
                     nombre={resultadoBusqueda.nick}
                     className="detail-participant-avatar"
+                    forma={resultadoBusqueda.avatarForma}
                   />
                   {resultadoBusqueda.nick}
                   <span className="profile-nick-id">#{resultadoBusqueda.uniqueId}</span>
@@ -773,8 +1628,19 @@ export default function TeamDetailPage() {
                   >
                     {invitando ? "Invitando..." : "Invitar"}
                   </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={investigando}
+                    onClick={() => handleInvestigar(resultadoBusqueda.id)}
+                  >
+                    {investigando ? "Investigando..." : "Investigar jugador"}
+                  </button>
                 </div>
               )}
+
+              {errorInvestigacion && <div className="form-error">{errorInvestigacion}</div>}
+              {investigacion && <InvestigacionJugadorPanel investigacion={investigacion} />}
 
               <h3 className="detail-subtitle">Miembros del equipo</h3>
               {errorQuitar && <div className="form-error">{errorQuitar}</div>}
@@ -790,6 +1656,678 @@ export default function TeamDetailPage() {
                       {e.nick ?? "Jugador de RemorApp"}
                       {e.uniqueId && <span className="profile-nick-id">#{e.uniqueId}</span>}
                       <span className="tournament-card-meta">{formatFecha(e.kickedAt)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 className="detail-subtitle">Clan Wars</h3>
+
+              <h4 className="detail-subtitle">Retos pendientes de responder</h4>
+              {retosPendientesResponder.length === 0 ? (
+                <p className="detail-empty">No tienes retos pendientes de responder.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {retosPendientesResponder.map((r) => (
+                    <div key={r.id} className="reto-item">
+                      <p className="reto-desc">Te reta {r.challengerNombre}</p>
+                      <p className="reto-fecha">
+                        Tu hora local: {formatearHoraLocal(r.fechaHoraCet)} · Hora CET:{" "}
+                        {formatearHoraCet(r.fechaHoraCet)}
+                      </p>
+                      {erroresResponderReto[r.id] && (
+                        <div className="form-error">{erroresResponderReto[r.id]}</div>
+                      )}
+                      <div className="invitation-actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={respondiendoReto === r.id}
+                          onClick={() => handleResponderReto(r.id, true)}
+                        >
+                          Aceptar
+                        </button>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor={`reto-motivo-${r.id}`}>
+                          Rechazar con motivo
+                        </label>
+                        <select
+                          id={`reto-motivo-${r.id}`}
+                          className="form-select"
+                          value={motivoRechazoPorReto[r.id] ?? ""}
+                          onChange={(e) =>
+                            setMotivoRechazoPorReto((prev) => ({
+                              ...prev,
+                              [r.id]: e.target.value as ClanWarMotivoRechazo,
+                            }))
+                          }
+                        >
+                          <option value="">Selecciona un motivo</option>
+                          {CLAN_WAR_MOTIVO_RECHAZO_OPTIONS.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {motivoRechazoPorReto[r.id] === "Otro" && (
+                        <div className="form-group">
+                          <label className="form-label" htmlFor={`reto-detalle-${r.id}`}>
+                            Detalle
+                          </label>
+                          <input
+                            id={`reto-detalle-${r.id}`}
+                            className="form-input"
+                            type="text"
+                            value={detalleRechazoPorReto[r.id] ?? ""}
+                            onChange={(e) =>
+                              setDetalleRechazoPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
+                            }
+                          />
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={respondiendoReto === r.id}
+                        onClick={() => handleResponderReto(r.id, false)}
+                      >
+                        {respondiendoReto === r.id ? "Enviando..." : "Rechazar"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h4 className="detail-subtitle">Retos propuestos por mí</h4>
+              {retosPropuestosPorMi.length === 0 ? (
+                <p className="detail-empty">No tienes retos esperando respuesta.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {retosPropuestosPorMi.map((r) => (
+                    <div key={r.id} className="reto-item">
+                      <p className="reto-desc">
+                        Reto a {r.challengedNombre}
+                        <span className="reto-status">Pendiente</span>
+                      </p>
+                      <p className="reto-fecha">
+                        Tu hora local: {formatearHoraLocal(r.fechaHoraCet)} · Hora CET:{" "}
+                        {formatearHoraCet(r.fechaHoraCet)}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h4 className="detail-subtitle">Guerras en preparación</h4>
+              {retosActivos.length === 0 ? (
+                <p className="detail-empty">No tienes ninguna guerra en preparación.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {retosActivos.map((r) => {
+                    const soyChallenger = r.challengerTeamId === equipo.id;
+                    const rivalTeamId = soyChallenger ? r.challengedTeamId : r.challengerTeamId;
+                    const rivalNombre = soyChallenger ? r.challengedNombre : r.challengerNombre;
+                    const miConfirmacion = soyChallenger ? r.challengerConfirmado : r.challengedConfirmado;
+                    const confirmacionRival = soyChallenger ? r.challengedConfirmado : r.challengerConfirmado;
+                    const miCierreConfirmado = soyChallenger
+                      ? r.challengerCierreConfirmado
+                      : r.challengedCierreConfirmado;
+                    const cierreRivalConfirmado = soyChallenger
+                      ? r.challengedCierreConfirmado
+                      : r.challengerCierreConfirmado;
+                    const dentroVentana = dentroDeVentanaCheckIn(r.fechaHoraCet, ahora);
+                    const roster = rosterPorTeamId[rivalTeamId] ?? [];
+                    const rosterChallenger = rosterPorTeamId[r.challengerTeamId] ?? [];
+                    const rosterChallenged = rosterPorTeamId[r.challengedTeamId] ?? [];
+                    const reportes = reportesPorReto[r.id] ?? [];
+                    const partidas = partidasPorReto[r.id] ?? [];
+                    const ganadasChallenger = partidas.filter(
+                      (p) => p.status === "jugado" && p.ganadorId === p.jugadorChallengerId
+                    ).length;
+                    const ganadasChallenged = partidas.filter(
+                      (p) => p.status === "jugado" && p.ganadorId === p.jugadorChallengedId
+                    ).length;
+
+                    return (
+                      <div key={r.id} className="reto-item">
+                        <p className="reto-desc">
+                          vs {rivalNombre}
+                          <span className="reto-status">{r.status === "en_curso" ? "En curso" : "Aceptada"}</span>
+                        </p>
+                        <p className="reto-fecha">
+                          Tu hora local: {formatearHoraLocal(r.fechaHoraCet)} · Hora CET:{" "}
+                          {formatearHoraCet(r.fechaHoraCet)}
+                        </p>
+
+                        {!dentroVentana && (
+                          <p className="tournament-card-meta">
+                            El check-in se abre 15 minutos antes de la hora del reto.
+                          </p>
+                        )}
+
+                        {dentroVentana && (
+                          <>
+                            <h5 className="detail-subtitle">Roster de {rivalNombre}</h5>
+                            {roster.length === 0 ? (
+                              <p className="detail-empty">Este equipo todavía no tiene miembros.</p>
+                            ) : (
+                              <div className="detail-participant-list">
+                                {roster.map((m) => (
+                                  <div key={m.userId} className="detail-participant-item">
+                                    {m.nick ?? "Jugador de RemorApp"}
+                                    {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+                                    <span className="tournament-card-meta">
+                                      SC2: {m.sc2Id ?? "sin declarar"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <p className="tournament-card-meta">
+                              Tu confirmación: {miConfirmacion ? "Confirmado" : "Pendiente"} · Confirmación de{" "}
+                              {rivalNombre}: {confirmacionRival ? "Confirmado" : "Pendiente"}
+                            </p>
+
+                            {erroresConfirmar[r.id] && <div className="form-error">{erroresConfirmar[r.id]}</div>}
+                            {!miConfirmacion && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={confirmando === r.id}
+                                onClick={() => handleConfirmarAlineacion(r.id)}
+                              >
+                                {confirmando === r.id
+                                  ? "Confirmando..."
+                                  : "Confirmo que la alineación es correcta"}
+                              </button>
+                            )}
+
+                            <h5 className="detail-subtitle">Reportar un problema</h5>
+                            {erroresReportar[r.id] && <div className="form-error">{erroresReportar[r.id]}</div>}
+                            <div className="form-group">
+                              <label className="form-label" htmlFor={`reporte-jugador-${r.id}`}>
+                                Jugador del roster rival
+                              </label>
+                              <select
+                                id={`reporte-jugador-${r.id}`}
+                                className="form-select"
+                                value={jugadorReportadoPorReto[r.id] ?? ""}
+                                onChange={(e) =>
+                                  setJugadorReportadoPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                }
+                              >
+                                <option value="">Selecciona un jugador</option>
+                                {roster.map((m) => (
+                                  <option key={m.userId} value={m.userId}>
+                                    {m.nick ?? "Jugador de RemorApp"}
+                                    {m.uniqueId ? `#${m.uniqueId}` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label" htmlFor={`reporte-motivo-${r.id}`}>
+                                Motivo
+                              </label>
+                              <select
+                                id={`reporte-motivo-${r.id}`}
+                                className="form-select"
+                                value={motivoReportePorReto[r.id] ?? ""}
+                                onChange={(e) =>
+                                  setMotivoReportePorReto((prev) => ({
+                                    ...prev,
+                                    [r.id]: e.target.value as ClanWarReporteMotivo,
+                                  }))
+                                }
+                              >
+                                <option value="">Selecciona un motivo</option>
+                                {CLAN_WAR_REPORTE_MOTIVO_OPTIONS.map((o) => (
+                                  <option key={o.value} value={o.value}>
+                                    {o.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={reportando === r.id}
+                              onClick={() => handleReportarProblema(r.id)}
+                            >
+                              {reportando === r.id ? "Reportando..." : "Reportar problema"}
+                            </button>
+
+                            {reportes.length > 0 && (
+                              <>
+                                <h5 className="detail-subtitle">Reportes de este reto</h5>
+                                <div className="detail-participant-list">
+                                  {reportes.map((rep) => (
+                                    <div key={rep.id} className="reto-item">
+                                      <p className="reto-motivo">
+                                        {rep.reportadoPorNombre} reportó a {rep.jugadorAfectadoNombre}:{" "}
+                                        {CLAN_WAR_REPORTE_MOTIVO_OPTIONS.find((o) => o.value === rep.motivo)
+                                          ?.label ?? rep.motivo}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </>
+                        )}
+
+                        {soyChallenger && r.status === "aceptada" && (
+                          <>
+                            <h5 className="detail-subtitle">Datos de transmisión</h5>
+                            {erroresTransmision[r.id] && (
+                              <div className="form-error">{erroresTransmision[r.id]}</div>
+                            )}
+                            <form className="auth-form" onSubmit={(e) => handleCompletarTransmision(e, r.id)}>
+                              <div className="form-group">
+                                <label className="form-label" htmlFor={`caster-nombre-${r.id}`}>
+                                  Nombre del caster (opcional)
+                                </label>
+                                <input
+                                  id={`caster-nombre-${r.id}`}
+                                  className="form-input"
+                                  type="text"
+                                  value={casterNombrePorReto[r.id] ?? r.casterNombre ?? ""}
+                                  onChange={(e) =>
+                                    setCasterNombrePorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                  }
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label" htmlFor={`caster-link-${r.id}`}>
+                                  Link de la transmisión (opcional)
+                                </label>
+                                <input
+                                  id={`caster-link-${r.id}`}
+                                  className="form-input"
+                                  type="text"
+                                  value={casterLinkPorReto[r.id] ?? r.casterLink ?? ""}
+                                  onChange={(e) =>
+                                    setCasterLinkPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                  }
+                                />
+                              </div>
+                              <div className="form-group">
+                                <label className="form-label" htmlFor={`tiene-delay-${r.id}`}>
+                                  ¿Tiene delay?
+                                </label>
+                                <select
+                                  id={`tiene-delay-${r.id}`}
+                                  className="form-select"
+                                  value={
+                                    tieneDelayPorReto[r.id] ??
+                                    (r.tieneDelay === null ? "" : r.tieneDelay ? "si" : "no")
+                                  }
+                                  onChange={(e) =>
+                                    setTieneDelayPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                  }
+                                >
+                                  <option value="">Selecciona una opción</option>
+                                  <option value="si">Sí</option>
+                                  <option value="no">No</option>
+                                </select>
+                              </div>
+                              <button
+                                type="submit"
+                                className="btn btn-ghost btn-block"
+                                disabled={guardandoTransmision === r.id}
+                              >
+                                {guardandoTransmision === r.id ? "Guardando..." : "Guardar datos de transmisión"}
+                              </button>
+                            </form>
+                          </>
+                        )}
+
+                        {!soyChallenger && (r.casterNombre || r.casterLink || r.tieneDelay !== null) && (
+                          <p className="tournament-card-meta">
+                            {r.casterNombre && <>Caster: {r.casterNombre} </>}
+                            {r.casterLink && <>({r.casterLink}) </>}
+                            {r.tieneDelay !== null && <>· {r.tieneDelay ? "Con delay" : "Sin delay"}</>}
+                          </p>
+                        )}
+
+                        {r.status === "en_curso" && (
+                          <>
+                            <p className="form-success">La guerra está en curso.</p>
+
+                            <h5 className="detail-subtitle">
+                              Partidas ({ganadasChallenger} - {ganadasChallenged})
+                            </h5>
+                            {partidas.length === 0 ? (
+                              <p className="detail-empty">Todavía no se agregó ninguna partida.</p>
+                            ) : (
+                              <div className="detail-participant-list">
+                                {partidas.map((p) => (
+                                  <div key={p.id} className="reto-item">
+                                    <p className="reto-desc">
+                                      {p.jugadorChallengerNombre} vs {p.jugadorChallengedNombre}
+                                      <span className="reto-status">
+                                        {p.status === "jugado" ? "Jugada" : "Pendiente"}
+                                      </span>
+                                    </p>
+                                    {p.status === "jugado" ? (
+                                      <p className="tournament-card-meta">
+                                        Ganó{" "}
+                                        {p.ganadorId === p.jugadorChallengerId
+                                          ? p.jugadorChallengerNombre
+                                          : p.jugadorChallengedNombre}
+                                      </p>
+                                    ) : (
+                                      <>
+                                        {erroresReportarPartida[p.id] && (
+                                          <div className="form-error">{erroresReportarPartida[p.id]}</div>
+                                        )}
+                                        <div className="bracket-report">
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost"
+                                            disabled={reportandoPartida === p.id}
+                                            onClick={() => handleReportarPartida(p.id, p.jugadorChallengerId)}
+                                          >
+                                            Ganó {p.jugadorChallengerNombre}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost"
+                                            disabled={reportandoPartida === p.id}
+                                            onClick={() => handleReportarPartida(p.id, p.jugadorChallengedId)}
+                                          >
+                                            Ganó {p.jugadorChallengedNombre}
+                                          </button>
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <h5 className="detail-subtitle">Agregar partida</h5>
+                            {erroresAgregarPartida[r.id] && (
+                              <div className="form-error">{erroresAgregarPartida[r.id]}</div>
+                            )}
+                            <div className="form-group">
+                              <label className="form-label" htmlFor={`partida-challenger-${r.id}`}>
+                                Jugador de {r.challengerNombre}
+                              </label>
+                              <select
+                                id={`partida-challenger-${r.id}`}
+                                className="form-select"
+                                value={jugadorChallengerPorReto[r.id] ?? ""}
+                                onChange={(e) =>
+                                  setJugadorChallengerPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                }
+                              >
+                                <option value="">Selecciona un jugador</option>
+                                {rosterChallenger.map((m) => (
+                                  <option key={m.userId} value={m.userId}>
+                                    {m.nick ?? "Jugador de RemorApp"}
+                                    {m.uniqueId ? `#${m.uniqueId}` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label className="form-label" htmlFor={`partida-challenged-${r.id}`}>
+                                Jugador de {r.challengedNombre}
+                              </label>
+                              <select
+                                id={`partida-challenged-${r.id}`}
+                                className="form-select"
+                                value={jugadorChallengedPorReto[r.id] ?? ""}
+                                onChange={(e) =>
+                                  setJugadorChallengedPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                }
+                              >
+                                <option value="">Selecciona un jugador</option>
+                                {rosterChallenged.map((m) => (
+                                  <option key={m.userId} value={m.userId}>
+                                    {m.nick ?? "Jugador de RemorApp"}
+                                    {m.uniqueId ? `#${m.uniqueId}` : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={agregandoPartida === r.id}
+                              onClick={() => handleAgregarPartida(r.id)}
+                            >
+                              {agregandoPartida === r.id ? "Agregando..." : "Agregar partida"}
+                            </button>
+
+                            <h5 className="detail-subtitle">Cerrar Clan War</h5>
+                            <p className="tournament-card-meta">
+                              Tu confirmación de cierre: {miCierreConfirmado ? "Confirmado" : "Pendiente"} ·
+                              Confirmación de {rivalNombre}: {cierreRivalConfirmado ? "Confirmado" : "Pendiente"}
+                            </p>
+                            {erroresCerrar[r.id] && <div className="form-error">{erroresCerrar[r.id]}</div>}
+                            {!miCierreConfirmado && (
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={cerrando === r.id}
+                                onClick={() => handleCerrarClanWar(r.id)}
+                              >
+                                {cerrando === r.id ? "Cerrando..." : "Cerrar Clan War"}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <h4 className="detail-subtitle">Proponer un reto</h4>
+              <form className="auth-form" onSubmit={handleProponerReto}>
+                {errorReto && <div className="form-error">{errorReto}</div>}
+                {retoEnviado && <div className="form-success">¡Reto propuesto!</div>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="reto-tag">
+                    Tag del equipo rival
+                  </label>
+                  <input
+                    id="reto-tag"
+                    className="form-input"
+                    type="text"
+                    placeholder="QSQD"
+                    value={tagRivalReto}
+                    onChange={(e) => setTagRivalReto(e.target.value.toUpperCase())}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="reto-fecha-hora">
+                    Fecha y hora (tu hora local)
+                  </label>
+                  <input
+                    id="reto-fecha-hora"
+                    className="form-input"
+                    type="datetime-local"
+                    value={fechaHoraReto}
+                    onChange={(e) => setFechaHoraReto(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendoReto}>
+                  {proponiendoReto ? "Proponiendo..." : "Proponer reto"}
+                </button>
+              </form>
+
+              <h4 className="detail-subtitle">Historial de retos</h4>
+              {historialRetos.length === 0 ? (
+                <p className="detail-empty">Todavía no hay retos resueltos.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {historialRetos.map((r) => (
+                    <div key={r.id} className="reto-item">
+                      <p className="reto-desc">
+                        {r.challengerNombre} vs {r.challengedNombre}
+                        <span className="reto-status">{r.status}</span>
+                      </p>
+                      <p className="reto-fecha">Hora CET: {formatearHoraCet(r.fechaHoraCet)}</p>
+                      {r.status === "rechazada" && r.motivoRechazo && (
+                        <p className="reto-motivo">
+                          Motivo: {r.motivoRechazo}
+                          {r.motivoRechazo === "Otro" && r.motivoDetalle ? ` — ${r.motivoDetalle}` : ""}
+                        </p>
+                      )}
+                      {r.status === "finalizada" && (
+                        <p className="tournament-card-meta">
+                          Ganó{" "}
+                          {r.ganadorTeamId === r.challengerTeamId ? r.challengerNombre : r.challengedNombre}
+                        </p>
+                      )}
+                      {r.status === "empatada" && (
+                        <p className="tournament-card-meta">
+                          Empate en partidas ganadas -- sin ajuste de MMR de clan.
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 className="detail-subtitle">Títulos Padre/Hijo</h3>
+              <p className="tournament-card-meta">
+                Se resuelven solos cuando se cierra una Clan War real entre los dos equipos.
+              </p>
+
+              <h4 className="detail-subtitle">Pendientes de responder</h4>
+              {titulosPendientesResponder.length === 0 ? (
+                <p className="detail-empty">No tienes propuestas de título pendientes de responder.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {titulosPendientesResponder.map((t) => (
+                    <div key={t.id} className="reto-item">
+                      <p className="reto-desc">
+                        {t.retadorNombre} te reta a un título ({t.duracionDias} días)
+                      </p>
+                      {erroresResponderTitulo[t.id] && (
+                        <div className="form-error">{erroresResponderTitulo[t.id]}</div>
+                      )}
+                      <div className="invitation-actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={respondiendoTitulo === t.id}
+                          onClick={() => handleResponderTitulo(t.id, true)}
+                        >
+                          Aceptar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={respondiendoTitulo === t.id}
+                          onClick={() => handleResponderTitulo(t.id, false)}
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h4 className="detail-subtitle">Propuestos por mí</h4>
+              {titulosPropuestosPorMi.length === 0 ? (
+                <p className="detail-empty">No propusiste ningún título.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {titulosPropuestosPorMi.map((t) => (
+                    <div key={t.id} className="reto-item">
+                      <p className="reto-desc">
+                        Título contra {t.retadoNombre} ({t.duracionDias} días)
+                        <span className="reto-status">
+                          {t.aceptado ? "Acordado, esperando la CW" : "Esperando respuesta"}
+                        </span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h4 className="detail-subtitle">Proponer un título</h4>
+              <form className="auth-form" onSubmit={handleProponerTitulo}>
+                {errorTitulo && <div className="form-error">{errorTitulo}</div>}
+                {tituloEnviado && <div className="form-success">¡Título propuesto!</div>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="titulo-tag">
+                    Tag del equipo rival
+                  </label>
+                  <input
+                    id="titulo-tag"
+                    className="form-input"
+                    type="text"
+                    placeholder="QSQD"
+                    value={tagRivalTitulo}
+                    onChange={(e) => setTagRivalTitulo(e.target.value.toUpperCase())}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="titulo-duracion">
+                    Duración (entre 7 y 90 días)
+                  </label>
+                  <input
+                    id="titulo-duracion"
+                    className="form-input"
+                    type="number"
+                    min={7}
+                    max={90}
+                    value={duracionTitulo}
+                    onChange={(e) => setDuracionTitulo(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendoTitulo}>
+                  {proponiendoTitulo ? "Proponiendo..." : "Proponer título"}
+                </button>
+              </form>
+
+              <h3 className="detail-subtitle">Torneos Históricos: consentimiento pendiente</h3>
+              {solicitudesHistoricas.length === 0 ? (
+                <p className="detail-empty">No tienes solicitudes de consentimiento pendientes.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {solicitudesHistoricas.map((s) => (
+                    <div key={s.id} className="reto-item">
+                      <p className="reto-desc">
+                        "{s.torneoNombre}" dice que tu equipo participó -- ¿aceptas que sea público?
+                      </p>
+                      {erroresResponderHistorico[s.id] && (
+                        <div className="form-error">{erroresResponderHistorico[s.id]}</div>
+                      )}
+                      <div className="invitation-actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={respondiendoHistorico === s.id}
+                          onClick={() => handleResponderHistorico(s.id, true)}
+                        >
+                          Aceptar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={respondiendoHistorico === s.id}
+                          onClick={() => handleResponderHistorico(s.id, false)}
+                        >
+                          Rechazar
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

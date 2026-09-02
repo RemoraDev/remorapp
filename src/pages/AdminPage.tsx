@@ -1,14 +1,23 @@
 ﻿import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { formatFecha } from "../lib/formatters";
 import { COUNTRY_OPTIONS, PERFIL_TIPO_OPTIONS } from "../types/profile";
 import type { PerfilTipo } from "../types/profile";
 import type { AdminUserRow } from "../types/admin";
 import type { TournamentRow } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
 
-type Tab = "torneos" | "usuarios" | "disputas";
+type Tab = "torneos" | "usuarios" | "equipos" | "disputas";
+
+interface EquipoEncontrado {
+  id: string;
+  name: string;
+  tag: string;
+  disuelto: boolean;
+}
 
 interface DisputaConNombres extends BracketMatchRow {
   tournamentNombre: string;
@@ -34,6 +43,17 @@ export default function AdminPage() {
   const [guardandoUsuario, setGuardandoUsuario] = useState<string | null>(null);
   // Rol elegido en el <select> de cada fila, antes de confirmar "Guardar".
   const [rolesSeleccionados, setRolesSeleccionados] = useState<Record<string, PerfilTipo>>({});
+  // Motivo escrito para cada fila, antes de confirmar "Suspender" --
+  // es obligatorio, admin_suspender_usuario() lo exige.
+  const [motivosSuspension, setMotivosSuspension] = useState<Record<string, string>>({});
+  const [erroresSuspender, setErroresSuspender] = useState<Record<string, string>>({});
+
+  // --- Equipos: buscar por tag y eliminar definitivamente ---
+  const [busquedaTagEquipo, setBusquedaTagEquipo] = useState("");
+  const [buscandoEquipo, setBuscandoEquipo] = useState(false);
+  const [errorBusquedaEquipo, setErrorBusquedaEquipo] = useState<string | null>(null);
+  const [equipoEncontrado, setEquipoEncontrado] = useState<EquipoEncontrado | null>(null);
+  const [eliminandoEquipo, setEliminandoEquipo] = useState(false);
 
   // --- Disputas de bracket ---
   const [disputas, setDisputas] = useState<DisputaConNombres[]>([]);
@@ -184,18 +204,96 @@ export default function AdminPage() {
   };
 
   const handleSuspender = async (usuarioId: string, suspenderA: boolean) => {
+    setErroresSuspender((prev) => ({ ...prev, [usuarioId]: "" }));
+
+    const motivo = motivosSuspension[usuarioId]?.trim();
+    if (suspenderA && !motivo) {
+      setErroresSuspender((prev) => ({ ...prev, [usuarioId]: "Tienes que escribir un motivo para suspender." }));
+      return;
+    }
+
     setGuardandoUsuario(usuarioId);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ suspendido: suspenderA })
-      .eq("id", usuarioId);
+    // admin_suspender_usuario() (en la base) es la que de verdad exige
+    // el motivo y guarda quién y cuándo -- suspendido ya no se puede
+    // tocar con un update directo (migración 028).
+    const { error } = await supabase.rpc("admin_suspender_usuario", {
+      p_usuario_id: usuarioId,
+      p_suspender: suspenderA,
+      p_motivo: suspenderA ? motivo : null,
+    });
     setGuardandoUsuario(null);
 
-    if (!error) {
-      setUsuarios((prev) =>
-        prev.map((u) => (u.id === usuarioId ? { ...u, suspendido: suspenderA } : u))
-      );
+    if (error) {
+      setErroresSuspender((prev) => ({ ...prev, [usuarioId]: error.message }));
+      return;
     }
+
+    setMotivosSuspension((prev) => ({ ...prev, [usuarioId]: "" }));
+
+    // Se recarga la lista completa en vez de parchear en memoria: hace
+    // falta traer suspendido_por_nick/motivo/en actualizados, que
+    // solo devuelve admin_listar_usuarios().
+    const { data } = await supabase.rpc("admin_listar_usuarios");
+    setUsuarios((data ?? []) as AdminUserRow[]);
+  };
+
+  const handleBuscarEquipo = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorBusquedaEquipo(null);
+    setEquipoEncontrado(null);
+
+    const tag = busquedaTagEquipo.trim().toUpperCase();
+    if (!tag) {
+      setErrorBusquedaEquipo("Escribe el tag del equipo.");
+      return;
+    }
+
+    setBuscandoEquipo(true);
+    const { data, error } = await supabase
+      .from("teams")
+      .select("id, name, tag, disuelto")
+      .eq("tag", tag)
+      .maybeSingle();
+    setBuscandoEquipo(false);
+
+    if (error || !data) {
+      setErrorBusquedaEquipo("No encontré ningún equipo con ese tag.");
+      return;
+    }
+
+    setEquipoEncontrado(data);
+  };
+
+  const handleEliminarEquipo = async () => {
+    if (!equipoEncontrado) return;
+    if (
+      !window.confirm(
+        `¿Confirmas que quieres eliminar definitivamente a ${equipoEncontrado.name} [${equipoEncontrado.tag}]? Esta acción no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+
+    setEliminandoEquipo(true);
+    setErrorBusquedaEquipo(null);
+
+    // eliminar_equipo_definitivo() (en la base) es la que de verdad
+    // verifica is_admin() y bloquea el borrado si el equipo tiene
+    // historial de Clan Wars o de torneos -- esto de acá solo pide
+    // confirmación y manda la orden.
+    const { error } = await supabase.rpc("eliminar_equipo_definitivo", {
+      p_team_id: equipoEncontrado.id,
+    });
+
+    setEliminandoEquipo(false);
+
+    if (error) {
+      setErrorBusquedaEquipo(error.message);
+      return;
+    }
+
+    setEquipoEncontrado(null);
+    setBusquedaTagEquipo("");
   };
 
   const handleResolverDisputa = async (matchId: string, ganadorId: string) => {
@@ -235,6 +333,13 @@ export default function AdminPage() {
           onClick={() => setTab("usuarios")}
         >
           Usuarios
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${tab === "equipos" ? "active" : ""}`}
+          onClick={() => setTab("equipos")}
+        >
+          Equipos
         </button>
         <button
           type="button"
@@ -292,6 +397,16 @@ export default function AdminPage() {
                     {usuario.cuenta_validada ? "Cuenta validada" : "Cuenta sin validar"}
                     {usuario.suspendido && " · Suspendido"}
                   </p>
+                  {usuario.suspendido && (
+                    <p className="admin-row-meta">
+                      Suspendido por {usuario.suspendido_por_nick ?? "un administrador"}
+                      {usuario.suspendido_en && ` el ${formatFecha(usuario.suspendido_en)}`}
+                      {usuario.suspendido_motivo && ` -- Motivo: ${usuario.suspendido_motivo}`}
+                    </p>
+                  )}
+                  {erroresSuspender[usuario.id] && (
+                    <div className="form-error">{erroresSuspender[usuario.id]}</div>
+                  )}
                 </div>
 
                 <div className="admin-row-actions">
@@ -322,6 +437,17 @@ export default function AdminPage() {
                   >
                     Guardar rol
                   </button>
+                  {!usuario.suspendido && (
+                    <input
+                      className="form-input"
+                      type="text"
+                      placeholder="Motivo de la suspensión"
+                      value={motivosSuspension[usuario.id] ?? ""}
+                      onChange={(e) =>
+                        setMotivosSuspension((prev) => ({ ...prev, [usuario.id]: e.target.value }))
+                      }
+                    />
+                  )}
                   <button
                     type="button"
                     className={`btn ${usuario.suspendido ? "btn-primary" : "btn-ghost"}`}
@@ -334,6 +460,49 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {tab === "equipos" && (
+        <div className="admin-panel">
+          <form className="auth-form" onSubmit={handleBuscarEquipo}>
+            {errorBusquedaEquipo && <div className="form-error">{errorBusquedaEquipo}</div>}
+            <div className="form-group">
+              <label className="form-label" htmlFor="admin-equipo-tag">
+                Tag del equipo
+              </label>
+              <input
+                id="admin-equipo-tag"
+                className="form-input"
+                type="text"
+                placeholder="QSQD"
+                value={busquedaTagEquipo}
+                onChange={(e) => setBusquedaTagEquipo(e.target.value.toUpperCase())}
+              />
+            </div>
+            <button type="submit" className="btn btn-ghost btn-block" disabled={buscandoEquipo}>
+              {buscandoEquipo ? "Buscando..." : "Buscar"}
+            </button>
+          </form>
+
+          {equipoEncontrado && (
+            <div className="admin-row">
+              <div className="admin-row-info">
+                <p className="admin-row-title">
+                  {equipoEncontrado.name} <span className="profile-nick-id">[{equipoEncontrado.tag}]</span>
+                </p>
+                <p className="admin-row-meta">{equipoEncontrado.disuelto ? "Disuelto" : "Activo"}</p>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={eliminandoEquipo}
+                onClick={handleEliminarEquipo}
+              >
+                {eliminandoEquipo ? "Eliminando..." : "Eliminar definitivamente"}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

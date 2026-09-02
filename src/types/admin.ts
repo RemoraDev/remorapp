@@ -13,4 +13,9 @@ export interface AdminUserRow {
   cuenta_validada: boolean;
   suspendido: boolean;
   es_admin: boolean;
+  // Suspensión administrada (migración 028): quién, por qué, cuándo --
+  // visible para cualquier administrador, no solo quien la aplicó.
+  suspendido_por_nick: string | null;
+  suspendido_motivo: string | null;
+  suspendido_en: string | null;
 }

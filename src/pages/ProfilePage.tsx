@@ -3,12 +3,15 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "../context/ThemeContext";
 import { validarNick } from "../lib/nickValidation";
 import { recortarImagenCuadrada } from "../lib/teams";
 import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
-import type { Country, Liga, Sc2Region, Profile } from "../types/profile";
+import type { AvatarForma, Country, Liga, Sc2Region, Profile } from "../types/profile";
 import Avatar from "../components/Avatar";
 import MmrProgressBar from "../components/MmrProgressBar";
+import PercentBar from "../components/PercentBar";
+import TitulosActivosList from "../components/TitulosActivosList";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -18,6 +21,22 @@ interface InvitacionConEquipo {
   equipoTag: string;
   equipoLogoUrl: string | null;
   invitadoPorNick: string | null;
+}
+
+interface JugadorEncontrado {
+  id: string;
+  nick: string;
+  uniqueId: string;
+}
+
+interface TituloJugadorConNombre {
+  id: string;
+  retadorId: string;
+  retadorNombre: string;
+  retadoId: string;
+  retadoNombre: string;
+  duracionDias: number;
+  aceptado: boolean;
 }
 
 // PostgREST embebe una relación "to-one" a veces como objeto y a veces
@@ -54,9 +73,13 @@ function calcularProgresoPerfil(profile: Profile | null) {
   return { completos, total: campos.length, mensaje };
 }
 
+type PestanaConfiguracion = "datos" | "apariencia";
+
 export default function ProfilePage() {
   const { user, profile, loading, refreshProfile } = useAuth();
+  const { tema, setTema } = useTheme();
   const location = useLocation();
+  const [pestanaActiva, setPestanaActiva] = useState<PestanaConfiguracion>("datos");
   // Llega desde LoginPage/RegisterPage cuando alguien con sesión activa
   // intentó entrar o registrarse de nuevo (ver Navigate en esas páginas).
   const avisoRedireccion = (location.state as { aviso?: string } | null)?.aviso ?? null;
@@ -78,6 +101,11 @@ export default function ProfilePage() {
   const [guardandoCaster, setGuardandoCaster] = useState(false);
   const [errorCaster, setErrorCaster] = useState<string | null>(null);
 
+  // --- Forma de avatar (pestaña Apariencia, migración 031): igual que
+  // "Soy caster", se guarda solo al elegir una opción. ---
+  const [guardandoForma, setGuardandoForma] = useState(false);
+  const [errorForma, setErrorForma] = useState<string | null>(null);
+
   // --- Foto de perfil ---
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -89,6 +117,23 @@ export default function ProfilePage() {
   const [invitaciones, setInvitaciones] = useState<InvitacionConEquipo[]>([]);
   const [respondiendo, setRespondiendo] = useState<string | null>(null);
   const [errorInvitacion, setErrorInvitacion] = useState<string | null>(null);
+
+  // --- Títulos Padre/Hijo entre jugadores (migración 026) ---
+  const [titulosPendientesResponder, setTitulosPendientesResponder] = useState<TituloJugadorConNombre[]>([]);
+  const [titulosPropuestosPorMi, setTitulosPropuestosPorMi] = useState<TituloJugadorConNombre[]>([]);
+  const [respondiendoTitulo, setRespondiendoTitulo] = useState<string | null>(null);
+  const [erroresResponderTitulo, setErroresResponderTitulo] = useState<Record<string, string>>({});
+
+  const [busquedaNickTitulo, setBusquedaNickTitulo] = useState("");
+  const [buscandoTitulo, setBuscandoTitulo] = useState(false);
+  const [errorBusquedaTitulo, setErrorBusquedaTitulo] = useState<string | null>(null);
+  const [rivalTitulo, setRivalTitulo] = useState<JugadorEncontrado | null>(null);
+  const [duracionTitulo, setDuracionTitulo] = useState("30");
+  const [casterNombreTitulo, setCasterNombreTitulo] = useState("");
+  const [casterLinkTitulo, setCasterLinkTitulo] = useState("");
+  const [proponiendoTitulo, setProponiendoTitulo] = useState(false);
+  const [errorTitulo, setErrorTitulo] = useState<string | null>(null);
+  const [tituloEnviado, setTituloEnviado] = useState(false);
 
   // El perfil llega después del primer render (consulta async): cuando
   // aparece (o cambia tras guardar), sincroniza los campos del form.
@@ -139,6 +184,49 @@ export default function ProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
+  const cargarTitulos = async () => {
+    if (!user) {
+      setTitulosPendientesResponder([]);
+      setTitulosPropuestosPorMi([]);
+      return;
+    }
+
+    const { data: titulosData } = await supabase
+      .from("titulos_padre_hijo")
+      .select("*")
+      .eq("tipo", "jugador")
+      .eq("status", "pendiente")
+      .or(`retador_id.eq.${user.id},retado_id.eq.${user.id}`)
+      .order("created_at", { ascending: false });
+
+    const userIds = [...new Set((titulosData ?? []).flatMap((t) => [t.retador_id, t.retado_id]))];
+    let nombrePorUserId: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: perfilesData } = await supabase.from("profiles").select("id, nick, unique_id").in("id", userIds);
+      nombrePorUserId = Object.fromEntries(
+        (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : "Jugador de RemorApp"])
+      );
+    }
+
+    const titulosResueltos: TituloJugadorConNombre[] = (titulosData ?? []).map((t) => ({
+      id: t.id,
+      retadorId: t.retador_id,
+      retadorNombre: nombrePorUserId[t.retador_id] ?? "Jugador de RemorApp",
+      retadoId: t.retado_id,
+      retadoNombre: nombrePorUserId[t.retado_id] ?? "Jugador de RemorApp",
+      duracionDias: t.duracion_dias,
+      aceptado: t.aceptado,
+    }));
+
+    setTitulosPendientesResponder(titulosResueltos.filter((t) => !t.aceptado && t.retadoId === user.id));
+    setTitulosPropuestosPorMi(titulosResueltos.filter((t) => t.retadorId === user.id));
+  };
+
+  useEffect(() => {
+    cargarTitulos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   const handleAceptarInvitacion = async (invitationId: string) => {
     setRespondiendo(invitationId);
     setErrorInvitacion(null);
@@ -171,6 +259,98 @@ export default function ProfilePage() {
 
     setInvitaciones((prev) => prev.filter((inv) => inv.id !== invitationId));
     await refreshProfile();
+  };
+
+  const handleBuscarRivalTitulo = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorBusquedaTitulo(null);
+    setRivalTitulo(null);
+    setTituloEnviado(false);
+
+    const partes = busquedaNickTitulo.trim().split("#");
+    if (partes.length !== 2 || !partes[0] || !partes[1]) {
+      setErrorBusquedaTitulo("Escribe el Nick#ID completo, por ejemplo CarpeDiem#12345.");
+      return;
+    }
+    const [nickBuscado, uniqueIdBuscado] = partes;
+
+    setBuscandoTitulo(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, nick, unique_id")
+      .eq("nick", nickBuscado)
+      .eq("unique_id", uniqueIdBuscado)
+      .maybeSingle();
+    setBuscandoTitulo(false);
+
+    if (error || !data) {
+      setErrorBusquedaTitulo("No encontré a nadie con ese Nick#ID.");
+      return;
+    }
+
+    setRivalTitulo({ id: data.id, nick: data.nick ?? nickBuscado, uniqueId: data.unique_id });
+  };
+
+  const handleProponerTitulo = async () => {
+    if (!rivalTitulo) return;
+
+    setErrorTitulo(null);
+    const duracion = Number(duracionTitulo);
+
+    if (!duracion || duracion < 7 || duracion > 90) {
+      setErrorTitulo("La duración tiene que ser entre 7 y 90 días.");
+      return;
+    }
+    if (!casterNombreTitulo.trim() || !casterLinkTitulo.trim()) {
+      setErrorTitulo("El caster y su link son obligatorios para un título entre jugadores.");
+      return;
+    }
+
+    setProponiendoTitulo(true);
+
+    // proponer_titulo_padre_hijo() (en la base) es la que de verdad
+    // valida la duración y exige el caster -- esto de acá es solo el
+    // formulario.
+    const { error } = await supabase.rpc("proponer_titulo_padre_hijo", {
+      p_tipo: "jugador",
+      p_retado_id: rivalTitulo.id,
+      p_duracion_dias: duracion,
+      p_caster_nombre: casterNombreTitulo.trim(),
+      p_caster_link: casterLinkTitulo.trim(),
+    });
+
+    setProponiendoTitulo(false);
+
+    if (error) {
+      setErrorTitulo(error.message);
+      return;
+    }
+
+    setTituloEnviado(true);
+    setRivalTitulo(null);
+    setBusquedaNickTitulo("");
+    setCasterNombreTitulo("");
+    setCasterLinkTitulo("");
+    await cargarTitulos();
+  };
+
+  const handleResponderTitulo = async (tituloId: string, aceptar: boolean) => {
+    setRespondiendoTitulo(tituloId);
+    setErroresResponderTitulo((prev) => ({ ...prev, [tituloId]: "" }));
+
+    const { error } = await supabase.rpc("responder_titulo_padre_hijo", {
+      p_titulo_id: tituloId,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoTitulo(null);
+
+    if (error) {
+      setErroresResponderTitulo((prev) => ({ ...prev, [tituloId]: error.message }));
+      return;
+    }
+
+    await cargarTitulos();
   };
 
   if (!loading && !user) {
@@ -241,6 +421,27 @@ export default function ProfilePage() {
     if (updateError) {
       setEsCaster(!nuevoValor); // revierte el cambio optimista si falló
       setErrorCaster(updateError.message);
+      return;
+    }
+
+    await refreshProfile();
+  };
+
+  const handleCambiarFormaAvatar = async (nuevaForma: AvatarForma) => {
+    if (!user || nuevaForma === profile?.avatar_forma) return;
+
+    setGuardandoForma(true);
+    setErrorForma(null);
+
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ avatar_forma: nuevaForma })
+      .eq("id", user.id);
+
+    setGuardandoForma(false);
+
+    if (updateError) {
+      setErrorForma(updateError.message);
       return;
     }
 
@@ -364,32 +565,152 @@ export default function ProfilePage() {
         </>
       )}
 
-      <div className="profile-avatar-section">
-        <Avatar
-          url={avatarPreview ?? profile?.avatar_url}
-          nombre={profile?.nick ?? profile?.nombre}
-          className="profile-avatar"
-        />
-        {!avatarPreview && !profile?.avatar_url && (
-          <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
-        )}
-        <form className="profile-avatar-form" onSubmit={handleGuardarAvatar}>
-          {errorAvatar && <div className="form-error">{errorAvatar}</div>}
-          {avatarGuardado && <div className="form-success">¡Foto actualizada!</div>}
+      <h2 className="detail-subtitle">Títulos Padre/Hijo</h2>
+      <p className="tournament-card-meta">
+        Se resuelven solos cuando ganas o pierdes una partida 1v1 real contra el rival, en cualquier
+        torneo.
+      </p>
+
+      <h3 className="detail-subtitle">Pendientes de responder</h3>
+      {titulosPendientesResponder.length === 0 ? (
+        <p className="detail-empty">No tienes retos de título pendientes de responder.</p>
+      ) : (
+        <div className="detail-participant-list">
+          {titulosPendientesResponder.map((t) => (
+            <div key={t.id} className="reto-item">
+              <p className="reto-desc">
+                {t.retadorNombre} te reta a un título ({t.duracionDias} días)
+              </p>
+              {erroresResponderTitulo[t.id] && (
+                <div className="form-error">{erroresResponderTitulo[t.id]}</div>
+              )}
+              <div className="invitation-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={respondiendoTitulo === t.id}
+                  onClick={() => handleResponderTitulo(t.id, true)}
+                >
+                  Aceptar
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={respondiendoTitulo === t.id}
+                  onClick={() => handleResponderTitulo(t.id, false)}
+                >
+                  Rechazar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 className="detail-subtitle">Propuestos por mí</h3>
+      {titulosPropuestosPorMi.length === 0 ? (
+        <p className="detail-empty">No propusiste ningún título.</p>
+      ) : (
+        <div className="detail-participant-list">
+          {titulosPropuestosPorMi.map((t) => (
+            <div key={t.id} className="reto-item">
+              <p className="reto-desc">
+                Título contra {t.retadoNombre} ({t.duracionDias} días)
+                <span className="reto-status">
+                  {t.aceptado ? "Acordado, esperando la partida" : "Esperando respuesta"}
+                </span>
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <h3 className="detail-subtitle">Proponer un título</h3>
+      <form className="auth-form" onSubmit={handleBuscarRivalTitulo}>
+        {errorBusquedaTitulo && <div className="form-error">{errorBusquedaTitulo}</div>}
+        {tituloEnviado && <div className="form-success">¡Título propuesto!</div>}
+
+        <div className="form-group">
+          <label className="form-label" htmlFor="titulo-buscar-nick">
+            Nick#ID del rival
+          </label>
           <input
-            id="perfil-avatar"
+            id="titulo-buscar-nick"
             className="form-input"
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={handleAvatarChange}
+            type="text"
+            placeholder="CarpeDiem#12345"
+            value={busquedaNickTitulo}
+            onChange={(e) => setBusquedaNickTitulo(e.target.value)}
           />
-          {avatarFile && (
-            <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoAvatar}>
-              {guardandoAvatar ? "Subiendo..." : "Guardar foto"}
-            </button>
-          )}
-        </form>
-      </div>
+        </div>
+
+        <button type="submit" className="btn btn-ghost btn-block" disabled={buscandoTitulo}>
+          {buscandoTitulo ? "Buscando..." : "Buscar"}
+        </button>
+      </form>
+
+      {rivalTitulo && (
+        <div className="detail-participant-item">
+          {rivalTitulo.nick}
+          <span className="profile-nick-id">#{rivalTitulo.uniqueId}</span>
+        </div>
+      )}
+
+      {rivalTitulo && (
+        <div className="auth-form">
+          {errorTitulo && <div className="form-error">{errorTitulo}</div>}
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="titulo-duracion-jugador">
+              Duración (entre 7 y 90 días)
+            </label>
+            <input
+              id="titulo-duracion-jugador"
+              className="form-input"
+              type="number"
+              min={7}
+              max={90}
+              value={duracionTitulo}
+              onChange={(e) => setDuracionTitulo(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="titulo-caster-nombre">
+              Nombre del caster
+            </label>
+            <input
+              id="titulo-caster-nombre"
+              className="form-input"
+              type="text"
+              value={casterNombreTitulo}
+              onChange={(e) => setCasterNombreTitulo(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="titulo-caster-link">
+              Link de la transmisión
+            </label>
+            <input
+              id="titulo-caster-link"
+              className="form-input"
+              type="text"
+              value={casterLinkTitulo}
+              onChange={(e) => setCasterLinkTitulo(e.target.value)}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            disabled={proponiendoTitulo}
+            onClick={handleProponerTitulo}
+          >
+            {proponiendoTitulo ? "Proponiendo..." : "Proponer título"}
+          </button>
+        </div>
+      )}
 
       {profile?.nick ? (
         <p className="profile-nick-display">
@@ -420,124 +741,239 @@ export default function ProfilePage() {
 
       <h2 className="detail-subtitle">Identidad de jugador</h2>
       {profile && (
-        <MmrProgressBar mmr={profile.mmr_1v1} liga={profile.liga_1v1} bancaRota={profile.banca_rota} />
+        <>
+          <MmrProgressBar mmr={profile.mmr_1v1} liga={profile.liga_1v1} bancaRota={profile.banca_rota} />
+          {profile.poco_confiable && (
+            <span className="nivel-badge nivel-badge-banca-rota">Poco Responsable</span>
+          )}
+          <PercentBar label="Valentía" value={profile.valentia_jugador} />
+          <PercentBar label="Responsabilidad en Clan Wars" value={profile.responsabilidad_cw} />
+          <TitulosActivosList tipo="jugador" id={profile.id} className="detail-map-list" />
+        </>
       )}
-      <form className="auth-form" onSubmit={handleGuardarIdentidad}>
-        {errorIdentidad && <div className="form-error">{errorIdentidad}</div>}
-        {identidadGuardada && <div className="form-success">Tu perfil se guardó correctamente.</div>}
 
-        <div className="form-group">
-          <label className="form-label" htmlFor="perfil-nick">
-            Nick
-          </label>
-          <input
-            id="perfil-nick"
-            className="form-input"
-            type="text"
-            required
-            value={nick}
-            onChange={(e) => setNick(e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="perfil-country">
-            País (de dónde eres)
-          </label>
-          <select
-            id="perfil-country"
-            className="form-select"
-            required
-            value={country}
-            onChange={(e) => setCountry(e.target.value as Country)}
-          >
-            <option value="" disabled>
-              Elige tu país
-            </option>
-            {COUNTRY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="perfil-sc2-region">
-            Servidor de StarCraft II (al que te conectas)
-          </label>
-          <select
-            id="perfil-sc2-region"
-            className="form-select"
-            required
-            value={sc2Region}
-            onChange={(e) => setSc2Region(e.target.value as Sc2Region)}
-          >
-            <option value="" disabled>
-              Elige tu servidor
-            </option>
-            {SC2_REGION_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="perfil-sc2-id">
-            ID de StarCraft II
-          </label>
-          <input
-            id="perfil-sc2-id"
-            className="form-input"
-            type="text"
-            required
-            value={sc2Id}
-            onChange={(e) => setSc2Id(e.target.value)}
-          />
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="perfil-liga">
-            Liga (opcional)
-          </label>
-          <select
-            id="perfil-liga"
-            className="form-select"
-            value={liga}
-            onChange={(e) => setLiga(e.target.value as Liga)}
-          >
-            <option value="">Prefiero no decirlo</option>
-            {LIGA_OPTIONS.map((opcion) => (
-              <option key={opcion} value={opcion}>
-                {opcion}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <button type="submit" className="btn btn-primary btn-block" disabled={guardandoIdentidad}>
-          {guardandoIdentidad ? "Guardando..." : "Guardar"}
+      <h2 className="detail-subtitle">Configuración general</h2>
+      <div className="settings-tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pestanaActiva === "datos"}
+          className={`settings-tab ${pestanaActiva === "datos" ? "active" : ""}`}
+          onClick={() => setPestanaActiva("datos")}
+        >
+          Editar datos
         </button>
-      </form>
-
-      <h2 className="detail-subtitle">Caster</h2>
-      <div className="auth-form">
-        {errorCaster && <div className="form-error">{errorCaster}</div>}
-        <label className="profile-caster-toggle">
-          <input
-            type="checkbox"
-            checked={esCaster}
-            onChange={handleToggleCaster}
-            disabled={guardandoCaster}
-          />
-          Soy caster
-        </label>
-        <p className="form-hint">
-          Independiente de tu rol de jugador o líder de clan -- podés ser las dos cosas a la vez.
-        </p>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={pestanaActiva === "apariencia"}
+          className={`settings-tab ${pestanaActiva === "apariencia" ? "active" : ""}`}
+          onClick={() => setPestanaActiva("apariencia")}
+        >
+          Apariencia
+        </button>
       </div>
+
+      {pestanaActiva === "datos" && (
+        <div className="settings-panel">
+          <div className="profile-avatar-section">
+            <Avatar
+              url={avatarPreview ?? profile?.avatar_url}
+              nombre={profile?.nick ?? profile?.nombre}
+              className="profile-avatar"
+              forma={profile?.avatar_forma}
+            />
+            {!avatarPreview && !profile?.avatar_url && (
+              <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
+            )}
+            <form className="profile-avatar-form" onSubmit={handleGuardarAvatar}>
+              {errorAvatar && <div className="form-error">{errorAvatar}</div>}
+              {avatarGuardado && <div className="form-success">¡Foto actualizada!</div>}
+              <input
+                id="perfil-avatar"
+                className="form-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={handleAvatarChange}
+              />
+              {avatarFile && (
+                <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoAvatar}>
+                  {guardandoAvatar ? "Subiendo..." : "Guardar foto"}
+                </button>
+              )}
+            </form>
+          </div>
+
+          <form className="auth-form" onSubmit={handleGuardarIdentidad}>
+            {errorIdentidad && <div className="form-error">{errorIdentidad}</div>}
+            {identidadGuardada && <div className="form-success">Tu perfil se guardó correctamente.</div>}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-nick">
+                Nick
+              </label>
+              <input
+                id="perfil-nick"
+                className="form-input"
+                type="text"
+                required
+                value={nick}
+                onChange={(e) => setNick(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-country">
+                País (de dónde eres)
+              </label>
+              <select
+                id="perfil-country"
+                className="form-select"
+                required
+                value={country}
+                onChange={(e) => setCountry(e.target.value as Country)}
+              >
+                <option value="" disabled>
+                  Elige tu país
+                </option>
+                {COUNTRY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-sc2-region">
+                Servidor de StarCraft II (al que te conectas)
+              </label>
+              <select
+                id="perfil-sc2-region"
+                className="form-select"
+                required
+                value={sc2Region}
+                onChange={(e) => setSc2Region(e.target.value as Sc2Region)}
+              >
+                <option value="" disabled>
+                  Elige tu servidor
+                </option>
+                {SC2_REGION_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-sc2-id">
+                ID de StarCraft II
+              </label>
+              <input
+                id="perfil-sc2-id"
+                className="form-input"
+                type="text"
+                required
+                value={sc2Id}
+                onChange={(e) => setSc2Id(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-liga">
+                Liga (opcional)
+              </label>
+              <select
+                id="perfil-liga"
+                className="form-select"
+                value={liga}
+                onChange={(e) => setLiga(e.target.value as Liga)}
+              >
+                <option value="">Prefiero no decirlo</option>
+                {LIGA_OPTIONS.map((opcion) => (
+                  <option key={opcion} value={opcion}>
+                    {opcion}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={guardandoIdentidad}>
+              {guardandoIdentidad ? "Guardando..." : "Guardar"}
+            </button>
+          </form>
+
+          <div className="auth-form">
+            {errorCaster && <div className="form-error">{errorCaster}</div>}
+            <label className="profile-caster-toggle">
+              <input
+                type="checkbox"
+                checked={esCaster}
+                onChange={handleToggleCaster}
+                disabled={guardandoCaster}
+              />
+              Soy caster
+            </label>
+            <p className="form-hint">
+              Independiente de tu rol de jugador o líder de clan -- podés ser las dos cosas a la vez.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {pestanaActiva === "apariencia" && (
+        <div className="settings-panel">
+          <p className="tournament-card-meta">
+            Elige cómo se ve RemorApp en este dispositivo. La elección se guarda solo en tu navegador.
+          </p>
+          <div className="pill-radio-group">
+            <label className={`pill-radio-option ${tema === "oscuro" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="tema-visual"
+                checked={tema === "oscuro"}
+                onChange={() => setTema("oscuro")}
+              />
+              Oscuro
+            </label>
+            <label className={`pill-radio-option ${tema === "claro" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="tema-visual"
+                checked={tema === "claro"}
+                onChange={() => setTema("claro")}
+              />
+              Claro
+            </label>
+          </div>
+
+          <h3 className="detail-subtitle">Forma del avatar</h3>
+          {errorForma && <div className="form-error">{errorForma}</div>}
+          <div className="avatar-forma-options">
+            <button
+              type="button"
+              className={`avatar-forma-option ${profile?.avatar_forma === "cuadrado" ? "selected" : ""}`}
+              disabled={guardandoForma}
+              onClick={() => handleCambiarFormaAvatar("cuadrado")}
+            >
+              <span className="avatar-forma-preview avatar-shape-cuadrado" />
+              Cuadrado
+            </button>
+            <button
+              type="button"
+              className={`avatar-forma-option ${profile?.avatar_forma === "redondo" ? "selected" : ""}`}
+              disabled={guardandoForma}
+              onClick={() => handleCambiarFormaAvatar("redondo")}
+            >
+              <span className="avatar-forma-preview avatar-shape-redondo" />
+              Redondo
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

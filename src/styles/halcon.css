@@ -38,6 +38,40 @@
   --nav-height: 68px;
 }
 
+/* Tema claro (pestaña "Apariencia" de /perfil, migración de tema
+   claro/oscuro). Redefine solo los tokens de color/sombra -- el resto
+   de la hoja de estilos usa var(--color-*), así que hereda el cambio
+   sin tocar cada regla. El acento de marca (--h-accent) se mantiene
+   igual en los dos temas; lo que cambia es --color-accent-soft, que
+   en oscuro es un cian casi blanco (para texto sobre fondo oscuro) y
+   en claro necesita ser un cian bien saturado para seguir siendo
+   legible sobre fondo claro. */
+:root[data-theme="claro"] {
+  --color-bg: #eef1f5;
+  --h-surface: #ffffff;
+  --h-surface-2: #f5f7fa;
+  --color-panel: var(--h-surface);
+  --color-card: var(--h-surface-2);
+  --h-border: rgba(15, 23, 32, 0.12);
+  --color-border: var(--h-border);
+
+  --h-accent-hover: #0e7490;
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #0e7490;
+
+  --color-text: #171b21;
+  --color-text-muted: #4b5563;
+  --color-text-faint: #6b7480;
+
+  --shadow-accent: 0 0 0 1px rgba(8, 145, 178, 0.3), 0 0 20px rgba(8, 145, 178, 0.12);
+  --shadow-accent-lg: 0 0 0 1px rgba(8, 145, 178, 0.4), 0 0 28px rgba(8, 145, 178, 0.18);
+}
+
+:root[data-theme="claro"] body {
+  background-image: radial-gradient(circle at 15% 0%, rgba(34, 211, 238, 0.1), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(34, 211, 238, 0.08), transparent 40%);
+}
+
 * {
   box-sizing: border-box;
 }
@@ -158,7 +192,7 @@ input[type="radio"] {
 }
 
 .btn-ghost:hover {
-  color: #fff;
+  color: var(--color-text);
 }
 
 .btn-link {
@@ -204,32 +238,45 @@ input[type="radio"] {
   gap: 0.75rem;
 }
 
-.header-user {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--color-text-muted);
-  margin-right: 0.25rem;
-  transition: color 0.15s ease;
+/* ---------- Avatar del header con menú desplegable ---------- */
+
+.header-user-wrap {
+  position: relative;
 }
 
-.header-user:hover {
-  color: var(--color-accent);
+.header-user-trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.header-user-trigger:hover,
+.header-user-trigger[aria-expanded="true"] {
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 
 .header-avatar {
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 50%;
+  width: 2.25rem;
+  height: 2.25rem;
   object-fit: cover;
-  font-size: 0.75rem;
+  font-size: 0.9rem;
   flex-shrink: 0;
 }
 
-/* Contador de invitaciones de equipo pendientes. */
+/* Contador de invitaciones de equipo pendientes: flota sobre la
+   esquina del avatar -- antes iba en línea junto al nombre, que ya no
+   se muestra en el header colapsado. */
 .header-invite-badge {
+  position: absolute;
+  top: -0.15rem;
+  right: -0.15rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -242,6 +289,99 @@ input[type="radio"] {
   font-size: 0.65rem;
   font-weight: 800;
   line-height: 1;
+  border: 2px solid var(--color-bg);
+}
+
+/* Catcher transparente para detectar el click afuera del menú y
+   cerrarlo -- portal a document.body por el mismo motivo que el menú
+   de abanico de la barra inferior: .header tiene backdrop-filter, que
+   vuelve a .header el "containing block" de cualquier descendiente
+   position:fixed y rompe la medida contra la ventana real. */
+.header-user-click-catcher {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: transparent;
+  pointer-events: none;
+}
+
+.header-user-click-catcher.is-open {
+  pointer-events: auto;
+}
+
+.header-user-menu {
+  /* position:absolute (no fixed): ancla al botón sin el problema de
+     containing block de arriba, así que no hace falta portal acá. */
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  z-index: 50;
+  width: 15rem;
+  max-width: calc(100vw - 2rem);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--h-surface-2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.5rem) scale(0.97);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.header-user-menu.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+.header-user-menu-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  padding: 0.6rem 0.7rem;
+  border-radius: var(--radius-md);
+  transition: background-color 0.15s ease;
+}
+
+.header-user-menu-identity:hover {
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.header-user-menu-nick {
+  margin: 0;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.header-user-menu-divider {
+  height: 1px;
+  margin: 0.25rem 0.2rem;
+  background: var(--color-border);
+}
+
+.header-user-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.7rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.header-user-menu-item:hover {
+  background: rgba(34, 211, 238, 0.08);
+  color: var(--color-text);
 }
 
 /* ---------- Logo ---------- */
@@ -261,7 +401,7 @@ input[type="radio"] {
   font-weight: 800;
   letter-spacing: 0.02em;
   font-size: 1.1rem;
-  color: #fff;
+  color: var(--color-text);
 }
 
 .logo-word-accent {
@@ -309,26 +449,13 @@ input[type="radio"] {
   right: 0;
 }
 
-.hero-tag {
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: var(--color-accent-soft);
-}
-
 .hero-title {
   font-family: var(--font-display);
   font-weight: 900;
   font-size: 2.5rem;
   line-height: 1.15;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
-}
-
-.hero-title-accent {
-  color: var(--color-accent);
 }
 
 .hero-phrase {
@@ -388,7 +515,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.5rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -446,7 +573,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 1.5rem;
-  color: #fff;
+  color: var(--color-text);
 }
 
 .featured-meta {
@@ -474,7 +601,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.5rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -580,7 +707,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.125rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -618,7 +745,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.125rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -642,7 +769,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1.1rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 2rem 0 0.75rem;
 }
 
@@ -704,7 +831,6 @@ input[type="radio"] {
 .detail-participant-avatar {
   width: 1.75rem;
   height: 1.75rem;
-  border-radius: 50%;
   object-fit: cover;
   font-size: 0.75rem;
   flex-shrink: 0;
@@ -721,6 +847,18 @@ input[type="radio"] {
   justify-content: center;
   font-weight: 700;
   font-family: var(--font-display);
+}
+
+/* Forma de avatar configurable (profiles.avatar_forma, migración 031):
+   la aplica el componente Avatar en todos los tamaños (header, listas
+   de participantes/miembros, /perfil), combinada con la clase de
+   tamaño correspondiente. */
+.avatar-shape-redondo {
+  border-radius: 50%;
+}
+
+.avatar-shape-cuadrado {
+  border-radius: var(--radius-md);
 }
 
 /* ---------- Foro (vista de ejemplo) ---------- */
@@ -754,7 +892,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -836,7 +974,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -962,7 +1100,7 @@ input[type="radio"] {
   font-family: var(--font-display);
   font-weight: 700;
   font-size: 1rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
 }
 
@@ -1123,6 +1261,45 @@ input[type="radio"] {
   font-size: 0.7rem;
   font-weight: 600;
   padding: 0.15rem 0.55rem;
+}
+
+/* ---------- Clan Wars: retos entre clanes (migración 021) ---------- */
+
+.reto-item {
+  border-radius: 0.6rem;
+  border: 1px solid var(--color-border);
+  padding: 0.6rem 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.reto-desc {
+  margin: 0 0 0.3rem;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.reto-fecha {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.reto-status {
+  margin-left: 0.5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.5rem;
+}
+
+.reto-motivo {
+  margin: 0.3rem 0 0;
+  font-size: 0.8rem;
+  color: #f87171;
 }
 
 .team-control-panel-wrap {
@@ -1418,7 +1595,7 @@ input[type="radio"] {
 
 .commission-strong {
   font-weight: 600;
-  color: #fff;
+  color: var(--color-text);
 }
 
 @media (min-width: 640px) {
@@ -1443,7 +1620,7 @@ input[type="radio"] {
 .page-placeholder h1 {
   font-family: var(--font-display);
   font-size: 2rem;
-  color: #fff;
+  color: var(--color-text);
 }
 
 .page-placeholder p {
@@ -1486,64 +1663,10 @@ input[type="radio"] {
   height: var(--nav-height);
 }
 
-/* ---------- Panal de hexágonos (decoración de la barra inferior) ---------- */
-
 .hex-pattern polygon {
   fill: none;
   stroke: var(--h-accent);
   stroke-width: 1;
-}
-
-.bottom-nav-hex {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.bottom-nav-hex-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  /* Sutil a propósito: 0.06–0.1 de opacidad, nada más. */
-  opacity: 0.08;
-}
-
-/* Brillo que recorre el panal despacio, solo con CSS (background-position
-   animado): nada de JavaScript ni seguimiento del mouse, así que es
-   prácticamente gratis en rendimiento. */
-.bottom-nav-hex-glow {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    100deg,
-    transparent 0%,
-    transparent 42%,
-    rgba(34, 211, 238, 0.3) 50%,
-    transparent 58%,
-    transparent 100%
-  );
-  background-size: 260% 100%;
-  mix-blend-mode: screen;
-  animation: bottom-nav-hex-glow-sweep 9s ease-in-out infinite;
-}
-
-@keyframes bottom-nav-hex-glow-sweep {
-  0%,
-  100% {
-    background-position: 100% 0;
-  }
-  50% {
-    background-position: 0% 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .bottom-nav-hex-glow {
-    animation: none;
-  }
 }
 
 .bottom-nav-item {
@@ -1809,7 +1932,7 @@ input[type="radio"] {
 .auth-title {
   font-family: var(--font-display);
   font-size: 1.75rem;
-  color: #fff;
+  color: var(--color-text);
   text-align: center;
   margin: 0;
 }
@@ -1847,7 +1970,7 @@ input[type="radio"] {
   border: 1px solid var(--color-border);
   background: var(--color-panel);
   padding: 0.65rem 0.85rem;
-  color: #fff;
+  color: var(--color-text);
   font-size: 0.9rem;
   width: 100%;
 }
@@ -1887,7 +2010,7 @@ input[type="radio"] {
 
 .form-radio-option.selected {
   border-color: var(--color-accent);
-  color: #fff;
+  color: var(--color-text);
 }
 
 .form-radio-label {
@@ -1920,13 +2043,89 @@ input[type="radio"] {
 
 .pill-radio-option.selected {
   border-color: var(--color-accent);
-  color: #fff;
+  color: var(--color-text);
   background: rgba(34, 211, 238, 0.12);
 }
 
 .pill-radio-option:has(input:focus-visible) {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/* ---------- Pestañas de Configuración General (/perfil) ---------- */
+
+.settings-tabs {
+  display: flex;
+  gap: 0.4rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1.25rem;
+}
+
+.settings-tab {
+  border: none;
+  background: none;
+  padding: 0.65rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.settings-tab:hover {
+  color: var(--color-text);
+}
+
+.settings-tab.active {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+.settings-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* ---------- Selector visual de forma de avatar (Apariencia) ---------- */
+
+.avatar-forma-options {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.avatar-forma-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: none;
+  padding: 0.85rem 1.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.avatar-forma-option.selected {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.avatar-forma-preview {
+  width: 2.5rem;
+  height: 2.5rem;
+  background: var(--color-accent);
+  opacity: 0.5;
+}
+
+.avatar-forma-option.selected .avatar-forma-preview {
+  opacity: 1;
 }
 
 /* ---------- Aviso en formularios ---------- */
@@ -1963,6 +2162,202 @@ input[type="radio"] {
 
 .map-picker-item.included {
   border-color: rgba(34, 211, 238, 0.4);
+}
+
+/* ---------- Sala de la Fama (migración 030) ----------
+   Ambientación deliberadamente distinta al resto de la app: fondo
+   oscuro con degradés radiales + un patrón SVG de líneas angulares
+   (data URI, sin imágenes externas), usando --h-accent solo como
+   acento de luz a baja opacidad. Se busca que se sienta como el
+   espacio más solemne de la plataforma. */
+
+.hall-of-fame {
+  position: relative;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background-color: #030406;
+  background-image: radial-gradient(ellipse 65% 45% at 50% -5%, rgba(34, 211, 238, 0.14), transparent 70%),
+    radial-gradient(ellipse 55% 35% at 100% 100%, rgba(34, 211, 238, 0.07), transparent 70%),
+    linear-gradient(180deg, #030406 0%, #0a0c11 55%, #030406 100%);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.12);
+}
+
+.hall-of-fame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='none' stroke='%2322d3ee' stroke-opacity='0.07' stroke-width='1'%3E%3Cpath d='M0 70 L70 0 L140 70 L70 140 Z'/%3E%3Cpath d='M70 0 L70 140 M0 70 L140 70'/%3E%3Cpath d='M0 0 L35 35 M140 0 L105 35 M0 140 L35 105 M140 140 L105 105'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 140px 140px;
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 20%, #000 40%, transparent 90%);
+}
+
+.hall-of-fame-header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.15);
+}
+
+.hall-of-fame-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: linear-gradient(180deg, #ffffff 0%, var(--color-accent-soft) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 0 36px rgba(34, 211, 238, 0.35);
+}
+
+.hall-of-fame-selector {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.hall-of-fame-selector .form-label {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.hall-subtitle {
+  position: relative;
+  z-index: 1;
+  margin: 2.5rem 0 1rem;
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent-soft);
+}
+
+.hall-wall {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hall-wall-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.15s ease;
+}
+
+.hall-wall-row:hover {
+  border-color: rgba(34, 211, 238, 0.35);
+}
+
+.hall-wall-row:nth-child(1) {
+  border-color: rgba(250, 204, 21, 0.5);
+  background: rgba(250, 204, 21, 0.05);
+}
+
+.hall-wall-row:nth-child(2) {
+  border-color: rgba(203, 213, 225, 0.4);
+  background: rgba(203, 213, 225, 0.04);
+}
+
+.hall-wall-row:nth-child(3) {
+  border-color: rgba(217, 119, 6, 0.4);
+  background: rgba(217, 119, 6, 0.05);
+}
+
+.hall-position {
+  min-width: 2rem;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  color: var(--color-accent);
+}
+
+.hall-name {
+  margin-right: auto;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.hall-mmr {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.hall-gallery-filters {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.hall-gallery-filter-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.hall-gallery {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  border-left: 2px solid rgba(34, 211, 238, 0.25);
+  padding-left: 1.25rem;
+}
+
+.hall-gallery-item {
+  position: relative;
+  padding-bottom: 1.35rem;
+}
+
+.hall-gallery-item::before {
+  content: "";
+  position: absolute;
+  top: 0.3rem;
+  left: -1.53rem;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.75);
+}
+
+.hall-gallery-fecha {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+}
+
+.hall-gallery-texto {
+  margin: 0.25rem 0 0;
+  color: var(--color-text);
 }
 
 .map-picker-name {
@@ -2107,7 +2502,6 @@ input[type="radio"] {
 .profile-avatar {
   width: 6rem;
   height: 6rem;
-  border-radius: 50%;
   object-fit: cover;
   font-size: 2rem;
   border: 2px solid var(--color-border);
@@ -2215,7 +2609,7 @@ input[type="radio"] {
 
 .profile-caster-toggle:has(input:checked) {
   border-color: var(--color-accent);
-  color: #fff;
+  color: var(--color-text);
 }
 
 .profile-caster-toggle input {
@@ -2267,13 +2661,13 @@ input[type="radio"] {
 }
 
 .modal-close:hover {
-  color: #fff;
+  color: var(--color-text);
 }
 
 .modal-title {
   font-family: var(--font-display);
   font-size: 1.2rem;
-  color: #fff;
+  color: var(--color-text);
   margin: 0;
 }
 

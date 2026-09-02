@@ -51,12 +51,7 @@ export default function Hero() {
       <HexPattern id="hero-hex-der" className="hex-pattern hero-hex hero-hex-der" />
 
       <div className="hero-content">
-        <p className="hero-tag">Chile · Guatemala · Puerto Rico · Argentina · Perú · Bolivia</p>
-        <h1 className="hero-title">
-          Tu torneo. <span className="hero-title-accent">Tu comunidad.</span>
-          <br />
-          Sin fronteras.
-        </h1>
+        <h1 className="hero-title">Bienvenidos a RemorApp</h1>
         <p className={`hero-phrase ${visible ? "visible" : ""}`}>{frasesGaming[indice]}</p>
         <Link to="/register" className="btn btn-primary btn-primary-lg hero-cta">
           Crear mi cuenta
