@@ -103,9 +103,10 @@ create trigger before_insert_teams_invite_code
 -- intersección real de arrays (sc2_regions && new.sc2_regions), no una
 -- restricción simple de columna, que no podría expresar esto. Esto es
 -- el respaldo a nivel de base -- el frontend hace el mismo chequeo
--- antes para mostrar el mensaje "Ese tag ya está pillado en [servidor]
--- wn" al toque, pero esto es lo que de verdad lo hace imposible aunque
--- dos personas manden la misma petición al mismo tiempo.
+-- antes para mostrar el mensaje "Ese tag ya está en uso en
+-- [servidor]" al toque, pero esto es lo que de verdad lo hace
+-- imposible aunque dos personas manden la misma petición al mismo
+-- tiempo.
 create or replace function public.validar_tag_unico_por_servidor()
 returns trigger
 language plpgsql

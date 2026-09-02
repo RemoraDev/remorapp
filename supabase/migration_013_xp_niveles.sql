@@ -99,6 +99,13 @@ alter table public.teams add column nivel integer generated always as (public.ca
 -- los de "authenticated".
 revoke update (xp) on public.profiles from authenticated;
 revoke update (xp) on public.teams from authenticated;
+-- CORRECCIÓN (migración 017): este revoke tampoco funcionó, mismo
+-- motivo que profiles.email -- patch_002_profile_self_update.sql y
+-- migration_007_avatares_banners.sql ya habían otorgado UPDATE de
+-- tabla completa, y un revoke de columna no puede recortar eso. xp
+-- quedó editable con un update común hasta la migración 017, que lo
+-- arregla de verdad. Se deja esta línea tal cual, como registro de lo
+-- que se corrió en su momento.
 
 -- ------------------------------------------------------------
 -- 3) otorgar_xp_participante: le da XP a un participante de bracket,

@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- RemorApp — Esquema del gestor de torneos
 --
 -- Cómo correrlo: Supabase Dashboard -> tu proyecto -> SQL Editor
@@ -26,6 +26,11 @@ create table public.profiles (
   perfil_tipo text not null default 'jugador' check (perfil_tipo in ('jugador', 'lider_clan')),
   es_caster boolean not null default false,
   es_admin boolean not null default false,
+  -- Privilegio del dueño de la plataforma (migración 016) -- distinto
+  -- de es_admin, para UNA sola cuenta, invisible incluso para otros
+  -- admins (ver el revoke más abajo). Protegido por el mismo
+  -- mecanismo que es_admin: solo se activa a mano en el SQL Editor.
+  es_dueno_plataforma boolean not null default false,
   -- Identidad de jugador (Fase 1 del módulo de Equipos/Clanes). Todo
   -- nullable salvo unique_id: se completa en el gate de /perfil, no
   -- al registrarse.
@@ -73,11 +78,19 @@ create policy "profiles_select_publico"
   on public.profiles for select
   using (true);
 
-revoke select (email) on public.profiles from anon, authenticated;
+-- El revoke de columna para email y es_dueno_plataforma NO va acá --
+-- ver la explicación larga junto al grant de más abajo (migración
+-- 017): un revoke de columna antes de un grant de tabla completa no
+-- sirve de nada, hay que hacerlo al revés.
 
--- Cada usuario puede editar su propia fila (nombre, perfil_tipo,
--- elegido en /perfil). es_admin queda protegido aparte por el
+-- Cada usuario puede editar su propia fila (nombre, país, sc2_id,
+-- etc., elegido en /perfil). es_admin queda protegido aparte por el
 -- trigger de abajo: sigue activándose solo a mano en este editor.
+-- perfil_tipo NO se edita acá pese a que esta política deja tocar
+-- cualquier columna de la fila propia: el grant de columna sobre
+-- perfil_tipo no existe para nadie (ver más abajo), así que Postgres
+-- rechaza cualquier intento de escribirlo aunque la política de fila
+-- lo permita -- la única puerta es admin_cambiar_perfil_tipo().
 create policy "profiles_update_propio"
   on public.profiles for update
   to authenticated
@@ -89,6 +102,10 @@ create policy "profiles_update_propio"
 -- authenticated); es null cuando se corre directo en el SQL Editor.
 -- Así, este trigger bloquea cambios a es_admin que vengan de la app,
 -- pero no interfiere con activarlo a mano.
+-- Migración 016: además de es_admin, protege es_dueno_plataforma con
+-- el mismo mecanismo, y bloquea que se suspenda/banee desde la app a
+-- la fila que ya tiene es_dueno_plataforma = true -- ni siquiera otro
+-- administrador puede hacerlo por acá.
 create or replace function public.proteger_es_admin()
 returns trigger
 language plpgsql
@@ -98,6 +115,11 @@ as $$
 begin
   if current_setting('request.jwt.claims', true) is not null then
     new.es_admin := old.es_admin;
+    new.es_dueno_plataforma := old.es_dueno_plataforma;
+
+    if old.es_dueno_plataforma then
+      new.suspendido := old.suspendido;
+    end if;
   end if;
   return new;
 end;
@@ -246,6 +268,31 @@ end;
 $$;
 
 grant execute on function public.admin_listar_usuarios() to authenticated;
+
+-- Único camino para cambiar perfil_tipo de otro usuario: perfil_tipo
+-- no tiene grant de columna para nadie (ver más arriba), así que la
+-- única forma de tocarlo es esta función, security definer, que
+-- verifica is_admin() antes de escribir nada.
+create or replace function public.admin_cambiar_perfil_tipo(p_usuario_id uuid, p_nuevo_rol text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'Solo un administrador puede cambiar el rol de un usuario.';
+  end if;
+
+  if p_nuevo_rol not in ('jugador', 'lider_clan') then
+    raise exception 'Ese rol no es válido.';
+  end if;
+
+  update public.profiles set perfil_tipo = p_nuevo_rol where id = p_usuario_id;
+end;
+$$;
+
+grant execute on function public.admin_cambiar_perfil_tipo(uuid, text) to authenticated;
 
 -- ------------------------------------------------------------
 -- maps: catálogo de mapas de StarCraft II (ficticios, de
@@ -451,6 +498,73 @@ create trigger after_insert_participant
   after insert on public.tournament_participants
   for each row execute function public.incrementar_cupos_ocupados();
 
+-- Simétrico al de arriba (migración 019): cuando abandonar_torneo()
+-- borra un participante de un torneo todavía 'abierto', el cupo se
+-- libera solo.
+create or replace function public.decrementar_cupos_ocupados()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.tournaments
+     set cupos_ocupados = cupos_ocupados - 1
+   where id = old.tournament_id;
+  return old;
+end;
+$$;
+
+create trigger after_delete_participant
+  after delete on public.tournament_participants
+  for each row execute function public.decrementar_cupos_ocupados();
+
+-- Registro de actividad para la restauración de banca rota (migración
+-- 020, sistema de MMR): inscribirse, confirmar asistencia, o jugar
+-- una partida real cuentan como actividad. Referencia team_members,
+-- que recién se define más abajo en este archivo -- no es un
+-- problema, plpgsql no valida el cuerpo contra el esquema hasta que
+-- se ejecuta (mismo caso que generar_llave() llamando a
+-- avanzar_ganador() antes de que exista en el archivo).
+create or replace function public.registrar_actividad_participante(p_participant_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_participante record;
+begin
+  select user_id, team_id into v_participante
+  from public.tournament_participants
+  where id = p_participant_id;
+
+  if v_participante.user_id is not null then
+    update public.profiles set ultima_actividad = now() where id = v_participante.user_id;
+  elsif v_participante.team_id is not null then
+    update public.teams set ultima_actividad = now() where id = v_participante.team_id;
+    update public.profiles set ultima_actividad = now()
+      where id in (select user_id from public.team_members where team_id = v_participante.team_id);
+  end if;
+end;
+$$;
+
+create or replace function public.registrar_actividad_tras_inscripcion()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.registrar_actividad_participante(new.id);
+  return new;
+end;
+$$;
+
+create trigger after_insert_participant_actividad
+  after insert on public.tournament_participants
+  for each row execute function public.registrar_actividad_tras_inscripcion();
+
 -- ------------------------------------------------------------
 -- tournament_results: resultado por partida.
 -- ------------------------------------------------------------
@@ -544,8 +658,42 @@ create trigger after_update_confirmacion_staff
 -- ------------------------------------------------------------
 grant usage on schema public to anon, authenticated;
 
-grant select on public.profiles to anon, authenticated;
-grant update on public.profiles to authenticated;
+-- profiles: SELECT y UPDATE solo por lista explícita de columnas, NO
+-- "toda la tabla y después revoco una columna" -- ese patrón no
+-- funciona en Postgres (un revoke de columna no recorta un grant de
+-- tabla completa, son entradas independientes). Ver la explicación
+-- larga en la migración 017.
+-- mmr_1v1/mmr_equipos y sus columnas derivadas (migración 020)
+-- reemplazan a xp/nivel -- ultima_actividad queda afuera a propósito,
+-- es de uso interno nada más (restauración de banca rota).
+grant select (
+  id, nombre, perfil_tipo, es_admin, es_caster, nick, unique_id,
+  country, sc2_region, sc2_id, liga, avatar_url, bio,
+  cuenta_validada, suspendido, creado_en,
+  mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos
+) on public.profiles to anon, authenticated;
+
+-- suspendido queda acá porque un admin necesita poder tocarlo desde
+-- /admin -- pero como un admin también corre como "authenticated",
+-- igual que cualquier usuario, un grant de columna no alcanza para
+-- distinguir "admin suspendiendo a otro" de "usuario reactivándose a
+-- sí mismo". Eso lo bloquea proteger_es_admin() (ver más arriba), que
+-- exige is_admin() para poder cambiar suspendido.
+--
+-- perfil_tipo NO va en esta lista (a diferencia de suspendido): no
+-- hay forma de que un grant de columna distinga "admin cambiando el
+-- rol de otro" de "usuario cambiándose el suyo propio" -- y a
+-- diferencia de suspendido, acá no alcanza con un trigger (el cambio
+-- de perfil_tipo también tiene que validar que el nuevo valor sea
+-- válido). Por eso queda totalmente afuera de este grant -- ni
+-- siquiera un admin puede tocarlo con un update directo -- y la única
+-- puerta es admin_cambiar_perfil_tipo() (ver más abajo, junto a
+-- admin_listar_usuarios()), security definer, exige is_admin().
+grant update (
+  nombre, es_caster, nick, country, sc2_region,
+  sc2_id, liga, avatar_url, suspendido
+) on public.profiles to authenticated;
+
 grant select on public.maps to anon, authenticated;
 
 grant select on public.tournaments to anon, authenticated;
@@ -582,7 +730,13 @@ create table public.teams (
   is_public boolean not null default true,
   invite_code text unique,
   owner_id uuid not null references public.profiles (id),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  -- Migración 019: cuando el dueño es el único miembro y sale del
+  -- equipo, en vez de borrar la fila (dejaría huérfano el historial de
+  -- team_kicks_log, los torneos en los que participó, etc.) queda
+  -- marcado disuelto y deja de aparecer en el buscador público
+  -- (filtrado en el frontend).
+  disuelto boolean not null default false
 );
 
 alter table public.teams enable row level security;
@@ -653,7 +807,7 @@ begin
       and t.id is distinct from new.id
       and t.sc2_regions && new.sc2_regions
   ) then
-    raise exception 'Ese tag ya está pillado en uno de esos servidores wn, prueba otro.';
+    raise exception 'Ese tag ya está en uso en uno de esos servidores. Intenta con otro.';
   end if;
 
   return new;
@@ -688,6 +842,10 @@ create policy "team_members_insert_propio"
     user_id = auth.uid()
     and roles = array['jugador']::text[]
     and not public.esta_suspendido()
+    -- Migración 019: un equipo disuelto no puede sumar gente de vuelta
+    -- por esta vía (código de invitación), aunque siga existiendo la
+    -- fila en teams.
+    and exists (select 1 from public.teams t where t.id = team_id and not t.disuelto)
   );
 
 create or replace function public.crear_membresia_owner()
@@ -754,7 +912,12 @@ create policy "teams_update_propio"
   using (owner_id = auth.uid())
   with check (owner_id = auth.uid());
 
-grant update on public.teams to authenticated;
+-- Lista explícita de columnas, no toda la tabla: excluye mmr (mismo
+-- criterio que xp antes, ver migración 017 -- ninguna función
+-- legítima necesita escribirlo desde acá, cualquier ajuste futuro de
+-- MMR pasará por una función propia) y name/tag (ya protegidos por su
+-- propio trigger de abajo, pero afuera de la lista de todas formas).
+grant update (description, logo_url, banner_url) on public.teams to authenticated;
 
 create or replace function public.proteger_nombre_y_tag_equipo()
 returns trigger
@@ -813,7 +976,13 @@ create table public.team_kicks_log (
   team_id uuid not null references public.teams (id) on delete cascade,
   user_id uuid not null references public.profiles (id),
   kicked_by uuid not null references public.profiles (id),
-  kicked_at timestamptz not null default now()
+  kicked_at timestamptz not null default now(),
+  -- Migración 019: distingue si la salida la inició el líder
+  -- (quitar_miembro) o el propio jugador (salir_equipo) -- mismo
+  -- kicked_by en los dos casos cuando es el propio jugador (uno se
+  -- "expulsa a sí mismo" en los datos), pero el motivo deja clara la
+  -- diferencia al mirar el historial.
+  motivo text not null default 'expulsado' check (motivo in ('expulsado', 'renuncia'))
 );
 
 alter table public.team_kicks_log enable row level security;
@@ -839,8 +1008,11 @@ as $$
 declare
   v_es_owner boolean;
 begin
+  -- Migración 019: "not disuelto" acá también bloquea que un ex-dueño
+  -- reviva un equipo disuelto invitando gente de nuevo -- owner_id no
+  -- cambia solo porque el equipo se disolvió.
   select exists (
-    select 1 from public.teams where id = p_team_id and owner_id = auth.uid()
+    select 1 from public.teams where id = p_team_id and owner_id = auth.uid() and not disuelto
   ) into v_es_owner;
 
   if not v_es_owner then
@@ -877,6 +1049,7 @@ set search_path = public
 as $$
 declare
   v_invitacion record;
+  v_disuelto boolean;
 begin
   select * into v_invitacion from public.team_invitations where id = p_invitation_id for update;
 
@@ -891,6 +1064,13 @@ begin
   end if;
   if public.esta_suspendido() then
     raise exception 'Tu cuenta está suspendida.';
+  end if;
+
+  -- Migración 019: cubre una invitación que quedó pendiente de antes
+  -- de que el equipo se disolviera.
+  select disuelto into v_disuelto from public.teams where id = v_invitacion.team_id;
+  if v_disuelto then
+    raise exception 'Ese equipo ya no existe.';
   end if;
 
   insert into public.team_members (team_id, user_id, roles)
@@ -947,15 +1127,15 @@ begin
   end if;
 
   if v_owner_id <> auth.uid() then
-    raise exception 'Solo el dueño del equipo puede sacar miembros wn.';
+    raise exception 'Solo el dueño del equipo puede quitar miembros.';
   end if;
 
   if p_user_id = auth.uid() then
     raise exception 'No te puedes sacar a ti mismo del equipo.';
   end if;
 
-  insert into public.team_kicks_log (team_id, user_id, kicked_by)
-  values (p_team_id, p_user_id, auth.uid());
+  insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo)
+  values (p_team_id, p_user_id, auth.uid(), 'expulsado');
 
   delete from public.team_members
   where team_id = p_team_id and user_id = p_user_id;
@@ -963,6 +1143,116 @@ end;
 $$;
 
 grant execute on function public.quitar_miembro(uuid, uuid) to authenticated;
+
+-- salir_equipo() (migración 019): la contraparte de quitar_miembro(),
+-- iniciada por el propio jugador. Un miembro común sale sin más
+-- trámite. El dueño solo puede usar esta misma función si es el
+-- ÚNICO miembro que queda -- en ese caso el equipo no se borra, queda
+-- marcado disuelto (así el historial de team_kicks_log y los torneos
+-- en los que participó no quedan huérfanos) y perfil_tipo del ahora
+-- ex-dueño vuelve a
+-- 'jugador'. Si el equipo tiene más gente, el dueño tiene que
+-- transferir el liderazgo primero (transferir_liderazgo(), más
+-- abajo) -- después de eso ya no es dueño y puede usar esta misma
+-- función sin problema.
+create or replace function public.salir_equipo()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_team_id uuid;
+  v_roles text[];
+  v_total_miembros int;
+begin
+  select tm.team_id, tm.roles into v_team_id, v_roles
+  from public.team_members tm
+  where tm.user_id = auth.uid();
+
+  if v_team_id is null then
+    raise exception 'No perteneces a ningún equipo.';
+  end if;
+
+  perform 1 from public.teams where id = v_team_id for update;
+
+  if v_roles @> array['owner']::text[] then
+    select count(*) into v_total_miembros from public.team_members where team_id = v_team_id;
+
+    if v_total_miembros > 1 then
+      raise exception 'Como dueño del equipo, primero debes transferir el liderazgo a otro miembro antes de salir.';
+    end if;
+
+    insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo)
+    values (v_team_id, auth.uid(), auth.uid(), 'renuncia');
+
+    delete from public.team_members where user_id = auth.uid();
+    update public.teams set disuelto = true where id = v_team_id;
+    update public.profiles set perfil_tipo = 'jugador' where id = auth.uid();
+    return;
+  end if;
+
+  insert into public.team_kicks_log (team_id, user_id, kicked_by, motivo)
+  values (v_team_id, auth.uid(), auth.uid(), 'renuncia');
+
+  delete from public.team_members where user_id = auth.uid();
+end;
+$$;
+
+grant execute on function public.salir_equipo() to authenticated;
+
+-- transferir_liderazgo() (migración 019): mismo criterio de
+-- perfil_tipo que crear_membresia_owner() (migración 011) -- crear un
+-- equipo o recibir su liderazgo son las dos únicas formas de volverse
+-- lider_clan, siempre a mano vía estas funciones, nunca eligiéndolo
+-- directo. El anterior dueño siempre puede volver a 'jugador' sin
+-- chequear si lidera otro equipo, porque team_members.user_id es
+-- primary key: nadie pertenece a más de un equipo a la vez.
+create or replace function public.transferir_liderazgo(p_nuevo_owner_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_team record;
+  v_es_miembro boolean;
+begin
+  select * into v_team from public.teams where owner_id = auth.uid() for update;
+
+  if v_team is null then
+    raise exception 'No eres dueño de ningún equipo.';
+  end if;
+
+  if v_team.disuelto then
+    raise exception 'Este equipo ya fue disuelto.';
+  end if;
+
+  if p_nuevo_owner_id = auth.uid() then
+    raise exception 'Ya eres el dueño de este equipo.';
+  end if;
+
+  select exists (
+    select 1 from public.team_members where team_id = v_team.id and user_id = p_nuevo_owner_id
+  ) into v_es_miembro;
+
+  if not v_es_miembro then
+    raise exception 'Ese jugador no pertenece a tu equipo.';
+  end if;
+
+  update public.team_members set roles = array['owner']::text[]
+    where team_id = v_team.id and user_id = p_nuevo_owner_id;
+  update public.team_members set roles = array['jugador']::text[]
+    where team_id = v_team.id and user_id = auth.uid();
+
+  update public.teams set owner_id = p_nuevo_owner_id where id = v_team.id;
+
+  update public.profiles set perfil_tipo = 'lider_clan' where id = p_nuevo_owner_id;
+  update public.profiles set perfil_tipo = 'jugador' where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.transferir_liderazgo(uuid) to authenticated;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (
@@ -1088,7 +1378,7 @@ begin
 
   v_n := coalesce(array_length(v_participantes, 1), 0);
   if v_n < 2 then
-    raise exception 'Necesitas al menos 2 jugadores confirmados wn';
+    raise exception 'Necesitas al menos 2 jugadores confirmados para generar la llave.';
   end if;
 
   v_next_pow2 := 1;
@@ -1184,6 +1474,10 @@ begin
   update public.tournament_participants
     set checked_in = true, checked_in_at = now()
     where id = p_participant_id;
+
+  -- Migración 020: confirmar que vas a jugar cuenta como actividad,
+  -- para la restauración de banca rota (30 días sin participar).
+  perform public.registrar_actividad_participante(p_participant_id);
 end;
 $$;
 
@@ -1201,22 +1495,19 @@ declare
   v_target_match_number int;
   v_target record;
   v_es_impar boolean;
-  v_perdedor_id uuid;
 begin
   select * into v_match from public.bracket_matches where id = p_match_id;
 
-  -- Reparto de XP (migración 013): solo en partidas reales, con los
-  -- dos participantes presentes -- un bye no se jugó, nadie gana XP
-  -- por eso. Cubre tanto un reporte normal como uno resuelto por
-  -- disputa desde /admin, porque las dos rutas terminan acá.
+  -- Registro de actividad (migración 020): solo en partidas reales,
+  -- con los dos participantes presentes -- un bye no se jugó. Cubre
+  -- tanto un reporte normal como uno resuelto por disputa o un
+  -- abandono, porque todas esas rutas terminan acá. Reemplaza al
+  -- reparto de XP que hacía este mismo punto antes (migración 013);
+  -- el ajuste de MMR por resultado todavía no existe -- eso es la
+  -- fase de Clan Wars -- pero la actividad sí se registra desde ya.
   if v_match.participant1_id is not null and v_match.participant2_id is not null then
-    v_perdedor_id := case
-      when v_match.winner_id = v_match.participant1_id then v_match.participant2_id
-      else v_match.participant1_id
-    end;
-
-    perform public.otorgar_xp_participante(v_match.winner_id, public.xp_ganador_partida(), 'partida_ganada');
-    perform public.otorgar_xp_participante(v_perdedor_id, public.xp_perdedor_partida(), 'partida_perdida');
+    perform public.registrar_actividad_participante(v_match.participant1_id);
+    perform public.registrar_actividad_participante(v_match.participant2_id);
   end if;
 
   select count(*) into v_total_en_ronda
@@ -1373,6 +1664,13 @@ begin
     where id = p_match_id;
 
   perform public.avanzar_ganador(p_match_id);
+
+  if public.es_dueno_plataforma() then
+    perform public.registrar_actividad_dueno(
+      'resolver_disputa',
+      'match_id=' || p_match_id::text || ' ganador=' || p_ganador_id::text
+    );
+  end if;
 end;
 $$;
 
@@ -1494,77 +1792,13 @@ $$;
 
 grant execute on function public.es_dueno_del_participante(uuid) to authenticated;
 
--- ------------------------------------------------------------
--- Sistema de experiencia y niveles (migración 013) -- Fase A: solo
--- números, sin skins todavía. Constantes y curvas de nivel explicadas
--- en el archivo de esa migración; acá solo el resultado final.
--- ------------------------------------------------------------
-create or replace function public.xp_ganador_partida()
-returns int
-language sql
-immutable
-as $$ select 20 $$;
-
-create or replace function public.xp_perdedor_partida()
-returns int
-language sql
-immutable
-as $$ select 5 $$;
-
-create or replace function public.calcular_nivel_jugador(p_xp int)
-returns int
-language sql
-immutable
-as $$
-  select least(100, floor(2 * sqrt(greatest(p_xp, 0)))::int);
-$$;
-
-create or replace function public.calcular_nivel_clan(p_xp int)
-returns int
-language sql
-immutable
-as $$
-  select least(100, floor(cbrt(greatest(p_xp, 0) / 0.025))::int);
-$$;
-
-alter table public.profiles add column xp integer not null default 0;
-alter table public.profiles add column nivel integer generated always as (public.calcular_nivel_jugador(xp)) stored;
-
-alter table public.teams add column xp integer not null default 0;
-alter table public.teams add column nivel integer generated always as (public.calcular_nivel_clan(xp)) stored;
-
--- Mismo patrón que el revoke de columna que ya existe sobre
--- profiles.email, pero de escritura: sin esto, profiles_update_propio
--- / teams_update_propio (las políticas que ya existen) dejarían que
--- cualquiera se regale XP con un update directo a su propia fila.
-revoke update (xp) on public.profiles from authenticated;
-revoke update (xp) on public.teams from authenticated;
-
--- ------------------------------------------------------------
--- Migración 014: quién le dio XP al clan + apuestas de XP entre
--- clanes.
--- ------------------------------------------------------------
-create table public.team_xp_log (
-  id uuid primary key default gen_random_uuid(),
-  team_id uuid not null references public.teams (id) on delete cascade,
-  user_id uuid references public.profiles (id),
-  cantidad integer not null,
-  origen text not null check (origen in ('partida_ganada', 'partida_perdida', 'apuesta')),
-  created_at timestamptz not null default now()
-);
-
-alter table public.team_xp_log enable row level security;
-
-create policy "team_xp_log_select_propio"
-  on public.team_xp_log for select
-  to authenticated
-  using (
-    exists (select 1 from public.teams t where t.id = team_id and t.owner_id = auth.uid())
-  );
-
-grant select on public.team_xp_log to authenticated;
-
-create or replace function public.otorgar_xp_participante(p_participant_id uuid, p_xp int, p_origen text)
+-- abandonar_torneo() (migración 019): saca a un participante de un
+-- torneo 'abierto', o -- si el torneo ya está 'en_curso' y ese
+-- participante todavía tiene una partida pendiente por jugar -- lo
+-- trata como un abandono: su rival avanza automáticamente,
+-- reutilizando avanzar_ganador() tal cual, con el mismo reparto de XP
+-- que un partido jugado de verdad.
+create or replace function public.abandonar_torneo(p_participant_id uuid)
 returns void
 language plpgsql
 security definer
@@ -1572,270 +1806,262 @@ set search_path = public
 as $$
 declare
   v_participante record;
-  v_team_id uuid;
-  v_miembro record;
+  v_torneo record;
+  v_match record;
+  v_rival_id uuid;
 begin
-  select user_id, team_id into v_participante
+  select * into v_participante
   from public.tournament_participants
-  where id = p_participant_id;
+  where id = p_participant_id
+  for update;
 
-  if v_participante.user_id is not null then
-    update public.profiles set xp = xp + p_xp where id = v_participante.user_id;
-
-    select team_id into v_team_id from public.team_members where user_id = v_participante.user_id;
-    if v_team_id is not null then
-      update public.teams set xp = xp + p_xp where id = v_team_id;
-      insert into public.team_xp_log (team_id, user_id, cantidad, origen)
-      values (v_team_id, v_participante.user_id, p_xp, p_origen);
-    end if;
-
-  elsif v_participante.team_id is not null then
-    for v_miembro in select user_id from public.team_members where team_id = v_participante.team_id loop
-      update public.profiles set xp = xp + p_xp where id = v_miembro.user_id;
-      insert into public.team_xp_log (team_id, user_id, cantidad, origen)
-      values (v_participante.team_id, v_miembro.user_id, p_xp, p_origen);
-    end loop;
-
-    update public.teams
-      set xp = xp + p_xp * (select count(*) from public.team_members where team_id = v_participante.team_id)
-      where id = v_participante.team_id;
-  end if;
-end;
-$$;
-
-create table public.team_xp_wagers (
-  id uuid primary key default gen_random_uuid(),
-  challenger_team_id uuid not null references public.teams (id) on delete cascade,
-  challenged_team_id uuid not null references public.teams (id) on delete cascade,
-  monto integer not null check (monto > 0),
-  status text not null default 'pendiente'
-    check (status in ('pendiente', 'aceptada', 'rechazada', 'resuelta', 'en_disputa')),
-  reporte_challenger uuid references public.teams (id),
-  reporte_challenged uuid references public.teams (id),
-  ganador_final uuid references public.teams (id),
-  created_at timestamptz not null default now(),
-  resolved_at timestamptz,
-  check (challenger_team_id <> challenged_team_id),
-  check (reporte_challenger is null or reporte_challenger in (challenger_team_id, challenged_team_id)),
-  check (reporte_challenged is null or reporte_challenged in (challenger_team_id, challenged_team_id)),
-  check (ganador_final is null or ganador_final in (challenger_team_id, challenged_team_id))
-);
-
-alter table public.team_xp_wagers enable row level security;
-
-create policy "team_xp_wagers_select"
-  on public.team_xp_wagers for select
-  to authenticated
-  using (
-    exists (select 1 from public.teams t where t.id = challenger_team_id and t.owner_id = auth.uid())
-    or exists (select 1 from public.teams t where t.id = challenged_team_id and t.owner_id = auth.uid())
-    or public.is_admin()
-  );
-
-grant select on public.team_xp_wagers to authenticated;
-
-create or replace function public.proponer_apuesta(p_challenged_team_id uuid, p_monto int)
-returns uuid
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_challenger_team_id uuid;
-  v_challenger_xp int;
-  v_id uuid;
-begin
-  select team_id into v_challenger_team_id
-  from public.team_members
-  where user_id = auth.uid() and roles @> array['owner']::text[];
-
-  if v_challenger_team_id is null then
-    raise exception 'Tienes que ser dueño de un equipo para proponer una apuesta.';
+  if v_participante is null then
+    raise exception 'Esa inscripción no existe.';
   end if;
 
-  if v_challenger_team_id = p_challenged_team_id then
-    raise exception 'No puedes desafiar a tu propio equipo wn.';
+  if not public.es_dueno_del_participante(p_participant_id) then
+    raise exception 'No tienes permiso para abandonar esta inscripción.';
   end if;
 
-  if not exists (select 1 from public.teams where id = p_challenged_team_id) then
-    raise exception 'Ese equipo no existe.';
+  select * into v_torneo from public.tournaments where id = v_participante.tournament_id for update;
+
+  if v_torneo.estado = 'abierto' then
+    delete from public.tournament_participants where id = p_participant_id;
+    return;
   end if;
 
-  if p_monto <= 0 then
-    raise exception 'El monto tiene que ser mayor a 0.';
+  if v_torneo.estado = 'finalizado' then
+    raise exception 'Este torneo ya terminó, no puedes abandonarlo.';
   end if;
 
-  select xp into v_challenger_xp from public.teams where id = v_challenger_team_id;
-  if p_monto > v_challenger_xp then
-    raise exception 'No puedes apostar más XP del que tiene tu equipo (tiene %).', v_challenger_xp;
+  -- estado = 'en_curso': busca la partida pendiente donde participa.
+  -- Si ya perdió o el torneo todavía no le asignó rival, no hay nada
+  -- que abandonar.
+  select * into v_match
+  from public.bracket_matches
+  where tournament_id = v_torneo.id
+    and (participant1_id = p_participant_id or participant2_id = p_participant_id)
+    and status = 'pendiente'
+  for update
+  limit 1;
+
+  if v_match is null then
+    raise exception 'No tienes ninguna partida pendiente en este torneo para abandonar.';
   end if;
 
-  insert into public.team_xp_wagers (challenger_team_id, challenged_team_id, monto)
-  values (v_challenger_team_id, p_challenged_team_id, p_monto)
-  returning id into v_id;
-
-  return v_id;
-end;
-$$;
-
-grant execute on function public.proponer_apuesta(uuid, int) to authenticated;
-
-create or replace function public.responder_apuesta(p_wager_id uuid, p_aceptar boolean)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_apuesta record;
-  v_es_owner boolean;
-begin
-  select * into v_apuesta from public.team_xp_wagers where id = p_wager_id for update;
-
-  if v_apuesta is null then
-    raise exception 'Esa apuesta no existe.';
-  end if;
-  if v_apuesta.status <> 'pendiente' then
-    raise exception 'Esta apuesta ya no está pendiente de respuesta.';
+  if v_match.participant1_id is null or v_match.participant2_id is null then
+    raise exception 'Esta partida todavía no tiene rival asignado.';
   end if;
 
-  select exists (
-    select 1 from public.teams where id = v_apuesta.challenged_team_id and owner_id = auth.uid()
-  ) into v_es_owner;
-
-  if not v_es_owner then
-    raise exception 'Solo el dueño del equipo desafiado puede responder esta apuesta.';
-  end if;
-
-  update public.team_xp_wagers
-    set status = case when p_aceptar then 'aceptada' else 'rechazada' end
-    where id = p_wager_id;
-end;
-$$;
-
-grant execute on function public.responder_apuesta(uuid, boolean) to authenticated;
-
-create or replace function public.resolver_apuesta_interno(p_wager_id uuid, p_ganador_team_id uuid)
-returns void
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_apuesta record;
-  v_perdedor_team_id uuid;
-begin
-  select * into v_apuesta from public.team_xp_wagers where id = p_wager_id for update;
-
-  v_perdedor_team_id := case
-    when p_ganador_team_id = v_apuesta.challenger_team_id then v_apuesta.challenged_team_id
-    else v_apuesta.challenger_team_id
+  v_rival_id := case
+    when v_match.participant1_id = p_participant_id then v_match.participant2_id
+    else v_match.participant1_id
   end;
 
-  update public.teams set xp = xp + v_apuesta.monto where id = p_ganador_team_id;
-  update public.teams set xp = greatest(0, xp - v_apuesta.monto) where id = v_perdedor_team_id;
+  update public.bracket_matches
+    set winner_id = v_rival_id, status = 'jugado'
+    where id = v_match.id;
 
-  insert into public.team_xp_log (team_id, user_id, cantidad, origen)
-  values (p_ganador_team_id, null, v_apuesta.monto, 'apuesta');
-
-  insert into public.team_xp_log (team_id, user_id, cantidad, origen)
-  values (v_perdedor_team_id, null, -v_apuesta.monto, 'apuesta');
-
-  update public.team_xp_wagers
-    set status = 'resuelta', ganador_final = p_ganador_team_id, resolved_at = now()
-    where id = p_wager_id;
+  perform public.avanzar_ganador(v_match.id);
 end;
 $$;
 
-create or replace function public.reportar_resultado_apuesta(p_wager_id uuid, p_ganador_team_id uuid)
+grant execute on function public.abandonar_torneo(uuid) to authenticated;
+
+-- ------------------------------------------------------------
+-- Sistema de MMR y ligas oficiales de StarCraft II (migración 020)
+-- -- reemplaza al de experiencia y niveles (antes acá, migraciones
+-- 013 y 014, con su log y sus apuestas de XP entre clanes -- ninguno
+-- de los dos sigue existiendo).
+-- ------------------------------------------------------------
+
+-- Tabla de ligas oficiales -- fija, no calculada. mmr < 1000 (entre
+-- el piso absoluto de 500 y el arranque de Bronce 3) no es una liga
+-- real: se trata directamente como 'Banca Rota'.
+create or replace function public.calcular_liga(p_mmr integer)
+returns text
+language sql
+immutable
+as $$
+  select case
+    when p_mmr < 1000 then 'Banca Rota'
+    when p_mmr <= 1200 then 'Bronce 3'
+    when p_mmr <= 1440 then 'Bronce 2'
+    when p_mmr <= 1680 then 'Bronce 1'
+    when p_mmr <= 1880 then 'Plata 3'
+    when p_mmr <= 2080 then 'Plata 2'
+    when p_mmr <= 2280 then 'Plata 1'
+    when p_mmr <= 2427 then 'Oro 3'
+    when p_mmr <= 2573 then 'Oro 2'
+    when p_mmr <= 2720 then 'Oro 1'
+    when p_mmr <= 2853 then 'Platino 3'
+    when p_mmr <= 2987 then 'Platino 2'
+    when p_mmr <= 3120 then 'Platino 1'
+    when p_mmr <= 3493 then 'Diamante 3'
+    when p_mmr <= 3867 then 'Diamante 2'
+    when p_mmr <= 4240 then 'Diamante 1'
+    when p_mmr <= 4480 then 'Maestro 3'
+    when p_mmr <= 4720 then 'Maestro 2'
+    when p_mmr <= 4960 then 'Maestro 1'
+    else 'Gran Maestro'
+  end;
+$$;
+
+-- Nivel 1-100 derivado del MMR -- solo tiene sentido para 1v1 por
+-- ahora (el de equipos se define en otra fase). Relación lineal
+-- exacta: nivel 1 = 1000 MMR, nivel 100 = 4961 MMR o más. Por debajo
+-- de 1000 (banca rota) queda fijo en nivel 1, no negativo.
+create or replace function public.calcular_nivel(p_mmr integer)
+returns integer
+language sql
+immutable
+as $$
+  select greatest(1, least(100,
+    round(1 + (p_mmr - 1000)::numeric / (4961 - 1000) * 99)
+  ))::int;
+$$;
+
+-- mmr_1v1 y mmr_equipos son del jugador (cada uno por separado -- el
+-- rating de un jugador en 1v1 no tiene por qué ser el mismo que su
+-- rating jugando en equipo); teams.mmr es del clan como unidad, nace
+-- en 1441 (Bronce 1), no en 1000. Los tres tienen un piso absoluto de
+-- 500. banca_rota, nivel_1v1, liga_1v1 y liga_equipos son GENERATED
+-- -- igual que nivel dependía de xp antes, dependen del mmr
+-- correspondiente y Postgres los recalcula solo, nunca se
+-- desincronizan ni se escriben a mano.
+alter table public.profiles add column mmr_1v1 integer not null default 1000 check (mmr_1v1 >= 500);
+alter table public.profiles add column mmr_equipos integer not null default 1000 check (mmr_equipos >= 500);
+-- Último momento en que este jugador participó en algo -- uso interno
+-- nada más, para la restauración de banca rota. No es pública: no
+-- está en la lista de columnas de SELECT de arriba.
+alter table public.profiles add column ultima_actividad timestamptz not null default now();
+
+alter table public.profiles add column banca_rota boolean
+  generated always as (mmr_1v1 <= 500 or mmr_equipos <= 500) stored;
+alter table public.profiles add column nivel_1v1 integer
+  generated always as (public.calcular_nivel(mmr_1v1)) stored;
+alter table public.profiles add column liga_1v1 text
+  generated always as (public.calcular_liga(mmr_1v1)) stored;
+alter table public.profiles add column liga_equipos text
+  generated always as (public.calcular_liga(mmr_equipos)) stored;
+
+alter table public.teams add column mmr integer not null default 1441 check (mmr >= 500);
+alter table public.teams add column ultima_actividad timestamptz not null default now();
+alter table public.teams add column banca_rota boolean generated always as (mmr <= 500) stored;
+alter table public.teams add column liga text generated always as (public.calcular_liga(mmr)) stored;
+
+-- Si pasaron 30 días corridos sin actividad y sigue en banca rota,
+-- vuelve a 1000 MMR (Bronce 3) -- fresco, no al punto de partida
+-- original de un equipo (1441), es una restauración desde el fondo
+-- de la tabla. Se llama desde el frontend cada vez que alguien entra
+-- a su perfil o a la página de su equipo -- se evalúa al toque, no
+-- hace falta un cron (mismo patrón que esta_suspendido()). banca_rota
+-- es GENERATED, se apaga sola en el mismo UPDATE.
+create or replace function public.restaurar_banca_rota_perfil(p_user_id uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_apuesta record;
-  v_soy_challenger boolean;
-  v_soy_challenged boolean;
 begin
-  select * into v_apuesta from public.team_xp_wagers where id = p_wager_id for update;
-
-  if v_apuesta is null then
-    raise exception 'Esa apuesta no existe.';
-  end if;
-  if v_apuesta.status <> 'aceptada' then
-    raise exception 'Esta apuesta no está activa.';
-  end if;
-  if p_ganador_team_id <> v_apuesta.challenger_team_id and p_ganador_team_id <> v_apuesta.challenged_team_id then
-    raise exception 'Ese equipo no participa en esta apuesta.';
-  end if;
-
-  select exists (
-    select 1 from public.teams where id = v_apuesta.challenger_team_id and owner_id = auth.uid()
-  ) into v_soy_challenger;
-  select exists (
-    select 1 from public.teams where id = v_apuesta.challenged_team_id and owner_id = auth.uid()
-  ) into v_soy_challenged;
-
-  if not v_soy_challenger and not v_soy_challenged then
-    raise exception 'No eres dueño de ninguno de los dos equipos de esta apuesta.';
-  end if;
-
-  if v_soy_challenger then
-    update public.team_xp_wagers set reporte_challenger = p_ganador_team_id where id = p_wager_id;
-  else
-    update public.team_xp_wagers set reporte_challenged = p_ganador_team_id where id = p_wager_id;
-  end if;
-
-  select * into v_apuesta from public.team_xp_wagers where id = p_wager_id;
-
-  if v_apuesta.reporte_challenger is not null and v_apuesta.reporte_challenged is not null then
-    if v_apuesta.reporte_challenger = v_apuesta.reporte_challenged then
-      perform public.resolver_apuesta_interno(p_wager_id, v_apuesta.reporte_challenger);
-    else
-      update public.team_xp_wagers set status = 'en_disputa' where id = p_wager_id;
-    end if;
-  end if;
+  update public.profiles
+  set
+    mmr_1v1 = case when mmr_1v1 <= 500 then 1000 else mmr_1v1 end,
+    mmr_equipos = case when mmr_equipos <= 500 then 1000 else mmr_equipos end
+  where id = p_user_id
+    and (mmr_1v1 <= 500 or mmr_equipos <= 500)
+    and ultima_actividad <= now() - interval '30 days';
 end;
 $$;
 
-grant execute on function public.reportar_resultado_apuesta(uuid, uuid) to authenticated;
+grant execute on function public.restaurar_banca_rota_perfil(uuid) to authenticated;
 
-create or replace function public.resolver_disputa_apuesta(p_wager_id uuid, p_ganador_team_id uuid)
+create or replace function public.restaurar_banca_rota_equipo(p_team_id uuid)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
-declare
-  v_apuesta record;
 begin
-  if not public.is_admin() then
-    raise exception 'Solo un administrador puede resolver una disputa de apuesta.';
-  end if;
-
-  select * into v_apuesta from public.team_xp_wagers where id = p_wager_id for update;
-
-  if v_apuesta is null then
-    raise exception 'Esa apuesta no existe.';
-  end if;
-  if v_apuesta.status <> 'en_disputa' then
-    raise exception 'Esta apuesta no está en disputa.';
-  end if;
-  if p_ganador_team_id <> v_apuesta.challenger_team_id and p_ganador_team_id <> v_apuesta.challenged_team_id then
-    raise exception 'Ese equipo no participa en esta apuesta.';
-  end if;
-
-  perform public.resolver_apuesta_interno(p_wager_id, p_ganador_team_id);
+  update public.teams
+  set mmr = 1000
+  where id = p_team_id
+    and mmr <= 500
+    and ultima_actividad <= now() - interval '30 days';
 end;
 $$;
 
-grant execute on function public.resolver_disputa_apuesta(uuid, uuid) to authenticated;
+grant execute on function public.restaurar_banca_rota_equipo(uuid) to authenticated;
+
+-- ------------------------------------------------------------
+-- Privilegio del dueño de la plataforma (migración 016): función de
+-- consulta, y registro privado de actividad.
+--
+-- es_dueno_plataforma() es la única forma de consultar el privilegio
+-- desde afuera de la base -- la columna cruda tiene la lectura
+-- revocada (ver arriba). PREPARADO PARA MÁS ADELANTE: cuando se
+-- construya un sistema de "fulano vio tu perfil/equipo" o el botón
+-- "Investigar jugador", hay que llamar a esta función para excluir al
+-- dueño de la plataforma de generar esos registros/notificaciones, y
+-- para bloquear que se lo investigue a él aunque quien llame sea otro
+-- admin -- ninguna de esas dos funciones existe todavía.
+-- ------------------------------------------------------------
+create or replace function public.es_dueno_plataforma()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select coalesce((select es_dueno_plataforma from public.profiles where id = auth.uid()), false);
+$$;
+
+-- No es "sin registro", es "registro privado": solo legible por quien
+-- tiene es_dueno_plataforma = true, invisible para todo el resto del
+-- staff (incluidos otros admins).
+create table public.dueno_actividad_log (
+  id uuid primary key default gen_random_uuid(),
+  accion text not null,
+  detalle text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.dueno_actividad_log enable row level security;
+
+create policy "dueno_actividad_log_select_propio"
+  on public.dueno_actividad_log for select
+  to authenticated
+  using (public.es_dueno_plataforma());
+
+grant select on public.dueno_actividad_log to authenticated;
+
+create or replace function public.registrar_actividad_dueno(p_accion text, p_detalle text default null)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.es_dueno_plataforma() then
+    raise exception 'Solo el dueño de la plataforma puede registrar esto.';
+  end if;
+
+  insert into public.dueno_actividad_log (accion, detalle)
+  values (p_accion, p_detalle);
+end;
+$$;
+
+grant execute on function public.registrar_actividad_dueno(text, text) to authenticated;
 
 -- ============================================================
 -- Después de correr todo lo de arriba, activa tu propio usuario
 -- como administrador (cambia el email):
 --
 --   update public.profiles set es_admin = true
+--   where id = (select id from auth.users where email = 'tu-correo@ejemplo.com');
+--
+-- Y, si además queres ser el dueño de la plataforma (privilegio
+-- aparte de es_admin, ver migración 016):
+--
+--   update public.profiles set es_dueno_plataforma = true
 --   where id = (select id from auth.users where email = 'tu-correo@ejemplo.com');
 -- ============================================================

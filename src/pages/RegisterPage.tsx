@@ -30,7 +30,7 @@ export default function RegisterPage() {
     // El nombre se muestra públicamente (header, lista de participantes
     // de un torneo), así que pasa por el mismo filtro que el nick.
     if (contieneLenguajeInapropiado(nombre)) {
-      setError("Ese nombre no está permitido wn, elige otro.");
+      setError("Ese nombre no está permitido. Por favor elige otro.");
       return;
     }
 

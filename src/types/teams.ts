@@ -8,16 +8,21 @@ export interface TeamRow {
   description: string | null;
   logo_url: string | null;
   banner_url: string | null;
-  // Sistema de experiencia (migración 013, Fase A): xp se acumula
-  // cuando cualquier miembro juega, nivel se recalcula solo en la
-  // base (columna GENERATED) con una curva bastante más empinada que
-  // la de un jugador individual.
-  xp: number;
-  nivel: number;
+  // Sistema de MMR y ligas oficiales de StarCraft II (migración 020,
+  // reemplaza al de experiencia/nivel de la migración 013). mmr es el
+  // rating del clan como unidad (nace en 1441, Bronce 1); banca_rota y
+  // liga se recalculan solos en la base a partir de mmr (columnas
+  // GENERATED) -- nunca se mandan a mano.
+  mmr: number;
+  banca_rota: boolean;
+  liga: string;
   is_public: boolean;
   invite_code: string;
   owner_id: string;
   created_at: string;
+  // Migración 019: el dueño era el único miembro y salió del equipo
+  // -- la fila queda, pero deja de aparecer en el buscador público.
+  disuelto: boolean;
 }
 
 export type TeamMemberRole = "owner" | "jugador";
@@ -40,38 +45,13 @@ export interface TeamInvitationRow {
   created_at: string;
 }
 
+export type TeamKickMotivo = "expulsado" | "renuncia";
+
 export interface TeamKickLogRow {
   id: string;
   team_id: string;
   user_id: string;
   kicked_by: string;
   kicked_at: string;
-}
-
-export type XpLogOrigen = "partida_ganada" | "partida_perdida" | "apuesta";
-
-export interface TeamXpLogRow {
-  id: string;
-  team_id: string;
-  // null cuando origen = 'apuesta' -- ahí el XP es del equipo, no de
-  // una persona jugando.
-  user_id: string | null;
-  cantidad: number;
-  origen: XpLogOrigen;
-  created_at: string;
-}
-
-export type WagerStatus = "pendiente" | "aceptada" | "rechazada" | "resuelta" | "en_disputa";
-
-export interface TeamXpWagerRow {
-  id: string;
-  challenger_team_id: string;
-  challenged_team_id: string;
-  monto: number;
-  status: WagerStatus;
-  reporte_challenger: string | null;
-  reporte_challenged: string | null;
-  ganador_final: string | null;
-  created_at: string;
-  resolved_at: string | null;
+  motivo: TeamKickMotivo;
 }

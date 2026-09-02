@@ -13,7 +13,7 @@ import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import BracketView from "../components/BracketView";
 import Avatar from "../components/Avatar";
-import NivelBadge from "../components/NivelBadge";
+import LigaBadge from "../components/LigaBadge";
 import type { TournamentRow } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
 
@@ -35,9 +35,14 @@ interface ParticipanteConNombre {
   teamId: string | null;
   nombre: string | null;
   avatarUrl: string | null;
-  // Nivel de jugador (solo 1v1 -- en un torneo por equipo acá no se
-  // muestra nivel de jugador, el nivel del clan vive en /equipos/:tag).
+  // MMR y liga (migración 020): en 1v1 son los del jugador (mmr_1v1);
+  // en un torneo por equipo son los del equipo (teams.mmr) -- nunca
+  // hay nivel acá para un equipo, ese cálculo todavía no existe (ver
+  // calcular_nivel(), solo definido para 1v1 por ahora).
+  mmr: number | null;
+  liga: string | null;
   nivel: number | null;
+  bancaRota: boolean;
   // Solo tiene sentido para jugador individual -- un equipo no se
   // "suspende", así que siempre queda en false para esas filas.
   suspendido: boolean;
@@ -76,6 +81,9 @@ export default function TournamentDetailPage() {
   const [errorCheckIn, setErrorCheckIn] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
   const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null);
+
+  const [abandonando, setAbandonando] = useState(false);
+  const [errorAbandonar, setErrorAbandonar] = useState<string | null>(null);
 
   // --- Mi equipo (solo relevante en torneos 2v2/3v3/4v4) ---
   const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
@@ -126,15 +134,21 @@ export default function TournamentDetailPage() {
       ];
       let nombrePorTeamId: Record<string, string> = {};
       let logoPorTeamId: Record<string, string | null> = {};
+      let mmrPorTeamId: Record<string, number> = {};
+      let ligaPorTeamId: Record<string, string> = {};
+      let bancaRotaPorTeamId: Record<string, boolean> = {};
 
       if (teamIds.length > 0) {
         const { data: equiposData } = await supabase
           .from("teams")
-          .select("id, name, logo_url")
+          .select("id, name, logo_url, mmr, liga, banca_rota")
           .in("id", teamIds);
 
         nombrePorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.name]));
         logoPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.logo_url]));
+        mmrPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.mmr]));
+        ligaPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.liga]));
+        bancaRotaPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.banca_rota]));
       }
 
       listaParticipantes = (participantesData ?? []).map((p) => ({
@@ -143,7 +157,10 @@ export default function TournamentDetailPage() {
         teamId: p.team_id,
         nombre: p.team_id ? nombrePorTeamId[p.team_id] ?? "Equipo de RemorApp" : null,
         avatarUrl: p.team_id ? logoPorTeamId[p.team_id] ?? null : null,
+        mmr: p.team_id ? mmrPorTeamId[p.team_id] ?? null : null,
+        liga: p.team_id ? ligaPorTeamId[p.team_id] ?? null : null,
         nivel: null,
+        bancaRota: p.team_id ? bancaRotaPorTeamId[p.team_id] ?? false : false,
         suspendido: false,
         checkedIn: p.checked_in,
       }));
@@ -152,7 +169,10 @@ export default function TournamentDetailPage() {
       let nombresPorId: Record<string, string | null> = {};
       let suspendidoPorId: Record<string, boolean> = {};
       let avatarPorId: Record<string, string | null> = {};
+      let mmrPorId: Record<string, number> = {};
+      let ligaPorId: Record<string, string> = {};
       let nivelPorId: Record<string, number> = {};
+      let bancaRotaPorId: Record<string, boolean> = {};
 
       // tournament_participants.user_id apunta a auth.users, no a
       // profiles, así que no hay join automático: se resuelven los
@@ -160,13 +180,16 @@ export default function TournamentDetailPage() {
       if (userIds.length > 0) {
         const { data: perfilesData } = await supabase
           .from("profiles")
-          .select("id, nombre, suspendido, avatar_url, nivel")
+          .select("id, nombre, suspendido, avatar_url, mmr_1v1, liga_1v1, nivel_1v1, banca_rota")
           .in("id", userIds);
 
         nombresPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nombre]));
         suspendidoPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.suspendido]));
         avatarPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.avatar_url]));
-        nivelPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nivel]));
+        mmrPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.mmr_1v1]));
+        ligaPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.liga_1v1]));
+        nivelPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nivel_1v1]));
+        bancaRotaPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.banca_rota]));
       }
 
       listaParticipantes = (participantesData ?? []).map((p) => ({
@@ -175,7 +198,10 @@ export default function TournamentDetailPage() {
         teamId: null,
         nombre: p.user_id ? nombresPorId[p.user_id] ?? null : null,
         avatarUrl: p.user_id ? avatarPorId[p.user_id] ?? null : null,
+        mmr: p.user_id ? mmrPorId[p.user_id] ?? null : null,
+        liga: p.user_id ? ligaPorId[p.user_id] ?? null : null,
         nivel: p.user_id ? nivelPorId[p.user_id] ?? 0 : null,
+        bancaRota: p.user_id ? bancaRotaPorId[p.user_id] ?? false : false,
         suspendido: p.user_id ? suspendidoPorId[p.user_id] ?? false : false,
         checkedIn: p.checked_in,
       }));
@@ -440,6 +466,51 @@ export default function TournamentDetailPage() {
   const miParticipante = participantes.find((p) => puedeReportarPorParticipante[p.id]);
   const confirmados = participantesVisibles.filter((p) => p.checkedIn).length;
 
+  // Tiene una partida pendiente (todavía no jugada) en la llave --
+  // "abandonar" en un torneo en_curso solo tiene sentido si esto es
+  // true: si ya perdió, o el torneo terminó, no hay nada que abandonar.
+  const tengoPartidaPendiente =
+    !!miParticipante &&
+    partidas.some(
+      (m) =>
+        (m.participant1_id === miParticipante.id || m.participant2_id === miParticipante.id) &&
+        m.status === "pendiente"
+    );
+
+  const puedoAbandonar =
+    !!miParticipante &&
+    (torneo.estado === "abierto" || (torneo.estado === "en_curso" && tengoPartidaPendiente));
+
+  const handleAbandonarTorneo = async () => {
+    if (!miParticipante) return;
+
+    const mensaje =
+      torneo.estado === "abierto"
+        ? "¿Seguro que quieres abandonar este torneo? Se cancelará tu inscripción."
+        : "¿Seguro que quieres abandonar este torneo? Tu rival avanzará automáticamente a la siguiente ronda.";
+    if (!window.confirm(mensaje)) return;
+
+    setAbandonando(true);
+    setErrorAbandonar(null);
+
+    // Toda la validación real (según el estado del torneo, si tienes
+    // permiso, si tienes una partida pendiente) vive en
+    // abandonar_torneo() en la base -- lo de acá arriba (ocultar el
+    // botón si no corresponde) es solo para el aviso al toque.
+    const { error } = await supabase.rpc("abandonar_torneo", {
+      p_participant_id: miParticipante.id,
+    });
+
+    setAbandonando(false);
+
+    if (error) {
+      setErrorAbandonar(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
   return (
     <section className="section section-page">
       <div className="detail-badges">
@@ -500,7 +571,14 @@ export default function TournamentDetailPage() {
             <div key={p.id} className="detail-participant-item">
               <Avatar url={p.avatarUrl} nombre={p.nombre} className="detail-participant-avatar" />
               {p.nombre ?? "Jugador de RemorApp"}
-              {p.nivel !== null && <NivelBadge nivel={p.nivel} />}
+              {p.liga !== null && p.mmr !== null && (
+                <LigaBadge
+                  liga={p.liga}
+                  mmr={p.mmr}
+                  nivel={p.nivel ?? undefined}
+                  bancaRota={p.bancaRota}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -718,6 +796,20 @@ export default function TournamentDetailPage() {
           </>
         )}
       </div>
+
+      {puedoAbandonar && (
+        <div className="detail-register-box">
+          {errorAbandonar && <div className="form-error">{errorAbandonar}</div>}
+          <button
+            type="button"
+            className="btn btn-ghost btn-block"
+            disabled={abandonando}
+            onClick={handleAbandonarTorneo}
+          >
+            {abandonando ? "Abandonando..." : "Abandonar torneo"}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

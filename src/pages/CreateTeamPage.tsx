@@ -136,7 +136,7 @@ export default function CreateTeamPage() {
       contieneLenguajeInapropiado(tagNormalizado) ||
       (descripcion.trim() && contieneLenguajeInapropiado(descripcion))
     ) {
-      setError("Ese nombre, tag o descripción no está permitido wn, cámbialo.");
+      setError("Ese nombre, tag o descripción no está permitido. Por favor cámbialo.");
       return;
     }
 
@@ -158,7 +158,7 @@ export default function CreateTeamPage() {
         .find((r) => regiones.includes(r));
       const label =
         SC2_REGION_OPTIONS.find((o) => o.value === regionEnConflicto)?.label ?? "ese servidor";
-      setError(`Ese tag ya está pillado en ${label} wn, prueba otro.`);
+      setError(`Ese tag ya está en uso en ${label}. Intenta con otro.`);
       setLoading(false);
       return;
     }

@@ -8,6 +8,7 @@ import { recortarImagenCuadrada } from "../lib/teams";
 import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
 import type { Country, Liga, Sc2Region, Profile } from "../types/profile";
 import Avatar from "../components/Avatar";
+import MmrProgressBar from "../components/MmrProgressBar";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
@@ -43,7 +44,7 @@ function calcularProgresoPerfil(profile: Profile | null) {
 
   let mensaje: string;
   if (faltantes.length === 0) {
-    mensaje = "¡Tu perfil está completo, la raja!";
+    mensaje = "¡Tu perfil está completo!";
   } else if (faltantes.length === 1) {
     mensaje = `¡Ya casi! Solo te falta ${faltantes[0]}.`;
   } else {
@@ -195,7 +196,7 @@ export default function ProfilePage() {
       return;
     }
     if (!country || !sc2Region || !sc2Id.trim()) {
-      setErrorIdentidad("Te falta completar algún campo wn.");
+      setErrorIdentidad("Debes completar todos los campos.");
       return;
     }
 
@@ -370,7 +371,7 @@ export default function ProfilePage() {
           className="profile-avatar"
         />
         {!avatarPreview && !profile?.avatar_url && (
-          <p className="profile-avatar-hint">Sube tu foto pa' que te reconozcan en tu clan.</p>
+          <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
         )}
         <form className="profile-avatar-form" onSubmit={handleGuardarAvatar}>
           {errorAvatar && <div className="form-error">{errorAvatar}</div>}
@@ -418,6 +419,9 @@ export default function ProfilePage() {
       )}
 
       <h2 className="detail-subtitle">Identidad de jugador</h2>
+      {profile && (
+        <MmrProgressBar mmr={profile.mmr_1v1} liga={profile.liga_1v1} bancaRota={profile.banca_rota} />
+      )}
       <form className="auth-form" onSubmit={handleGuardarIdentidad}>
         {errorIdentidad && <div className="form-error">{errorIdentidad}</div>}
         {identidadGuardada && <div className="form-success">Tu perfil se guardó correctamente.</div>}

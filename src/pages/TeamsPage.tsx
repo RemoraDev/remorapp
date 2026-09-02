@@ -38,10 +38,13 @@ export default function TeamsPage() {
     const cargarEquipos = async () => {
       setCargando(true);
 
-      let query = supabase.from("teams").select("*, profiles!owner_id(nick, unique_id)").eq(
-        "is_public",
-        true
-      );
+      let query = supabase
+        .from("teams")
+        .select("*, profiles!owner_id(nick, unique_id)")
+        .eq("is_public", true)
+        // Migración 019: un equipo disuelto (el dueño era el único
+        // miembro y salió) no debe seguir apareciendo en el buscador.
+        .eq("disuelto", false);
       if (regionFiltro) query = query.overlaps("sc2_regions", [regionFiltro]);
 
       const { data: equiposData, error } = await query.order("created_at", { ascending: false });
@@ -116,10 +119,14 @@ export default function TeamsPage() {
       .from("teams")
       .select("id, tag")
       .eq("invite_code", codigoNormalizado)
+      // Un equipo disuelto no aparece acá aunque el código siga
+      // siendo técnicamente válido -- mismo mensaje que "no existe",
+      // en vez del error crudo de RLS que daría el insert de abajo.
+      .eq("disuelto", false)
       .maybeSingle();
 
     if (!equipo) {
-      setErrorCodigo("Código no encontrado wn.");
+      setErrorCodigo("No encontramos ningún equipo con ese código.");
       setUniendose(false);
       return;
     }

@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { recortarImagenCuadrada, recortarImagenConProporcion } from "../lib/teams";
@@ -8,7 +8,8 @@ import { formatFecha } from "../lib/formatters";
 import { SC2_REGION_OPTIONS } from "../types/profile";
 import type { TeamRow } from "../types/teams";
 import Avatar from "../components/Avatar";
-import NivelBadge from "../components/NivelBadge";
+import LigaBadge from "../components/LigaBadge";
+import MmrProgressBar from "../components/MmrProgressBar";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const BANNER_MAX_BYTES = 3 * 1024 * 1024;
@@ -18,8 +19,14 @@ interface MiembroConNombre {
   nick: string | null;
   uniqueId: string | null;
   avatarUrl: string | null;
+  // Liga autodeclarada por el jugador en /perfil (independiente del
+  // MMR calculado, ver types/profile.ts) -- se muestra aparte.
   liga: string | null;
-  nivel: number;
+  // MMR/liga de equipos (migración 020): el rating personal de este
+  // jugador jugando en formato de equipo, no su MMR de 1v1.
+  mmrEquipos: number;
+  ligaEquipos: string;
+  bancaRota: boolean;
   roles: string[];
 }
 
@@ -35,24 +42,6 @@ interface ExpulsadoConNombre {
   nick: string | null;
   uniqueId: string | null;
   kickedAt: string;
-}
-
-interface AporteXp {
-  userId: string;
-  nick: string | null;
-  uniqueId: string | null;
-  total: number;
-}
-
-interface ApuestaConNombres {
-  id: string;
-  challengerTeamId: string;
-  challengerNombre: string;
-  challengedTeamId: string;
-  challengedNombre: string;
-  monto: number;
-  status: string;
-  ganadorFinal: string | null;
 }
 
 // team_kicks_log.user_id apunta a profiles.id, igual que
@@ -73,7 +62,9 @@ function extraerPerfil(profiles: unknown): {
   unique_id: string | null;
   avatar_url: string | null;
   liga: string | null;
-  nivel: number;
+  mmr_equipos: number;
+  liga_equipos: string;
+  banca_rota: boolean;
 } {
   const perfil = Array.isArray(profiles) ? profiles[0] : profiles;
   return {
@@ -81,12 +72,15 @@ function extraerPerfil(profiles: unknown): {
     unique_id: (perfil as { unique_id?: string } | undefined)?.unique_id ?? null,
     avatar_url: (perfil as { avatar_url?: string } | undefined)?.avatar_url ?? null,
     liga: (perfil as { liga?: string } | undefined)?.liga ?? null,
-    nivel: (perfil as { nivel?: number } | undefined)?.nivel ?? 0,
+    mmr_equipos: (perfil as { mmr_equipos?: number } | undefined)?.mmr_equipos ?? 1000,
+    liga_equipos: (perfil as { liga_equipos?: string } | undefined)?.liga_equipos ?? "Bronce 3",
+    banca_rota: (perfil as { banca_rota?: boolean } | undefined)?.banca_rota ?? false,
   };
 }
 
 export default function TeamDetailPage() {
   const { tag } = useParams<{ tag: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [equipo, setEquipo] = useState<TeamRow | null>(null);
   const [miembros, setMiembros] = useState<MiembroConNombre[]>([]);
@@ -111,6 +105,16 @@ export default function TeamDetailPage() {
   // se ve desperdigado en la página, solo cuando el dueño lo abre.
   const [panelAbierto, setPanelAbierto] = useState(false);
 
+  // --- Salir del equipo (cualquier miembro que no sea el dueño, o el
+  // dueño cuando es el único miembro que queda) ---
+  const [saliendo, setSaliendo] = useState(false);
+  const [errorSalir, setErrorSalir] = useState<string | null>(null);
+
+  // --- Panel de control: transferir liderazgo ---
+  const [nuevoLiderId, setNuevoLiderId] = useState("");
+  const [transfiriendo, setTransfiriendo] = useState(false);
+  const [errorTransferir, setErrorTransferir] = useState<string | null>(null);
+
   // --- Panel de control: buscar e invitar por Nick#ID ---
   const [busquedaNick, setBusquedaNick] = useState("");
   const [buscando, setBuscando] = useState(false);
@@ -121,19 +125,6 @@ export default function TeamDetailPage() {
 
   // --- Panel de control: jugadores expulsados ---
   const [expulsados, setExpulsados] = useState<ExpulsadoConNombre[]>([]);
-
-  // --- Panel de control: aporte de XP ---
-  const [aportes, setAportes] = useState<AporteXp[]>([]);
-
-  // --- Panel de control: apuestas de XP contra otros equipos ---
-  const [apuestas, setApuestas] = useState<ApuestaConNombres[]>([]);
-  const [tagRival, setTagRival] = useState("");
-  const [montoApuesta, setMontoApuesta] = useState("");
-  const [proponiendo, setProponiendo] = useState(false);
-  const [errorApuesta, setErrorApuesta] = useState<string | null>(null);
-  const [apuestaEnviada, setApuestaEnviada] = useState(false);
-  const [respondiendoApuesta, setRespondiendoApuesta] = useState<string | null>(null);
-  const [reportandoApuesta, setReportandoApuesta] = useState<string | null>(null);
 
   const cargar = async () => {
     if (!tag) return;
@@ -150,12 +141,28 @@ export default function TeamDetailPage() {
       return;
     }
 
+    // Se evalúa acá, cada vez que se entra a la página del equipo --
+    // si este equipo lleva 30 días en banca rota sin actividad, lo
+    // restaura a 1000 MMR antes de mostrar sus datos. Mismo patrón
+    // que restaurar_banca_rota_perfil() en AuthContext: no hace falta
+    // un cron, la función no hace nada si todavía no corresponde.
+    // Solo tiene sentido si hay sesión (la función es authenticated).
+    if (user) {
+      await supabase.rpc("restaurar_banca_rota_equipo", { p_team_id: equipoData.id });
+      const { data: equipoActualizado } = await supabase
+        .from("teams")
+        .select("*")
+        .eq("id", equipoData.id)
+        .single();
+      if (equipoActualizado) Object.assign(equipoData, equipoActualizado);
+    }
+
     setEquipo(equipoData as TeamRow);
     setDescEquipo(equipoData.description ?? "");
 
     const { data: miembrosData } = await supabase
       .from("team_members")
-      .select("user_id, roles, profiles(nick, unique_id, avatar_url, liga, nivel)")
+      .select("user_id, roles, profiles(nick, unique_id, avatar_url, liga, mmr_equipos, liga_equipos, banca_rota)")
       .eq("team_id", equipoData.id)
       .order("joined_at", { ascending: true });
 
@@ -168,7 +175,9 @@ export default function TeamDetailPage() {
           uniqueId: perfil.unique_id,
           avatarUrl: perfil.avatar_url,
           liga: perfil.liga,
-          nivel: perfil.nivel,
+          mmrEquipos: perfil.mmr_equipos,
+          ligaEquipos: perfil.liga_equipos,
+          bancaRota: perfil.banca_rota,
           roles: m.roles as string[],
         };
       })
@@ -195,67 +204,8 @@ export default function TeamDetailPage() {
           };
         })
       );
-      // Aporte de XP: suma por miembro (solo filas con user_id --
-      // las de origen 'apuesta' tienen user_id null a propósito,
-      // porque ahí el XP es del equipo, no de una persona jugando).
-      const { data: logData } = await supabase
-        .from("team_xp_log")
-        .select("user_id, cantidad, profiles!user_id(nick, unique_id)")
-        .eq("team_id", equipoData.id)
-        .not("user_id", "is", null);
-
-      const totalesPorUsuario = new Map<string, AporteXp>();
-      for (const fila of logData ?? []) {
-        const perfil = extraerPerfilBasico(fila.profiles);
-        const actual = totalesPorUsuario.get(fila.user_id as string) ?? {
-          userId: fila.user_id as string,
-          nick: perfil.nick,
-          uniqueId: perfil.unique_id,
-          total: 0,
-        };
-        actual.total += fila.cantidad;
-        totalesPorUsuario.set(fila.user_id as string, actual);
-      }
-      setAportes([...totalesPorUsuario.values()].sort((a, b) => b.total - a.total));
-
-      // Apuestas de XP: tanto las que este equipo propuso como las
-      // que le propusieron a él.
-      const { data: apuestasData } = await supabase
-        .from("team_xp_wagers")
-        .select("*")
-        .or(`challenger_team_id.eq.${equipoData.id},challenged_team_id.eq.${equipoData.id}`)
-        .order("created_at", { ascending: false });
-
-      const teamIdsApuestas = [
-        ...new Set((apuestasData ?? []).flatMap((a) => [a.challenger_team_id, a.challenged_team_id])),
-      ];
-      let nombrePorTeamIdApuesta: Record<string, string> = {};
-      if (teamIdsApuestas.length > 0) {
-        const { data: equiposApuestaData } = await supabase
-          .from("teams")
-          .select("id, name, tag")
-          .in("id", teamIdsApuestas);
-        nombrePorTeamIdApuesta = Object.fromEntries(
-          (equiposApuestaData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
-        );
-      }
-
-      setApuestas(
-        (apuestasData ?? []).map((a) => ({
-          id: a.id,
-          challengerTeamId: a.challenger_team_id,
-          challengerNombre: nombrePorTeamIdApuesta[a.challenger_team_id] ?? "Equipo",
-          challengedTeamId: a.challenged_team_id,
-          challengedNombre: nombrePorTeamIdApuesta[a.challenged_team_id] ?? "Equipo",
-          monto: a.monto,
-          status: a.status,
-          ganadorFinal: a.ganador_final,
-        }))
-      );
     } else {
       setExpulsados([]);
-      setAportes([]);
-      setApuestas([]);
     }
 
     setLoading(false);
@@ -288,6 +238,8 @@ export default function TeamDetailPage() {
   }
 
   const esDueño = !!user && equipo.owner_id === user.id;
+  const miMembresia = miembros.find((m) => m.userId === user?.id);
+  const esMiembroNoOwner = !!miMembresia && !miMembresia.roles.includes("owner");
 
   const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
@@ -430,6 +382,54 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
+  const handleSalirEquipo = async () => {
+    const soyUnicoMiembro = miembros.length === 1;
+    const mensaje = soyUnicoMiembro
+      ? "¿Seguro que quieres salir? Como eres el único miembro, el equipo quedará disuelto y dejará de aparecer en el buscador."
+      : "¿Seguro que quieres salir del equipo?";
+    if (!window.confirm(mensaje)) return;
+
+    setSaliendo(true);
+    setErrorSalir(null);
+
+    // salir_equipo() (en la base) es la que de verdad decide si esto
+    // es una salida normal o, si sos el único miembro, una disolución
+    // del equipo -- acá solo se manda la orden y se navega afuera.
+    const { error } = await supabase.rpc("salir_equipo");
+
+    setSaliendo(false);
+
+    if (error) {
+      setErrorSalir(error.message);
+      return;
+    }
+
+    navigate("/equipos");
+  };
+
+  const handleTransferirLiderazgo = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!nuevoLiderId) return;
+    if (!window.confirm("¿Confirmas que quieres transferir el liderazgo de este equipo?")) return;
+
+    setTransfiriendo(true);
+    setErrorTransferir(null);
+
+    const { error } = await supabase.rpc("transferir_liderazgo", {
+      p_nuevo_owner_id: nuevoLiderId,
+    });
+
+    setTransfiriendo(false);
+
+    if (error) {
+      setErrorTransferir(error.message);
+      return;
+    }
+
+    setNuevoLiderId("");
+    await cargar();
+  };
+
   const handleBuscarJugador = async (event: FormEvent) => {
     event.preventDefault();
     setErrorBusqueda(null);
@@ -491,103 +491,13 @@ export default function TeamDetailPage() {
     setBusquedaNick("");
   };
 
-  const handleProponerApuesta = async (event: FormEvent) => {
-    event.preventDefault();
-    setErrorApuesta(null);
-    setApuestaEnviada(false);
-
-    const tag = tagRival.trim().toUpperCase();
-    const monto = Number(montoApuesta);
-
-    if (!tag) {
-      setErrorApuesta("Escribe el tag del equipo rival.");
-      return;
-    }
-    if (!monto || monto <= 0) {
-      setErrorApuesta("El monto tiene que ser mayor a 0.");
-      return;
-    }
-
-    setProponiendo(true);
-
-    const { data: equipoRival, error: buscarError } = await supabase
-      .from("teams")
-      .select("id")
-      .eq("tag", tag)
-      .maybeSingle();
-
-    if (buscarError || !equipoRival) {
-      setErrorApuesta("No encontré ningún equipo con ese tag.");
-      setProponiendo(false);
-      return;
-    }
-
-    // proponer_apuesta() (en la base) es la que de verdad chequea que
-    // seas dueño y que el monto no supere el XP de tu equipo -- esto
-    // de acá es solo el formulario.
-    const { error } = await supabase.rpc("proponer_apuesta", {
-      p_challenged_team_id: equipoRival.id,
-      p_monto: monto,
-    });
-
-    setProponiendo(false);
-
-    if (error) {
-      setErrorApuesta(error.message);
-      return;
-    }
-
-    setApuestaEnviada(true);
-    setTagRival("");
-    setMontoApuesta("");
-    await cargar();
-  };
-
-  const handleResponderApuesta = async (wagerId: string, aceptar: boolean) => {
-    setRespondiendoApuesta(wagerId);
-    setErrorApuesta(null);
-
-    const { error } = await supabase.rpc("responder_apuesta", {
-      p_wager_id: wagerId,
-      p_aceptar: aceptar,
-    });
-
-    setRespondiendoApuesta(null);
-
-    if (error) {
-      setErrorApuesta(error.message);
-      return;
-    }
-
-    await cargar();
-  };
-
-  const handleReportarApuesta = async (wagerId: string, ganadorTeamId: string) => {
-    setReportandoApuesta(wagerId);
-    setErrorApuesta(null);
-
-    const { error } = await supabase.rpc("reportar_resultado_apuesta", {
-      p_wager_id: wagerId,
-      p_ganador_team_id: ganadorTeamId,
-    });
-
-    setReportandoApuesta(null);
-
-    if (error) {
-      setErrorApuesta(error.message);
-      return;
-    }
-
-    await cargar();
-  };
-
   const renderMiembro = (m: MiembroConNombre, conControles: boolean) => (
     <div key={m.userId} className="detail-participant-item">
       <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" />
       {m.nick ?? "Jugador de RemorApp"}
       {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
       {m.liga && <span className="liga-badge">{m.liga}</span>}
-      <NivelBadge nivel={m.nivel} />
+      <LigaBadge liga={m.ligaEquipos} mmr={m.mmrEquipos} bancaRota={m.bancaRota} />
       {m.roles.includes("owner") && <span className="team-owner-badge">Dueño</span>}
       {conControles && !m.roles.includes("owner") && (
         <button
@@ -624,17 +534,34 @@ export default function TeamDetailPage() {
           en la página. */}
       {equipo.description && <p className="team-detail-description">{equipo.description}</p>}
 
+      <MmrProgressBar mmr={equipo.mmr} liga={equipo.liga} bancaRota={equipo.banca_rota} />
+
       <div className="team-detail-header">
         <div>
           <h1 className="section-title">
             {equipo.name}
-            <NivelBadge nivel={equipo.nivel} className="nivel-badge-grande" />
+            <LigaBadge
+              liga={equipo.liga}
+              mmr={equipo.mmr}
+              bancaRota={equipo.banca_rota}
+              className="nivel-badge-grande"
+            />
           </h1>
           <p className="tournament-card-meta">
             [{equipo.tag}] · {miembros.length} {miembros.length === 1 ? "miembro" : "miembros"}
           </p>
         </div>
       </div>
+
+      {/* Acceso adicional a /equipos, no un reemplazo: "Mi equipo" en
+          el abanico sigue llevando directo acá cuando ya tienes clan,
+          así que sin esto no había ninguna forma de volver al
+          buscador general una vez que perteneces a un equipo. */}
+      <p className="tournament-card-meta">
+        <Link to="/equipos" className="btn-link">
+          Explorar otros equipos
+        </Link>
+      </p>
 
       <div className="detail-map-list">
         {equipo.sc2_regions.map((region) => (
@@ -646,6 +573,20 @@ export default function TeamDetailPage() {
 
       <h2 className="detail-subtitle">Miembros</h2>
       <div className="detail-participant-list">{miembros.map((m) => renderMiembro(m, false))}</div>
+
+      {esMiembroNoOwner && (
+        <div className="detail-register-box">
+          {errorSalir && <div className="form-error">{errorSalir}</div>}
+          <button
+            type="button"
+            className="btn btn-ghost btn-block"
+            disabled={saliendo}
+            onClick={handleSalirEquipo}
+          >
+            {saliendo ? "Saliendo..." : "Salir del equipo"}
+          </button>
+        </div>
+      )}
 
       {esDueño && (
         <div className="team-control-panel-wrap">
@@ -665,6 +606,65 @@ export default function TeamDetailPage() {
                   {codigoCopiado ? "¡Copiado!" : "Copiar código"}
                 </button>
               </div>
+
+              {/* El dueño no puede simplemente "salir": si hay más
+                  miembros, primero tiene que transferir el liderazgo.
+                  Recién cuando queda como único miembro, salir del
+                  equipo disuelve el equipo en vez de dejarlo sin
+                  dueño. */}
+              {miembros.length > 1 ? (
+                <>
+                  <h3 className="detail-subtitle">Transferir liderazgo</h3>
+                  {errorTransferir && <div className="form-error">{errorTransferir}</div>}
+                  <form className="auth-form" onSubmit={handleTransferirLiderazgo}>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="team-nuevo-lider">
+                        Nuevo dueño del equipo
+                      </label>
+                      <select
+                        id="team-nuevo-lider"
+                        className="form-input"
+                        value={nuevoLiderId}
+                        onChange={(e) => setNuevoLiderId(e.target.value)}
+                      >
+                        <option value="">Selecciona un miembro</option>
+                        {miembros
+                          .filter((m) => !m.roles.includes("owner"))
+                          .map((m) => (
+                            <option key={m.userId} value={m.userId}>
+                              {m.nick ?? "Jugador de RemorApp"}
+                              {m.uniqueId ? `#${m.uniqueId}` : ""}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <button
+                      type="submit"
+                      className="btn btn-ghost btn-block"
+                      disabled={transfiriendo || !nuevoLiderId}
+                    >
+                      {transfiriendo ? "Transfiriendo..." : "Transferir liderazgo"}
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <h3 className="detail-subtitle">Salir del equipo</h3>
+                  <p className="tournament-card-meta">
+                    Eres el único miembro. Si sales, el equipo quedará disuelto y dejará de
+                    aparecer en el buscador público.
+                  </p>
+                  {errorSalir && <div className="form-error">{errorSalir}</div>}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-block"
+                    disabled={saliendo}
+                    onClick={handleSalirEquipo}
+                  >
+                    {saliendo ? "Saliendo..." : "Salir del equipo"}
+                  </button>
+                </>
+              )}
 
               <form className="auth-form" onSubmit={handleGuardarEquipo}>
             {errorEquipo && <div className="form-error">{errorEquipo}</div>}
@@ -790,138 +790,6 @@ export default function TeamDetailPage() {
                       {e.nick ?? "Jugador de RemorApp"}
                       {e.uniqueId && <span className="profile-nick-id">#{e.uniqueId}</span>}
                       <span className="tournament-card-meta">{formatFecha(e.kickedAt)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <h3 className="detail-subtitle">Aporte de XP</h3>
-              {aportes.length === 0 ? (
-                <p className="detail-empty">Todavía no hay aportes registrados.</p>
-              ) : (
-                <ol className="ranking-list">
-                  {aportes.map((a, i) => (
-                    <li key={a.userId} className="ranking-item">
-                      <span className="ranking-position">{i + 1}</span>
-                      <span className="ranking-name">
-                        {a.nick ?? "Jugador de RemorApp"}
-                        {a.uniqueId && <span className="profile-nick-id">#{a.uniqueId}</span>}
-                      </span>
-                      <span className="ranking-points">{a.total} XP</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
-
-              <h3 className="detail-subtitle">Apostar XP contra otro equipo</h3>
-              <form className="auth-form" onSubmit={handleProponerApuesta}>
-                {errorApuesta && <div className="form-error">{errorApuesta}</div>}
-                {apuestaEnviada && <div className="form-success">¡Apuesta propuesta!</div>}
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="apuesta-tag">
-                    Tag del equipo rival
-                  </label>
-                  <input
-                    id="apuesta-tag"
-                    className="form-input"
-                    type="text"
-                    placeholder="QSQD"
-                    value={tagRival}
-                    onChange={(e) => setTagRival(e.target.value.toUpperCase())}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="apuesta-monto">
-                    Monto de XP (tu equipo tiene {equipo.xp})
-                  </label>
-                  <input
-                    id="apuesta-monto"
-                    className="form-input"
-                    type="number"
-                    min={1}
-                    max={equipo.xp}
-                    value={montoApuesta}
-                    onChange={(e) => setMontoApuesta(e.target.value)}
-                  />
-                </div>
-
-                <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendo}>
-                  {proponiendo ? "Proponiendo..." : "Proponer apuesta"}
-                </button>
-              </form>
-
-              <h3 className="detail-subtitle">Apuestas de XP</h3>
-              {apuestas.length === 0 ? (
-                <p className="detail-empty">Todavía no hay apuestas.</p>
-              ) : (
-                <div className="detail-participant-list">
-                  {apuestas.map((a) => (
-                    <div key={a.id} className="wager-item">
-                      <p className="wager-desc">
-                        {a.challengerNombre} vs {a.challengedNombre} · {a.monto} XP
-                        <span className="wager-status">{a.status}</span>
-                      </p>
-
-                      {a.status === "pendiente" && a.challengedTeamId === equipo.id && (
-                        <div className="invitation-actions">
-                          <button
-                            type="button"
-                            className="btn btn-primary"
-                            disabled={respondiendoApuesta === a.id}
-                            onClick={() => handleResponderApuesta(a.id, true)}
-                          >
-                            Aceptar
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={respondiendoApuesta === a.id}
-                            onClick={() => handleResponderApuesta(a.id, false)}
-                          >
-                            Rechazar
-                          </button>
-                        </div>
-                      )}
-
-                      {a.status === "pendiente" && a.challengerTeamId === equipo.id && (
-                        <p className="tournament-card-meta">Esperando respuesta del equipo rival.</p>
-                      )}
-
-                      {a.status === "aceptada" && (
-                        <div className="bracket-report">
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={reportandoApuesta === a.id}
-                            onClick={() => handleReportarApuesta(a.id, a.challengerTeamId)}
-                          >
-                            Ganó {a.challengerNombre}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-ghost"
-                            disabled={reportandoApuesta === a.id}
-                            onClick={() => handleReportarApuesta(a.id, a.challengedTeamId)}
-                          >
-                            Ganó {a.challengedNombre}
-                          </button>
-                        </div>
-                      )}
-
-                      {a.status === "en_disputa" && (
-                        <p className="bracket-disputa">
-                          Resultado en disputa, un administrador debe resolverlo.
-                        </p>
-                      )}
-
-                      {a.status === "resuelta" && (
-                        <p className="tournament-card-meta">
-                          Ganó{" "}
-                          {a.ganadorFinal === a.challengerTeamId ? a.challengerNombre : a.challengedNombre}
-                        </p>
-                      )}
                     </div>
                   ))}
                 </div>

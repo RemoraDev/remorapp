@@ -100,11 +100,19 @@ export interface Profile {
   sc2_region: Sc2Region | null;
   sc2_id: string | null;
   liga: Liga | null;
-  // Sistema de experiencia (migración 013, Fase A): xp se acumula
-  // jugando torneos, nivel se recalcula solo en la base a partir de
-  // xp (columna GENERATED) -- nunca se manda a mano.
-  xp: number;
-  nivel: number;
+  // Sistema de MMR y ligas oficiales de StarCraft II (migración 020,
+  // reemplaza al de experiencia/nivel de la migración 013). mmr_1v1 y
+  // mmr_equipos son ratings separados del jugador; banca_rota,
+  // nivel_1v1, liga_1v1 y liga_equipos se recalculan solos en la base
+  // a partir de esos dos MMR (columnas GENERATED) -- nunca se mandan
+  // a mano. nivel_1v1 solo existe para 1v1 por ahora (el de equipos
+  // se define en otra fase).
+  mmr_1v1: number;
+  mmr_equipos: number;
+  banca_rota: boolean;
+  nivel_1v1: number;
+  liga_1v1: string;
+  liga_equipos: string;
   avatar_url: string | null;
   bio: string | null;
   cuenta_validada: boolean;

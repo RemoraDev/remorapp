@@ -8,10 +8,10 @@ export const NICK_REGEX = /^[A-Za-z0-9_Øø]{3,13}$/;
 // la app) o null si el nick es válido.
 export function validarNick(nick: string): string | null {
   if (!NICK_REGEX.test(nick)) {
-    return "Sin espacios wn. Usa CarpeDiem no Carpe Diem. Entre 3 y 13 caracteres: letras, números, guion bajo y Ø/ø.";
+    return "El nick no puede tener espacios. Usa CarpeDiem en vez de Carpe Diem. Debe tener entre 3 y 13 caracteres: letras, números, guion bajo y Ø/ø.";
   }
   if (contieneLenguajeInapropiado(nick)) {
-    return "Ese nick no está permitido wn, elige otro.";
+    return "Ese nick no está permitido. Por favor elige otro.";
   }
   return null;
 }

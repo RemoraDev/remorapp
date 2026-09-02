@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
-import NivelBadge from "./NivelBadge";
+import LigaBadge from "./LigaBadge";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header() {
@@ -22,7 +22,14 @@ export default function Header() {
               <Link to="/perfil" className="header-user">
                 <Avatar url={profile?.avatar_url} nombre={profile?.nombre} className="header-avatar" />
                 {profile?.nombre ?? user.email}
-                {profile && <NivelBadge nivel={profile.nivel} />}
+                {profile && (
+                  <LigaBadge
+                    liga={profile.liga_1v1}
+                    mmr={profile.mmr_1v1}
+                    nivel={profile.nivel_1v1}
+                    bancaRota={profile.banca_rota}
+                  />
+                )}
                 {/* Invitaciones de equipo pendientes -- se responden en
                     /perfil, este es solo el aviso. */}
                 {invitacionesPendientes > 0 && (

@@ -30,10 +30,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const cargarPerfil = useCallback(async (userId: string) => {
+    // Se evalúa acá, cada vez que se carga la sesión -- si este
+    // perfil lleva 30 días en banca rota sin actividad, lo restaura a
+    // 1000 MMR antes de traer el perfil ya actualizado. No hace falta
+    // esperar un cron: restaurar_banca_rota_perfil() (en la base) no
+    // hace nada si todavía no corresponde.
+    await supabase.rpc("restaurar_banca_rota_perfil", { p_user_id: userId });
+
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, xp, nivel, avatar_url, bio, cuenta_validada, suspendido"
+        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, avatar_url, bio, cuenta_validada, suspendido"
       )
       .eq("id", userId)
       .single();

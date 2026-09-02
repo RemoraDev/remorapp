@@ -1050,9 +1050,10 @@ input[type="radio"] {
   padding: 0.15rem 0.55rem;
 }
 
-/* Nivel (sistema de XP, Fase A) -- chico y reusado en listas; la
-   variante .nivel-badge-grande se usa para el nivel del clan, bien
-   destacado en /equipos/:tag. */
+/* Liga + MMR (+ nivel) del sistema de MMR y ligas oficiales
+   (migración 020, reemplaza al viejo sistema de XP/nivel) -- chico y
+   reusado en listas; la variante .nivel-badge-grande se usa para la
+   insignia del clan, bien destacada en /equipos/:tag. */
 .nivel-badge {
   margin-left: 0.5rem;
   border-radius: 999px;
@@ -1071,6 +1072,48 @@ input[type="radio"] {
   font-family: var(--font-display);
 }
 
+/* Banca rota: mismo tamaño, color de aviso en vez del dorado normal. */
+.nivel-badge-banca-rota {
+  background: rgba(248, 113, 113, 0.14);
+  color: #f87171;
+}
+
+/* Barra de progreso de MMR hacia la siguiente liga (migración 020),
+   en /perfil y /equipos/:tag. */
+.mmr-progress {
+  margin: 0.75rem 0;
+}
+
+.mmr-progress-track {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  overflow: hidden;
+}
+
+.mmr-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--color-accent);
+  transition: width 0.3s ease;
+}
+
+.mmr-progress-fill-banca-rota {
+  background: #f87171;
+}
+
+.mmr-progress-texto {
+  margin: 0.4rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.mmr-progress-texto-banca-rota {
+  color: #f87171;
+  font-weight: 600;
+}
+
 /* Liga del jugador, junto al Nick#ID en listas de miembros. */
 .liga-badge {
   margin-left: 0.5rem;
@@ -1084,33 +1127,6 @@ input[type="radio"] {
 
 .team-control-panel-wrap {
   margin-top: 2rem;
-}
-
-/* ---------- Apuestas de XP entre clanes ---------- */
-
-.wager-item {
-  border-radius: 0.6rem;
-  border: 1px solid var(--color-border);
-  padding: 0.6rem 0.85rem;
-  margin-bottom: 0.5rem;
-}
-
-.wager-desc {
-  margin: 0 0 0.4rem;
-  font-size: 0.85rem;
-  color: var(--color-text);
-}
-
-.wager-status {
-  margin-left: 0.5rem;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--color-text-muted);
-  font-size: 0.65rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 0.1rem 0.5rem;
 }
 
 .team-control-panel-wrap .team-leader-panel {

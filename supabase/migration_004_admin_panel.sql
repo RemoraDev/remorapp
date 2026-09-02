@@ -73,6 +73,14 @@ $$;
 --    abajo, que sí puede leerlo porque corre como security definer.
 -- ------------------------------------------------------------
 revoke select (email) on public.profiles from anon, authenticated;
+-- CORRECCIÓN (migración 017): este revoke NUNCA funcionó -- un revoke
+-- de columna no recorta el "grant select on profiles to anon,
+-- authenticated" de patch_001_grants.sql, que ya cubre todas las
+-- columnas. email quedó legible con un select común hasta que se
+-- corrió la migración 017, que lo arregla de verdad (revoke de tabla
+-- completa + grant explícito por lista de columnas). Se deja esta
+-- línea tal cual, sin editarla, como registro de lo que se corrió en
+-- su momento -- no cambia nada volver a correrla.
 
 -- ------------------------------------------------------------
 -- 4) Función para el listado de /admin: junta todo lo que

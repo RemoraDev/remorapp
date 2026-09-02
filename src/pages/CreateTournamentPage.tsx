@@ -71,7 +71,7 @@ export default function CreateTournamentPage() {
     // El nombre del torneo se muestra públicamente (listado y detalle),
     // así que pasa por el mismo filtro que el nick.
     if (contieneLenguajeInapropiado(nombre)) {
-      setError("Ese nombre no está permitido wn, elige otro.");
+      setError("Ese nombre no está permitido. Por favor elige otro.");
       return;
     }
 
