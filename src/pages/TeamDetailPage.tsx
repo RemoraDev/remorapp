@@ -43,6 +43,10 @@ interface MiembroConNombre {
   responsabilidadCw: number;
   pocoConfiable: boolean;
   roles: string[];
+  // Capitán (migración 038): permiso delegado por el dueño, revocable
+  // en cualquier momento -- distinto de "roles", que solo distingue
+  // owner/jugador.
+  esCapitan: boolean;
   // Perfil de juego de StarCraft II (migración 034) -- opcional, puede
   // no existir todavía para este jugador.
   razaPrincipal: RazaSc2 | null;
@@ -226,6 +230,8 @@ export default function TeamDetailPage() {
   const [codigoCopiado, setCodigoCopiado] = useState(false);
   const [quitando, setQuitando] = useState<string | null>(null);
   const [errorQuitar, setErrorQuitar] = useState<string | null>(null);
+  const [asignandoCapitan, setAsignandoCapitan] = useState<string | null>(null);
+  const [errorCapitan, setErrorCapitan] = useState<string | null>(null);
   // El panel entero vive colapsado atrás de un botón -- nada de esto
   // se ve desperdigado en la página, solo cuando el dueño lo abre.
   // Adentro, el panel es un menú de 5 secciones (más "configuracion");
@@ -434,7 +440,7 @@ export default function TeamDetailPage() {
     const { data: miembrosData } = await supabase
       .from("team_members")
       .select(
-        "user_id, roles, profiles(nick, unique_id, avatar_url, avatar_forma, liga, mmr_equipos, liga_equipos, banca_rota, valentia_jugador, responsabilidad_cw, poco_confiable)"
+        "user_id, roles, es_capitan, profiles(nick, unique_id, avatar_url, avatar_forma, liga, mmr_equipos, liga_equipos, banca_rota, valentia_jugador, responsabilidad_cw, poco_confiable)"
       )
       .eq("team_id", equipoData.id)
       .order("joined_at", { ascending: true });
@@ -455,6 +461,7 @@ export default function TeamDetailPage() {
         responsabilidadCw: perfil.responsabilidad_cw,
         pocoConfiable: perfil.poco_confiable,
         roles: m.roles as string[],
+        esCapitan: m.es_capitan,
         razaPrincipal: null,
         razaSecundaria: null,
       };
@@ -917,6 +924,12 @@ export default function TeamDetailPage() {
   }
 
   const esDueño = !!user && equipo.owner_id === user.id;
+  // Capitán (migración 038): mismo permiso que el dueño en casi todo,
+  // salvo transferir liderazgo, eliminar/disolver el equipo y
+  // asignar/quitar capitanes -- eso sigue siendo exclusivo de esDueño,
+  // ver los usos puntuales más abajo.
+  const esCapitan = !!user && miembros.some((m) => m.userId === user.id && m.esCapitan);
+  const puedeGestionar = esDueño || esCapitan;
 
   const handleEliminarEquipoDefinitivo = async () => {
     if (
@@ -1142,6 +1155,29 @@ export default function TeamDetailPage() {
     // Recarga en vez de solo filtrar en memoria: quitar_miembro() ahora
     // también deja registro en team_kicks_log, y "Jugadores expulsados"
     // tiene que verlo reflejado al toque.
+    await cargar();
+  };
+
+  // Asignar/quitar capitán (migración 038): exclusiva del dueño, sin
+  // límite de cuántos capitanes puede haber a la vez -- ver
+  // asignar_capitan() en la base.
+  const handleAsignarCapitan = async (userId: string, esCapitanActual: boolean) => {
+    setAsignandoCapitan(userId);
+    setErrorCapitan(null);
+
+    const { error } = await supabase.rpc("asignar_capitan", {
+      p_team_id: equipo.id,
+      p_user_id: userId,
+      p_es_capitan: !esCapitanActual,
+    });
+
+    setAsignandoCapitan(null);
+
+    if (error) {
+      setErrorCapitan(error.message);
+      return;
+    }
+
     await cargar();
   };
 
@@ -1802,7 +1838,29 @@ export default function TeamDetailPage() {
       <span className="liga-badge">Responsabilidad {m.responsabilidadCw}%</span>
       {m.pocoConfiable && <span className="nivel-badge nivel-badge-banca-rota">Poco Responsable</span>}
       {m.roles.includes("owner") && <span className="team-owner-badge">Dueño</span>}
-      {conControles && !m.roles.includes("owner") && (
+      {/* "Capitán" es una insignia distinta de "Dueño" a propósito --
+          un capitán tiene casi el mismo permiso, pero sigue siendo
+          revocable, y el equipo solo tiene un dueño real. */}
+      {m.esCapitan && !m.roles.includes("owner") && (
+        <span className="team-owner-badge team-captain-badge">Capitán</span>
+      )}
+      {/* Asignar/quitar capitán: exclusivo del dueño, ni siquiera otro
+          capitán puede hacerlo -- ver asignar_capitan() en la base. */}
+      {conControles && esDueño && !m.roles.includes("owner") && (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled={asignandoCapitan === m.userId}
+          onClick={() => handleAsignarCapitan(m.userId, m.esCapitan)}
+        >
+          {asignandoCapitan === m.userId
+            ? "Guardando..."
+            : m.esCapitan
+              ? "Quitar capitán"
+              : "Marcar como capitán"}
+        </button>
+      )}
+      {conControles && puedeGestionar && !m.roles.includes("owner") && (
         <button
           type="button"
           className="btn btn-ghost team-kick-btn"
@@ -1873,9 +1931,10 @@ export default function TeamDetailPage() {
 
       {/* El código de invitación queda a mano en la página principal,
           fuera del Panel de control -- no hace falta abrir ningún
-          submenú para encontrarlo. Solo lo ve el dueño, igual que
-          antes. */}
-      {esDueño && (
+          submenú para encontrarlo. Lo ve el dueño o un capitán
+          (migración 038): invitar jugadores es un permiso delegado, y
+          el código es una de las dos formas de invitar. */}
+      {puedeGestionar && (
         <div className="team-leader-invite">
           <span className="team-leader-invite-code">{equipo.invite_code}</span>
           <button type="button" className="btn btn-ghost" onClick={handleCopiarCodigo}>
@@ -1940,7 +1999,12 @@ export default function TeamDetailPage() {
         </div>
       )}
 
-      {esDueño && (
+      {/* Migración 038: el Panel de control también lo abre un
+          capitán, no solo el dueño -- las secciones que siguen siendo
+          exclusivas del dueño (Configuración, Títulos de clan,
+          transferir liderazgo) se filtran más abajo, cada una por su
+          cuenta. */}
+      {puedeGestionar && (
         <div className="team-control-panel-wrap">
           <button
             type="button"
@@ -1957,16 +2021,21 @@ export default function TeamDetailPage() {
             <div className="team-leader-panel">
               {seccionPanel === null ? (
                 <div className="team-panel-menu">
-                  <button
-                    type="button"
-                    className="team-panel-menu-item"
-                    onClick={() => setSeccionPanel("configuracion")}
-                  >
-                    <span className="team-panel-menu-item-title">Configuración</span>
-                    <span className="team-panel-menu-item-desc">
-                      Logo, banner, título Padre/Hijo activo y eliminar equipo
-                    </span>
-                  </button>
+                  {/* Configuración (logo/banner/tema/eliminar equipo) y
+                      Títulos de clan quedan fuera de lo delegado a un
+                      capitán -- solo el dueño las ve. */}
+                  {esDueño && (
+                    <button
+                      type="button"
+                      className="team-panel-menu-item"
+                      onClick={() => setSeccionPanel("configuracion")}
+                    >
+                      <span className="team-panel-menu-item-title">Configuración</span>
+                      <span className="team-panel-menu-item-desc">
+                        Logo, banner, título Padre/Hijo activo y eliminar equipo
+                      </span>
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="team-panel-menu-item"
@@ -1983,10 +2052,12 @@ export default function TeamDetailPage() {
                       Solicitudes de Clan War, retos y su historial
                     </span>
                   </button>
-                  <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("titulos")}>
-                    <span className="team-panel-menu-item-title">Títulos</span>
-                    <span className="team-panel-menu-item-desc">Responder, proponer y ver Títulos Padre/Hijo</span>
-                  </button>
+                  {esDueño && (
+                    <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("titulos")}>
+                      <span className="team-panel-menu-item-title">Títulos</span>
+                      <span className="team-panel-menu-item-desc">Responder, proponer y ver Títulos Padre/Hijo</span>
+                    </button>
+                  )}
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("logros")}>
                     <span className="team-panel-menu-item-title">Logros y Recompensas</span>
                     <span className="team-panel-menu-item-desc">
@@ -2018,8 +2089,10 @@ export default function TeamDetailPage() {
                   miembros, primero tiene que transferir el liderazgo.
                   Recién cuando queda como único miembro, salir del
                   equipo disuelve el equipo en vez de dejarlo sin
-                  dueño. */}
-              {seccionPanel === "editar-equipo" && (miembros.length > 1 ? (
+                  dueño. Exclusivo de esDueño -- un capitán que entra a
+                  "Editar equipo" no ve esto, transferir liderazgo
+                  sigue siendo solo del dueño. */}
+              {seccionPanel === "editar-equipo" && esDueño && (miembros.length > 1 ? (
                 <>
                   <h3 className="detail-subtitle">Transferir liderazgo</h3>
                   {errorTransferir && <div className="form-error">{errorTransferir}</div>}
@@ -2229,6 +2302,7 @@ export default function TeamDetailPage() {
 
               <h3 className="detail-subtitle">Miembros del equipo</h3>
               {errorQuitar && <div className="form-error">{errorQuitar}</div>}
+              {errorCapitan && <div className="form-error">{errorCapitan}</div>}
               <div className="detail-participant-list">{miembros.map((m) => renderMiembro(m, true))}</div>
 
               <h3 className="detail-subtitle">Jugador temporal</h3>

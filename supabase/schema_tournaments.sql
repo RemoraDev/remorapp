@@ -929,7 +929,12 @@ create table public.team_members (
   roles text[] not null default array['jugador']::text[] check (
     roles <@ array['owner', 'jugador']::text[]
   ),
-  joined_at timestamptz not null default now()
+  joined_at timestamptz not null default now(),
+  -- Capitán (migración 038): permiso delegado por el dueño, revocable
+  -- en cualquier momento -- ver asignar_capitan() y
+  -- es_capitan_o_dueno() más abajo. Sin límite de cuántos capitanes
+  -- puede haber a la vez.
+  es_capitan boolean not null default false
 );
 
 alter table public.team_members enable row level security;
@@ -1108,24 +1113,76 @@ create policy "team_kicks_log_select_propio"
 
 grant select on public.team_kicks_log to authenticated;
 
-create or replace function public.invitar_jugador(p_team_id uuid, p_invited_user_id uuid)
+-- ------------------------------------------------------------
+-- Capitanes (migración 038): un capitán tiene, con pocas excepciones,
+-- el mismo permiso que el dueño sobre SU equipo -- ver el detalle de
+-- qué queda exclusivo del dueño en cada función de abajo.
+-- ------------------------------------------------------------
+create or replace function public.es_capitan_o_dueno(p_team_id uuid, p_user_id uuid default auth.uid())
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.teams where id = p_team_id and owner_id = p_user_id
+  ) or exists (
+    select 1 from public.team_members
+    where team_id = p_team_id and user_id = p_user_id and es_capitan
+  );
+$$;
+
+grant execute on function public.es_capitan_o_dueno(uuid, uuid) to authenticated;
+
+-- asignar_capitan(): exclusiva del dueño. Sin límite de capitanes; no
+-- se puede marcar/desmarcar a uno mismo (el dueño ya tiene todo el
+-- permiso, no necesita el rol).
+create or replace function public.asignar_capitan(p_team_id uuid, p_user_id uuid, p_es_capitan boolean)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  v_es_owner boolean;
+  v_owner_id uuid;
 begin
-  -- Migración 019: "not disuelto" acá también bloquea que un ex-dueño
-  -- reviva un equipo disuelto invitando gente de nuevo -- owner_id no
-  -- cambia solo porque el equipo se disolvió.
-  select exists (
-    select 1 from public.teams where id = p_team_id and owner_id = auth.uid() and not disuelto
-  ) into v_es_owner;
+  select owner_id into v_owner_id from public.teams where id = p_team_id;
 
-  if not v_es_owner then
-    raise exception 'Solo el dueño del equipo puede invitar jugadores.';
+  if v_owner_id is null then
+    raise exception 'Ese equipo no existe.';
+  end if;
+
+  if v_owner_id <> auth.uid() then
+    raise exception 'Solo el dueño del equipo puede asignar o quitar capitanes.';
+  end if;
+
+  if p_user_id = auth.uid() then
+    raise exception 'El dueño no necesita marcarse como capitán.';
+  end if;
+
+  if not exists (select 1 from public.team_members where team_id = p_team_id and user_id = p_user_id) then
+    raise exception 'Ese jugador no es miembro de tu equipo.';
+  end if;
+
+  update public.team_members set es_capitan = p_es_capitan where team_id = p_team_id and user_id = p_user_id;
+end;
+$$;
+
+grant execute on function public.asignar_capitan(uuid, uuid, boolean) to authenticated;
+
+create or replace function public.invitar_jugador(p_team_id uuid, p_invited_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not exists (select 1 from public.teams where id = p_team_id and not disuelto) then
+    raise exception 'Ese equipo no existe.';
+  end if;
+
+  if not public.es_capitan_o_dueno(p_team_id) then
+    raise exception 'Solo el dueño o un capitán del equipo puede invitar jugadores.';
   end if;
 
   if not exists (select 1 from public.profiles where id = p_invited_user_id) then
@@ -1236,12 +1293,20 @@ begin
     raise exception 'Ese equipo no existe.';
   end if;
 
-  if v_owner_id <> auth.uid() then
-    raise exception 'Solo el dueño del equipo puede quitar miembros.';
+  if not public.es_capitan_o_dueno(p_team_id) then
+    raise exception 'Solo el dueño o un capitán del equipo puede quitar miembros.';
   end if;
 
   if p_user_id = auth.uid() then
     raise exception 'No te puedes sacar a ti mismo del equipo.';
+  end if;
+
+  -- Migración 038: antes era imposible por construcción (solo el
+  -- dueño podía llamar a esta función, y ya se bloqueaba sacarse a
+  -- uno mismo) -- ahora que un capitán también puede, hace falta
+  -- bloquear explícitamente sacar al dueño.
+  if p_user_id = v_owner_id then
+    raise exception 'No se puede quitar al dueño del equipo.';
   end if;
 
   select joined_at into v_entrada_en
@@ -1585,6 +1650,12 @@ create table public.clan_wars (
   -- confirmar_lineup_cw() más abajo.
   lineup_visto_bueno_challenger boolean not null default false,
   lineup_visto_bueno_challenged boolean not null default false,
+  -- Migración 038: quién dio realmente el visto bueno de cada lado --
+  -- no necesariamente el mismo capitán que armó el lineup
+  -- (clan_war_lineup.agregado_por), puede haber sido otro capitán o
+  -- el dueño.
+  visto_bueno_dado_por_challenger uuid references public.profiles (id),
+  visto_bueno_dado_por_challenged uuid references public.profiles (id),
   challenger_confirmado boolean not null default false,
   challenged_confirmado boolean not null default false,
   caster_nombre text,
@@ -1608,14 +1679,14 @@ create table public.clan_wars (
 
 alter table public.clan_wars enable row level security;
 
--- Solo los dueños de los dos equipos involucrados ven el detalle de
--- un reto -- ni siquiera otro miembro del mismo equipo.
+-- El dueño o un capitán (migración 038) de alguno de los dos equipos
+-- involucrados ve el detalle de un reto -- ni siquiera otro miembro
+-- del mismo equipo.
 create policy "clan_wars_select_propio"
   on public.clan_wars for select
   to authenticated
   using (
-    exists (select 1 from public.teams t where t.id = challenger_team_id and t.owner_id = auth.uid())
-    or exists (select 1 from public.teams t where t.id = challenged_team_id and t.owner_id = auth.uid())
+    public.es_capitan_o_dueno(challenger_team_id) or public.es_capitan_o_dueno(challenged_team_id)
   );
 
 grant select on public.clan_wars to authenticated;
@@ -1636,12 +1707,17 @@ declare
   v_challenged record;
   v_ultimo_reto timestamptz;
 begin
-  -- Migración 028: not disuelto -- si no, un ex-dueño de un equipo ya
-  -- disuelto podría seguir proponiendo retos como si el equipo
-  -- siguiera existiendo (owner_id no se limpia solo al disolverse).
-  select * into v_challenger from public.teams where owner_id = auth.uid() and not disuelto;
+  -- Migración 038: ya no solo el dueño -- cualquier miembro que sea
+  -- dueño o capitán de su equipo. team_members.user_id es primary key,
+  -- así que solo puede pertenecer a un equipo a la vez.
+  select t.* into v_challenger
+  from public.teams t
+  join public.team_members tm on tm.team_id = t.id
+  where tm.user_id = auth.uid()
+    and (t.owner_id = auth.uid() or tm.es_capitan);
+
   if v_challenger is null then
-    raise exception 'No eres dueño de ningún equipo.';
+    raise exception 'No eres dueño ni capitán de ningún equipo.';
   end if;
 
   if v_challenger.disuelto then
@@ -1702,19 +1778,14 @@ set search_path = public
 as $$
 declare
   v_reto record;
-  v_soy_desafiado boolean;
 begin
   select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
   if v_reto is null then
     raise exception 'Ese reto no existe.';
   end if;
 
-  select exists (
-    select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid()
-  ) into v_soy_desafiado;
-
-  if not v_soy_desafiado then
-    raise exception 'Solo el dueño del equipo desafiado puede responder este reto.';
+  if not public.es_capitan_o_dueno(v_reto.challenged_team_id) then
+    raise exception 'Solo el dueño o un capitán del equipo desafiado puede responder este reto.';
   end if;
 
   if v_reto.status <> 'pendiente' then
@@ -1803,10 +1874,9 @@ create policy "clan_war_lineup_select_propio"
   to authenticated
   using (
     exists (
-      select 1
-      from public.clan_wars cw
-      join public.teams t on t.id in (cw.challenger_team_id, cw.challenged_team_id)
-      where cw.id = clan_war_id and t.owner_id = auth.uid()
+      select 1 from public.clan_wars cw
+      where cw.id = clan_war_id
+        and (public.es_capitan_o_dueno(cw.challenger_team_id) or public.es_capitan_o_dueno(cw.challenged_team_id))
     )
   );
 
@@ -1839,19 +1909,14 @@ begin
     raise exception 'El lineup solo se arma después de aceptar el reto.';
   end if;
 
-  select exists (
-    select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid()
-  ) into v_soy_challenger;
-
-  if v_soy_challenger then
+  if public.es_capitan_o_dueno(v_reto.challenger_team_id) then
     v_mi_team_id := v_reto.challenger_team_id;
-  elsif exists (
-    select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid()
-  ) then
+    v_soy_challenger := true;
+  elsif public.es_capitan_o_dueno(v_reto.challenged_team_id) then
     v_mi_team_id := v_reto.challenged_team_id;
     v_soy_challenger := false;
   else
-    raise exception 'Solo el capitán de alguno de los dos equipos puede armar el lineup.';
+    raise exception 'Solo el dueño o un capitán de alguno de los dos equipos puede armar el lineup.';
   end if;
 
   if p_accion = 'agregar' then
@@ -1892,13 +1957,19 @@ begin
     raise exception 'Acción inválida: tiene que ser agregar o quitar.';
   end if;
 
+  -- Cualquier cambio en el lineup resetea el visto bueno (y quién lo
+  -- dio) del lado que lo cambió -- hay que volver a confirmarlo.
   if v_soy_challenger then
     update public.clan_wars
-      set lineup_visto_bueno_challenger = false, check_in_abierto = false
+      set lineup_visto_bueno_challenger = false,
+          visto_bueno_dado_por_challenger = null,
+          check_in_abierto = false
       where id = p_clan_war_id;
   else
     update public.clan_wars
-      set lineup_visto_bueno_challenged = false, check_in_abierto = false
+      set lineup_visto_bueno_challenged = false,
+          visto_bueno_dado_por_challenged = null,
+          check_in_abierto = false
       where id = p_clan_war_id;
   end if;
 end;
@@ -1906,6 +1977,12 @@ $$;
 
 grant execute on function public.armar_lineup_cw(uuid, text, uuid, uuid, text, uuid) to authenticated;
 
+-- confirmar_lineup_cw(): el visto bueno lo puede dar CUALQUIER
+-- capitán o el dueño de ese equipo -- no tiene que ser
+-- específicamente quien armó el lineup originalmente (ver
+-- clan_war_lineup.agregado_por, que sí registra a esa persona puntual
+-- y no cambia). Queda guardado en visto_bueno_dado_por_challenger/
+-- challenged quién dio el visto bueno de verdad (migración 038).
 create or replace function public.confirmar_lineup_cw(p_clan_war_id uuid)
 returns void
 language plpgsql
@@ -1914,25 +1991,22 @@ set search_path = public
 as $$
 declare
   v_reto record;
-  v_soy_challenger boolean;
 begin
   select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
   if v_reto is null then
     raise exception 'Ese reto no existe.';
   end if;
 
-  select exists (
-    select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid()
-  ) into v_soy_challenger;
-
-  if v_soy_challenger then
-    update public.clan_wars set lineup_visto_bueno_challenger = true where id = p_clan_war_id;
-  elsif exists (
-    select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid()
-  ) then
-    update public.clan_wars set lineup_visto_bueno_challenged = true where id = p_clan_war_id;
+  if public.es_capitan_o_dueno(v_reto.challenger_team_id) then
+    update public.clan_wars
+      set lineup_visto_bueno_challenger = true, visto_bueno_dado_por_challenger = auth.uid()
+      where id = p_clan_war_id;
+  elsif public.es_capitan_o_dueno(v_reto.challenged_team_id) then
+    update public.clan_wars
+      set lineup_visto_bueno_challenged = true, visto_bueno_dado_por_challenged = auth.uid()
+      where id = p_clan_war_id;
   else
-    raise exception 'Solo el capitán de alguno de los dos equipos puede confirmar el lineup.';
+    raise exception 'Solo el dueño o un capitán de alguno de los dos equipos puede confirmar el lineup.';
   end if;
 
   update public.clan_wars
@@ -1961,17 +2035,16 @@ create table public.clan_war_reportes (
 
 alter table public.clan_war_reportes enable row level security;
 
--- Mismo criterio que clan_wars: solo los capitanes de los dos equipos
--- del reto en cuestión ven sus reportes.
+-- Mismo criterio que clan_wars: solo el dueño o un capitán de los dos
+-- equipos del reto en cuestión ven sus reportes.
 create policy "clan_war_reportes_select_propio"
   on public.clan_war_reportes for select
   to authenticated
   using (
     exists (
-      select 1
-      from public.clan_wars cw
-      join public.teams t on t.id in (cw.challenger_team_id, cw.challenged_team_id)
-      where cw.id = clan_war_id and t.owner_id = auth.uid()
+      select 1 from public.clan_wars cw
+      where cw.id = clan_war_id
+        and (public.es_capitan_o_dueno(cw.challenger_team_id) or public.es_capitan_o_dueno(cw.challenged_team_id))
     )
   );
 
@@ -2031,20 +2104,18 @@ begin
     raise exception 'Este reto todavía no fue aceptado, o la guerra ya empezó.';
   end if;
 
-  select exists (select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid())
-    into v_soy_challenger;
-  select exists (select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid())
-    into v_soy_challenged;
+  v_soy_challenger := public.es_capitan_o_dueno(v_reto.challenger_team_id);
+  v_soy_challenged := public.es_capitan_o_dueno(v_reto.challenged_team_id);
 
   if not v_soy_challenger and not v_soy_challenged then
-    raise exception 'No eres capitán de ninguno de los dos equipos de este reto.';
+    raise exception 'No eres dueño ni capitán de ninguno de los dos equipos de este reto.';
   end if;
 
   -- Migración 037: el lineup tiene que estar aprobado por los dos
-  -- capitanes ANTES de que el check-in real pueda empezar -- el
-  -- check-in pasa a ser el paso siguiente al lineup, no el primero.
+  -- lados ANTES de que el check-in real pueda empezar -- el check-in
+  -- pasa a ser el paso siguiente al lineup, no el primero.
   if not v_reto.lineup_visto_bueno_challenger or not v_reto.lineup_visto_bueno_challenged then
-    raise exception 'Todavía falta que los dos capitanes den el visto bueno al lineup.';
+    raise exception 'Todavía falta que los dos equipos den el visto bueno al lineup.';
   end if;
 
   -- La ventana se abre 15 minutos antes de fecha_hora_cet -- se
@@ -2089,14 +2160,14 @@ begin
     raise exception 'Ese reto no existe.';
   end if;
 
-  if exists (select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid()) then
+  if public.es_capitan_o_dueno(v_reto.challenger_team_id) then
     v_mi_team_id := v_reto.challenger_team_id;
     v_rival_team_id := v_reto.challenged_team_id;
-  elsif exists (select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid()) then
+  elsif public.es_capitan_o_dueno(v_reto.challenged_team_id) then
     v_mi_team_id := v_reto.challenged_team_id;
     v_rival_team_id := v_reto.challenger_team_id;
   else
-    raise exception 'No eres capitán de ninguno de los dos equipos de este reto.';
+    raise exception 'No eres dueño ni capitán de ninguno de los dos equipos de este reto.';
   end if;
 
   if v_reto.status not in ('aceptada', 'en_curso') then
@@ -2165,8 +2236,8 @@ begin
     raise exception 'Ese reto no existe.';
   end if;
 
-  if not exists (select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid()) then
-    raise exception 'Solo el organizador (quien propuso el reto) puede completar los datos de transmisión.';
+  if not public.es_capitan_o_dueno(v_reto.challenger_team_id) then
+    raise exception 'Solo el dueño o un capitán del equipo organizador puede completar los datos de transmisión.';
   end if;
 
   if v_reto.status <> 'aceptada' then
@@ -2458,10 +2529,9 @@ create policy "clan_war_matches_select_propio"
   to authenticated
   using (
     exists (
-      select 1
-      from public.clan_wars cw
-      join public.teams t on t.id in (cw.challenger_team_id, cw.challenged_team_id)
-      where cw.id = clan_war_id and t.owner_id = auth.uid()
+      select 1 from public.clan_wars cw
+      where cw.id = clan_war_id
+        and (public.es_capitan_o_dueno(cw.challenger_team_id) or public.es_capitan_o_dueno(cw.challenged_team_id))
     )
   );
 
@@ -2549,11 +2619,8 @@ begin
     raise exception 'Esa guerra no existe.';
   end if;
 
-  if not exists (
-    select 1 from public.teams
-    where (id = v_reto.challenger_team_id or id = v_reto.challenged_team_id) and owner_id = auth.uid()
-  ) then
-    raise exception 'No eres capitán de ninguno de los dos equipos de esta guerra.';
+  if not public.es_capitan_o_dueno(v_reto.challenger_team_id) and not public.es_capitan_o_dueno(v_reto.challenged_team_id) then
+    raise exception 'No eres dueño ni capitán de ninguno de los dos equipos de esta guerra.';
   end if;
 
   if v_reto.status <> 'en_curso' then
@@ -2607,11 +2674,8 @@ begin
 
   select * into v_reto from public.clan_wars where id = v_match.clan_war_id;
 
-  if not exists (
-    select 1 from public.teams
-    where (id = v_reto.challenger_team_id or id = v_reto.challenged_team_id) and owner_id = auth.uid()
-  ) then
-    raise exception 'No eres capitán de ninguno de los dos equipos de esta guerra.';
+  if not public.es_capitan_o_dueno(v_reto.challenger_team_id) and not public.es_capitan_o_dueno(v_reto.challenged_team_id) then
+    raise exception 'No eres dueño ni capitán de ninguno de los dos equipos de esta guerra.';
   end if;
 
   if p_ganador_id <> v_match.jugador_challenger_id and p_ganador_id <> v_match.jugador_challenged_id then
@@ -2701,13 +2765,11 @@ begin
     raise exception 'Esta guerra no está en curso.';
   end if;
 
-  select exists (select 1 from public.teams where id = v_reto.challenger_team_id and owner_id = auth.uid())
-    into v_soy_challenger;
-  select exists (select 1 from public.teams where id = v_reto.challenged_team_id and owner_id = auth.uid())
-    into v_soy_challenged;
+  v_soy_challenger := public.es_capitan_o_dueno(v_reto.challenger_team_id);
+  v_soy_challenged := public.es_capitan_o_dueno(v_reto.challenged_team_id);
 
   if not v_soy_challenger and not v_soy_challenged then
-    raise exception 'No eres capitán de ninguno de los dos equipos de esta guerra.';
+    raise exception 'No eres dueño ni capitán de ninguno de los dos equipos de esta guerra.';
   end if;
 
   if v_soy_challenger then
@@ -3965,8 +4027,8 @@ as $$
 declare
   v_id uuid;
 begin
-  if not exists (select 1 from public.teams where id = p_team_id and owner_id = auth.uid()) then
-    raise exception 'Solo el dueño del equipo puede crear un jugador temporal.';
+  if not public.es_capitan_o_dueno(p_team_id) then
+    raise exception 'Solo el dueño o un capitán del equipo puede crear un jugador temporal.';
   end if;
 
   if p_nick_temporal !~ '^[A-Za-z0-9_Øø]{3,13}$' then
@@ -4001,8 +4063,8 @@ begin
     raise exception 'Ese jugador temporal ya fue reemplazado.';
   end if;
 
-  if not exists (select 1 from public.teams where id = v_temp.team_id and owner_id = auth.uid()) then
-    raise exception 'Solo el dueño del equipo puede reemplazar un jugador temporal.';
+  if not public.es_capitan_o_dueno(v_temp.team_id) then
+    raise exception 'Solo el dueño o un capitán del equipo puede reemplazar un jugador temporal.';
   end if;
 
   select id into v_perfil_id from public.profiles where nick = p_nick and unique_id = p_unique_id;

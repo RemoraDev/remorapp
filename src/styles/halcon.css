@@ -1333,6 +1333,14 @@ input[type="radio"] {
   padding: 0.15rem 0.55rem;
 }
 
+/* Capitán (migración 038): mismo tamaño que "Dueño", pero en un color
+   distinto -- a propósito, para no confundir un permiso delegado y
+   revocable con el dueño real del equipo. */
+.team-captain-badge {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+}
+
 /* Liga + MMR (+ nivel) del sistema de MMR y ligas oficiales
    (migración 020, reemplaza al viejo sistema de XP/nivel) -- chico y
    reusado en listas; la variante .nivel-badge-corner la superpone en
