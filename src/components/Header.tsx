@@ -3,7 +3,6 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
-import LigaBadge from "./LigaBadge";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header() {
@@ -59,29 +58,26 @@ export default function Header() {
                 document.body
               )}
 
+              {/* Solo estas 3 opciones + Cerrar sesión -- el Nick#ID y la
+                  insignia de liga/MMR/nivel que antes iban acá ahora
+                  viven en "Mi perfil" (el perfil público), no hace
+                  falta repetirlos en el menú. */}
               <div className={`header-user-menu ${menuAbierto ? "is-open" : ""}`} aria-hidden={!menuAbierto}>
-                <Link to="/perfil" className="header-user-menu-identity" onClick={cerrarMenu}>
-                  <p className="header-user-menu-nick">
-                    {profile?.nick ?? "Jugador de RemorApp"}
-                    {profile?.nick && <span className="profile-nick-id">#{profile.unique_id}</span>}
-                  </p>
-                  {profile && (
-                    <LigaBadge
-                      liga={profile.liga_1v1}
-                      mmr={profile.mmr_1v1}
-                      nivel={profile.nivel_1v1}
-                      bancaRota={profile.banca_rota}
-                    />
-                  )}
+                <Link to="/perfil" className="header-user-menu-item" onClick={cerrarMenu}>
+                  Editar mis datos
                 </Link>
 
-                <div className="header-user-menu-divider" />
+                <Link to="/perfil?tab=apariencia" className="header-user-menu-item" onClick={cerrarMenu}>
+                  Configuración
+                </Link>
 
                 {profile?.es_admin && (
                   <Link to="/admin" className="header-user-menu-item" onClick={cerrarMenu}>
-                    Admin
+                    Administración
                   </Link>
                 )}
+
+                <div className="header-user-menu-divider" />
 
                 <button type="button" className="header-user-menu-item" onClick={() => void handleCerrarSesion()}>
                   Cerrar sesión

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -79,7 +79,13 @@ export default function ProfilePage() {
   const { user, profile, loading, refreshProfile } = useAuth();
   const { tema, setTema } = useTheme();
   const location = useLocation();
-  const [pestanaActiva, setPestanaActiva] = useState<PestanaConfiguracion>("datos");
+  // El menú del avatar en el header manda acá con ?tab=apariencia para
+  // "Configuración" -- sin el parámetro (o con cualquier otro valor),
+  // arranca en "Editar mis datos" como siempre.
+  const [searchParams] = useSearchParams();
+  const [pestanaActiva, setPestanaActiva] = useState<PestanaConfiguracion>(
+    searchParams.get("tab") === "apariencia" ? "apariencia" : "datos"
+  );
   // Llega desde LoginPage/RegisterPage cuando alguien con sesión activa
   // intentó entrar o registrarse de nuevo (ver Navigate en esas páginas).
   const avisoRedireccion = (location.state as { aviso?: string } | null)?.aviso ?? null;

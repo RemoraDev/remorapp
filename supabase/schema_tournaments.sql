@@ -59,6 +59,9 @@ create table public.profiles (
   -- (header, listas de participantes, miembros de equipo) -- no
   -- afecta a los logos de equipo, que son un concepto aparte.
   avatar_forma text not null default 'cuadrado' check (avatar_forma in ('cuadrado', 'redondo')),
+  -- Banner del Perfil Público de Jugador (migración 032) -- mismo
+  -- concepto que teams.banner_url, recorte 4:1.
+  banner_url text,
   bio text,
   -- Se recalcula sola (ver trigger actualizar_cuenta_validada): la
   -- app nunca la setea a mano, alcanza con guardar nick/country/
@@ -754,7 +757,8 @@ grant usage on schema public to anon, authenticated;
 -- en la Sala de la Fama para cualquiera.
 grant select (
   id, nombre, perfil_tipo, es_admin, es_caster, nick, unique_id,
-  country, sc2_region, sc2_id, liga, avatar_url, avatar_forma, bio,
+  country, sc2_region, sc2_id, liga, avatar_url, avatar_forma,
+  banner_url, bio,
   cuenta_validada, suspendido, creado_en,
   mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos,
   valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable,
@@ -778,7 +782,7 @@ grant select (
 -- admin_listar_usuarios()), security definer, exige is_admin().
 grant update (
   nombre, es_caster, nick, country, sc2_region,
-  sc2_id, liga, avatar_url, avatar_forma
+  sc2_id, liga, avatar_url, avatar_forma, banner_url, bio
 ) on public.profiles to authenticated;
 
 grant select on public.maps to anon, authenticated;
@@ -2616,6 +2620,30 @@ create policy "team_banners_subida_propia"
   to authenticated
   with check (
     bucket_id = 'team-banners'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- Banner del Perfil Público de Jugador (migración 032) -- mismo
+-- patrón que team-banners.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'player-banners',
+  'player-banners',
+  true,
+  3145728,
+  array['image/png', 'image/jpeg', 'image/webp']
+)
+on conflict (id) do nothing;
+
+create policy "player_banners_lectura_publica"
+  on storage.objects for select
+  using (bucket_id = 'player-banners');
+
+create policy "player_banners_subida_propia"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'player-banners'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
 

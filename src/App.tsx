@@ -9,6 +9,7 @@ import TournamentDetailPage from "./pages/TournamentDetailPage";
 import TournamentHistoryPage from "./pages/TournamentHistoryPage";
 import HistoricalTournamentsPage from "./pages/HistoricalTournamentsPage";
 import HallOfFamePage from "./pages/HallOfFamePage";
+import PlayerDetailPage from "./pages/PlayerDetailPage";
 import MyTournamentsPage from "./pages/MyTournamentsPage";
 import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
@@ -43,6 +44,7 @@ function AppContent() {
           <Route path="/tournaments/history" element={<TournamentHistoryPage />} />
           <Route path="/torneos-historicos" element={<HistoricalTournamentsPage />} />
           <Route path="/sala-de-la-fama" element={<HallOfFamePage />} />
+          <Route path="/jugador/:nick/:uniqueId" element={<PlayerDetailPage />} />
           <Route path="/tournaments/inscritos" element={<MyTournamentsPage />} />
           <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
           <Route path="/perfil" element={<ProfilePage />} />

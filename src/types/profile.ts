@@ -137,6 +137,7 @@ export interface Profile {
   gran_maestro_alcanzado_en: string | null;
   avatar_url: string | null;
   avatar_forma: AvatarForma;
+  banner_url: string | null;
   bio: string | null;
   cuenta_validada: boolean;
   // Cuenta suspendida desde /admin: no puede crear torneos ni
