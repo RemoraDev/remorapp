@@ -776,7 +776,9 @@ export default function ProfilePage() {
         </>
       )}
 
-      <h2 className="detail-subtitle">Títulos Padre/Hijo</h2>
+      <h2 className="detail-subtitle" id="titulos-padre-hijo">
+        Títulos Padre/Hijo
+      </h2>
       <p className="tournament-card-meta">
         Se resuelven solos cuando ganas o pierdes una partida 1v1 real contra el rival, en cualquier
         torneo.

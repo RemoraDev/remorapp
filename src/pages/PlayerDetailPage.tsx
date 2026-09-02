@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import MmrProgressBar from "../components/MmrProgressBar";
 import PercentBar from "../components/PercentBar";
-import type { AvatarForma, LinkTransmision } from "../types/profile";
+import { COUNTRY_OPTIONS } from "../types/profile";
+import type { AvatarForma, Country, LinkTransmision } from "../types/profile";
 import type { TituloActivoTodos } from "../types/titulos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
@@ -17,6 +19,7 @@ interface PerfilPublico {
   avatarForma: AvatarForma;
   bannerUrl: string | null;
   bio: string | null;
+  country: Country | null;
   esCaster: boolean;
   carisma: number;
   horarioStream: string | null;
@@ -60,12 +63,14 @@ function tituloMasRelevante(
 // "Editar mis datos" en el menú del avatar (ver ProfilePage.tsx).
 export default function PlayerDetailPage() {
   const { nick, uniqueId } = useParams<{ nick: string; uniqueId: string }>();
+  const { user } = useAuth();
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
   const [tituloTexto, setTituloTexto] = useState<string | null>(null);
   const [equipoActual, setEquipoActual] = useState<EquipoActual | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [panelAbierto, setPanelAbierto] = useState(false);
 
   useEffect(() => {
     const cargarPerfilPublico = async () => {
@@ -76,7 +81,7 @@ export default function PlayerDetailPage() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, nick, unique_id, avatar_url, avatar_forma, banner_url, bio, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, valentia_jugador, responsabilidad_cw, responsabilidad_torneos"
+          "id, nick, unique_id, avatar_url, avatar_forma, banner_url, bio, country, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, valentia_jugador, responsabilidad_cw, responsabilidad_torneos"
         )
         .eq("nick", nick)
         .eq("unique_id", uniqueId)
@@ -96,6 +101,7 @@ export default function PlayerDetailPage() {
         avatarForma: data.avatar_forma,
         bannerUrl: data.banner_url,
         bio: data.bio,
+        country: data.country,
         esCaster: data.es_caster,
         carisma: data.carisma,
         horarioStream: data.horario_stream,
@@ -226,15 +232,69 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
+      {/* La bio va acá, inmediatamente debajo del Nick#ID y antes de
+          Estadísticas -- no al final de la página. */}
+      {perfil.bio && <p className="team-detail-description">{perfil.bio}</p>}
+
       <h2 className="detail-subtitle">Estadísticas</h2>
       <MmrProgressBar mmr={perfil.mmr} liga={perfil.liga} bancaRota={perfil.bancaRota} />
 
-      {/* Tarjeta agrupada con fondo propio para las barras verticales
-          (siempre Valentía y Responsabilidad en Torneos; Responsabilidad
-          en Clan War solo con equipo actual; Carisma solo si es
-          caster), con la sección de transmisión AL COSTADO -- no
-          debajo -- cuando es caster. */}
+      {/* Dos columnas: a la izquierda, país + Equipo actual (+
+          Transmisión si es caster); a la derecha, la tarjeta agrupada
+          de barras verticales. En pantallas angostas se apilan, la
+          izquierda arriba. */}
       <div className="player-detail-stats-row">
+        <div className="player-detail-info-column">
+          {perfil.country && (
+            <p className="tournament-card-meta">
+              País: {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
+            </p>
+          )}
+
+          {equipoActual && (
+            <>
+              <h3 className="detail-subtitle">Equipo actual</h3>
+              <Link to={`/equipos/${equipoActual.tag}`} className="team-card">
+                {equipoActual.logoUrl ? (
+                  <img src={equipoActual.logoUrl} alt={equipoActual.name} className="team-card-logo" />
+                ) : (
+                  <div className="team-card-logo team-card-logo-placeholder">{equipoActual.tag.charAt(0)}</div>
+                )}
+                <div className="team-card-info">
+                  <p className="team-card-name">{equipoActual.name}</p>
+                  <p className="team-card-tag">[{equipoActual.tag}]</p>
+                </div>
+              </Link>
+            </>
+          )}
+
+          {perfil.esCaster && (
+            <>
+              <h3 className="detail-subtitle">Transmisión</h3>
+              {perfil.linksTransmision.length === 0 ? (
+                <p className="detail-empty">Todavía no agregó links de transmisión.</p>
+              ) : (
+                <div className="detail-map-list">
+                  {perfil.linksTransmision.map((link, indice) => (
+                    <a
+                      key={`${link.plataforma}-${indice}`}
+                      href={link.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className="badge badge-format"
+                    >
+                      {link.plataforma}
+                    </a>
+                  ))}
+                </div>
+              )}
+              {perfil.horarioStream && (
+                <p className="tournament-card-meta">Horario habitual: {perfil.horarioStream}</p>
+              )}
+            </>
+          )}
+        </div>
+
         <div className="player-detail-stats-column stats-card-group">
           <PercentBar label="Valentía del jugador" value={perfil.valentiaJugador} vertical />
           <PercentBar label="Responsabilidad en Torneos" value={perfil.responsabilidadTorneos} vertical />
@@ -243,53 +303,41 @@ export default function PlayerDetailPage() {
           )}
           {perfil.esCaster && <PercentBar label="Carisma" value={perfil.carisma} vertical />}
         </div>
-
-        {perfil.esCaster && (
-          <div className="player-detail-stream-column">
-            <h3 className="detail-subtitle">Transmisión</h3>
-            {perfil.linksTransmision.length === 0 ? (
-              <p className="detail-empty">Todavía no agregó links de transmisión.</p>
-            ) : (
-              <div className="detail-map-list">
-                {perfil.linksTransmision.map((link, indice) => (
-                  <a
-                    key={`${link.plataforma}-${indice}`}
-                    href={link.url}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="badge badge-format"
-                  >
-                    {link.plataforma}
-                  </a>
-                ))}
-              </div>
-            )}
-            {perfil.horarioStream && (
-              <p className="tournament-card-meta">Horario habitual: {perfil.horarioStream}</p>
-            )}
-          </div>
-        )}
       </div>
 
-      {equipoActual && (
-        <>
-          <h2 className="detail-subtitle">Equipo actual</h2>
-          <Link to={`/equipos/${equipoActual.tag}`} className="team-card">
-            {equipoActual.logoUrl ? (
-              <img src={equipoActual.logoUrl} alt={equipoActual.name} className="team-card-logo" />
-            ) : (
-              <div className="team-card-logo team-card-logo-placeholder">{equipoActual.tag.charAt(0)}</div>
-            )}
-            <div className="team-card-info">
-              <p className="team-card-name">{equipoActual.name}</p>
-              <p className="team-card-tag">[{equipoActual.tag}]</p>
-            </div>
-          </Link>
-        </>
-      )}
+      {/* Panel de control: solo cuando el usuario ve su propio perfil,
+          nunca en el de otra persona. Mismo patrón visual que el de
+          /equipos/:tag, pero acá cada opción es un acceso directo a
+          una sección de ProfilePage.tsx (esta página se mantiene de
+          solo lectura, sin ningún formulario propio). */}
+      {user?.id === perfil.id && (
+        <div className="team-control-panel-wrap">
+          <button type="button" className="btn btn-primary btn-block" onClick={() => setPanelAbierto((a) => !a)}>
+            {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
+          </button>
 
-      {/* La bio va al final de todo el perfil, a propósito. */}
-      {perfil.bio && <p className="team-detail-description">{perfil.bio}</p>}
+          {panelAbierto && (
+            <div className="team-leader-panel">
+              <div className="team-panel-menu">
+                <Link to="/perfil" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Editar mis datos</span>
+                  <span className="team-panel-menu-item-desc">
+                    Identidad, portada, descripción y links de transmisión
+                  </span>
+                </Link>
+                <Link to="/perfil?tab=apariencia" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Apariencia</span>
+                  <span className="team-panel-menu-item-desc">Tema del sitio y forma del avatar</span>
+                </Link>
+                <Link to="/perfil#titulos-padre-hijo" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Títulos Padre/Hijo</span>
+                  <span className="team-panel-menu-item-desc">Responder y proponer títulos</span>
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

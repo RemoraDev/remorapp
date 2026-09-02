@@ -1309,20 +1309,18 @@ input[type="radio"] {
   min-width: 16rem;
 }
 
-.player-detail-stream-column {
+/* Columna izquierda: país, Equipo actual (en su propio recuadro, vía
+   .team-card) y, si es caster, Transmisión -- todo apilado. */
+.player-detail-info-column {
   flex: 1 1 16rem;
   min-width: 16rem;
-  border-left: 1px solid var(--color-border);
-  padding-left: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
-@media (max-width: 640px) {
-  .player-detail-stream-column {
-    border-left: none;
-    padding-left: 0;
-    border-top: 1px solid var(--color-border);
-    padding-top: 1rem;
-  }
+.player-detail-info-column .team-card {
+  margin: 0.25rem 0 0.5rem;
 }
 
 .team-owner-badge {
