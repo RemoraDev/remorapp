@@ -9,6 +9,8 @@ import MmrProgressBar from "../components/MmrProgressBar";
 import PercentBar from "../components/PercentBar";
 import type { AvatarForma } from "../types/profile";
 import type { TituloActivoTodos } from "../types/titulos";
+import type { DatosSc2, RazaSc2 } from "../types/juegos";
+import { obtenerJuegoIdSc2 } from "../lib/juegos";
 
 const BANNER_MAX_BYTES = 3 * 1024 * 1024;
 
@@ -27,6 +29,8 @@ interface PerfilPublico {
   valentiaJugador: number;
   responsabilidadCw: number;
   responsabilidadTorneos: number;
+  razaPrincipal: RazaSc2 | null;
+  razaSecundaria: RazaSc2 | null;
 }
 
 interface EquipoActual {
@@ -104,7 +108,26 @@ export default function PlayerDetailPage() {
       valentiaJugador: data.valentia_jugador,
       responsabilidadCw: data.responsabilidad_cw,
       responsabilidadTorneos: data.responsabilidad_torneos,
+      razaPrincipal: null,
+      razaSecundaria: null,
     };
+
+    // Perfil de juego de StarCraft II (migración 034): opcional, así
+    // que puede no existir todavía -- se resuelve el juego_id una vez
+    // y se busca la fila puntual de este jugador.
+    const idSc2 = await obtenerJuegoIdSc2();
+    if (idSc2) {
+      const { data: perfilJuegoData } = await supabase
+        .from("perfiles_juego")
+        .select("datos")
+        .eq("user_id", perfilCargado.id)
+        .eq("juego_id", idSc2)
+        .maybeSingle();
+      const datos = perfilJuegoData?.datos as DatosSc2 | undefined;
+      perfilCargado.razaPrincipal = datos?.raza_principal ?? null;
+      perfilCargado.razaSecundaria = datos?.raza_secundaria ?? null;
+    }
+
     setPerfil(perfilCargado);
     setBio(data.bio ?? "");
 
@@ -276,6 +299,12 @@ export default function PlayerDetailPage() {
       <h2 className="detail-subtitle">Estadísticas</h2>
       <MmrProgressBar mmr={perfil.mmr} liga={perfil.liga} bancaRota={perfil.bancaRota} />
       <span className="nivel-badge nivel-badge-grande">Nv. {perfil.nivel}</span>
+      {perfil.razaPrincipal && (
+        <span className="liga-badge">
+          Raza: {perfil.razaPrincipal}
+          {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
+        </span>
+      )}
       <PercentBar label="Valentía" value={perfil.valentiaJugador} />
       <PercentBar label="Responsabilidad en Clan Wars" value={perfil.responsabilidadCw} />
       <PercentBar label="Responsabilidad en torneos" value={perfil.responsabilidadTorneos} />

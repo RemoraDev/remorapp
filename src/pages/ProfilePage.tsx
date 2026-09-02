@@ -8,6 +8,9 @@ import { validarNick } from "../lib/nickValidation";
 import { recortarImagenCuadrada } from "../lib/teams";
 import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
 import type { AvatarForma, Country, Liga, Sc2Region, Profile } from "../types/profile";
+import { RAZA_SC2_OPTIONS } from "../types/juegos";
+import type { DatosSc2, RazaSc2 } from "../types/juegos";
+import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import Avatar from "../components/Avatar";
 import MmrProgressBar from "../components/MmrProgressBar";
 import PercentBar from "../components/PercentBar";
@@ -101,6 +104,16 @@ export default function ProfilePage() {
   const [errorIdentidad, setErrorIdentidad] = useState<string | null>(null);
   const [identidadGuardada, setIdentidadGuardada] = useState(false);
 
+  // --- Perfil de juego de StarCraft II (migración 034): razas, en
+  // perfiles_juego -- opcional, no bloquea cuenta_validada. juegoIdSc2
+  // se resuelve una vez y queda guardado para el guardar/cargar. ---
+  const [juegoIdSc2, setJuegoIdSc2] = useState<string | null>(null);
+  const [razaPrincipal, setRazaPrincipal] = useState<RazaSc2 | "">("");
+  const [razaSecundaria, setRazaSecundaria] = useState<RazaSc2 | "">("");
+  const [guardandoRaza, setGuardandoRaza] = useState(false);
+  const [errorRaza, setErrorRaza] = useState<string | null>(null);
+  const [razaGuardada, setRazaGuardada] = useState(false);
+
   // --- "Soy caster": switch independiente de perfil_tipo, se guarda
   // solo al tocarlo (no hace falta un botón "Guardar" aparte). ---
   const [esCaster, setEsCaster] = useState(false);
@@ -152,6 +165,27 @@ export default function ProfilePage() {
     setLiga(profile.liga ?? "");
     setEsCaster(profile.es_caster);
   }, [profile]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    (async () => {
+      const idSc2 = await obtenerJuegoIdSc2();
+      setJuegoIdSc2(idSc2);
+      if (!idSc2) return;
+
+      const { data } = await supabase
+        .from("perfiles_juego")
+        .select("datos")
+        .eq("user_id", user.id)
+        .eq("juego_id", idSc2)
+        .maybeSingle();
+
+      const datos = data?.datos as DatosSc2 | undefined;
+      setRazaPrincipal(datos?.raza_principal ?? "");
+      setRazaSecundaria(datos?.raza_secundaria ?? "");
+    })();
+  }, [user]);
 
   const cargarInvitaciones = async () => {
     if (!user) {
@@ -407,6 +441,33 @@ export default function ProfilePage() {
 
     await refreshProfile();
     setIdentidadGuardada(true);
+  };
+
+  const handleGuardarRaza = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user || !juegoIdSc2) return;
+
+    setGuardandoRaza(true);
+    setErrorRaza(null);
+    setRazaGuardada(false);
+
+    const datos: DatosSc2 = {
+      raza_principal: razaPrincipal || null,
+      raza_secundaria: razaSecundaria || null,
+    };
+
+    const { error } = await supabase
+      .from("perfiles_juego")
+      .upsert({ user_id: user.id, juego_id: juegoIdSc2, datos }, { onConflict: "user_id,juego_id" });
+
+    setGuardandoRaza(false);
+
+    if (error) {
+      setErrorRaza(error.message);
+      return;
+    }
+
+    setRazaGuardada(true);
   };
 
   const handleToggleCaster = async () => {
@@ -850,6 +911,12 @@ export default function ProfilePage() {
               </select>
             </div>
 
+            {/* Agrupa visualmente esto y los dos siguientes (ID de SC2,
+                liga) bajo "StarCraft II", igual que la raza más abajo,
+                aunque técnicamente sigan viviendo en profiles -- ver el
+                pedido del perfil de juego agnóstico. */}
+            <h3 className="detail-subtitle">StarCraft II</h3>
+
             <div className="form-group">
               <label className="form-label" htmlFor="perfil-sc2-region">
                 Servidor de StarCraft II (al que te conectas)
@@ -907,6 +974,57 @@ export default function ProfilePage() {
 
             <button type="submit" className="btn btn-primary btn-block" disabled={guardandoIdentidad}>
               {guardandoIdentidad ? "Guardando..." : "Guardar"}
+            </button>
+          </form>
+
+          {/* Raza principal/secundaria: perfiles_juego, no profiles --
+              se guarda aparte, con su propio botón, aunque quede
+              agrupada bajo "StarCraft II" con lo de arriba. Opcional,
+              no bloquea cuenta_validada. */}
+          <form className="auth-form" onSubmit={handleGuardarRaza}>
+            {errorRaza && <div className="form-error">{errorRaza}</div>}
+            {razaGuardada && <div className="form-success">Tu raza se guardó correctamente.</div>}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-raza-principal">
+                Raza principal
+              </label>
+              <select
+                id="perfil-raza-principal"
+                className="form-select"
+                value={razaPrincipal}
+                onChange={(e) => setRazaPrincipal(e.target.value as RazaSc2)}
+              >
+                <option value="">Prefiero no decirlo</option>
+                {RAZA_SC2_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-raza-secundaria">
+                Raza secundaria (opcional)
+              </label>
+              <select
+                id="perfil-raza-secundaria"
+                className="form-select"
+                value={razaSecundaria}
+                onChange={(e) => setRazaSecundaria(e.target.value as RazaSc2)}
+              >
+                <option value="">Ninguna</option>
+                {RAZA_SC2_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoRaza || !juegoIdSc2}>
+              {guardandoRaza ? "Guardando..." : "Guardar raza"}
             </button>
           </form>
 

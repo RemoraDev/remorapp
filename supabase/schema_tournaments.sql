@@ -3865,6 +3865,57 @@ create policy "reportes_staff_insert_propio"
 
 grant select, insert on public.reportes_staff to authenticated;
 
+-- ------------------------------------------------------------
+-- Migración 034: Perfiles de juego agnósticos (hoy solo StarCraft II,
+-- estructura lista para más juegos sin rehacer nada -- ver el
+-- comentario largo en la migración).
+-- ------------------------------------------------------------
+
+create table public.catalogo_juegos (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  activo boolean not null default true
+);
+
+alter table public.catalogo_juegos enable row level security;
+
+create policy "catalogo_juegos_select_publico"
+  on public.catalogo_juegos for select
+  using (true);
+
+grant select on public.catalogo_juegos to anon, authenticated;
+
+insert into public.catalogo_juegos (nombre, activo) values ('StarCraft II', true);
+
+create table public.perfiles_juego (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  juego_id uuid not null references public.catalogo_juegos (id),
+  datos jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  unique (user_id, juego_id)
+);
+
+alter table public.perfiles_juego enable row level security;
+
+create policy "perfiles_juego_select_publico"
+  on public.perfiles_juego for select
+  using (true);
+
+create policy "perfiles_juego_insert_propio"
+  on public.perfiles_juego for insert
+  to authenticated
+  with check (user_id = auth.uid());
+
+create policy "perfiles_juego_update_propio"
+  on public.perfiles_juego for update
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
+grant select on public.perfiles_juego to anon, authenticated;
+grant insert, update on public.perfiles_juego to authenticated;
+
 -- ============================================================
 -- Después de correr todo lo de arriba, activa tu propio usuario
 -- como administrador (cambia el email):

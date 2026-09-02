@@ -10,6 +10,8 @@ import type { AvatarForma } from "../types/profile";
 import { CLAN_WAR_MOTIVO_RECHAZO_OPTIONS, CLAN_WAR_REPORTE_MOTIVO_OPTIONS, TEMAS_EQUIPO } from "../types/teams";
 import type { ClanWarMotivoRechazo, ClanWarReporteMotivo, ClanWarStatus, TeamRow, TemaEquipo } from "../types/teams";
 import { NICK_REGEX, validarNick } from "../lib/nickValidation";
+import type { DatosSc2, RazaSc2 } from "../types/juegos";
+import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import { datetimeLocalAIso, dentroDeVentanaCheckIn, formatearHoraCet, formatearHoraLocal } from "../lib/clanWars";
 import type { InvestigacionJugador } from "../types/investigacion";
 import Avatar from "../components/Avatar";
@@ -41,6 +43,10 @@ interface MiembroConNombre {
   responsabilidadCw: number;
   pocoConfiable: boolean;
   roles: string[];
+  // Perfil de juego de StarCraft II (migración 034) -- opcional, puede
+  // no existir todavía para este jugador.
+  razaPrincipal: RazaSc2 | null;
+  razaSecundaria: RazaSc2 | null;
 }
 
 interface JugadorEncontrado {
@@ -85,6 +91,8 @@ interface MiembroRoster {
   nick: string | null;
   uniqueId: string | null;
   sc2Id: string | null;
+  razaPrincipal: RazaSc2 | null;
+  razaSecundaria: RazaSc2 | null;
 }
 
 interface ReporteConNombres {
@@ -398,26 +406,53 @@ export default function TeamDetailPage() {
       .eq("team_id", equipoData.id)
       .order("joined_at", { ascending: true });
 
-    setMiembros(
-      (miembrosData ?? []).map((m) => {
-        const perfil = extraerPerfil(m.profiles);
-        return {
-          userId: m.user_id,
-          nick: perfil.nick,
-          uniqueId: perfil.unique_id,
-          avatarUrl: perfil.avatar_url,
-          avatarForma: perfil.avatar_forma,
-          liga: perfil.liga,
-          mmrEquipos: perfil.mmr_equipos,
-          ligaEquipos: perfil.liga_equipos,
-          bancaRota: perfil.banca_rota,
-          valentiaJugador: perfil.valentia_jugador,
-          responsabilidadCw: perfil.responsabilidad_cw,
-          pocoConfiable: perfil.poco_confiable,
-          roles: m.roles as string[],
-        };
-      })
-    );
+    const miembrosBase: MiembroConNombre[] = (miembrosData ?? []).map((m) => {
+      const perfil = extraerPerfil(m.profiles);
+      return {
+        userId: m.user_id,
+        nick: perfil.nick,
+        uniqueId: perfil.unique_id,
+        avatarUrl: perfil.avatar_url,
+        avatarForma: perfil.avatar_forma,
+        liga: perfil.liga,
+        mmrEquipos: perfil.mmr_equipos,
+        ligaEquipos: perfil.liga_equipos,
+        bancaRota: perfil.banca_rota,
+        valentiaJugador: perfil.valentia_jugador,
+        responsabilidadCw: perfil.responsabilidad_cw,
+        pocoConfiable: perfil.poco_confiable,
+        roles: m.roles as string[],
+        razaPrincipal: null,
+        razaSecundaria: null,
+      };
+    });
+
+    // Raza de StarCraft II (migración 034): opcional para cada
+    // miembro -- se resuelve el juego_id una vez y se completa acá,
+    // en vez de embeber perfiles_juego en la consulta de arriba.
+    const idSc2 = await obtenerJuegoIdSc2();
+    if (idSc2 && miembrosBase.length > 0) {
+      const { data: razasData } = await supabase
+        .from("perfiles_juego")
+        .select("user_id, datos")
+        .eq("juego_id", idSc2)
+        .in(
+          "user_id",
+          miembrosBase.map((m) => m.userId)
+        );
+
+      const razaPorUserId: Record<string, DatosSc2> = Object.fromEntries(
+        (razasData ?? []).map((r) => [r.user_id, r.datos as DatosSc2])
+      );
+
+      for (const m of miembrosBase) {
+        const datos = razaPorUserId[m.userId];
+        m.razaPrincipal = datos?.raza_principal ?? null;
+        m.razaSecundaria = datos?.raza_secundaria ?? null;
+      }
+    }
+
+    setMiembros(miembrosBase);
 
     // Jugadores temporales (migración 033): públicos, igual que el
     // resto del roster -- si ya fueron reemplazados, se resuelve acá
@@ -543,6 +578,23 @@ export default function TeamDetailPage() {
           .select("team_id, user_id, profiles(nick, unique_id, sc2_id)")
           .in("team_id", teamIdsInvolucrados);
 
+        // Raza de StarCraft II (migración 034) para cada jugador del
+        // roster -- el capitán la necesita a mano en el check-in, para
+        // decidir el line-up real contra un rival específico.
+        const idSc2ParaRoster = await obtenerJuegoIdSc2();
+        let razaPorUserIdRoster: Record<string, DatosSc2> = {};
+        if (idSc2ParaRoster) {
+          const userIdsRoster = [...new Set((rosterData ?? []).map((f) => f.user_id))];
+          const { data: razasRosterData } = await supabase
+            .from("perfiles_juego")
+            .select("user_id, datos")
+            .eq("juego_id", idSc2ParaRoster)
+            .in("user_id", userIdsRoster);
+          razaPorUserIdRoster = Object.fromEntries(
+            (razasRosterData ?? []).map((r) => [r.user_id, r.datos as DatosSc2])
+          );
+        }
+
         const rosterPorTeamIdTmp: Record<string, MiembroRoster[]> = {};
         for (const fila of rosterData ?? []) {
           const perfil = fila.profiles as unknown as
@@ -550,12 +602,15 @@ export default function TeamDetailPage() {
             | { nick: string | null; unique_id: string | null; sc2_id: string | null }[]
             | null;
           const p = Array.isArray(perfil) ? perfil[0] : perfil;
+          const razaDeFila = razaPorUserIdRoster[fila.user_id];
           const lista = rosterPorTeamIdTmp[fila.team_id] ?? [];
           lista.push({
             userId: fila.user_id,
             nick: p?.nick ?? null,
             uniqueId: p?.unique_id ?? null,
             sc2Id: p?.sc2_id ?? null,
+            razaPrincipal: razaDeFila?.raza_principal ?? null,
+            razaSecundaria: razaDeFila?.raza_secundaria ?? null,
           });
           rosterPorTeamIdTmp[fila.team_id] = lista;
         }
@@ -1586,6 +1641,12 @@ export default function TeamDetailPage() {
       {m.nick ?? "Jugador de RemorApp"}
       {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
       {m.liga && <span className="liga-badge">{m.liga}</span>}
+      {m.razaPrincipal && (
+        <span className="liga-badge">
+          {m.razaPrincipal}
+          {m.razaSecundaria && ` / ${m.razaSecundaria}`}
+        </span>
+      )}
       <LigaBadge liga={m.ligaEquipos} mmr={m.mmrEquipos} bancaRota={m.bancaRota} />
       <span className="liga-badge">Valentía {m.valentiaJugador}%</span>
       <span className="liga-badge">Responsabilidad {m.responsabilidadCw}%</span>
@@ -2281,6 +2342,12 @@ export default function TeamDetailPage() {
                                   <div key={m.userId} className="detail-participant-item">
                                     {m.nick ?? "Jugador de RemorApp"}
                                     {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+                                    {m.razaPrincipal && (
+                                      <span className="liga-badge">
+                                        {m.razaPrincipal}
+                                        {m.razaSecundaria && ` / ${m.razaSecundaria}`}
+                                      </span>
+                                    )}
                                     <span className="tournament-card-meta">
                                       SC2: {m.sc2Id ?? "sin declarar"}
                                     </span>
