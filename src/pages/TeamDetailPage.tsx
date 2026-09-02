@@ -1829,6 +1829,19 @@ export default function TeamDetailPage() {
           ) : (
             <div className="team-detail-logo team-card-logo-placeholder">{equipo.tag.charAt(0)}</div>
           )}
+          {/* Los equipos no tienen "nivel" propio -- ese concepto es
+              solo de MMR 1v1 individual (ver calcular_nivel() en la
+              base). Como insignia de esquina se usa solo el nombre de
+              la liga (no "liga · MMR" completo, como en LigaBadge): ese
+              texto es demasiado largo para una insignia chica sobre un
+              logo de 4.5rem y se salía de la pantalla. El MMR exacto
+              igual se sigue viendo, en el texto de la barra de
+              progreso, justo debajo. */}
+          <span
+            className={`nivel-badge nivel-badge-corner ${equipo.banca_rota ? "nivel-badge-banca-rota" : ""}`}
+          >
+            {equipo.liga}
+          </span>
         </div>
       </div>
 
@@ -1837,26 +1850,26 @@ export default function TeamDetailPage() {
           en la página. */}
       {equipo.description && <p className="team-detail-description">{equipo.description}</p>}
 
-      <MmrProgressBar mmr={equipo.mmr} liga={equipo.liga} bancaRota={equipo.banca_rota} />
-      <PercentBar label="Valentía del clan" value={equipo.valentia} />
-      <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
-
       <div className="team-detail-header">
         <div>
-          <h1 className="section-title">
-            {equipo.name}
-            <LigaBadge
-              liga={equipo.liga}
-              mmr={equipo.mmr}
-              bancaRota={equipo.banca_rota}
-              className="nivel-badge-grande"
-            />
-          </h1>
+          <h1 className="section-title">{equipo.name}</h1>
           <p className="tournament-card-meta">
             [{equipo.tag}] · {miembros.length} {miembros.length === 1 ? "miembro" : "miembros"}
           </p>
         </div>
       </div>
+
+      <h2 className="detail-subtitle">Estadísticas</h2>
+      <MmrProgressBar mmr={equipo.mmr} liga={equipo.liga} bancaRota={equipo.banca_rota} />
+
+      {/* Misma tarjeta agrupada que en el perfil de jugador -- hoy solo
+          trae la Valentía del clan, la única barra que aplica a
+          equipos por ahora. */}
+      <div className="stats-card-group">
+        <PercentBar label="Valentía del clan" value={equipo.valentia} />
+      </div>
+
+      <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
 
       {/* El código de invitación queda a mano en la página principal,
           fuera del Panel de control -- no hace falta abrir ningún

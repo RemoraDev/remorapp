@@ -206,6 +206,7 @@ export default function PlayerDetailPage() {
             className="player-detail-avatar"
             forma={perfil.avatarForma}
           />
+          <span className="nivel-badge nivel-badge-corner">Nv. {perfil.nivel}</span>
         </div>
       </div>
 
@@ -216,25 +217,25 @@ export default function PlayerDetailPage() {
             <span className="profile-nick-id">#{perfil.uniqueId}</span>
           </h1>
           {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
+          {perfil.razaPrincipal && (
+            <span className="liga-badge">
+              Raza: {perfil.razaPrincipal}
+              {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
+            </span>
+          )}
         </div>
       </div>
 
       <h2 className="detail-subtitle">Estadísticas</h2>
       <MmrProgressBar mmr={perfil.mmr} liga={perfil.liga} bancaRota={perfil.bancaRota} />
-      <span className="nivel-badge nivel-badge-grande">Nv. {perfil.nivel}</span>
-      {perfil.razaPrincipal && (
-        <span className="liga-badge">
-          Raza: {perfil.razaPrincipal}
-          {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
-        </span>
-      )}
 
-      {/* Columna vertical de barras (siempre Valentía y Responsabilidad
-          en Torneos; Responsabilidad en Clan War solo con equipo
-          actual; Carisma solo si es caster), con la sección de
-          transmisión AL COSTADO -- no debajo -- cuando es caster. */}
+      {/* Tarjeta agrupada con fondo propio para las barras verticales
+          (siempre Valentía y Responsabilidad en Torneos; Responsabilidad
+          en Clan War solo con equipo actual; Carisma solo si es
+          caster), con la sección de transmisión AL COSTADO -- no
+          debajo -- cuando es caster. */}
       <div className="player-detail-stats-row">
-        <div className="player-detail-stats-column">
+        <div className="player-detail-stats-column stats-card-group">
           <PercentBar label="Valentía del jugador" value={perfil.valentiaJugador} />
           <PercentBar label="Responsabilidad en Torneos" value={perfil.responsabilidadTorneos} />
           {equipoActual && (

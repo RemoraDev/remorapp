@@ -1108,17 +1108,26 @@ input[type="radio"] {
   border: 1px solid var(--color-border);
 }
 
-.team-detail-banner-placeholder {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(34, 211, 238, 0.04));
+/* Fondo genérico cuando no hay banner subido: oscuro, con el mismo
+   patrón sutil de rombos que ambienta la Sala de la Fama, en vez de
+   un degradado cualquiera -- para que se sienta parte del proyecto. */
+.team-detail-banner-placeholder,
+.player-detail-banner-placeholder {
+  background-color: #06070a;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='none' stroke='%2322d3ee' stroke-opacity='0.09' stroke-width='1'%3E%3Cpath d='M0 70 L70 0 L140 70 L70 140 Z'/%3E%3Cpath d='M70 0 L70 140 M0 70 L140 70'/%3E%3Cpath d='M0 0 L35 35 M140 0 L105 35 M0 140 L35 105 M140 140 L105 105'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgba(34, 211, 238, 0.12), transparent 70%);
+  background-size: 140px 140px, 100% 100%;
 }
 
+/* Sin overflow:hidden a propósito: la insignia de nivel/liga se
+   superpone en una esquina del logo (ver .nivel-badge-corner) y no
+   debe recortarse -- el propio logo ya trae su radio de esquina. */
 .team-detail-logo-overlap {
   position: absolute;
   left: 1.25rem;
   bottom: -2rem;
   border: 3px solid var(--color-bg);
   border-radius: 0.85rem;
-  overflow: hidden;
   line-height: 0;
 }
 
@@ -1163,17 +1172,20 @@ input[type="radio"] {
   border: 1px solid var(--color-border);
 }
 
-.player-detail-banner-placeholder {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(34, 211, 238, 0.04));
-}
-
+/* Avatar grande (más que el de un miembro en una lista, a propósito),
+   sin overflow:hidden por la misma razón que .team-detail-logo-overlap:
+   la insignia de nivel se superpone en una esquina y no debe recortarse. */
 .player-detail-avatar-overlap {
   position: absolute;
   left: 1.25rem;
-  bottom: -2rem;
+  bottom: -2.75rem;
   border: 3px solid var(--color-bg);
-  overflow: hidden;
+  border-radius: 50%;
   line-height: 0;
+}
+
+.player-detail-avatar-overlap.avatar-shape-cuadrado {
+  border-radius: var(--radius-md);
 }
 
 .player-detail-header {
@@ -1184,11 +1196,39 @@ input[type="radio"] {
 }
 
 .player-detail-avatar {
-  width: 4.5rem;
-  height: 4.5rem;
+  width: 7rem;
+  height: 7rem;
   object-fit: cover;
-  font-size: 1.5rem;
+  font-size: 2.25rem;
   flex-shrink: 0;
+}
+
+/* Insignia de nivel (jugador) o de liga+MMR (equipo, que no tiene
+   nivel propio) superpuesta en la esquina inferior derecha del avatar
+   o logo grande -- mismo espíritu que el "sello" de portada+foto de
+   cualquier red social. */
+.nivel-badge.nivel-badge-corner {
+  position: absolute;
+  right: -0.5rem;
+  bottom: -0.5rem;
+  margin-left: 0;
+  /* Fondo sólido (no la versión translúcida de .nivel-badge): la
+     insignia cae encima de una foto o logo de color arbitrario, así
+     que necesita su propio respaldo opaco para seguir siendo legible
+     sin importar qué haya detrás. */
+  background: var(--color-bg);
+  border: 2px solid var(--color-bg);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.35);
+}
+
+/* Tarjeta que agrupa las barras verticales (Valentía, Responsabilidad,
+   Carisma) con un fondo propio, apenas distinto del fondo general de
+   la página -- así se leen como un solo bloque de estadísticas. */
+.stats-card-group {
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.1rem 1.25rem;
 }
 
 /* Columna vertical de barras + columna de transmisión AL COSTADO
@@ -1237,8 +1277,9 @@ input[type="radio"] {
 
 /* Liga + MMR (+ nivel) del sistema de MMR y ligas oficiales
    (migración 020, reemplaza al viejo sistema de XP/nivel) -- chico y
-   reusado en listas; la variante .nivel-badge-grande se usa para la
-   insignia del clan, bien destacada en /equipos/:tag. */
+   reusado en listas; la variante .nivel-badge-corner la superpone en
+   la esquina del avatar/logo grande en /jugador/:nick/:uniqueId y
+   /equipos/:tag. */
 .nivel-badge {
   margin-left: 0.5rem;
   border-radius: 999px;
@@ -1248,13 +1289,6 @@ input[type="radio"] {
   font-weight: 700;
   padding: 0.15rem 0.55rem;
   white-space: nowrap;
-}
-
-.nivel-badge-grande {
-  margin-left: 0;
-  font-size: 0.95rem;
-  padding: 0.3rem 0.85rem;
-  font-family: var(--font-display);
 }
 
 /* Banca rota: mismo tamaño, color de aviso en vez del dorado normal. */

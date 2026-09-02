@@ -12,8 +12,6 @@ import { RAZA_SC2_OPTIONS } from "../types/juegos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import Avatar from "../components/Avatar";
-import MmrProgressBar from "../components/MmrProgressBar";
-import PercentBar from "../components/PercentBar";
 import TitulosActivosList from "../components/TitulosActivosList";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
@@ -90,6 +88,15 @@ export default function ProfilePage() {
   const [pestanaActiva, setPestanaActiva] = useState<PestanaConfiguracion>(
     searchParams.get("tab") === "apariencia" ? "apariencia" : "datos"
   );
+  // El valor inicial de useState solo se lee en el primer montaje: si
+  // ya se está parado en /perfil y se navega de nuevo acá con un ?tab=
+  // distinto (el menú del avatar usa <Link>, no recarga la página), el
+  // componente no se vuelve a montar y la pestaña se quedaba pegada en
+  // la que estaba. Este efecto la resincroniza cada vez que cambia el
+  // parámetro de la URL.
+  useEffect(() => {
+    setPestanaActiva(searchParams.get("tab") === "apariencia" ? "apariencia" : "datos");
+  }, [searchParams]);
   // Llega desde LoginPage/RegisterPage cuando alguien con sesión activa
   // intentó entrar o registrarse de nuevo (ver Navigate en esas páginas).
   const avisoRedireccion = (location.state as { aviso?: string } | null)?.aviso ?? null;
@@ -774,6 +781,7 @@ export default function ProfilePage() {
         Se resuelven solos cuando ganas o pierdes una partida 1v1 real contra el rival, en cualquier
         torneo.
       </p>
+      {profile && <TitulosActivosList tipo="jugador" id={profile.id} className="detail-map-list" />}
 
       <h3 className="detail-subtitle">Pendientes de responder</h3>
       {titulosPendientesResponder.length === 0 ? (
@@ -943,19 +951,12 @@ export default function ProfilePage() {
         </div>
       )}
 
-      <h2 className="detail-subtitle">Identidad de jugador</h2>
-      {profile && (
-        <>
-          <MmrProgressBar mmr={profile.mmr_1v1} liga={profile.liga_1v1} bancaRota={profile.banca_rota} />
-          {profile.poco_confiable && (
-            <span className="nivel-badge nivel-badge-banca-rota">Poco Responsable</span>
-          )}
-          <PercentBar label="Valentía" value={profile.valentia_jugador} />
-          <PercentBar label="Responsabilidad en Clan Wars" value={profile.responsabilidad_cw} />
-          <TitulosActivosList tipo="jugador" id={profile.id} className="detail-map-list" />
-        </>
-      )}
-
+      {/* Las estadísticas (MMR, Valentía, Responsabilidad) NO se
+          repiten acá: son contenido de la vitrina pública
+          (/jugador/:nick/:uniqueId, "Mi perfil" en la barra inferior),
+          no de esta página de edición. Mostrarlas acá también era
+          justamente lo que hacía que "Editar mis datos" y "Mi perfil"
+          se sintieran mezclados en una sola pantalla. */}
       <h2 className="detail-subtitle">Configuración general</h2>
       <div className="settings-tabs" role="tablist">
         <button
