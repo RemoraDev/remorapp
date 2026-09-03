@@ -2891,6 +2891,182 @@ input[type="radio"] {
   gap: 0.5rem;
 }
 
+/* Botón "Copiar URL para OBS", en /tournaments/:id y en el detalle de
+   una Clan War -- separado del overlay en sí (ver más abajo), que es
+   la página pública que ese link abre. */
+.overlay-obs-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin: 0.75rem 0;
+}
+
+.overlay-obs-copy .form-hint {
+  margin: 0;
+}
+
+/* ---------- Overlay para OBS (migración 044) ----------
+   /overlay/cw/:id y /overlay/torneo/:id -- páginas públicas sin
+   login, pensadas para pegarse como "Browser Source" en OBS. Fondo
+   totalmente transparente (body trae un fondo oscuro fijo para el
+   resto de la app, ver la regla "body" arriba -- acá se anula
+   mientras alguna de estas dos páginas está montada) y tipografía
+   grande, legible a la distancia de una transmisión. */
+body.overlay-obs {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.overlay-page {
+  min-height: 100vh;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  font-family: var(--font-display);
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+
+.overlay-error {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.overlay-cw-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+  width: 100%;
+}
+
+.overlay-cw-equipo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.overlay-cw-equipo-derecha {
+  flex-direction: row-reverse;
+}
+
+.overlay-cw-logo {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.5rem;
+  object-fit: cover;
+}
+
+.overlay-cw-nombre {
+  white-space: nowrap;
+}
+
+.overlay-cw-tag {
+  color: var(--color-accent);
+}
+
+.overlay-cw-marcador-global {
+  font-size: 3rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
+  min-width: 8rem;
+  text-align: center;
+}
+
+.overlay-cw-sets {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 40rem;
+}
+
+.overlay-cw-set {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(6, 7, 10, 0.65);
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.overlay-cw-set.en-juego {
+  border: 2px solid var(--color-accent);
+}
+
+.overlay-cw-set-posicion {
+  font-size: 1rem;
+  color: var(--color-accent-soft);
+  min-width: 4rem;
+}
+
+.overlay-cw-set-jugador {
+  flex: 1;
+  text-align: center;
+}
+
+.overlay-cw-set-marcador {
+  font-variant-numeric: tabular-nums;
+  min-width: 4rem;
+  text-align: center;
+  color: var(--color-accent);
+}
+
+.overlay-cw-ace {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 1.6rem;
+  font-weight: 800;
+  padding: 0.5rem 1.5rem;
+  border-radius: var(--radius-md);
+  background: rgba(251, 191, 36, 0.18);
+  border: 2px solid #fbbf24;
+}
+
+.overlay-cw-ace-label {
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  color: #fbbf24;
+}
+
+.overlay-cw-ace-ganador {
+  color: #fbbf24;
+  text-decoration: underline;
+}
+
+.overlay-torneo-nombre {
+  font-size: 1.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.overlay-torneo-match {
+  font-size: 1.4rem;
+  min-width: 24rem;
+}
+
+.overlay-torneo-match .bracket-slot {
+  font-size: 1.4rem;
+  padding: 0.75rem 1rem;
+}
+
+.overlay-torneo-match .bracket-slot-logo {
+  width: 2rem;
+  height: 2rem;
+}
+
 .hall-wall-row {
   display: flex;
   align-items: center;

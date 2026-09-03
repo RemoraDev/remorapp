@@ -81,6 +81,10 @@ export default function TournamentDetailPage() {
   const [posiciones, setPosiciones] = useState<PosicionGrupo[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // Overlay para OBS (migración 044): visible para cualquiera, no
+  // solo el organizador -- cualquiera puede querer transmitir el
+  // torneo, no necesariamente quien lo creó.
+  const [urlObsCopiada, setUrlObsCopiada] = useState(false);
 
   const [inscribiendo, setInscribiendo] = useState(false);
   const [inscripcionError, setInscripcionError] = useState<string | null>(null);
@@ -478,6 +482,16 @@ export default function TournamentDetailPage() {
     await cargarTorneo();
   };
 
+  // Overlay para OBS (migración 044): copia el link completo, no una
+  // ruta relativa -- OBS necesita una URL absoluta para poder abrirla
+  // como "Fuente de navegador".
+  const handleCopiarUrlObs = async () => {
+    if (!torneo) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/overlay/torneo/${torneo.id}`);
+    setUrlObsCopiada(true);
+    setTimeout(() => setUrlObsCopiada(false), 2000);
+  };
+
   const handleConfirmarAsistencia = async (participantId: string) => {
     setConfirmando(true);
     setErrorConfirmar(null);
@@ -595,6 +609,15 @@ export default function TournamentDetailPage() {
       <p className="tournament-card-meta">
         {getModoLabel(torneo.modo)} — {getModoDescripcion(torneo.modo)}
       </p>
+
+      <div className="overlay-obs-copy">
+        <button type="button" className="btn btn-ghost" onClick={handleCopiarUrlObs}>
+          {urlObsCopiada ? "¡Copiado!" : "Copiar URL para OBS"}
+        </button>
+        <p className="form-hint">
+          Pégala en OBS como "Fuente de navegador" para mostrar el marcador en tu transmisión.
+        </p>
+      </div>
 
       <div className="detail-stats">
         <div>

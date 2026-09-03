@@ -1,7 +1,9 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
+import OverlayClanWarPage from "./pages/OverlayClanWarPage";
+import OverlayTorneoPage from "./pages/OverlayTorneoPage";
 import HomePage from "./pages/HomePage";
 import TournamentsPage from "./pages/TournamentsPage";
 import CreateTournamentPage from "./pages/CreateTournamentPage";
@@ -27,6 +29,21 @@ import RegisterPage from "./pages/RegisterPage";
 // este componente, no a App -- App es quien lo declara).
 function AppContent() {
   const { profile } = useAuth();
+  const location = useLocation();
+  // Overlay para OBS (migración 044): páginas públicas, sin login, sin
+  // el header ni la barra de navegación de la app -- solo el
+  // contenido del overlay, para que se puedan pegar como "Browser
+  // Source" en OBS sin que aparezca nada de la interfaz normal.
+  const esOverlay = location.pathname.startsWith("/overlay/");
+
+  if (esOverlay) {
+    return (
+      <Routes>
+        <Route path="/overlay/cw/:id" element={<OverlayClanWarPage />} />
+        <Route path="/overlay/torneo/:id" element={<OverlayTorneoPage />} />
+      </Routes>
+    );
+  }
 
   return (
     <div className="app-shell">

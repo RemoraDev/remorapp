@@ -358,6 +358,9 @@ export default function TeamDetailPage() {
   const [designandoAce, setDesignandoAce] = useState<string | null>(null);
   const [erroresAce, setErroresAce] = useState<Record<string, string>>({});
   const [reportandoMapaAce, setReportandoMapaAce] = useState<string | null>(null);
+  // Overlay para OBS (migración 044): un "copiado" por reto, no uno
+  // global.
+  const [urlObsCopiadaPorReto, setUrlObsCopiadaPorReto] = useState<Record<string, boolean>>({});
   // Se recalcula cada 30 segundos -- así la ventana de check-in
   // aparece sola cuando corresponde, sin que haga falta recargar la
   // página a mano.
@@ -1495,6 +1498,13 @@ export default function TeamDetailPage() {
     }
 
     await cargar();
+  };
+
+  // Overlay para OBS (migración 044).
+  const handleCopiarUrlObsCw = async (retoId: string) => {
+    await navigator.clipboard.writeText(`${window.location.origin}/overlay/cw/${retoId}`);
+    setUrlObsCopiadaPorReto((prev) => ({ ...prev, [retoId]: true }));
+    setTimeout(() => setUrlObsCopiadaPorReto((prev) => ({ ...prev, [retoId]: false })), 2000);
   };
 
   const handleQuitarLineup = async (retoId: string, lineupId: string) => {
@@ -2732,6 +2742,19 @@ export default function TeamDetailPage() {
                           Tu hora local: {formatearHoraLocal(r.fechaHoraCet)} · Hora CET:{" "}
                           {formatearHoraCet(r.fechaHoraCet)}
                         </p>
+
+                        <div className="overlay-obs-copy">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => handleCopiarUrlObsCw(r.id)}
+                          >
+                            {urlObsCopiadaPorReto[r.id] ? "¡Copiado!" : "Copiar URL para OBS"}
+                          </button>
+                          <p className="form-hint">
+                            Pégala en OBS como "Fuente de navegador" para mostrar el marcador en tu transmisión.
+                          </p>
+                        </div>
 
                         {!lineupAprobado ? (
                           <>
