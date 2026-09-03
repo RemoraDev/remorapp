@@ -12,9 +12,11 @@ import { formatFecha, formatPozo } from "../lib/formatters";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import BracketView from "../components/BracketView";
+import BracketStylePicker from "../components/BracketStylePicker";
+import GroupStage from "../components/GroupStage";
 import Avatar from "../components/Avatar";
 import LigaBadge from "../components/LigaBadge";
-import type { TournamentRow } from "../types/tournaments";
+import type { PosicionGrupo, TournamentGroupMatchRow, TournamentGroupRow, TournamentRow } from "../types/tournaments";
 import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
 
@@ -72,6 +74,11 @@ export default function TournamentDetailPage() {
   const [mapas, setMapas] = useState<MapaSeleccionado[]>([]);
   const [participantes, setParticipantes] = useState<ParticipanteConNombre[]>([]);
   const [partidas, setPartidas] = useState<BracketMatchRow[]>([]);
+  // Migración 041: etapa de grupos, previa a la llave -- solo se
+  // llenan mientras torneo.fase_actual === "grupos".
+  const [grupos, setGrupos] = useState<TournamentGroupRow[]>([]);
+  const [partidasGrupo, setPartidasGrupo] = useState<TournamentGroupMatchRow[]>([]);
+  const [posiciones, setPosiciones] = useState<PosicionGrupo[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
@@ -80,6 +87,8 @@ export default function TournamentDetailPage() {
 
   const [generandoLlave, setGenerandoLlave] = useState(false);
   const [errorLlave, setErrorLlave] = useState<string | null>(null);
+  const [generandoGrupos, setGenerandoGrupos] = useState(false);
+  const [errorGrupos, setErrorGrupos] = useState<string | null>(null);
 
   const [abriendoCheckIn, setAbriendoCheckIn] = useState(false);
   const [errorCheckIn, setErrorCheckIn] = useState<string | null>(null);
@@ -226,7 +235,11 @@ export default function TournamentDetailPage() {
     // (generar_llave/avanzar_ganador/reportar_resultado) es el mismo
     // para todos, ver migración 009. Recién se consulta si ya se
     // generó (estado distinto de "abierto").
-    if (torneoData.modo === "eliminacion_simple" && torneoData.estado !== "abierto") {
+    if (
+      torneoData.modo === "eliminacion_simple" &&
+      torneoData.estado !== "abierto" &&
+      torneoData.fase_actual === "eliminacion"
+    ) {
       const { data: partidasData } = await supabase
         .from("bracket_matches")
         .select(
@@ -237,6 +250,34 @@ export default function TournamentDetailPage() {
       setPartidas((partidasData ?? []) as BracketMatchRow[]);
     } else {
       setPartidas([]);
+    }
+
+    // Migración 041: mientras la etapa de grupos está en curso, se
+    // trae grupos + sus partidos + la tabla de posiciones -- la llave
+    // todavía no existe (fase_actual sigue en "grupos").
+    if (torneoData.modo === "eliminacion_simple" && torneoData.fase_actual === "grupos") {
+      const { data: gruposData } = await supabase
+        .from("tournament_groups")
+        .select("id, tournament_id, nombre, created_at")
+        .eq("tournament_id", id)
+        .order("nombre");
+
+      const idsGrupos = (gruposData ?? []).map((g) => g.id);
+
+      const { data: partidasGrupoData } = await supabase
+        .from("tournament_group_matches")
+        .select("id, group_id, participant1_id, participant2_id, ganador_id, status")
+        .in("group_id", idsGrupos.length > 0 ? idsGrupos : ["00000000-0000-0000-0000-000000000000"]);
+
+      const { data: posicionesData } = await supabase.rpc("posiciones_grupos", { p_tournament_id: id });
+
+      setGrupos((gruposData ?? []) as TournamentGroupRow[]);
+      setPartidasGrupo((partidasGrupoData ?? []) as TournamentGroupMatchRow[]);
+      setPosiciones((posicionesData ?? []) as PosicionGrupo[]);
+    } else {
+      setGrupos([]);
+      setPartidasGrupo([]);
+      setPosiciones([]);
     }
 
     setLoading(false);
@@ -409,6 +450,28 @@ export default function TournamentDetailPage() {
 
     if (error) {
       setErrorLlave(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  // Migración 041: mismo botón de "cerrar check-in", pero cuando el
+  // torneo tiene etapa de grupos arma los grupos en vez de la llave
+  // directo -- generar_grupos() es quien reparte y arma los partidos
+  // de todos contra todos, y deja fase_actual = "grupos".
+  const handleGenerarGrupos = async () => {
+    if (!torneo) return;
+
+    setGenerandoGrupos(true);
+    setErrorGrupos(null);
+
+    const { error } = await supabase.rpc("generar_grupos", { p_tournament_id: torneo.id });
+
+    setGenerandoGrupos(false);
+
+    if (error) {
+      setErrorGrupos(error.message);
       return;
     }
 
@@ -636,7 +699,21 @@ export default function TournamentDetailPage() {
                 <p className="form-success">Ya confirmaste tu asistencia.</p>
               )}
 
-              {esOrganizador && (
+              {esOrganizador && torneo.tiene_fase_grupos && (
+                <>
+                  {errorGrupos && <div className="form-error">{errorGrupos}</div>}
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={generandoGrupos}
+                    onClick={handleGenerarGrupos}
+                  >
+                    {generandoGrupos ? "Generando..." : "Cerrar check-in y generar grupos"}
+                  </button>
+                </>
+              )}
+
+              {esOrganizador && !torneo.tiene_fase_grupos && (
                 <button
                   type="button"
                   className="btn btn-primary btn-block"
@@ -649,7 +726,45 @@ export default function TournamentDetailPage() {
             </div>
           )}
 
-          {torneo.estado !== "abierto" && (
+          {torneo.fase_actual === "grupos" && (
+            <>
+              <h2 className="detail-subtitle">Grupos</h2>
+              <GroupStage
+                grupos={grupos}
+                partidas={partidasGrupo}
+                posiciones={posiciones}
+                nombresPorParticipante={Object.fromEntries(
+                  participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
+                )}
+                puedeReportarPorParticipante={puedeReportarPorParticipante}
+                userId={user?.id ?? null}
+                organizadorId={torneo.creador_id}
+                onCambio={cargarTorneo}
+              />
+
+              {esOrganizador && (
+                <div className="detail-register-box">
+                  {errorLlave && <div className="form-error">{errorLlave}</div>}
+                  {partidasGrupo.length > 0 && partidasGrupo.every((m) => m.status === "jugado") ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block"
+                      disabled={generandoLlave}
+                      onClick={handleGenerarLlave}
+                    >
+                      {generandoLlave ? "Generando..." : "Cerrar etapa de grupos y generar llave"}
+                    </button>
+                  ) : (
+                    <p className="tournament-card-meta">
+                      Todavía faltan partidos de grupo por jugarse antes de poder generar la llave.
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {torneo.estado !== "abierto" && torneo.fase_actual === "eliminacion" && (
             <>
               <h2 className="detail-subtitle">Llave</h2>
               {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
@@ -659,24 +774,42 @@ export default function TournamentDetailPage() {
                     "Jugador de RemorApp"}
                 </p>
               )}
+
+              {/* Estilo y fondo: visibles y editables solo para el
+                  organizador, en cualquier momento, incluso con el
+                  torneo en curso -- migración 040. */}
+              {esOrganizador && (
+                <BracketStylePicker
+                  tournamentId={torneo.id}
+                  estilo={torneo.estilo_bracket}
+                  fondo={torneo.fondo_bracket}
+                  onCambio={cargarTorneo}
+                />
+              )}
+
               {partidas.length === 0 ? (
                 <p className="detail-empty">Cargando la llave...</p>
               ) : (
-                <BracketView
-                  matches={partidas}
-                  nombresPorParticipante={Object.fromEntries(
-                    participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
-                  )}
-                  logosPorParticipante={
-                    esPorEquipos
-                      ? Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))
-                      : undefined
-                  }
-                  puedeReportarPorParticipante={puedeReportarPorParticipante}
-                  userId={user?.id ?? null}
-                  organizadorId={torneo.creador_id}
-                  onCambio={cargarTorneo}
-                />
+                <div className="tournament-bracket-wrap" data-fondo-bracket={torneo.fondo_bracket}>
+                  <BracketView
+                    matches={partidas}
+                    nombresPorParticipante={Object.fromEntries(
+                      participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
+                    )}
+                    logosPorParticipante={
+                      esPorEquipos
+                        ? Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))
+                        : undefined
+                    }
+                    avatarsPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))}
+                    estilo={torneo.estilo_bracket}
+                    nombreTorneo={torneo.nombre}
+                    puedeReportarPorParticipante={puedeReportarPorParticipante}
+                    userId={user?.id ?? null}
+                    organizadorId={torneo.creador_id}
+                    onCambio={cargarTorneo}
+                  />
+                </div>
               )}
             </>
           )}

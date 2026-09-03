@@ -1609,6 +1609,284 @@ input[type="radio"] {
   color: #fca5a5;
 }
 
+/* ---------- Catálogo de estilos de bracket + fondos (migración 040) ----------
+   El layout base (.bracket, .bracket-round, .bracket-match, ...) de
+   arriba es "clasico", intacto -- ninguna regla de acá lo toca por
+   fuera de un selector [data-estilo-bracket="esports"/"starcraft_oficial"]
+   o [data-fondo-bracket="..."], así que "clasico" + "ninguno" siguen
+   viéndose exactamente igual que antes de esta migración.
+
+   Nota sobre "starcraft_oficial" y las mayúsculas en el nombre de
+   ronda: .bracket-round-title YA es uppercase en la base (línea de
+   arriba), para los 3 estilos por igual -- no se duplicó esa regla acá
+   porque ya se cumple sola, sin necesidad de un selector aparte. */
+
+.tournament-bracket-wrap {
+  position: relative;
+  margin-top: 1rem;
+}
+
+/* Los 4 fondos que no son "ninguno" comparten el mismo contenedor
+   (color de base + padding + borde) -- lo único que cambia entre
+   ellos es el background-image. */
+.tournament-bracket-wrap[data-fondo-bracket]:not([data-fondo-bracket="ninguno"]) {
+  padding: 1.5rem 1rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background-color: #06070a;
+}
+
+/* Campo de estrellas: un único elemto, varias capas de radial-gradient
+   de 1-1.5px tileadas -- la técnica liviana estándar de "starfield",
+   sin imágenes ni múltiples nodos DOM. Estático: no hay animación. */
+.tournament-bracket-wrap[data-fondo-bracket="campo_estrellas"],
+.bracket-fondo-preview[data-fondo-bracket="campo_estrellas"] {
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(1px 1px at 40% 72%, rgba(255, 255, 255, 0.65), transparent 60%),
+    radial-gradient(1.5px 1.5px at 70% 32%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(1px 1px at 85% 88%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.5px 1.5px at 25% 92%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(1px 1px at 55% 12%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(1px 1px at 95% 45%, rgba(255, 255, 255, 0.6), transparent 60%);
+  background-size: 180px 180px;
+}
+
+/* Nebulosa: 3 manchas grandes de gradiente radial, opacidad baja,
+   estáticas -- ningún movimiento. */
+.tournament-bracket-wrap[data-fondo-bracket="nebulosa"],
+.bracket-fondo-preview[data-fondo-bracket="nebulosa"] {
+  background-image:
+    radial-gradient(45% 35% at 20% 25%, rgba(34, 211, 238, 0.16), transparent 70%),
+    radial-gradient(40% 30% at 82% 68%, rgba(168, 85, 247, 0.14), transparent 70%),
+    radial-gradient(35% 30% at 50% 95%, rgba(236, 72, 153, 0.1), transparent 70%);
+}
+
+/* Constelación: mismo criterio que el patrón de rombos de la Sala de
+   la Fama (data URI, SVG puro, sin librerías) -- acá puntos finos
+   conectados por líneas, a muy baja opacidad. */
+.tournament-bracket-wrap[data-fondo-bracket="constelacion"],
+.bracket-fondo-preview[data-fondo-bracket="constelacion"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='%2322d3ee' fill-opacity='0.45' stroke='%2322d3ee' stroke-opacity='0.16' stroke-width='1'%3E%3Ccircle cx='20' cy='30' r='1.6'/%3E%3Ccircle cx='90' cy='15' r='1.6'/%3E%3Ccircle cx='150' cy='60' r='1.6'/%3E%3Ccircle cx='60' cy='100' r='1.6'/%3E%3Ccircle cx='170' cy='150' r='1.6'/%3E%3Ccircle cx='30' cy='170' r='1.6'/%3E%3Cpath d='M20 30 L90 15 M90 15 L150 60 M60 100 L20 30 M60 100 L150 60 M60 100 L170 150 M170 150 L30 170'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+
+/* Vórtice: un solo conic-gradient -- el remolino sale de la FORMA del
+   gradiente (franjas que giran alrededor de un centro), no de
+   animarlo. Sin rotación, sin @keyframes. */
+.tournament-bracket-wrap[data-fondo-bracket="vortice"],
+.bracket-fondo-preview[data-fondo-bracket="vortice"] {
+  background-image: conic-gradient(
+    from 0deg at 50% 50%,
+    rgba(34, 211, 238, 0.18),
+    rgba(6, 7, 10, 0) 25%,
+    rgba(168, 85, 247, 0.16) 50%,
+    rgba(6, 7, 10, 0) 75%,
+    rgba(34, 211, 238, 0.18)
+  );
+}
+
+/* ----- Estilo "esports": logo/avatar más grande, franja con el
+   nombre del torneo, líneas de conexión gruesas color de acento. ----- */
+
+.bracket-esports-banner {
+  background: var(--color-accent);
+  color: #04141a;
+  font-family: var(--font-display);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  text-align: center;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 0.75rem;
+}
+
+[data-estilo-bracket="esports"] .bracket-match {
+  position: relative;
+  border-left: 3px solid var(--color-accent);
+}
+
+[data-estilo-bracket="esports"] .bracket-slot-logo {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+/* Línea de conexión: un tramo que sale del borde derecho de cada
+   partida y llega hasta el borde del siguiente round (el ancho exacto
+   del gap entre columnas, ver ".bracket { gap: 2.5rem }"). No es un
+   codo soldado al punto exacto del próximo cruce -- con el layout
+   actual (flex + space-around, sin posiciones calculadas a mano) eso
+   requeriría rehacer el armado de la llave; esto es un acento de
+   dirección hacia la siguiente ronda, mismo espíritu visual. */
+[data-estilo-bracket="esports"] .bracket-round:not(:last-child) .bracket-match::after,
+[data-estilo-bracket="starcraft_oficial"] .bracket-round:not(:last-child) .bracket-match::after {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  width: 2.5rem;
+  height: 2px;
+  background: var(--color-accent);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+[data-estilo-bracket="esports"] .bracket-round:not(:last-child) .bracket-match::after {
+  height: 3px;
+}
+
+/* ----- Estilo "starcraft_oficial": líneas con glow estático (sin
+   animación) y una insinuación del mismo glow en el borde de cada
+   partida. Los nombres de ronda ya son uppercase en la base. ----- */
+
+[data-estilo-bracket="starcraft_oficial"] .bracket-match {
+  position: relative;
+  border-color: rgba(34, 211, 238, 0.35);
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.12);
+}
+
+[data-estilo-bracket="starcraft_oficial"] .bracket-round:not(:last-child) .bracket-match::after {
+  box-shadow: 0 0 6px 1px var(--color-accent);
+}
+
+/* ---------- Selector de estilo/fondo (organizador, /tournaments/:id) ---------- */
+
+.bracket-picker-group {
+  margin: 1rem 0;
+}
+
+.bracket-picker-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.bracket-picker-option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--color-border);
+  background: var(--color-panel);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.bracket-picker-option:hover {
+  border-color: var(--color-accent-soft);
+}
+
+.bracket-picker-option.selected {
+  border-color: var(--color-accent);
+}
+
+.bracket-picker-option-label {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+/* Mini-render real del estilo: mismas clases .bracket-match/.bracket-slot
+   que la llave de verdad, solo que a tamaño reducido -- no es una
+   captura, es el mismo CSS aplicado a un partido de muestra. */
+.bracket-style-preview {
+  width: 6.5rem;
+  transform: scale(0.9);
+  transform-origin: top center;
+  pointer-events: none;
+}
+
+.bracket-style-preview .bracket-match {
+  padding: 0.3rem;
+  margin-bottom: 0.2rem;
+}
+
+.bracket-style-preview .bracket-slot {
+  padding: 0.15rem 0.25rem;
+  font-size: 0.55rem;
+  gap: 0.2rem;
+}
+
+.bracket-style-preview .bracket-slot-logo {
+  width: 0.7rem;
+  height: 0.7rem;
+}
+
+/* Mini-render real del fondo: mismo fondo que .tournament-bracket-wrap,
+   en una caja chica. */
+.bracket-fondo-preview {
+  width: 4rem;
+  height: 3rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg);
+}
+
+.bracket-fondo-preview[data-fondo-bracket]:not([data-fondo-bracket="ninguno"]) {
+  background-color: #06070a;
+}
+
+/* ---------- Etapa de grupos (migración 041) ---------- */
+
+.group-stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.group-stage-block {
+  flex: 1 1 20rem;
+  min-width: 18rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1rem;
+  background: var(--color-panel);
+}
+
+.group-standings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.group-standings-table th,
+.group-standings-table td {
+  text-align: left;
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.group-standings-table th {
+  color: var(--color-text-faint);
+  font-weight: 700;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+}
+
+.group-standings-table th:nth-child(1),
+.group-standings-table td:nth-child(1),
+.group-standings-table th:nth-child(3),
+.group-standings-table td:nth-child(3),
+.group-standings-table th:nth-child(4),
+.group-standings-table td:nth-child(4) {
+  text-align: center;
+}
+
+.group-stage-matches {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.group-stage-match {
+  width: 100%;
+}
+
 /* ---------- Historial ---------- */
 
 .history-list {
@@ -2972,6 +3250,32 @@ input[type="radio"] {
 }
 
 .profile-caster-toggle input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--color-accent);
+}
+
+/* Mismo look que .profile-caster-toggle, con nombre genérico para
+   reusar en cualquier otro checkbox de un formulario (etapa de
+   grupos en CreateTournamentPage.tsx, por ejemplo). */
+.form-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-radius: 0.6rem;
+  border: 1px solid var(--color-border);
+  padding: 0.6rem 0.85rem;
+  font-size: 0.875rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.form-checkbox-label:has(input:checked) {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.form-checkbox-label input {
   width: 1.1rem;
   height: 1.1rem;
   accent-color: var(--color-accent);

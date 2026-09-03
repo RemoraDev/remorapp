@@ -22,6 +22,12 @@ export default function CreateTournamentPage() {
   const [cuposTotales, setCuposTotales] = useState("16");
   const [fechaInicio, setFechaInicio] = useState("");
 
+  // Etapa de grupos (migración 041) -- solo aplica con eliminación
+  // simple, ver el gate en el JSX.
+  const [tieneFaseGrupos, setTieneFaseGrupos] = useState(false);
+  const [cantidadGrupos, setCantidadGrupos] = useState("2");
+  const [avanzanPorGrupo, setAvanzanPorGrupo] = useState("2");
+
   const [mapas, setMapas] = useState<MapRow[]>([]);
   const [mapasIncluidos, setMapasIncluidos] = useState<Record<string, boolean>>({});
   const [mapasVeteables, setMapasVeteables] = useState<Record<string, boolean>>({});
@@ -94,6 +100,9 @@ export default function CreateTournamentPage() {
         cupos_totales: Number(cuposTotales),
         fecha_inicio: new Date(fechaInicio).toISOString(),
         creador_id: user.id,
+        tiene_fase_grupos: modo === "eliminacion_simple" && tieneFaseGrupos,
+        cantidad_grupos: modo === "eliminacion_simple" && tieneFaseGrupos ? Number(cantidadGrupos) : null,
+        avanzan_por_grupo: modo === "eliminacion_simple" && tieneFaseGrupos ? Number(avanzanPorGrupo) : null,
       })
       .select()
       .single();
@@ -202,6 +211,57 @@ export default function CreateTournamentPage() {
             ))}
           </div>
         </div>
+
+        {/* Etapa de grupos (migración 041): todos contra todos dentro
+            de cada grupo, con los mejores avanzando a la llave. Solo
+            tiene sentido con eliminación simple -- generar_grupos()
+            en la base rechaza cualquier otro modo, así que se oculta
+            acá directamente en vez de dejar armar una configuración
+            que después va a fallar al generarla. */}
+        {modo === "eliminacion_simple" && (
+          <div className="form-group">
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={tieneFaseGrupos}
+                onChange={(e) => setTieneFaseGrupos(e.target.checked)}
+              />
+              Con etapa de grupos
+            </label>
+            <p className="form-hint">
+              Los inscritos se reparten en grupos y juegan todos contra todos dentro de su grupo;
+              los mejores de cada uno avanzan a la llave eliminatoria.
+            </p>
+
+            {tieneFaseGrupos && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="torneo-cantidad-grupos">
+                  Cantidad de grupos
+                </label>
+                <input
+                  id="torneo-cantidad-grupos"
+                  className="form-input"
+                  type="number"
+                  min={2}
+                  value={cantidadGrupos}
+                  onChange={(e) => setCantidadGrupos(e.target.value)}
+                />
+
+                <label className="form-label" htmlFor="torneo-avanzan-por-grupo">
+                  Cuántos avanzan por grupo
+                </label>
+                <input
+                  id="torneo-avanzan-por-grupo"
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  value={avanzanPorGrupo}
+                  onChange={(e) => setAvanzanPorGrupo(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="form-group">
           <span className="form-label">Mapas</span>

@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { CSSProperties } from "react";
 import { supabase } from "../lib/supabaseClient";
 import type { BracketMatchRow } from "../types/bracket";
+import type { EstiloBracket } from "../types/tournaments";
 
 interface BracketViewProps {
   matches: BracketMatchRow[];
@@ -9,8 +10,20 @@ interface BracketViewProps {
   // jugador en 1v1, nombre del equipo en 2v2/3v3/4v4).
   nombresPorParticipante: Record<string, string>;
   // tournament_participants.id -> logo del equipo (solo en torneos por
-  // equipo; en 1v1 no se pasa este prop).
+  // equipo; en 1v1 no se pasa este prop). Se muestra en los 3 estilos
+  // por igual, sin cambios -- así se veía siempre en un torneo por
+  // equipo.
   logosPorParticipante?: Record<string, string | null>;
+  // tournament_participants.id -> avatar de perfil, en TODOS los
+  // torneos (1v1 incluido). Solo se usa cuando estilo es "esports" Y
+  // no llegó logosPorParticipante (1v1) -- "clasico"/"starcraft_oficial"
+  // en 1v1 siguen sin mostrar foto, igual que siempre.
+  avatarsPorParticipante?: Record<string, string | null>;
+  // Migración 040: layout de cajas/líneas -- puramente visual, ver
+  // halcon.css (selectores [data-estilo-bracket="..."]).
+  estilo: EstiloBracket;
+  // Nombre del torneo, para la franja superior del estilo "esports".
+  nombreTorneo: string;
   // tournament_participants.id -> si el usuario logueado puede
   // reportar por ese participante: ya viene resuelto desde afuera
   // (BracketView no sabe ni le importa si el torneo es 1v1 o por
@@ -28,6 +41,9 @@ export default function BracketView({
   matches,
   nombresPorParticipante,
   logosPorParticipante,
+  avatarsPorParticipante,
+  estilo,
+  nombreTorneo,
   puedeReportarPorParticipante,
   userId,
   organizadorId,
@@ -51,8 +67,14 @@ export default function BracketView({
   const nombreDe = (participantId: string | null) =>
     participantId ? nombresPorParticipante[participantId] ?? "Jugador de RemorApp" : "BYE";
 
-  const logoDe = (participantId: string | null) =>
-    participantId ? logosPorParticipante?.[participantId] ?? null : null;
+  const logoDe = (participantId: string | null) => {
+    if (!participantId) return null;
+    if (logosPorParticipante) return logosPorParticipante[participantId] ?? null;
+    // 1v1: solo el estilo "esports" muestra el avatar -- "clasico" y
+    // "starcraft_oficial" en 1v1 se quedan exactamente como estaban.
+    if (estilo === "esports") return avatarsPorParticipante?.[participantId] ?? null;
+    return null;
+  };
 
   const puedeReportar = (match: BracketMatchRow) => {
     if (!userId) return false;
@@ -82,7 +104,13 @@ export default function BracketView({
   };
 
   return (
-    <div className="bracket" style={{ height: `${alturaBracket}px` } as CSSProperties}>
+    <>
+      {estilo === "esports" && <div className="bracket-esports-banner">{nombreTorneo}</div>}
+      <div
+        className="bracket"
+        data-estilo-bracket={estilo}
+        style={{ height: `${alturaBracket}px` } as CSSProperties}
+      >
       {partidosPorRonda.map((partidos, indiceRonda) => (
         <div key={rondas[indiceRonda]} className="bracket-round">
           <div className="bracket-round-title">
@@ -148,6 +176,7 @@ export default function BracketView({
           })}
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }
