@@ -1860,7 +1860,11 @@ export default function TeamDetailPage() {
               : "Marcar como capitán"}
         </button>
       )}
-      {conControles && puedeGestionar && !m.roles.includes("owner") && (
+      {/* Migración 039: un capitán puede quitar a un jugador normal,
+          pero no a otro capitán -- eso queda exclusivo del dueño (la
+          base ya lo bloquea; esto evita ofrecer un botón que siempre
+          va a fallar). */}
+      {conControles && !m.roles.includes("owner") && (esDueño || (esCapitan && !m.esCapitan)) && (
         <button
           type="button"
           className="btn btn-ghost team-kick-btn"

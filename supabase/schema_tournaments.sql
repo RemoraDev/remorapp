@@ -74,7 +74,8 @@ create table public.profiles (
   -- Carisma (migración 036): mismo formato que valentia_jugador, pero
   -- todavía SIN ninguna lógica que lo suba o baje -- valor fijo hasta
   -- que se defina cómo debería cambiar.
-  carisma integer not null default 50 check (carisma >= 0 and carisma <= 100),
+  -- Migración 039: nace en 100, no en 50.
+  carisma integer not null default 100 check (carisma >= 0 and carisma <= 100),
   -- Se recalcula sola (ver trigger actualizar_cuenta_validada): la
   -- app nunca la setea a mano, alcanza con guardar nick/country/
   -- sc2_region/sc2_id.
@@ -1101,22 +1102,12 @@ create table public.team_kicks_log (
 
 alter table public.team_kicks_log enable row level security;
 
-create policy "team_kicks_log_select_propio"
-  on public.team_kicks_log for select
-  to authenticated
-  using (
-    exists (
-      select 1 from public.teams t
-      where t.id = team_id and t.owner_id = auth.uid()
-    )
-  );
-
-grant select on public.team_kicks_log to authenticated;
-
 -- ------------------------------------------------------------
 -- Capitanes (migración 038): un capitán tiene, con pocas excepciones,
 -- el mismo permiso que el dueño sobre SU equipo -- ver el detalle de
--- qué queda exclusivo del dueño en cada función de abajo.
+-- qué queda exclusivo del dueño en cada función de abajo. Definida
+-- ACÁ (antes de team_kicks_log_select_propio, que ya la usa) para que
+-- este archivo se pueda correr de punta a punta en un esquema nuevo.
 -- ------------------------------------------------------------
 create or replace function public.es_capitan_o_dueno(p_team_id uuid, p_user_id uuid default auth.uid())
 returns boolean
@@ -1133,6 +1124,14 @@ as $$
 $$;
 
 grant execute on function public.es_capitan_o_dueno(uuid, uuid) to authenticated;
+
+-- Migración 039: visible también para capitanes, no solo el dueño.
+create policy "team_kicks_log_select_propio"
+  on public.team_kicks_log for select
+  to authenticated
+  using (public.es_capitan_o_dueno(team_id));
+
+grant select on public.team_kicks_log to authenticated;
 
 -- asignar_capitan(): exclusiva del dueño. Sin límite de capitanes; no
 -- se puede marcar/desmarcar a uno mismo (el dueño ya tiene todo el
@@ -1285,6 +1284,7 @@ set search_path = public
 as $$
 declare
   v_owner_id uuid;
+  v_objetivo_es_capitan boolean;
   v_entrada_en timestamptz;
 begin
   select owner_id into v_owner_id from public.teams where id = p_team_id;
@@ -1307,6 +1307,16 @@ begin
   -- bloquear explícitamente sacar al dueño.
   if p_user_id = v_owner_id then
     raise exception 'No se puede quitar al dueño del equipo.';
+  end if;
+
+  -- Migración 039: un capitán puede expulsar a un jugador normal,
+  -- pero no a OTRO capitán -- eso queda exclusivo del dueño real.
+  select es_capitan into v_objetivo_es_capitan
+  from public.team_members
+  where team_id = p_team_id and user_id = p_user_id;
+
+  if v_objetivo_es_capitan and auth.uid() <> v_owner_id then
+    raise exception 'Solo el dueño del equipo puede expulsar a un capitán.';
   end if;
 
   select joined_at into v_entrada_en
@@ -1511,7 +1521,13 @@ declare
   v_puede_investigar boolean;
   v_resultado jsonb;
 begin
-  select exists (select 1 from public.teams where owner_id = auth.uid()) or public.is_admin()
+  -- Migración 039: dueño de cualquier equipo O capitán de cualquier
+  -- equipo (esta función no recibe team_id -- es un permiso general
+  -- de "sos líder de algún equipo", no de uno puntual).
+  select
+    exists (select 1 from public.teams where owner_id = auth.uid())
+    or exists (select 1 from public.team_members where user_id = auth.uid() and es_capitan)
+    or public.is_admin()
     into v_puede_investigar;
 
   if not v_puede_investigar then
@@ -2312,8 +2328,7 @@ create policy "titulos_padre_hijo_select_propio"
   using (
     (tipo = 'jugador' and (retador_id = auth.uid() or retado_id = auth.uid()))
     or (tipo = 'clan' and (
-      exists (select 1 from public.teams where id = retador_id and owner_id = auth.uid())
-      or exists (select 1 from public.teams where id = retado_id and owner_id = auth.uid())
+      public.es_capitan_o_dueno(retador_id) or public.es_capitan_o_dueno(retado_id)
     ))
   );
 
@@ -2348,10 +2363,16 @@ begin
   end if;
 
   if p_tipo = 'clan' then
-    -- Migración 028: not disuelto, mismo motivo que en proponer_clan_war().
-    select id into v_retador_id from public.teams where owner_id = auth.uid() and not disuelto;
+    -- Migración 039: dueño o capitán, ya no solo dueño.
+    select t.id into v_retador_id
+    from public.teams t
+    join public.team_members tm on tm.team_id = t.id
+    where tm.user_id = auth.uid()
+      and (t.owner_id = auth.uid() or tm.es_capitan)
+      and not t.disuelto;
+
     if v_retador_id is null then
-      raise exception 'No eres dueño de ningún equipo.';
+      raise exception 'No eres dueño ni capitán de ningún equipo.';
     end if;
     if not exists (select 1 from public.teams where id = p_retado_id) then
       raise exception 'Ese equipo no existe.';
@@ -2405,8 +2426,8 @@ begin
   end if;
 
   if v_titulo.tipo = 'clan' then
-    select exists (select 1 from public.teams where id = v_titulo.retado_id and owner_id = auth.uid())
-      into v_soy_retado;
+    -- Migración 039: dueño o capitán del equipo retado.
+    v_soy_retado := public.es_capitan_o_dueno(v_titulo.retado_id);
   else
     v_soy_retado := (v_titulo.retado_id = auth.uid());
   end if;
@@ -3841,9 +3862,11 @@ alter table public.teams add column liga text generated always as (public.calcul
 -- visible para el usuario siempre es "Poco Responsable", nunca
 -- "confiable"/"confiabilidad".
 -- ------------------------------------------------------------
-alter table public.teams add column valentia integer not null default 50 check (valentia >= 0 and valentia <= 100);
+-- Migración 039: nacen en 100, no en 50 -- solo el default para
+-- cuentas/equipos nuevos, no se tocan las filas existentes.
+alter table public.teams add column valentia integer not null default 100 check (valentia >= 0 and valentia <= 100);
 
-alter table public.profiles add column valentia_jugador integer not null default 50
+alter table public.profiles add column valentia_jugador integer not null default 100
   check (valentia_jugador >= 0 and valentia_jugador <= 100);
 alter table public.profiles add column responsabilidad_cw integer not null default 100
   check (responsabilidad_cw >= 0 and responsabilidad_cw <= 100);
