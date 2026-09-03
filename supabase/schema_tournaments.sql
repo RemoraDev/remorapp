@@ -1651,6 +1651,60 @@ grant execute on function public.investigar_jugador(uuid) to authenticated;
 -- una conversión de huso horario correcta -- nunca se desincronizan
 -- entre sí.
 -- ------------------------------------------------------------
+-- ------------------------------------------------------------
+-- Temporadas (migración 047): contenedor mínimo para torneos/ligas --
+-- solo lo necesario para que "fichado para toda la temporada" (ver
+-- team_mercenarios más abajo) tenga un límite de tiempo real. Sin
+-- historial de temporadas pasadas todavía, eso es una fase aparte.
+-- ------------------------------------------------------------
+create table public.temporadas (
+  id uuid primary key default gen_random_uuid(),
+  torneo_id uuid not null references public.tournaments (id) on delete cascade,
+  nombre text not null check (char_length(nombre) between 3 and 60),
+  fecha_inicio timestamptz not null,
+  fecha_fin timestamptz not null,
+  inscripciones_abiertas boolean not null default true,
+  -- Migración 047, punto 4: array de {posicion, mmr_min, mmr_max}, uno
+  -- por cada posición del set. Null = sin restricción (comportamiento
+  -- de siempre). Las posiciones válidas son 1/2/3 -- WTL, el único
+  -- formato de Clan War con el concepto de "posición del set" hasta
+  -- hoy, siempre usa exactamente esas tres.
+  rangos_mmr_por_posicion jsonb,
+  created_at timestamptz not null default now(),
+  check (fecha_fin > fecha_inicio)
+);
+
+alter table public.temporadas enable row level security;
+
+-- Público, igual que tournaments -- una temporada es información
+-- pública del torneo/liga que la usa.
+create policy "temporadas_select_publico"
+  on public.temporadas for select
+  using (true);
+
+create policy "temporadas_insert_organizador"
+  on public.temporadas for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from public.tournaments t
+      where t.id = torneo_id and (t.creador_id = auth.uid() or public.is_admin())
+    )
+  );
+
+create policy "temporadas_update_organizador"
+  on public.temporadas for update
+  to authenticated
+  using (
+    exists (
+      select 1 from public.tournaments t
+      where t.id = torneo_id and (t.creador_id = auth.uid() or public.is_admin())
+    )
+  );
+
+grant select on public.temporadas to anon, authenticated;
+grant insert, update on public.temporadas to authenticated;
+
 create table public.clan_wars (
   id uuid primary key default gen_random_uuid(),
   challenger_team_id uuid not null references public.teams (id),
@@ -1719,6 +1773,9 @@ create table public.clan_wars (
   -- Migración 045: cuántas reprogramaciones ya se ACEPTARON -- una
   -- rechazada no cuenta, ver solicitar_reprogramacion_cw() más abajo.
   reprogramaciones_usadas integer not null default 0,
+  -- Migración 047: opcional -- si no se indica (todos los retos hasta
+  -- hoy), ninguna regla de mercenarios/alianzas/rangos de MMR aplica.
+  temporada_id uuid references public.temporadas (id),
   check (challenger_team_id <> challenged_team_id),
   check (motivo_rechazo = 'Otro' or motivo_detalle is null),
   check (motivo_rechazo is distinct from 'Otro' or motivo_detalle is not null)
@@ -1747,12 +1804,14 @@ grant select on public.clan_wars to authenticated;
 -- crear un reto en formato 'wtl' (clan_wars no tiene política de
 -- UPDATE para authenticated, todo pasa por funciones, y esta era la
 -- única forma de insertar una fila nueva).
-drop function if exists public.proponer_clan_war(uuid, timestamptz);
+-- Migración 047: +p_temporada_id, opcional.
+drop function if exists public.proponer_clan_war(uuid, timestamptz, text);
 
 create or replace function public.proponer_clan_war(
   p_challenged_team_id uuid,
   p_fecha_hora_cet timestamptz,
-  p_formato text default 'simple'
+  p_formato text default 'simple',
+  p_temporada_id uuid default null
 )
 returns void
 language plpgsql
@@ -1766,6 +1825,10 @@ declare
 begin
   if p_formato not in ('simple', 'wtl') then
     raise exception 'Ese formato no es válido.';
+  end if;
+
+  if p_temporada_id is not null and not exists (select 1 from public.temporadas where id = p_temporada_id) then
+    raise exception 'Esa temporada no existe.';
   end if;
 
   -- Migración 038: ya no solo el dueño -- cualquier miembro que sea
@@ -1819,12 +1882,12 @@ begin
       to_char(v_ultimo_reto + interval '7 days', 'DD/MM/YYYY HH24:MI');
   end if;
 
-  insert into public.clan_wars (challenger_team_id, challenged_team_id, fecha_hora_cet, formato)
-  values (v_challenger.id, p_challenged_team_id, p_fecha_hora_cet, p_formato);
+  insert into public.clan_wars (challenger_team_id, challenged_team_id, fecha_hora_cet, formato, temporada_id)
+  values (v_challenger.id, p_challenged_team_id, p_fecha_hora_cet, p_formato, p_temporada_id);
 end;
 $$;
 
-grant execute on function public.proponer_clan_war(uuid, timestamptz, text) to authenticated;
+grant execute on function public.proponer_clan_war(uuid, timestamptz, text, uuid) to authenticated;
 
 create or replace function public.responder_clan_war(
   p_clan_war_id uuid,
@@ -2120,6 +2183,288 @@ create policy "clan_war_wtl_sets_select_propio"
 -- actualizan desde reportar_mapa_wtl(), las dos security definer.
 grant select on public.clan_war_wtl_sets to authenticated;
 
+-- ------------------------------------------------------------
+-- Mercenarios (migración 047): fichados para una temporada completa,
+-- no para una Clan War puntual.
+-- ------------------------------------------------------------
+create table public.team_mercenarios (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams (id) on delete cascade,
+  jugador_id uuid not null references public.profiles (id),
+  temporada_id uuid not null references public.temporadas (id) on delete cascade,
+  fichado_en timestamptz not null default now(),
+  -- Un jugador no puede ser mercenario de más de un equipo en la
+  -- misma temporada.
+  unique (jugador_id, temporada_id),
+  -- Un equipo no puede tener más de 1 mercenario por temporada.
+  unique (team_id, temporada_id)
+);
+
+alter table public.team_mercenarios enable row level security;
+
+-- Público a propósito: el roster de mercenarios se muestra en el
+-- perfil del equipo, igual que team_members.
+create policy "team_mercenarios_select_publico"
+  on public.team_mercenarios for select
+  using (true);
+
+-- Sin política de insert/update para authenticated -- la única forma
+-- de escribir acá es fichar_mercenario(), security definer.
+grant select on public.team_mercenarios to anon, authenticated;
+
+create or replace function public.fichar_mercenario(p_team_id uuid, p_jugador_id uuid, p_temporada_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_temporada record;
+begin
+  if not public.es_capitan_o_dueno(p_team_id) then
+    raise exception 'Solo el dueño o un capitán puede fichar un mercenario.';
+  end if;
+
+  select * into v_temporada from public.temporadas where id = p_temporada_id for update;
+  if v_temporada is null then
+    raise exception 'Esa temporada no existe.';
+  end if;
+  if not v_temporada.inscripciones_abiertas then
+    raise exception 'Las inscripciones de esta temporada ya están cerradas.';
+  end if;
+
+  if exists (select 1 from public.team_members where team_id = p_team_id and user_id = p_jugador_id) then
+    raise exception 'Ese jugador ya es miembro del equipo -- no hace falta ficharlo como mercenario.';
+  end if;
+
+  insert into public.team_mercenarios (team_id, jugador_id, temporada_id)
+  values (p_team_id, p_jugador_id, p_temporada_id);
+exception
+  when unique_violation then
+    raise exception 'Ese jugador ya es mercenario de otro equipo esta temporada, o tu equipo ya tiene un mercenario fichado esta temporada.';
+end;
+$$;
+
+grant execute on function public.fichar_mercenario(uuid, uuid, uuid) to authenticated;
+
+-- ------------------------------------------------------------
+-- Alianzas (migración 047): comparten jugadores elegibles para el
+-- lineup, cada equipo mantiene su identidad propia.
+-- ------------------------------------------------------------
+create table public.team_alianzas (
+  id uuid primary key default gen_random_uuid(),
+  team_a_id uuid not null references public.teams (id) on delete cascade,
+  team_b_id uuid not null references public.teams (id) on delete cascade,
+  temporada_id uuid not null references public.temporadas (id) on delete cascade,
+  status text not null default 'pendiente' check (status in ('pendiente', 'aprobada', 'rechazada')),
+  aprobado_por uuid references public.profiles (id),
+  created_at timestamptz not null default now(),
+  -- El dueño del equipo B tiene que confirmar (confirmar_alianza_equipo())
+  -- antes de que un administrador pueda aprobarla -- ver el chequeo
+  -- explícito en aprobar_alianza() más abajo.
+  aprobado_por_equipo_b boolean not null default false,
+  check (team_a_id <> team_b_id)
+);
+
+alter table public.team_alianzas enable row level security;
+
+-- Una alianza 'aprobada' es pública (se muestra en el perfil del
+-- equipo); 'pendiente'/'rechazada' solo las ven los involucrados y un
+-- administrador.
+create policy "team_alianzas_select"
+  on public.team_alianzas for select
+  using (
+    status = 'aprobada'
+    or (
+      auth.uid() is not null
+      and (
+        public.es_capitan_o_dueno(team_a_id) or public.es_capitan_o_dueno(team_b_id) or public.is_admin()
+      )
+    )
+  );
+
+-- Sin política de insert/update para authenticated -- la única forma
+-- de escribir acá es proponer_alianza() y aprobar_alianza(), security
+-- definer.
+grant select on public.team_alianzas to anon, authenticated;
+
+create or replace function public.proponer_alianza(p_team_id uuid, p_team_rival_id uuid, p_temporada_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_team record;
+begin
+  select * into v_team from public.teams where id = p_team_id;
+  if v_team is null then
+    raise exception 'Ese equipo no existe.';
+  end if;
+  -- A propósito exclusivo del dueño, no "dueño o capitán" -- una
+  -- alianza es una decisión de fondo del equipo, distinta de operar
+  -- una Clan War puntual.
+  if v_team.owner_id <> auth.uid() then
+    raise exception 'Solo el dueño del equipo puede proponer una alianza.';
+  end if;
+
+  if p_team_rival_id = p_team_id then
+    raise exception 'Un equipo no puede aliarse consigo mismo.';
+  end if;
+  if not exists (select 1 from public.teams where id = p_team_rival_id) then
+    raise exception 'Ese equipo rival no existe.';
+  end if;
+  if not exists (select 1 from public.temporadas where id = p_temporada_id) then
+    raise exception 'Esa temporada no existe.';
+  end if;
+
+  -- Máximo 2 equipos por alianza y un equipo no puede estar en más de
+  -- una alianza activa a la vez en la misma temporada.
+  if exists (
+    select 1 from public.team_alianzas
+    where temporada_id = p_temporada_id
+      and status = 'aprobada'
+      and (p_team_id in (team_a_id, team_b_id) or p_team_rival_id in (team_a_id, team_b_id))
+  ) then
+    raise exception 'Uno de los dos equipos ya tiene una alianza activa en esta temporada.';
+  end if;
+
+  insert into public.team_alianzas (team_a_id, team_b_id, temporada_id)
+  values (p_team_id, p_team_rival_id, p_temporada_id);
+end;
+$$;
+
+grant execute on function public.proponer_alianza(uuid, uuid, uuid) to authenticated;
+
+create or replace function public.confirmar_alianza_equipo(p_alianza_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_alianza record;
+  v_team_b record;
+begin
+  select * into v_alianza from public.team_alianzas where id = p_alianza_id for update;
+  if v_alianza is null then
+    raise exception 'Esa alianza no existe.';
+  end if;
+  if v_alianza.status <> 'pendiente' then
+    raise exception 'Esta alianza ya fue resuelta.';
+  end if;
+  if v_alianza.aprobado_por_equipo_b then
+    raise exception 'Esta alianza ya fue confirmada por tu equipo.';
+  end if;
+
+  select * into v_team_b from public.teams where id = v_alianza.team_b_id;
+  -- A propósito exclusivo del dueño del equipo B, mismo criterio que
+  -- proponer_alianza() con el equipo A -- no "dueño o capitán".
+  if v_team_b.owner_id <> auth.uid() then
+    raise exception 'Solo el dueño del equipo invitado puede confirmar esta alianza.';
+  end if;
+
+  update public.team_alianzas set aprobado_por_equipo_b = true where id = p_alianza_id;
+end;
+$$;
+
+grant execute on function public.confirmar_alianza_equipo(uuid) to authenticated;
+
+create or replace function public.aprobar_alianza(p_alianza_id uuid, p_aprobar boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_alianza record;
+begin
+  if not public.is_admin() then
+    raise exception 'Solo un administrador puede aprobar o rechazar una alianza.';
+  end if;
+
+  select * into v_alianza from public.team_alianzas where id = p_alianza_id for update;
+  if v_alianza is null then
+    raise exception 'Esa alianza no existe.';
+  end if;
+  if v_alianza.status <> 'pendiente' then
+    raise exception 'Esta alianza ya fue resuelta.';
+  end if;
+
+  if p_aprobar then
+    if not v_alianza.aprobado_por_equipo_b then
+      raise exception 'Todavía no se puede aprobar: falta que el equipo invitado confirme la alianza.';
+    end if;
+
+    if exists (
+      select 1 from public.team_alianzas
+      where id <> p_alianza_id
+        and temporada_id = v_alianza.temporada_id
+        and status = 'aprobada'
+        and (
+          v_alianza.team_a_id in (team_a_id, team_b_id) or v_alianza.team_b_id in (team_a_id, team_b_id)
+        )
+    ) then
+      raise exception 'Uno de los dos equipos ya tiene una alianza activa en esta temporada.';
+    end if;
+
+    update public.team_alianzas set status = 'aprobada', aprobado_por = auth.uid() where id = p_alianza_id;
+  else
+    update public.team_alianzas set status = 'rechazada', aprobado_por = auth.uid() where id = p_alianza_id;
+  end if;
+end;
+$$;
+
+grant execute on function public.aprobar_alianza(uuid, boolean) to authenticated;
+
+-- roster_elegible_cw(): a quién puede poner un capitán en el lineup
+-- de una Clan War de esta temporada -- miembros propios, mercenario
+-- propio, y si hay alianza aprobada, miembros y mercenario del equipo
+-- aliado. Con p_temporada_id null (la inmensa mayoría de las Clan
+-- Wars) devuelve exactamente lo mismo que team_members: el
+-- comportamiento de siempre.
+create or replace function public.roster_elegible_cw(p_team_id uuid, p_temporada_id uuid)
+returns table (jugador_id uuid, es_mercenario boolean, es_aliado boolean)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  with equipo_aliado as (
+    select case when team_a_id = p_team_id then team_b_id else team_a_id end as aliado_id
+    from public.team_alianzas
+    where p_temporada_id is not null
+      and temporada_id = p_temporada_id
+      and status = 'aprobada'
+      and (team_a_id = p_team_id or team_b_id = p_team_id)
+    limit 1
+  )
+  select user_id as jugador_id, false as es_mercenario, false as es_aliado
+  from public.team_members
+  where team_id = p_team_id
+
+  union
+
+  select tmerc.jugador_id, true, false
+  from public.team_mercenarios tmerc
+  where tmerc.team_id = p_team_id and p_temporada_id is not null and tmerc.temporada_id = p_temporada_id
+
+  union
+
+  select tm.user_id, false, true
+  from public.team_members tm
+  join equipo_aliado a on tm.team_id = a.aliado_id
+
+  union
+
+  select tmerc.jugador_id, true, true
+  from public.team_mercenarios tmerc
+  join equipo_aliado a on tmerc.team_id = a.aliado_id
+  where p_temporada_id is not null and tmerc.temporada_id = p_temporada_id;
+$$;
+
+grant execute on function public.roster_elegible_cw(uuid, uuid) to authenticated;
+
 create or replace function public.armar_lineup_cw(
   p_clan_war_id uuid,
   p_accion text,
@@ -2138,6 +2483,9 @@ declare
   v_reto record;
   v_mi_team_id uuid;
   v_soy_challenger boolean;
+  v_rangos jsonb;
+  v_rango record;
+  v_mmr_jugador int;
 begin
   select * into v_reto from public.clan_wars where id = p_clan_war_id for update;
   if v_reto is null then
@@ -2178,16 +2526,45 @@ begin
       end if;
     end if;
 
+    -- Migración 047: antes exigía team_members directo -- ahora pasa
+    -- por roster_elegible_cw(), que además de los miembros propios
+    -- incluye al mercenario propio y, con alianza aprobada para la
+    -- temporada de este reto, al roster del equipo aliado. Con
+    -- v_reto.temporada_id null (la mayoría de los retos) el resultado
+    -- es idéntico a team_members -- mismo comportamiento de siempre.
     if p_jugador_id is not null and not exists (
-      select 1 from public.team_members where team_id = v_mi_team_id and user_id = p_jugador_id
+      select 1 from public.roster_elegible_cw(v_mi_team_id, v_reto.temporada_id) where jugador_id = p_jugador_id
     ) then
-      raise exception 'Ese jugador no es miembro de tu equipo.';
+      raise exception 'Ese jugador no es miembro de tu equipo, ni tu mercenario, ni miembro de un equipo aliado para esta temporada.';
     end if;
 
     if p_jugador_temporal_id is not null and not exists (
       select 1 from public.team_temp_players where id = p_jugador_temporal_id and team_id = v_mi_team_id
     ) then
       raise exception 'Ese jugador temporal no es de tu equipo.';
+    end if;
+
+    -- Migración 047, punto 4: rangos de MMR por posición, solo en
+    -- formato WTL (el único con el concepto de "posición" hoy) y solo
+    -- si la temporada de este reto los tiene configurados.
+    if v_reto.formato = 'wtl' and v_reto.temporada_id is not null and p_jugador_id is not null then
+      select rangos_mmr_por_posicion into v_rangos from public.temporadas where id = v_reto.temporada_id;
+
+      if v_rangos is not null then
+        select (elem->>'mmr_min')::int as mmr_min, (elem->>'mmr_max')::int as mmr_max
+          into v_rango
+          from jsonb_array_elements(v_rangos) as elem
+          where (elem->>'posicion')::int = p_posicion;
+
+        if v_rango is not null then
+          select mmr_equipos into v_mmr_jugador from public.profiles where id = p_jugador_id;
+
+          if v_mmr_jugador < v_rango.mmr_min or v_mmr_jugador > v_rango.mmr_max then
+            raise exception 'El jugador para la posición % debe tener entre % y % de MMR de equipos (tiene %).',
+              p_posicion, v_rango.mmr_min, v_rango.mmr_max, v_mmr_jugador;
+          end if;
+        end if;
+      end if;
     end if;
 
     insert into public.clan_war_lineup (
@@ -3015,6 +3392,14 @@ begin
     where clan_war_id = p_clan_war_id and team_id = v_mi_team_id and jugador_id = p_jugador_id
   ) then
     raise exception 'Ese jugador no es parte de tu lineup en esta guerra.';
+  end if;
+
+  -- Migración 047: un mercenario no puede ser designado ACE.
+  if v_reto.temporada_id is not null and exists (
+    select 1 from public.team_mercenarios
+    where team_id = v_mi_team_id and jugador_id = p_jugador_id and temporada_id = v_reto.temporada_id
+  ) then
+    raise exception 'Un mercenario no puede ser designado como ACE.';
   end if;
 
   if v_soy_challenger then

@@ -171,6 +171,65 @@ export interface ClanWarRow {
   ace_ganador_id: string | null;
   resultado_mapas_challenger: number;
   resultado_mapas_challenged: number;
+  // Migración 047: opcional -- si es null, ninguna regla de
+  // mercenarios/alianzas/rangos de MMR aplica a este reto.
+  temporada_id: string | null;
+}
+
+// Temporadas (migración 047): contenedor mínimo para torneos/ligas,
+// sin historial de temporadas pasadas todavía.
+export interface TemporadaRow {
+  id: string;
+  torneo_id: string;
+  nombre: string;
+  fecha_inicio: string;
+  fecha_fin: string;
+  inscripciones_abiertas: boolean;
+  // Un rango por posición del set (1/2/3, el único formato de Clan War
+  // con ese concepto hoy es WTL). Null = sin restricción.
+  rangos_mmr_por_posicion: RangoMmrPorPosicion[] | null;
+  created_at: string;
+}
+
+export interface RangoMmrPorPosicion {
+  posicion: 1 | 2 | 3;
+  mmr_min: number;
+  mmr_max: number;
+}
+
+// Mercenarios (migración 047): fichados para una temporada completa.
+export interface TeamMercenarioRow {
+  id: string;
+  team_id: string;
+  jugador_id: string;
+  temporada_id: string;
+  fichado_en: string;
+}
+
+export type TeamAlianzaStatus = "pendiente" | "aprobada" | "rechazada";
+
+// Alianzas (migración 047): comparten jugadores elegibles para el
+// lineup, cada equipo mantiene su identidad propia.
+export interface TeamAlianzaRow {
+  id: string;
+  team_a_id: string;
+  team_b_id: string;
+  temporada_id: string;
+  status: TeamAlianzaStatus;
+  aprobado_por: string | null;
+  // El dueño del equipo B confirma con confirmar_alianza_equipo()
+  // antes de que un administrador pueda aprobar la alianza.
+  aprobado_por_equipo_b: boolean;
+  created_at: string;
+}
+
+// Resultado de roster_elegible_cw(): a quién puede poner un capitán en
+// el lineup -- miembros propios, mercenario propio y, con alianza
+// aprobada, roster del equipo aliado.
+export interface RosterElegibleRow {
+  jugador_id: string;
+  es_mercenario: boolean;
+  es_aliado: boolean;
 }
 
 export type ClanWarMatchStatus = "pendiente" | "jugado";

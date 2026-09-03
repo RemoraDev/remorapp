@@ -8,7 +8,14 @@ import { formatFecha } from "../lib/formatters";
 import { SC2_REGION_OPTIONS } from "../types/profile";
 import type { AvatarForma } from "../types/profile";
 import { CLAN_WAR_MOTIVO_RECHAZO_OPTIONS, CLAN_WAR_REPORTE_MOTIVO_OPTIONS, TEMAS_EQUIPO } from "../types/teams";
-import type { ClanWarMotivoRechazo, ClanWarReporteMotivo, ClanWarStatus, TeamRow, TemaEquipo } from "../types/teams";
+import type {
+  ClanWarMotivoRechazo,
+  ClanWarReporteMotivo,
+  ClanWarStatus,
+  TeamRow,
+  TemaEquipo,
+  TemporadaRow,
+} from "../types/teams";
 import { NICK_REGEX, validarNick } from "../lib/nickValidation";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
@@ -100,6 +107,9 @@ interface ClanWarConNombres {
   resultadoMapasChallenged: number;
   // Reprogramar (migración 045).
   reprogramacionesUsadas: number;
+  // Migración 047: opcional -- null significa que ninguna regla de
+  // mercenarios/alianzas/rangos de MMR aplica a este reto.
+  temporadaId: string | null;
 }
 
 interface MiembroRoster {
@@ -109,6 +119,45 @@ interface MiembroRoster {
   sc2Id: string | null;
   razaPrincipal: RazaSc2 | null;
   razaSecundaria: RazaSc2 | null;
+  // Migración 047: true cuando este puesto del roster es un
+  // mercenario fichado para la temporada del reto en cuestión, no un
+  // miembro real del equipo.
+  esMercenario?: boolean;
+}
+
+// Migración 047: opción elegible para el lineup -- miembro propio,
+// mercenario propio, o miembro/mercenario del equipo aliado (con
+// alianza aprobada para la temporada del reto).
+interface JugadorElegibleLineup {
+  jugadorId: string;
+  nombre: string;
+  esMercenario: boolean;
+  esAliado: boolean;
+}
+
+// Migración 047: mercenario fichado por este equipo, con el nombre
+// del jugador y de la temporada ya resueltos para mostrar.
+interface MercenarioConNombres {
+  id: string;
+  jugadorId: string;
+  jugadorNombre: string;
+  temporadaId: string;
+  temporadaNombre: string;
+}
+
+// Migración 047: alianza (en cualquier estado) donde participa este
+// equipo, con el nombre del equipo aliado y de la temporada resueltos.
+interface AlianzaConNombres {
+  id: string;
+  aliadoId: string;
+  aliadoNombre: string;
+  temporadaId: string;
+  temporadaNombre: string;
+  status: "pendiente" | "aprobada" | "rechazada";
+  propuestaPorMi: boolean;
+  // El dueño del equipo B confirma antes de que un administrador
+  // pueda aprobar la alianza.
+  aprobadoPorEquipoB: boolean;
 }
 
 interface LineupEntry {
@@ -199,7 +248,24 @@ interface TorneoParticipadoConResultado {
 // Las secciones del Panel de control (más el acceso directo a Hall of
 // Fame, que no es una sección con contenido propio, solo un link).
 // null = se ve el menú con las tarjetas, no una sección puntual.
-type SeccionPanel = "configuracion" | "editar-equipo" | "eventos" | "titulos" | "logros" | "reportar";
+type SeccionPanel =
+  | "configuracion"
+  | "editar-equipo"
+  | "eventos"
+  | "titulos"
+  | "logros"
+  | "reportar"
+  | "temporada";
+
+// Migración 047: una temporada es "la actual" cuando hoy cae dentro
+// de su fecha_inicio/fecha_fin -- sin esto, "de la temporada actual"
+// (punto 5 del pedido) no tendría cómo distinguirse de "de cualquier
+// temporada que haya existido alguna vez".
+function esTemporadaVigente(temporada: TemporadaRow | undefined): boolean {
+  if (!temporada) return false;
+  const ahora = new Date().toISOString();
+  return temporada.fecha_inicio <= ahora && ahora <= temporada.fecha_fin;
+}
 
 // team_kicks_log.user_id apunta a profiles.id, igual que
 // team_members.user_id -- mismo patrón de extracción.
@@ -328,9 +394,41 @@ export default function TeamDetailPage() {
   // Formato WTL (migración 043): 'simple' por defecto, igual que
   // siempre.
   const [formatoReto, setFormatoReto] = useState<"simple" | "wtl">("simple");
+  // Temporada (migración 047): opcional, "" = sin temporada, mismo
+  // comportamiento de siempre.
+  const [temporadaReto, setTemporadaReto] = useState("");
   const [proponiendoReto, setProponiendoReto] = useState(false);
   const [errorReto, setErrorReto] = useState<string | null>(null);
   const [retoEnviado, setRetoEnviado] = useState(false);
+
+  // --- Temporadas, mercenarios y alianzas (migración 047) ---
+  // Listado público de temporadas, para elegir en "Proponer un reto",
+  // "Fichar mercenario" y "Proponer alianza" -- no hace falta volver a
+  // pedirlo en cada formulario aparte.
+  const [temporadas, setTemporadas] = useState<TemporadaRow[]>([]);
+  const [mercenariosPropios, setMercenariosPropios] = useState<MercenarioConNombres[]>([]);
+  const [alianzasPropias, setAlianzasPropias] = useState<AlianzaConNombres[]>([]);
+  // A quién puede poner un capitán en el lineup de cada reto activo --
+  // incluye mercenario propio y, con alianza aprobada, el roster del
+  // equipo aliado. Solo se completa para retos con temporadaId; sin
+  // eso, el <select> del lineup sigue usando `miembros` directamente.
+  const [elegiblesPorReto, setElegiblesPorReto] = useState<Record<string, JugadorElegibleLineup[]>>({});
+
+  const [temporadaFichaje, setTemporadaFichaje] = useState("");
+  const [busquedaMercenario, setBusquedaMercenario] = useState("");
+  const [buscandoMercenario, setBuscandoMercenario] = useState(false);
+  const [errorMercenario, setErrorMercenario] = useState<string | null>(null);
+  const [resultadoBusquedaMercenario, setResultadoBusquedaMercenario] = useState<JugadorEncontrado | null>(null);
+  const [fichando, setFichando] = useState(false);
+  const [mercenarioFichado, setMercenarioFichado] = useState(false);
+
+  const [temporadaAlianza, setTemporadaAlianza] = useState("");
+  const [tagRivalAlianza, setTagRivalAlianza] = useState("");
+  const [proponiendoAlianza, setProponiendoAlianza] = useState(false);
+  const [errorAlianza, setErrorAlianza] = useState<string | null>(null);
+  const [alianzaEnviada, setAlianzaEnviada] = useState(false);
+  const [confirmandoAlianza, setConfirmandoAlianza] = useState<string | null>(null);
+  const [erroresConfirmarAlianza, setErroresConfirmarAlianza] = useState<Record<string, string>>({});
 
   const [respondiendoReto, setRespondiendoReto] = useState<string | null>(null);
   const [erroresResponderReto, setErroresResponderReto] = useState<Record<string, string>>({});
@@ -500,6 +598,93 @@ export default function TeamDetailPage() {
     setEquipo(equipoData as TeamRow);
     setDescEquipo(equipoData.description ?? "");
 
+    // Temporadas (migración 047): listado público completo -- sin
+    // historial todavía, así que en la práctica son pocas filas. Se
+    // usa para elegir en "Proponer un reto", "Fichar mercenario" y
+    // "Proponer alianza".
+    const { data: temporadasData } = await supabase
+      .from("temporadas")
+      .select("*")
+      .order("fecha_inicio", { ascending: false });
+    setTemporadas((temporadasData ?? []) as TemporadaRow[]);
+
+    // Mercenarios propios (migración 047): públicos, se muestran en el
+    // perfil del equipo, separados de los miembros normales -- solo
+    // los de la temporada actual (hoy cae dentro de fecha_inicio/
+    // fecha_fin), no un historial de todas las que hubo alguna vez.
+    const { data: mercenariosData } = await supabase
+      .from("team_mercenarios")
+      .select("id, jugador_id, temporada_id, profiles(nick, unique_id), temporadas(nombre, fecha_inicio, fecha_fin)")
+      .eq("team_id", equipoData.id)
+      .order("fichado_en", { ascending: false });
+
+    const ahoraIso = new Date().toISOString();
+    setMercenariosPropios(
+      (mercenariosData ?? [])
+        .filter((m) => {
+          const t = Array.isArray(m.temporadas) ? m.temporadas[0] : m.temporadas;
+          const temp = t as { fecha_inicio?: string; fecha_fin?: string } | null;
+          return temp?.fecha_inicio && temp?.fecha_fin && temp.fecha_inicio <= ahoraIso && ahoraIso <= temp.fecha_fin;
+        })
+        .map((m) => {
+          const perfil = extraerPerfilBasico(m.profiles);
+          const temporada = Array.isArray(m.temporadas) ? m.temporadas[0] : m.temporadas;
+          return {
+            id: m.id,
+            jugadorId: m.jugador_id,
+            jugadorNombre: perfil.nick ? `${perfil.nick}#${perfil.unique_id}` : "Jugador de RemorApp",
+            temporadaId: m.temporada_id,
+            temporadaNombre: (temporada as { nombre?: string } | null)?.nombre ?? "Temporada",
+          };
+        })
+    );
+
+    // Alianzas donde participa este equipo, en cualquier estado -- la
+    // RLS ya filtra 'pendiente'/'rechazada' a solo los involucrados y
+    // un administrador (acá siempre calza, es el propio equipo). Se
+    // muestran todas (no solo 'aprobada') porque el propio equipo
+    // necesita ver sus solicitudes pendientes/rechazadas en el panel;
+    // la vitrina pública más abajo sí filtra a solo las aprobadas de
+    // la temporada actual.
+    const { data: alianzasData } = await supabase
+      .from("team_alianzas")
+      .select("id, team_a_id, team_b_id, temporada_id, status, aprobado_por_equipo_b, temporadas(nombre)")
+      .or(`team_a_id.eq.${equipoData.id},team_b_id.eq.${equipoData.id}`)
+      .order("created_at", { ascending: false });
+
+    const idsEquiposAliados = [
+      ...new Set(
+        (alianzasData ?? []).map((a) => (a.team_a_id === equipoData.id ? a.team_b_id : a.team_a_id))
+      ),
+    ];
+    let nombrePorEquipoAliado: Record<string, string> = {};
+    if (idsEquiposAliados.length > 0) {
+      const { data: equiposAliadosData } = await supabase
+        .from("teams")
+        .select("id, name, tag")
+        .in("id", idsEquiposAliados);
+      nombrePorEquipoAliado = Object.fromEntries(
+        (equiposAliadosData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+      );
+    }
+
+    setAlianzasPropias(
+      (alianzasData ?? []).map((a) => {
+        const aliadoId = a.team_a_id === equipoData.id ? a.team_b_id : a.team_a_id;
+        const temporada = Array.isArray(a.temporadas) ? a.temporadas[0] : a.temporadas;
+        return {
+          id: a.id,
+          aliadoId,
+          aliadoNombre: nombrePorEquipoAliado[aliadoId] ?? "Equipo",
+          temporadaId: a.temporada_id,
+          temporadaNombre: (temporada as { nombre?: string } | null)?.nombre ?? "Temporada",
+          status: a.status as "pendiente" | "aprobada" | "rechazada",
+          propuestaPorMi: a.team_a_id === equipoData.id,
+          aprobadoPorEquipoB: a.aprobado_por_equipo_b,
+        };
+      })
+    );
+
     const { data: miembrosData } = await supabase
       .from("team_members")
       .select(
@@ -659,6 +844,7 @@ export default function TeamDetailPage() {
         resultadoMapasChallenger: r.resultado_mapas_challenger,
         resultadoMapasChallenged: r.resultado_mapas_challenged,
         reprogramacionesUsadas: r.reprogramaciones_usadas,
+        temporadaId: r.temporada_id,
       }));
 
       setRetosPendientesResponder(
@@ -726,6 +912,51 @@ export default function TeamDetailPage() {
           });
           rosterPorTeamIdTmp[fila.team_id] = lista;
         }
+
+        // Migración 047: mercenarios fichados para la temporada de
+        // cada reto activo se agregan al roster de su equipo, con la
+        // etiqueta correspondiente -- no son team_members, pero deben
+        // verse en la pantalla de check-in igual que cualquier otro
+        // puesto del roster.
+        const retosConTemporada = activos.filter((r) => r.temporadaId);
+        if (retosConTemporada.length > 0) {
+          const temporadaIdsActivos = [...new Set(retosConTemporada.map((r) => r.temporadaId as string))];
+          const { data: mercenariosCheckInData } = await supabase
+            .from("team_mercenarios")
+            .select("team_id, jugador_id, temporada_id, profiles(nick, unique_id, sc2_id)")
+            .in("team_id", teamIdsInvolucrados)
+            .in("temporada_id", temporadaIdsActivos);
+
+          for (const fila of mercenariosCheckInData ?? []) {
+            // Solo tiene sentido para el/los retos cuya temporada
+            // coincide con la de este fichaje -- un mercenario fichado
+            // para una temporada no aparece en el roster de un reto de
+            // otra temporada distinta.
+            const aplicaAlgunReto = retosConTemporada.some(
+              (r) => r.temporadaId === fila.temporada_id && (r.challengerTeamId === fila.team_id || r.challengedTeamId === fila.team_id)
+            );
+            if (!aplicaAlgunReto) continue;
+
+            const perfil = fila.profiles as unknown as
+              | { nick: string | null; unique_id: string | null; sc2_id: string | null }
+              | { nick: string | null; unique_id: string | null; sc2_id: string | null }[]
+              | null;
+            const p = Array.isArray(perfil) ? perfil[0] : perfil;
+            const lista = rosterPorTeamIdTmp[fila.team_id] ?? [];
+            if (lista.some((m) => m.userId === fila.jugador_id)) continue;
+            lista.push({
+              userId: fila.jugador_id,
+              nick: p?.nick ?? null,
+              uniqueId: p?.unique_id ?? null,
+              sc2Id: p?.sc2_id ?? null,
+              razaPrincipal: null,
+              razaSecundaria: null,
+              esMercenario: true,
+            });
+            rosterPorTeamIdTmp[fila.team_id] = lista;
+          }
+        }
+
         setRosterPorTeamId(rosterPorTeamIdTmp);
 
         const nombrePorUserId: Record<string, string> = {};
@@ -735,6 +966,49 @@ export default function TeamDetailPage() {
               ? `${m.nick}${m.uniqueId ? `#${m.uniqueId}` : ""}`
               : "Jugador de RemorApp";
           }
+        }
+
+        // Migración 047: a quién puede poner un capitán en el lineup
+        // de cada reto con temporada -- roster_elegible_cw() ya
+        // resuelve miembros + mercenario propio + (con alianza
+        // aprobada) roster del equipo aliado. Sin temporada en el
+        // reto, el <select> del lineup sigue usando `miembros`
+        // directamente, sin ningún cambio.
+        if (retosConTemporada.length > 0) {
+          const elegiblesTmp: Record<string, JugadorElegibleLineup[]> = {};
+          for (const r of retosConTemporada) {
+            const miTeamIdReto = r.challengerTeamId === equipoData.id ? r.challengerTeamId : r.challengedTeamId;
+            const { data: elegiblesData, error: elegiblesError } = await supabase.rpc("roster_elegible_cw", {
+              p_team_id: miTeamIdReto,
+              p_temporada_id: r.temporadaId,
+            });
+            if (elegiblesError || !elegiblesData) continue;
+
+            const idsFaltantes = (elegiblesData as { jugador_id: string }[])
+              .map((e) => e.jugador_id)
+              .filter((id) => !nombrePorUserId[id]);
+            if (idsFaltantes.length > 0) {
+              const { data: perfilesFaltantes } = await supabase
+                .from("profiles")
+                .select("id, nick, unique_id")
+                .in("id", idsFaltantes);
+              for (const pf of perfilesFaltantes ?? []) {
+                nombrePorUserId[pf.id] = pf.nick ? `${pf.nick}#${pf.unique_id}` : "Jugador de RemorApp";
+              }
+            }
+
+            elegiblesTmp[r.id] = (elegiblesData as { jugador_id: string; es_mercenario: boolean; es_aliado: boolean }[]).map(
+              (e) => ({
+                jugadorId: e.jugador_id,
+                nombre: nombrePorUserId[e.jugador_id] ?? "Jugador de RemorApp",
+                esMercenario: e.es_mercenario,
+                esAliado: e.es_aliado,
+              })
+            );
+          }
+          setElegiblesPorReto(elegiblesTmp);
+        } else {
+          setElegiblesPorReto({});
         }
 
         const retoIds = activos.map((r) => r.id);
@@ -1049,6 +1323,14 @@ export default function TeamDetailPage() {
   // ver los usos puntuales más abajo.
   const esCapitan = !!user && miembros.some((m) => m.userId === user.id && m.esCapitan);
   const puedeGestionar = esDueño || esCapitan;
+
+  // Migración 047: vitrina pública -- solo alianzas ya aprobadas y de
+  // una temporada vigente hoy, distinto de alianzasPropias (que
+  // también incluye pendientes/rechazadas, para el panel de gestión).
+  const temporadaPorId = Object.fromEntries(temporadas.map((t) => [t.id, t]));
+  const alianzasActivasPublicas = alianzasPropias.filter(
+    (a) => a.status === "aprobada" && esTemporadaVigente(temporadaPorId[a.temporadaId])
+  );
 
   const handleEliminarEquipoDefinitivo = async () => {
     if (
@@ -1385,6 +1667,7 @@ export default function TeamDetailPage() {
       p_challenged_team_id: equipoRival.id,
       p_fecha_hora_cet: datetimeLocalAIso(fechaHoraReto),
       p_formato: formatoReto,
+      p_temporada_id: temporadaReto || null,
     });
 
     setProponiendoReto(false);
@@ -1397,6 +1680,7 @@ export default function TeamDetailPage() {
     setRetoEnviado(true);
     setTagRivalReto("");
     setFechaHoraReto("");
+    setTemporadaReto("");
     await cargar();
   };
 
@@ -1984,6 +2268,144 @@ export default function TeamDetailPage() {
     setBusquedaNick("");
   };
 
+  // --- Mercenarios y alianzas (migración 047) ---
+  const handleBuscarMercenario = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorMercenario(null);
+    setResultadoBusquedaMercenario(null);
+    setMercenarioFichado(false);
+
+    if (!temporadaFichaje) {
+      setErrorMercenario("Elige la temporada para la que quieres fichar.");
+      return;
+    }
+
+    const partes = busquedaMercenario.trim().split("#");
+    if (partes.length !== 2 || !partes[0] || !partes[1]) {
+      setErrorMercenario("Escribe el Nick#ID completo, por ejemplo CarpeDiem#12345.");
+      return;
+    }
+    const [nickBuscado, uniqueIdBuscado] = partes;
+
+    setBuscandoMercenario(true);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, nick, unique_id, avatar_url, avatar_forma")
+      .eq("nick", nickBuscado)
+      .eq("unique_id", uniqueIdBuscado)
+      .maybeSingle();
+    setBuscandoMercenario(false);
+
+    if (error || !data) {
+      setErrorMercenario("No encontré a nadie con ese Nick#ID.");
+      return;
+    }
+
+    setResultadoBusquedaMercenario({
+      id: data.id,
+      nick: data.nick ?? nickBuscado,
+      uniqueId: data.unique_id,
+      avatarUrl: data.avatar_url,
+      avatarForma: data.avatar_forma,
+    });
+  };
+
+  const handleFicharMercenario = async () => {
+    if (!resultadoBusquedaMercenario || !temporadaFichaje) return;
+
+    setFichando(true);
+    setErrorMercenario(null);
+
+    // fichar_mercenario() (en la base) es la que de verdad chequea que
+    // seas dueño o capitán, que las inscripciones de la temporada
+    // sigan abiertas, y los límites de 1 mercenario por equipo / 1
+    // equipo por jugador -- esto de acá es solo el formulario.
+    const { error } = await supabase.rpc("fichar_mercenario", {
+      p_team_id: equipo.id,
+      p_jugador_id: resultadoBusquedaMercenario.id,
+      p_temporada_id: temporadaFichaje,
+    });
+
+    setFichando(false);
+
+    if (error) {
+      setErrorMercenario(error.message);
+      return;
+    }
+
+    setMercenarioFichado(true);
+    setResultadoBusquedaMercenario(null);
+    setBusquedaMercenario("");
+    await cargar();
+  };
+
+  const handleProponerAlianza = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorAlianza(null);
+    setAlianzaEnviada(false);
+
+    if (!temporadaAlianza) {
+      setErrorAlianza("Elige la temporada de la alianza.");
+      return;
+    }
+    const tagRival = tagRivalAlianza.trim().toUpperCase();
+    if (!tagRival) {
+      setErrorAlianza("Escribe el tag del equipo aliado.");
+      return;
+    }
+
+    setProponiendoAlianza(true);
+
+    const { data: equipoRival, error: buscarError } = await supabase
+      .from("teams")
+      .select("id")
+      .eq("tag", tagRival)
+      .maybeSingle();
+
+    if (buscarError || !equipoRival) {
+      setErrorAlianza("No encontré ningún equipo con ese tag.");
+      setProponiendoAlianza(false);
+      return;
+    }
+
+    // proponer_alianza() (en la base) es la que de verdad chequea que
+    // seas el dueño y que ninguno de los dos equipos tenga ya una
+    // alianza activa esta temporada -- todavía queda pendiente de
+    // aprobación de un administrador.
+    const { error } = await supabase.rpc("proponer_alianza", {
+      p_team_id: equipo.id,
+      p_team_rival_id: equipoRival.id,
+      p_temporada_id: temporadaAlianza,
+    });
+
+    setProponiendoAlianza(false);
+
+    if (error) {
+      setErrorAlianza(error.message);
+      return;
+    }
+
+    setAlianzaEnviada(true);
+    setTagRivalAlianza("");
+    await cargar();
+  };
+
+  const handleConfirmarAlianza = async (alianzaId: string) => {
+    setConfirmandoAlianza(alianzaId);
+    setErroresConfirmarAlianza((prev) => ({ ...prev, [alianzaId]: "" }));
+
+    const { error } = await supabase.rpc("confirmar_alianza_equipo", { p_alianza_id: alianzaId });
+
+    setConfirmandoAlianza(null);
+
+    if (error) {
+      setErroresConfirmarAlianza((prev) => ({ ...prev, [alianzaId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
   const handleCrearTemporal = async (event: FormEvent) => {
     event.preventDefault();
     if (!equipo) return;
@@ -2232,6 +2654,39 @@ export default function TeamDetailPage() {
         )}
       </div>
 
+      {/* Migración 047: mercenarios y alianzas de la temporada actual,
+          claramente separados de los miembros normales de arriba --
+          no se mezclan en la misma lista. */}
+      {mercenariosPropios.length > 0 && (
+        <>
+          <h2 className="detail-subtitle">Mercenarios</h2>
+          <div className="detail-participant-list">
+            {mercenariosPropios.map((m) => (
+              <div key={m.id} className="detail-participant-item">
+                {m.jugadorNombre}
+                <span className="team-temp-badge">Mercenario</span>
+                <span className="tournament-card-meta">{m.temporadaNombre}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {alianzasActivasPublicas.length > 0 && (
+        <>
+          <h2 className="detail-subtitle">Alianzas activas</h2>
+          <div className="detail-participant-list">
+            {alianzasActivasPublicas.map((a) => (
+              <div key={a.id} className="detail-participant-item">
+                {a.aliadoNombre}
+                <span className="team-temp-badge">Aliado</span>
+                <span className="tournament-card-meta">{a.temporadaNombre}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       {esMiembroNoOwner && (
         <div className="detail-register-box">
           {errorSalir && <div className="form-error">{errorSalir}</div>}
@@ -2305,6 +2760,16 @@ export default function TeamDetailPage() {
                       <span className="team-panel-menu-item-desc">Responder, proponer y ver Títulos Padre/Hijo</span>
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="team-panel-menu-item"
+                    onClick={() => setSeccionPanel("temporada")}
+                  >
+                    <span className="team-panel-menu-item-title">Mercenarios y Alianzas</span>
+                    <span className="team-panel-menu-item-desc">
+                      Fichar un mercenario y proponer una alianza con otro equipo
+                    </span>
+                  </button>
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("logros")}>
                     <span className="team-panel-menu-item-title">Logros y Recompensas</span>
                     <span className="team-panel-menu-item-desc">
@@ -2992,10 +3457,25 @@ export default function TeamDetailPage() {
                                 }
                               >
                                 <option value="">Selecciona un jugador</option>
-                                {miembros.map((m) => (
-                                  <option key={`real:${m.userId}`} value={`real:${m.userId}`}>
-                                    {m.nick ?? "Jugador de RemorApp"}
-                                    {m.uniqueId ? `#${m.uniqueId}` : ""}
+                                {/* Migración 047: con una temporada asignada
+                                    a este reto, se ofrece el roster
+                                    elegible completo (miembros + mercenario
+                                    propio + roster del equipo aliado si hay
+                                    alianza aprobada), no solo `miembros` --
+                                    sin temporada, comportamiento idéntico a
+                                    siempre. */}
+                                {(elegiblesPorReto[r.id] ??
+                                  miembros.map((m) => ({
+                                    jugadorId: m.userId,
+                                    nombre: m.nick ? `${m.nick}${m.uniqueId ? `#${m.uniqueId}` : ""}` : "Jugador de RemorApp",
+                                    esMercenario: false,
+                                    esAliado: false,
+                                  }))
+                                ).map((op) => (
+                                  <option key={`real:${op.jugadorId}`} value={`real:${op.jugadorId}`}>
+                                    {op.nombre}
+                                    {op.esMercenario ? " (Mercenario)" : ""}
+                                    {op.esAliado ? " (Aliado)" : ""}
                                   </option>
                                 ))}
                                 {/* Formato WTL: solo jugadores reales, sin
@@ -3112,6 +3592,7 @@ export default function TeamDetailPage() {
                                   <div key={m.userId} className="detail-participant-item">
                                     {m.nick ?? "Jugador de RemorApp"}
                                     {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+                                    {m.esMercenario && <span className="team-temp-badge">Mercenario</span>}
                                     {m.razaPrincipal && (
                                       <span className="liga-badge">
                                         {m.razaPrincipal}
@@ -3604,6 +4085,30 @@ export default function TeamDetailPage() {
                   </select>
                 </div>
 
+                {/* Migración 047: opcional -- solo si este reto forma
+                    parte de una temporada aplican las reglas de
+                    mercenarios/alianzas/rangos de MMR. Sin elegir
+                    ninguna, el reto se comporta exactamente como
+                    siempre. */}
+                <div className="form-group">
+                  <label className="form-label" htmlFor="reto-temporada">
+                    Temporada (opcional)
+                  </label>
+                  <select
+                    id="reto-temporada"
+                    className="form-select"
+                    value={temporadaReto}
+                    onChange={(e) => setTemporadaReto(e.target.value)}
+                  >
+                    <option value="">Sin temporada</option>
+                    {temporadas.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendoReto}>
                   {proponiendoReto ? "Proponiendo..." : "Proponer reto"}
                 </button>
@@ -3788,6 +4293,202 @@ export default function TeamDetailPage() {
                   {eliminandoEquipoDefinitivo ? "Eliminando..." : "Eliminar equipo"}
                 </button>
               </div>
+              )}
+
+              {seccionPanel === "temporada" && (
+                <>
+                  <h3 className="detail-subtitle">Fichar un mercenario</h3>
+                  <p className="detail-empty">
+                    Un mercenario queda disponible para el lineup durante toda la temporada elegida,
+                    igual que cualquier miembro del equipo, pero no puede ser designado ACE. Un equipo
+                    solo puede tener 1 mercenario por temporada, y un jugador solo puede ser mercenario
+                    de 1 equipo por temporada.
+                  </p>
+                  {temporadas.length === 0 ? (
+                    <p className="detail-empty">Todavía no hay ninguna temporada creada.</p>
+                  ) : (
+                    <form className="auth-form" onSubmit={handleBuscarMercenario}>
+                      {errorMercenario && <div className="form-error">{errorMercenario}</div>}
+                      {mercenarioFichado && <div className="form-success">¡Mercenario fichado!</div>}
+
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="mercenario-temporada">
+                          Temporada
+                        </label>
+                        <select
+                          id="mercenario-temporada"
+                          className="form-select"
+                          value={temporadaFichaje}
+                          onChange={(e) => setTemporadaFichaje(e.target.value)}
+                        >
+                          <option value="">Selecciona una temporada</option>
+                          {temporadas
+                            .filter((t) => t.inscripciones_abiertas)
+                            .map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.nombre}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="mercenario-nick">
+                          Nick#ID del jugador
+                        </label>
+                        <input
+                          id="mercenario-nick"
+                          className="form-input"
+                          type="text"
+                          placeholder="CarpeDiem#12345"
+                          value={busquedaMercenario}
+                          onChange={(e) => setBusquedaMercenario(e.target.value)}
+                        />
+                      </div>
+
+                      <button type="submit" className="btn btn-ghost btn-block" disabled={buscandoMercenario}>
+                        {buscandoMercenario ? "Buscando..." : "Buscar"}
+                      </button>
+
+                      {resultadoBusquedaMercenario && (
+                        <div className="detail-participant-item">
+                          <Avatar
+                            url={resultadoBusquedaMercenario.avatarUrl}
+                            nombre={resultadoBusquedaMercenario.nick}
+                            className="detail-participant-avatar"
+                            forma={resultadoBusquedaMercenario.avatarForma}
+                          />
+                          {resultadoBusquedaMercenario.nick}
+                          <span className="profile-nick-id">#{resultadoBusquedaMercenario.uniqueId}</span>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={fichando}
+                            onClick={handleFicharMercenario}
+                          >
+                            {fichando ? "Fichando..." : "Fichar como mercenario"}
+                          </button>
+                        </div>
+                      )}
+                    </form>
+                  )}
+
+                  {mercenariosPropios.length > 0 && (
+                    <>
+                      <h3 className="detail-subtitle">Mercenarios de la temporada actual</h3>
+                      <div className="detail-participant-list">
+                        {mercenariosPropios.map((m) => (
+                          <div key={m.id} className="detail-participant-item">
+                            {m.jugadorNombre}
+                            <span className="team-temp-badge">Mercenario</span>
+                            <span className="tournament-card-meta">{m.temporadaNombre}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  <h3 className="detail-subtitle">Proponer una alianza</h3>
+                  {esDueño ? (
+                    temporadas.length === 0 ? (
+                      <p className="detail-empty">Todavía no hay ninguna temporada creada.</p>
+                    ) : (
+                      <form className="auth-form" onSubmit={handleProponerAlianza}>
+                        {errorAlianza && <div className="form-error">{errorAlianza}</div>}
+                        {alianzaEnviada && (
+                          <div className="form-success">
+                            Alianza propuesta -- queda pendiente de aprobación de un administrador.
+                          </div>
+                        )}
+
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="alianza-temporada">
+                            Temporada
+                          </label>
+                          <select
+                            id="alianza-temporada"
+                            className="form-select"
+                            value={temporadaAlianza}
+                            onChange={(e) => setTemporadaAlianza(e.target.value)}
+                          >
+                            <option value="">Selecciona una temporada</option>
+                            {temporadas.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.nombre}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="alianza-tag">
+                            Tag del equipo aliado
+                          </label>
+                          <input
+                            id="alianza-tag"
+                            className="form-input"
+                            type="text"
+                            placeholder="QSQD"
+                            value={tagRivalAlianza}
+                            onChange={(e) => setTagRivalAlianza(e.target.value.toUpperCase())}
+                          />
+                        </div>
+
+                        <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendoAlianza}>
+                          {proponiendoAlianza ? "Proponiendo..." : "Proponer alianza"}
+                        </button>
+                      </form>
+                    )
+                  ) : (
+                    <p className="detail-empty">Solo el dueño del equipo puede proponer una alianza.</p>
+                  )}
+
+                  {alianzasPropias.length > 0 && (
+                    <>
+                      <h3 className="detail-subtitle">Alianzas de este equipo</h3>
+                      <div className="detail-participant-list">
+                        {alianzasPropias.map((a) => {
+                          const estadoTexto =
+                            a.status === "aprobada"
+                              ? "Aprobada"
+                              : a.status === "rechazada"
+                                ? "Rechazada"
+                                : a.aprobadoPorEquipoB
+                                  ? "Confirmada -- pendiente de un administrador"
+                                  : a.propuestaPorMi
+                                    ? "Esperando confirmación del equipo aliado"
+                                    : "Pendiente de tu confirmación";
+
+                          // Solo el dueño del equipo B confirma -- ver el
+                          // chequeo explícito en confirmar_alianza_equipo().
+                          const puedoConfirmar =
+                            esDueño && !a.propuestaPorMi && a.status === "pendiente" && !a.aprobadoPorEquipoB;
+
+                          return (
+                            <div key={a.id} className="detail-participant-item">
+                              {a.aliadoNombre}
+                              <span className="tournament-card-meta">{a.temporadaNombre}</span>
+                              <span className="reto-status">{estadoTexto}</span>
+                              {puedoConfirmar && (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={confirmandoAlianza === a.id}
+                                  onClick={() => handleConfirmarAlianza(a.id)}
+                                >
+                                  {confirmandoAlianza === a.id ? "Confirmando..." : "Confirmar alianza"}
+                                </button>
+                              )}
+                              {erroresConfirmarAlianza[a.id] && (
+                                <div className="form-error">{erroresConfirmarAlianza[a.id]}</div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </>
               )}
 
               {seccionPanel === "logros" && (

@@ -10,7 +10,7 @@ import type { AdminUserRow } from "../types/admin";
 import type { TournamentRow } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
 
-type Tab = "torneos" | "usuarios" | "equipos" | "disputas" | "reportes";
+type Tab = "torneos" | "usuarios" | "equipos" | "disputas" | "reportes" | "alianzas";
 
 interface ReporteConNombre {
   id: string;
@@ -33,6 +33,15 @@ interface DisputaConNombres extends BracketMatchRow {
   p2Nombre: string;
   reportedP1Nombre: string | null;
   reportedP2Nombre: string | null;
+}
+
+// Alianzas pendientes de aprobación (migración 047).
+interface AlianzaPendienteConNombres {
+  id: string;
+  equipoANombre: string;
+  equipoBNombre: string;
+  temporadaNombre: string;
+  createdAt: string;
 }
 
 export default function AdminPage() {
@@ -74,6 +83,13 @@ export default function AdminPage() {
   const [reportes, setReportes] = useState<ReporteConNombre[]>([]);
   const [cargandoReportes, setCargandoReportes] = useState(true);
   const [errorReportes, setErrorReportes] = useState<string | null>(null);
+
+  // --- Alianzas pendientes de aprobación (migración 047) ---
+  const [alianzas, setAlianzas] = useState<AlianzaPendienteConNombres[]>([]);
+  const [cargandoAlianzas, setCargandoAlianzas] = useState(true);
+  const [errorAlianzas, setErrorAlianzas] = useState<string | null>(null);
+  const [resolviendoAlianza, setResolviendoAlianza] = useState<string | null>(null);
+  const [erroresAlianza, setErroresAlianza] = useState<Record<string, string>>({});
 
   const esAdmin = !!profile?.es_admin;
 
@@ -201,6 +217,51 @@ export default function AdminPage() {
     };
 
     cargarReportes();
+
+    const cargarAlianzas = async () => {
+      // Solo las que el equipo B ya confirmó -- sin esa confirmación,
+      // aprobar_alianza() las rechaza igual, así que ni tiene sentido
+      // ofrecerlas acá.
+      const { data, error } = await supabase
+        .from("team_alianzas")
+        .select("id, team_a_id, team_b_id, created_at, temporadas(nombre)")
+        .eq("status", "pendiente")
+        .eq("aprobado_por_equipo_b", true)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        setErrorAlianzas(error.message);
+        setCargandoAlianzas(false);
+        return;
+      }
+
+      const filas = data ?? [];
+      if (filas.length === 0) {
+        setAlianzas([]);
+        setCargandoAlianzas(false);
+        return;
+      }
+
+      const teamIds = [...new Set(filas.flatMap((a) => [a.team_a_id, a.team_b_id]))];
+      const { data: equiposData } = await supabase.from("teams").select("id, name, tag").in("id", teamIds);
+      const nombrePorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`]));
+
+      setAlianzas(
+        filas.map((a) => {
+          const temporada = Array.isArray(a.temporadas) ? a.temporadas[0] : a.temporadas;
+          return {
+            id: a.id,
+            equipoANombre: nombrePorTeamId[a.team_a_id] ?? "Equipo",
+            equipoBNombre: nombrePorTeamId[a.team_b_id] ?? "Equipo",
+            temporadaNombre: (temporada as { nombre?: string } | null)?.nombre ?? "Temporada",
+            createdAt: a.created_at,
+          };
+        })
+      );
+      setCargandoAlianzas(false);
+    };
+
+    cargarAlianzas();
   }, [esAdmin]);
 
   // Orden importa: primero la sesión, después el perfil (llega por una
@@ -358,6 +419,25 @@ export default function AdminPage() {
     setDisputas((prev) => prev.filter((d) => d.id !== matchId));
   };
 
+  const handleResolverAlianza = async (alianzaId: string, aprobar: boolean) => {
+    setResolviendoAlianza(alianzaId);
+    setErroresAlianza((prev) => ({ ...prev, [alianzaId]: "" }));
+
+    const { error } = await supabase.rpc("aprobar_alianza", {
+      p_alianza_id: alianzaId,
+      p_aprobar: aprobar,
+    });
+
+    setResolviendoAlianza(null);
+
+    if (error) {
+      setErroresAlianza((prev) => ({ ...prev, [alianzaId]: error.message }));
+      return;
+    }
+
+    setAlianzas((prev) => prev.filter((a) => a.id !== alianzaId));
+  };
+
   return (
     <section className="section section-page">
       <h1 className="section-title">Administración</h1>
@@ -399,6 +479,14 @@ export default function AdminPage() {
         >
           Reportes
           {reportes.length > 0 && ` (${reportes.length})`}
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${tab === "alianzas" ? "active" : ""}`}
+          onClick={() => setTab("alianzas")}
+        >
+          Alianzas
+          {alianzas.length > 0 && ` (${alianzas.length})`}
         </button>
       </div>
 
@@ -620,6 +708,49 @@ export default function AdminPage() {
                     {r.reportadoPorNombre} · {formatFecha(r.createdAt)}
                   </p>
                   <p className="admin-row-meta">{r.descripcion}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "alianzas" && (
+        <div className="admin-panel">
+          {errorAlianzas && <div className="form-error">{errorAlianzas}</div>}
+          {cargandoAlianzas && <p className="tournament-card-meta">Cargando alianzas...</p>}
+          {!cargandoAlianzas && alianzas.length === 0 && (
+            <p className="tournament-card-meta">No hay ninguna alianza pendiente de aprobación.</p>
+          )}
+          <div className="admin-list">
+            {alianzas.map((a) => (
+              <div key={a.id} className="admin-row">
+                <div className="admin-row-info">
+                  <p className="admin-row-title">
+                    {a.equipoANombre} + {a.equipoBNombre}
+                  </p>
+                  <p className="admin-row-meta">
+                    {a.temporadaNombre} · Propuesta el {formatFecha(a.createdAt)}
+                  </p>
+                  {erroresAlianza[a.id] && <div className="form-error">{erroresAlianza[a.id]}</div>}
+                </div>
+                <div className="admin-row-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={resolviendoAlianza === a.id}
+                    onClick={() => handleResolverAlianza(a.id, true)}
+                  >
+                    Aprobar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={resolviendoAlianza === a.id}
+                    onClick={() => handleResolverAlianza(a.id, false)}
+                  >
+                    Rechazar
+                  </button>
                 </div>
               </div>
             ))}
