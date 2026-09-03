@@ -91,6 +91,13 @@ interface ClanWarConNombres {
   challengerCierreConfirmado: boolean;
   challengedCierreConfirmado: boolean;
   ganadorTeamId: string | null;
+  // Formato WTL/chino (migración 042).
+  formato: "simple" | "wtl";
+  aceChallengerId: string | null;
+  aceChallengedId: string | null;
+  aceGanadorId: string | null;
+  resultadoMapasChallenger: number;
+  resultadoMapasChallenged: number;
 }
 
 interface MiembroRoster {
@@ -107,6 +114,23 @@ interface LineupEntry {
   nombre: string;
   esTemporal: boolean;
   linkVerificacion: string | null;
+  // Migración 042 (formato WTL): jugadorId real (null para
+  // temporales) y la posición (1/2/3) que ocupa en el lineup.
+  jugadorId: string | null;
+  posicion: 1 | 2 | 3 | null;
+}
+
+// Formato WTL/chino (migración 042): un set Bo2 por posición (1/2/3).
+interface WtlSetConNombres {
+  id: string;
+  posicion: 1 | 2 | 3;
+  jugadorChallengerId: string;
+  jugadorChallengerNombre: string;
+  jugadorChallengedId: string;
+  jugadorChallengedNombre: string;
+  mapasGanadosChallenger: number;
+  mapasGanadosChallenged: number;
+  status: "pendiente" | "jugado";
 }
 
 interface ReporteConNombres {
@@ -289,6 +313,9 @@ export default function TeamDetailPage() {
 
   const [tagRivalReto, setTagRivalReto] = useState("");
   const [fechaHoraReto, setFechaHoraReto] = useState("");
+  // Formato WTL (migración 043): 'simple' por defecto, igual que
+  // siempre.
+  const [formatoReto, setFormatoReto] = useState<"simple" | "wtl">("simple");
   const [proponiendoReto, setProponiendoReto] = useState(false);
   const [errorReto, setErrorReto] = useState<string | null>(null);
   const [retoEnviado, setRetoEnviado] = useState(false);
@@ -312,6 +339,9 @@ export default function TeamDetailPage() {
   );
   const [jugadorLineupNuevo, setJugadorLineupNuevo] = useState<Record<string, string>>({});
   const [linkLineupNuevo, setLinkLineupNuevo] = useState<Record<string, string>>({});
+  // Formato WTL (migración 042): posición (1/2/3) elegida para el
+  // próximo jugador que se agregue al lineup.
+  const [posicionLineupNuevo, setPosicionLineupNuevo] = useState<Record<string, string>>({});
   const [agregandoLineup, setAgregandoLineup] = useState<string | null>(null);
   const [quitandoLineup, setQuitandoLineup] = useState<string | null>(null);
   const [erroresLineup, setErroresLineup] = useState<Record<string, string>>({});
@@ -319,6 +349,15 @@ export default function TeamDetailPage() {
   const [erroresConfirmarLineup, setErroresConfirmarLineup] = useState<Record<string, string>>({});
   const [reportesPorReto, setReportesPorReto] = useState<Record<string, ReporteConNombres[]>>({});
   const [partidasPorReto, setPartidasPorReto] = useState<Record<string, PartidaConNombres[]>>({});
+  // Formato WTL (migración 042): 3 sets Bo2, ACE si el marcador global
+  // queda 3-3.
+  const [wtlSetsPorReto, setWtlSetsPorReto] = useState<Record<string, WtlSetConNombres[]>>({});
+  const [reportandoMapaWtl, setReportandoMapaWtl] = useState<string | null>(null);
+  const [erroresMapaWtl, setErroresMapaWtl] = useState<Record<string, string>>({});
+  const [aceElegidoPorReto, setAceElegidoPorReto] = useState<Record<string, string>>({});
+  const [designandoAce, setDesignandoAce] = useState<string | null>(null);
+  const [erroresAce, setErroresAce] = useState<Record<string, string>>({});
+  const [reportandoMapaAce, setReportandoMapaAce] = useState<string | null>(null);
   // Se recalcula cada 30 segundos -- así la ventana de check-in
   // aparece sola cuando corresponde, sin que haga falta recargar la
   // página a mano.
@@ -589,6 +628,12 @@ export default function TeamDetailPage() {
         challengerCierreConfirmado: r.challenger_cierre_confirmado,
         challengedCierreConfirmado: r.challenged_cierre_confirmado,
         ganadorTeamId: r.ganador_team_id,
+        formato: r.formato,
+        aceChallengerId: r.ace_challenger_id,
+        aceChallengedId: r.ace_challenged_id,
+        aceGanadorId: r.ace_ganador_id,
+        resultadoMapasChallenger: r.resultado_mapas_challenger,
+        resultadoMapasChallenged: r.resultado_mapas_challenged,
       }));
 
       setRetosPendientesResponder(
@@ -678,7 +723,7 @@ export default function TeamDetailPage() {
             // (jugador_id y agregado_por) -- hay que especificar la
             // columna, si no PostgREST tira PGRST201 por ambigüedad
             // (mismo caso ya visto con team_invitations).
-            "id, clan_war_id, team_id, jugador_id, jugador_temporal_id, link_verificacion, profiles!jugador_id(nick, unique_id), team_temp_players(nick_temporal)"
+            "id, clan_war_id, team_id, jugador_id, jugador_temporal_id, link_verificacion, posicion, profiles!jugador_id(nick, unique_id), team_temp_players(nick_temporal)"
           )
           .in("clan_war_id", retoIds);
 
@@ -703,6 +748,8 @@ export default function TeamDetailPage() {
               : `Temporal: ${temp?.nick_temporal ?? "?"}`,
             esTemporal: !!fila.jugador_temporal_id,
             linkVerificacion: fila.link_verificacion,
+            jugadorId: fila.jugador_id,
+            posicion: fila.posicion as 1 | 2 | 3 | null,
           };
           const bucket = lineupPorRetoTmp[fila.clan_war_id] ?? { propio: [], rival: [] };
           if (fila.team_id === equipoData.id) {
@@ -761,11 +808,38 @@ export default function TeamDetailPage() {
           partidasPorRetoTmp[p.clan_war_id] = lista;
         }
         setPartidasPorReto(partidasPorRetoTmp);
+
+        // Formato WTL (migración 042): 3 sets Bo2 por reto, generados
+        // solos al arrancar la guerra -- mismo nombrePorUserId de arriba.
+        const { data: wtlSetsData } = await supabase
+          .from("clan_war_wtl_sets")
+          .select("*")
+          .in("clan_war_id", retoIds)
+          .order("posicion", { ascending: true });
+
+        const wtlSetsPorRetoTmp: Record<string, WtlSetConNombres[]> = {};
+        for (const s of wtlSetsData ?? []) {
+          const lista = wtlSetsPorRetoTmp[s.clan_war_id] ?? [];
+          lista.push({
+            id: s.id,
+            posicion: s.posicion,
+            jugadorChallengerId: s.jugador_challenger_id,
+            jugadorChallengerNombre: nombrePorUserId[s.jugador_challenger_id] ?? "Jugador de RemorApp",
+            jugadorChallengedId: s.jugador_challenged_id,
+            jugadorChallengedNombre: nombrePorUserId[s.jugador_challenged_id] ?? "Jugador de RemorApp",
+            mapasGanadosChallenger: s.mapas_ganados_challenger,
+            mapasGanadosChallenged: s.mapas_ganados_challenged,
+            status: s.status,
+          });
+          wtlSetsPorRetoTmp[s.clan_war_id] = lista;
+        }
+        setWtlSetsPorReto(wtlSetsPorRetoTmp);
       } else {
         setRosterPorTeamId({});
         setLineupPorReto({});
         setReportesPorReto({});
         setPartidasPorReto({});
+        setWtlSetsPorReto({});
       }
 
       // Títulos Padre/Hijo entre clanes: propuestas pendientes de
@@ -1265,6 +1339,7 @@ export default function TeamDetailPage() {
     const { error } = await supabase.rpc("proponer_clan_war", {
       p_challenged_team_id: equipoRival.id,
       p_fecha_hora_cet: datetimeLocalAIso(fechaHoraReto),
+      p_formato: formatoReto,
     });
 
     setProponiendoReto(false);
@@ -1340,6 +1415,7 @@ export default function TeamDetailPage() {
       p_jugador_id: tipo === "real" ? id : null,
       p_jugador_temporal_id: tipo === "temp" ? id : null,
       p_link_verificacion: linkLineupNuevo[retoId]?.trim() || null,
+      p_posicion: posicionLineupNuevo[retoId] ? Number(posicionLineupNuevo[retoId]) : null,
     });
 
     setAgregandoLineup(null);
@@ -1351,6 +1427,73 @@ export default function TeamDetailPage() {
 
     setJugadorLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
     setLinkLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
+    setPosicionLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
+    await cargar();
+  };
+
+  // Formato WTL (migración 042): un mapa a la vez, dentro de un set Bo2.
+  const handleReportarMapaWtl = async (setId: string, ganadorId: string) => {
+    setReportandoMapaWtl(setId);
+    setErroresMapaWtl((prev) => ({ ...prev, [setId]: "" }));
+
+    const { error } = await supabase.rpc("reportar_mapa_wtl", {
+      p_set_id: setId,
+      p_ganador_id: ganadorId,
+    });
+
+    setReportandoMapaWtl(null);
+
+    if (error) {
+      setErroresMapaWtl((prev) => ({ ...prev, [setId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  // Designar al ACE propio (solo disponible con el marcador global
+  // empatado 3-3 y los 3 sets jugados).
+  const handleDesignarAce = async (retoId: string) => {
+    const jugadorId = aceElegidoPorReto[retoId];
+    if (!jugadorId) {
+      setErroresAce((prev) => ({ ...prev, [retoId]: "Selecciona a tu ACE." }));
+      return;
+    }
+
+    setDesignandoAce(retoId);
+    setErroresAce((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("designar_ace_wtl", {
+      p_clan_war_id: retoId,
+      p_jugador_id: jugadorId,
+    });
+
+    setDesignandoAce(null);
+
+    if (error) {
+      setErroresAce((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleReportarMapaAce = async (retoId: string, ganadorId: string) => {
+    setReportandoMapaAce(retoId);
+    setErroresAce((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("reportar_mapa_ace_wtl", {
+      p_clan_war_id: retoId,
+      p_ganador_id: ganadorId,
+    });
+
+    setReportandoMapaAce(null);
+
+    if (error) {
+      setErroresAce((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
     await cargar();
   };
 
@@ -2570,6 +2713,14 @@ export default function TeamDetailPage() {
                     const ganadasChallenged = partidas.filter(
                       (p) => p.status === "jugado" && p.ganadorId === p.jugadorChallengedId
                     ).length;
+                    // Formato WTL (migración 042).
+                    const wtlSets = wtlSetsPorReto[r.id] ?? [];
+                    const wtlMarcadorEmpatado =
+                      wtlSets.length === 3 &&
+                      wtlSets.every((s) => s.status === "jugado") &&
+                      r.resultadoMapasChallenger === r.resultadoMapasChallenged;
+                    const miAceYaElegido = soyChallenger ? r.aceChallengerId : r.aceChallengedId;
+                    const rivalAceYaElegido = soyChallenger ? r.aceChallengedId : r.aceChallengerId;
 
                     return (
                       <div key={r.id} className="reto-item">
@@ -2592,6 +2743,7 @@ export default function TeamDetailPage() {
                               <div className="detail-participant-list">
                                 {lineupDeReto.propio.map((entry) => (
                                   <div key={entry.id} className="detail-participant-item">
+                                    {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
                                     {entry.nombre}
                                     {entry.esTemporal && <span className="team-temp-badge">Temporal</span>}
                                     {entry.linkVerificacion && (
@@ -2636,13 +2788,37 @@ export default function TeamDetailPage() {
                                     {m.uniqueId ? `#${m.uniqueId}` : ""}
                                   </option>
                                 ))}
-                                {temporalesPropiosDisponibles.map((t) => (
-                                  <option key={`temp:${t.id}`} value={`temp:${t.id}`}>
-                                    {t.nickTemporal} (Temporal)
-                                  </option>
-                                ))}
+                                {/* Formato WTL: solo jugadores reales, sin
+                                    temporales -- ver el comentario en
+                                    armar_lineup_cw() en la base. */}
+                                {r.formato !== "wtl" &&
+                                  temporalesPropiosDisponibles.map((t) => (
+                                    <option key={`temp:${t.id}`} value={`temp:${t.id}`}>
+                                      {t.nickTemporal} (Temporal)
+                                    </option>
+                                  ))}
                               </select>
                             </div>
+                            {r.formato === "wtl" && (
+                              <div className="form-group">
+                                <label className="form-label" htmlFor={`lineup-posicion-${r.id}`}>
+                                  Posición (1, 2 o 3)
+                                </label>
+                                <select
+                                  id={`lineup-posicion-${r.id}`}
+                                  className="form-select"
+                                  value={posicionLineupNuevo[r.id] ?? ""}
+                                  onChange={(e) =>
+                                    setPosicionLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                  }
+                                >
+                                  <option value="">Selecciona la posición</option>
+                                  <option value="1">Posición 1</option>
+                                  <option value="2">Posición 2</option>
+                                  <option value="3">Posición 3</option>
+                                </select>
+                              </div>
+                            )}
                             <div className="form-group">
                               <label className="form-label" htmlFor={`lineup-link-${r.id}`}>
                                 Link de verificación (opcional)
@@ -2674,6 +2850,7 @@ export default function TeamDetailPage() {
                               <div className="detail-participant-list">
                                 {lineupDeReto.rival.map((entry) => (
                                   <div key={entry.id} className="detail-participant-item">
+                                    {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
                                     {entry.nombre}
                                     {entry.esTemporal && <span className="team-temp-badge">Temporal</span>}
                                     {entry.linkVerificacion && (
@@ -2910,6 +3087,133 @@ export default function TeamDetailPage() {
                           <>
                             <p className="form-success">La guerra está en curso.</p>
 
+                            {/* Formato WTL/chino (migración 042): marcador
+                                estilo StarLeague -- cada set como "X-Y" y
+                                el acumulado global de mapas, en vez de
+                                partidas individuales sueltas. */}
+                            {r.formato === "wtl" && (
+                              <>
+                                <h5 className="detail-subtitle">
+                                  Marcador global ({r.resultadoMapasChallenger} - {r.resultadoMapasChallenged})
+                                </h5>
+                                {erroresMapaWtl[r.id] && <div className="form-error">{erroresMapaWtl[r.id]}</div>}
+                                <div className="detail-participant-list">
+                                  {wtlSets.map((s) => (
+                                    <div key={s.id} className="reto-item">
+                                      <p className="reto-desc">
+                                        Posición {s.posicion}: {s.jugadorChallengerNombre} {s.mapasGanadosChallenger}-
+                                        {s.mapasGanadosChallenged} {s.jugadorChallengedNombre}
+                                        <span className="reto-status">
+                                          {s.status === "jugado" ? "Set jugado" : "En juego"}
+                                        </span>
+                                      </p>
+                                      {s.status === "pendiente" && (
+                                        <div className="bracket-report">
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost"
+                                            disabled={reportandoMapaWtl === s.id}
+                                            onClick={() => handleReportarMapaWtl(s.id, s.jugadorChallengerId)}
+                                          >
+                                            Ganó mapa {s.jugadorChallengerNombre}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btn btn-ghost"
+                                            disabled={reportandoMapaWtl === s.id}
+                                            onClick={() => handleReportarMapaWtl(s.id, s.jugadorChallengedId)}
+                                          >
+                                            Ganó mapa {s.jugadorChallengedNombre}
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {/* ACE: solo cuando el marcador global de
+                                    mapas quedó exactamente 3-3 con los 3
+                                    sets ya jugados. */}
+                                {wtlMarcadorEmpatado && (
+                                  <>
+                                    <h5 className="detail-subtitle">Marcador empatado 3-3 -- mapa decisivo del ACE</h5>
+                                    {erroresAce[r.id] && <div className="form-error">{erroresAce[r.id]}</div>}
+
+                                    {!miAceYaElegido ? (
+                                      <div className="form-group">
+                                        <label className="form-label" htmlFor={`ace-${r.id}`}>
+                                          Tu ACE
+                                        </label>
+                                        <select
+                                          id={`ace-${r.id}`}
+                                          className="form-select"
+                                          value={aceElegidoPorReto[r.id] ?? ""}
+                                          onChange={(e) =>
+                                            setAceElegidoPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                          }
+                                        >
+                                          <option value="">Selecciona a tu ACE</option>
+                                          {lineupDeReto.propio
+                                            .filter((entry) => entry.jugadorId)
+                                            .map((entry) => (
+                                              <option key={entry.jugadorId} value={entry.jugadorId as string}>
+                                                {entry.nombre}
+                                              </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          disabled={designandoAce === r.id}
+                                          onClick={() => handleDesignarAce(r.id)}
+                                        >
+                                          {designandoAce === r.id ? "Guardando..." : "Designar ACE"}
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <p className="tournament-card-meta">Tu ACE ya está designado.</p>
+                                    )}
+
+                                    {!rivalAceYaElegido && (
+                                      <p className="tournament-card-meta">
+                                        Todavía falta que {rivalNombre} designe a su ACE.
+                                      </p>
+                                    )}
+
+                                    {miAceYaElegido && rivalAceYaElegido && !r.aceGanadorId && (
+                                      <div className="bracket-report">
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          disabled={reportandoMapaAce === r.id}
+                                          onClick={() => handleReportarMapaAce(r.id, r.aceChallengerId as string)}
+                                        >
+                                          Ganó el ACE de {r.challengerNombre}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          disabled={reportandoMapaAce === r.id}
+                                          onClick={() => handleReportarMapaAce(r.id, r.aceChallengedId as string)}
+                                        >
+                                          Ganó el ACE de {r.challengedNombre}
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {r.aceGanadorId && (
+                                      <p className="form-success">
+                                        Ganó el mapa decisivo{" "}
+                                        {r.aceGanadorId === r.aceChallengerId ? r.challengerNombre : r.challengedNombre}.
+                                      </p>
+                                    )}
+                                  </>
+                                )}
+                              </>
+                            )}
+
+                            {r.formato !== "wtl" && (
+                              <>
                             <h5 className="detail-subtitle">
                               Partidas ({ganadasChallenger} - {ganadasChallenged})
                             </h5>
@@ -3016,6 +3320,8 @@ export default function TeamDetailPage() {
                             >
                               {agregandoPartida === r.id ? "Agregando..." : "Agregar partida"}
                             </button>
+                              </>
+                            )}
 
                             <h5 className="detail-subtitle">Cerrar Clan War</h5>
                             <p className="tournament-card-meta">
@@ -3071,6 +3377,21 @@ export default function TeamDetailPage() {
                     value={fechaHoraReto}
                     onChange={(e) => setFechaHoraReto(e.target.value)}
                   />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="reto-formato">
+                    Formato
+                  </label>
+                  <select
+                    id="reto-formato"
+                    className="form-select"
+                    value={formatoReto}
+                    onChange={(e) => setFormatoReto(e.target.value as "simple" | "wtl")}
+                  >
+                    <option value="simple">Simple (partidas sueltas)</option>
+                    <option value="wtl">WTL / chino (3 sets Bo2 + ACE)</option>
+                  </select>
                 </div>
 
                 <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendoReto}>

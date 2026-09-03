@@ -162,6 +162,15 @@ export interface ClanWarRow {
   // Solo se llena cuando status = 'finalizada' -- en 'empatada' queda
   // null, nadie ganó la CW completa.
   ganador_team_id: string | null;
+  // Formato WTL/chino (migración 042): 3 sets Bo2 en posiciones fijas,
+  // con un ACE si el marcador global de mapas queda 3-3. 'simple' (el
+  // que ya existía, clan_war_matches) sigue siendo el default.
+  formato: "simple" | "wtl";
+  ace_challenger_id: string | null;
+  ace_challenged_id: string | null;
+  ace_ganador_id: string | null;
+  resultado_mapas_challenger: number;
+  resultado_mapas_challenged: number;
 }
 
 export type ClanWarMatchStatus = "pendiente" | "jugado";
@@ -205,4 +214,22 @@ export interface ClanWarLineupRow {
   link_verificacion: string | null;
   agregado_por: string;
   created_at: string;
+  // Migración 042: orden dentro del lineup (1/2/3) -- solo se usa en
+  // formato WTL, null en formato simple.
+  posicion: 1 | 2 | 3 | null;
+}
+
+export type ClanWarWtlSetStatus = "pendiente" | "jugado";
+
+// Formato WTL/chino (migración 042): 3 sets Bo2 en posiciones fijas,
+// generados solos al arrancar la guerra (uno por cada posicion 1/2/3).
+export interface ClanWarWtlSetRow {
+  id: string;
+  clan_war_id: string;
+  posicion: 1 | 2 | 3;
+  jugador_challenger_id: string;
+  jugador_challenged_id: string;
+  mapas_ganados_challenger: number;
+  mapas_ganados_challenged: number;
+  status: ClanWarWtlSetStatus;
 }
