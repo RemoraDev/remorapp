@@ -98,6 +98,8 @@ interface ClanWarConNombres {
   aceGanadorId: string | null;
   resultadoMapasChallenger: number;
   resultadoMapasChallenged: number;
+  // Reprogramar (migración 045).
+  reprogramacionesUsadas: number;
 }
 
 interface MiembroRoster {
@@ -150,6 +152,16 @@ interface PartidaConNombres {
   jugadorChallengedNombre: string;
   ganadorId: string | null;
   status: "pendiente" | "jugado";
+}
+
+// Reprogramar una Clan War (migración 045): solo importa la solicitud
+// PENDIENTE de cada reto -- solicitar_reprogramacion_cw() ya bloquea
+// que haya más de una a la vez.
+interface ReprogramacionPendiente {
+  id: string;
+  propuestoPor: string;
+  nuevaFechaHoraCet: string;
+  motivo: string | null;
 }
 
 interface SolicitudHistoricaConNombre {
@@ -361,6 +373,15 @@ export default function TeamDetailPage() {
   // Overlay para OBS (migración 044): un "copiado" por reto, no uno
   // global.
   const [urlObsCopiadaPorReto, setUrlObsCopiadaPorReto] = useState<Record<string, boolean>>({});
+  // Reprogramar una Clan War (migración 045).
+  const [reprogramacionPorReto, setReprogramacionPorReto] = useState<Record<string, ReprogramacionPendiente | null>>(
+    {}
+  );
+  const [nuevaFechaReprogramacion, setNuevaFechaReprogramacion] = useState<Record<string, string>>({});
+  const [motivoReprogramacion, setMotivoReprogramacion] = useState<Record<string, string>>({});
+  const [solicitandoReprogramacion, setSolicitandoReprogramacion] = useState<string | null>(null);
+  const [erroresReprogramacion, setErroresReprogramacion] = useState<Record<string, string>>({});
+  const [respondiendoReprogramacion, setRespondiendoReprogramacion] = useState<string | null>(null);
   // Se recalcula cada 30 segundos -- así la ventana de check-in
   // aparece sola cuando corresponde, sin que haga falta recargar la
   // página a mano.
@@ -637,6 +658,7 @@ export default function TeamDetailPage() {
         aceGanadorId: r.ace_ganador_id,
         resultadoMapasChallenger: r.resultado_mapas_challenger,
         resultadoMapasChallenged: r.resultado_mapas_challenged,
+        reprogramacionesUsadas: r.reprogramaciones_usadas,
       }));
 
       setRetosPendientesResponder(
@@ -837,12 +859,32 @@ export default function TeamDetailPage() {
           wtlSetsPorRetoTmp[s.clan_war_id] = lista;
         }
         setWtlSetsPorReto(wtlSetsPorRetoTmp);
+
+        // Reprogramar una Clan War (migración 045): solo la solicitud
+        // pendiente de cada reto -- solo puede haber una a la vez.
+        const { data: reprogramacionesData } = await supabase
+          .from("clan_war_reschedules")
+          .select("id, clan_war_id, propuesto_por, nueva_fecha_hora_cet, motivo")
+          .in("clan_war_id", retoIds)
+          .eq("status", "pendiente");
+
+        const reprogramacionPorRetoTmp: Record<string, ReprogramacionPendiente | null> = {};
+        for (const rp of reprogramacionesData ?? []) {
+          reprogramacionPorRetoTmp[rp.clan_war_id] = {
+            id: rp.id,
+            propuestoPor: rp.propuesto_por,
+            nuevaFechaHoraCet: rp.nueva_fecha_hora_cet,
+            motivo: rp.motivo,
+          };
+        }
+        setReprogramacionPorReto(reprogramacionPorRetoTmp);
       } else {
         setRosterPorTeamId({});
         setLineupPorReto({});
         setReportesPorReto({});
         setPartidasPorReto({});
         setWtlSetsPorReto({});
+        setReprogramacionPorReto({});
       }
 
       // Títulos Padre/Hijo entre clanes: propuestas pendientes de
@@ -1505,6 +1547,54 @@ export default function TeamDetailPage() {
     await navigator.clipboard.writeText(`${window.location.origin}/overlay/cw/${retoId}`);
     setUrlObsCopiadaPorReto((prev) => ({ ...prev, [retoId]: true }));
     setTimeout(() => setUrlObsCopiadaPorReto((prev) => ({ ...prev, [retoId]: false })), 2000);
+  };
+
+  // Reprogramar una Clan War (migración 045).
+  const handleSolicitarReprogramacion = async (retoId: string) => {
+    const fecha = nuevaFechaReprogramacion[retoId];
+    if (!fecha) {
+      setErroresReprogramacion((prev) => ({ ...prev, [retoId]: "Elige la nueva fecha y hora." }));
+      return;
+    }
+
+    setSolicitandoReprogramacion(retoId);
+    setErroresReprogramacion((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("solicitar_reprogramacion_cw", {
+      p_clan_war_id: retoId,
+      p_nueva_fecha_hora_cet: datetimeLocalAIso(fecha),
+      p_motivo: motivoReprogramacion[retoId]?.trim() || null,
+    });
+
+    setSolicitandoReprogramacion(null);
+
+    if (error) {
+      setErroresReprogramacion((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    setNuevaFechaReprogramacion((prev) => ({ ...prev, [retoId]: "" }));
+    setMotivoReprogramacion((prev) => ({ ...prev, [retoId]: "" }));
+    await cargar();
+  };
+
+  const handleResponderReprogramacion = async (retoId: string, reschedulesId: string, aceptar: boolean) => {
+    setRespondiendoReprogramacion(reschedulesId);
+    setErroresReprogramacion((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("responder_reprogramacion_cw", {
+      p_reschedule_id: reschedulesId,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoReprogramacion(null);
+
+    if (error) {
+      setErroresReprogramacion((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
   };
 
   const handleQuitarLineup = async (retoId: string, lineupId: string) => {
@@ -2691,6 +2781,9 @@ export default function TeamDetailPage() {
                     const soyChallenger = r.challengerTeamId === equipo.id;
                     const rivalTeamId = soyChallenger ? r.challengedTeamId : r.challengerTeamId;
                     const rivalNombre = soyChallenger ? r.challengedNombre : r.challengerNombre;
+                    // Reprogramar (migración 045).
+                    const reprogramacion = reprogramacionPorReto[r.id] ?? null;
+                    const yoPropuseReprogramar = reprogramacion?.propuestoPor === equipo.id;
                     const miConfirmacion = soyChallenger ? r.challengerConfirmado : r.challengedConfirmado;
                     const confirmacionRival = soyChallenger ? r.challengedConfirmado : r.challengerConfirmado;
                     const miCierreConfirmado = soyChallenger
@@ -2755,6 +2848,100 @@ export default function TeamDetailPage() {
                             Pégala en OBS como "Fuente de navegador" para mostrar el marcador en tu transmisión.
                           </p>
                         </div>
+
+                        {/* Reprogramar (migración 045): solo tiene
+                            sentido con la CW 'aceptada' -- una vez que
+                            llega a 'en_curso' ya no aplica. */}
+                        {r.status === "aceptada" && (
+                          <>
+                            <h5 className="detail-subtitle">Reprogramación</h5>
+                            {erroresReprogramacion[r.id] && (
+                              <div className="form-error">{erroresReprogramacion[r.id]}</div>
+                            )}
+
+                            {reprogramacion ? (
+                              yoPropuseReprogramar ? (
+                                <p className="tournament-card-meta">
+                                  Propusiste cambiar la fecha a{" "}
+                                  {formatearHoraLocal(reprogramacion.nuevaFechaHoraCet)} (
+                                  {formatearHoraCet(reprogramacion.nuevaFechaHoraCet)} CET)
+                                  {reprogramacion.motivo && <> -- Motivo: {reprogramacion.motivo}</>}. Esperando la
+                                  respuesta de {rivalNombre}.
+                                </p>
+                              ) : (
+                                <>
+                                  <p className="tournament-card-meta">
+                                    {rivalNombre} propuso cambiar la fecha a{" "}
+                                    {formatearHoraLocal(reprogramacion.nuevaFechaHoraCet)} (
+                                    {formatearHoraCet(reprogramacion.nuevaFechaHoraCet)} CET)
+                                    {reprogramacion.motivo && <> -- Motivo: {reprogramacion.motivo}</>}.
+                                  </p>
+                                  <div className="bracket-report">
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      disabled={respondiendoReprogramacion === reprogramacion.id}
+                                      onClick={() => handleResponderReprogramacion(r.id, reprogramacion.id, true)}
+                                    >
+                                      {respondiendoReprogramacion === reprogramacion.id ? "Guardando..." : "Aceptar"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      disabled={respondiendoReprogramacion === reprogramacion.id}
+                                      onClick={() => handleResponderReprogramacion(r.id, reprogramacion.id, false)}
+                                    >
+                                      {respondiendoReprogramacion === reprogramacion.id ? "Guardando..." : "Rechazar"}
+                                    </button>
+                                  </div>
+                                </>
+                              )
+                            ) : r.reprogramacionesUsadas >= 2 ? (
+                              <p className="tournament-card-meta">
+                                Ya se usaron las 2 reprogramaciones permitidas para esta Clan War.
+                              </p>
+                            ) : (
+                              <div className="form-group">
+                                <label className="form-label" htmlFor={`reprogramar-fecha-${r.id}`}>
+                                  Nueva fecha y hora (tu hora local)
+                                </label>
+                                <input
+                                  id={`reprogramar-fecha-${r.id}`}
+                                  className="form-input"
+                                  type="datetime-local"
+                                  value={nuevaFechaReprogramacion[r.id] ?? ""}
+                                  onChange={(e) =>
+                                    setNuevaFechaReprogramacion((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                  }
+                                />
+                                <label className="form-label" htmlFor={`reprogramar-motivo-${r.id}`}>
+                                  Motivo (opcional)
+                                </label>
+                                <input
+                                  id={`reprogramar-motivo-${r.id}`}
+                                  className="form-input"
+                                  type="text"
+                                  value={motivoReprogramacion[r.id] ?? ""}
+                                  onChange={(e) =>
+                                    setMotivoReprogramacion((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  disabled={solicitandoReprogramacion === r.id}
+                                  onClick={() => handleSolicitarReprogramacion(r.id)}
+                                >
+                                  {solicitandoReprogramacion === r.id ? "Solicitando..." : "Solicitar cambio de fecha"}
+                                </button>
+                                <p className="form-hint">
+                                  Te queda{2 - r.reprogramacionesUsadas === 1 ? "" : "n"} {2 - r.reprogramacionesUsadas}{" "}
+                                  reprogramaci{2 - r.reprogramacionesUsadas === 1 ? "ón" : "ones"} para esta Clan War.
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        )}
 
                         {!lineupAprobado ? (
                           <>
