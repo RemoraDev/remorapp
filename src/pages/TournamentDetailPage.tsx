@@ -247,7 +247,7 @@ export default function TournamentDetailPage() {
       const { data: partidasData } = await supabase
         .from("bracket_matches")
         .select(
-          "id, tournament_id, round, match_number, participant1_id, participant2_id, winner_id, reported_p1_winner, reported_p2_winner, status"
+          "id, tournament_id, round, match_number, participant1_id, participant2_id, winner_id, reported_p1_winner, reported_p2_winner, status, es_tercer_lugar"
         )
         .eq("tournament_id", id);
 
@@ -794,6 +794,13 @@ export default function TournamentDetailPage() {
                 <p className="form-success">
                   🏆 Campeón:{" "}
                   {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                    "Jugador de RemorApp"}
+                </p>
+              )}
+              {torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id && (
+                <p className="tournament-card-meta">
+                  🥉 Tercer lugar:{" "}
+                  {participantes.find((p) => p.id === torneo.tercer_lugar_participant_id)?.nombre ??
                     "Jugador de RemorApp"}
                 </p>
               )}

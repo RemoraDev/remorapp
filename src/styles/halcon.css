@@ -1609,6 +1609,17 @@ input[type="radio"] {
   color: #fca5a5;
 }
 
+/* Partido por el tercer lugar (migración 046): separado de la llave
+   principal con su propio borde superior, no mezclado con las
+   rondas normales -- reutiliza .bracket-match/.bracket-slot tal cual,
+   así que respeta el estilo de bracket elegido igual que el resto. */
+.bracket-tercer-lugar {
+  max-width: 15rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed var(--color-border);
+}
+
 /* ---------- Catálogo de estilos de bracket + fondos (migración 040) ----------
    El layout base (.bracket, .bracket-round, .bracket-match, ...) de
    arriba es "clasico", intacto -- ninguna regla de acá lo toca por

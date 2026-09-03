@@ -13,4 +13,7 @@ export interface BracketMatchRow {
   reported_p1_winner: string | null;
   reported_p2_winner: string | null;
   status: MatchStatus;
+  // Migración 046: partido por el tercer lugar, en paralelo a la
+  // final -- no forma parte de la progresión normal de rondas.
+  es_tercer_lugar: boolean;
 }

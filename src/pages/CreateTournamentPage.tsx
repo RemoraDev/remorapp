@@ -28,6 +28,11 @@ export default function CreateTournamentPage() {
   const [cantidadGrupos, setCantidadGrupos] = useState("2");
   const [avanzanPorGrupo, setAvanzanPorGrupo] = useState("2");
 
+  // Partido por el tercer lugar (migración 046) -- mismo gate que la
+  // etapa de grupos: solo tiene sentido con eliminación simple, único
+  // modo que tiene llave.
+  const [tieneTercerLugar, setTieneTercerLugar] = useState(false);
+
   const [mapas, setMapas] = useState<MapRow[]>([]);
   const [mapasIncluidos, setMapasIncluidos] = useState<Record<string, boolean>>({});
   const [mapasVeteables, setMapasVeteables] = useState<Record<string, boolean>>({});
@@ -103,6 +108,7 @@ export default function CreateTournamentPage() {
         tiene_fase_grupos: modo === "eliminacion_simple" && tieneFaseGrupos,
         cantidad_grupos: modo === "eliminacion_simple" && tieneFaseGrupos ? Number(cantidadGrupos) : null,
         avanzan_por_grupo: modo === "eliminacion_simple" && tieneFaseGrupos ? Number(avanzanPorGrupo) : null,
+        tiene_tercer_lugar: modo === "eliminacion_simple" && tieneTercerLugar,
       })
       .select()
       .single();
@@ -260,6 +266,27 @@ export default function CreateTournamentPage() {
                 />
               </div>
             )}
+          </div>
+        )}
+
+        {/* Partido por el tercer lugar (migración 046): entre los
+            perdedores de semifinal, en paralelo a la final -- mismo
+            gate que la etapa de grupos, solo eliminación simple tiene
+            llave. */}
+        {modo === "eliminacion_simple" && (
+          <div className="form-group">
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={tieneTercerLugar}
+                onChange={(e) => setTieneTercerLugar(e.target.checked)}
+              />
+              Con partido por el tercer lugar
+            </label>
+            <p className="form-hint">
+              Los dos perdedores de semifinal juegan aparte por el tercer puesto, en paralelo a la
+              final.
+            </p>
           </div>
         )}
 

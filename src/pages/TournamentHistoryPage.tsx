@@ -18,6 +18,8 @@ interface TorneoFinalizado {
   resultados: ResultadoConNombre[];
   // Solo para modo eliminacion_simple (llave) -- ver migración 006.
   campeonNombre: string | null;
+  // Solo si el torneo tenía tiene_tercer_lugar -- ver migración 046.
+  tercerLugarNombre: string | null;
 }
 
 interface PosicionRanking {
@@ -84,7 +86,12 @@ export default function TournamentHistoryPage() {
             const resuelto = await obtenerNombreDeParticipante(torneo.campeon_participant_id);
             campeonNombre = resuelto?.nombre ?? "Jugador de RemorApp";
           }
-          resultado.push({ torneo, resultados: [], campeonNombre });
+          let tercerLugarNombre: string | null = null;
+          if (torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id) {
+            const resuelto = await obtenerNombreDeParticipante(torneo.tercer_lugar_participant_id);
+            tercerLugarNombre = resuelto?.nombre ?? "Jugador de RemorApp";
+          }
+          resultado.push({ torneo, resultados: [], campeonNombre, tercerLugarNombre });
           continue;
         }
 
@@ -102,6 +109,7 @@ export default function TournamentHistoryPage() {
         resultado.push({
           torneo,
           campeonNombre: null,
+          tercerLugarNombre: null,
           resultados: filas
             .filter((r) => !infoPorParticipante[r.participant_id as string]?.suspendido)
             .map((r) => ({
@@ -136,7 +144,7 @@ export default function TournamentHistoryPage() {
       )}
 
       <div className="history-list">
-        {items.map(({ torneo, resultados, campeonNombre }) => {
+        {items.map(({ torneo, resultados, campeonNombre, tercerLugarNombre }) => {
           const esReyDeLaColina = torneo.modo === "rey_de_la_colina";
           const esEliminacionSimple = torneo.modo === "eliminacion_simple";
           const ranking = esReyDeLaColina ? calcularRanking(resultados) : [];
@@ -154,7 +162,14 @@ export default function TournamentHistoryPage() {
               </p>
 
               {esEliminacionSimple ? (
-                <p className="form-success">🏆 Campeón: {campeonNombre ?? "Sin definir todavía"}</p>
+                <>
+                  <p className="form-success">🏆 Campeón: {campeonNombre ?? "Sin definir todavía"}</p>
+                  {torneo.tiene_tercer_lugar && (
+                    <p className="tournament-card-meta">
+                      🥉 Tercer lugar: {tercerLugarNombre ?? "Sin definir todavía"}
+                    </p>
+                  )}
+                </>
               ) : esReyDeLaColina ? (
                 ranking.length === 0 ? (
                   <p className="detail-empty">Sin resultados registrados todavía.</p>

@@ -55,6 +55,11 @@ export interface TournamentRow {
   // Se llena sola cuando se juega la final de la llave (ver
   // avanzar_ganador() en supabase/migration_006_bracket.sql).
   campeon_participant_id: string | null;
+  // Migración 046: partido por el tercer lugar entre los perdedores
+  // de semifinal, en paralelo a la final. Mismo patrón de llenado que
+  // campeon_participant_id, se completa solo cuando se juega.
+  tiene_tercer_lugar: boolean;
+  tercer_lugar_participant_id: string | null;
   // Check-in antes de generar la llave (migración 010): mientras está
   // en true, los inscritos pueden confirmar que van a jugar.
   check_in_abierto: boolean;

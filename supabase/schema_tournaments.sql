@@ -453,7 +453,10 @@ create table public.tournaments (
   tiene_fase_grupos boolean not null default false,
   cantidad_grupos integer,
   avanzan_por_grupo integer,
-  fase_actual text not null default 'eliminacion' check (fase_actual in ('grupos', 'eliminacion'))
+  fase_actual text not null default 'eliminacion' check (fase_actual in ('grupos', 'eliminacion')),
+  -- Migración 046: partido por el tercer lugar entre los perdedores de
+  -- semifinal, en paralelo a la final.
+  tiene_tercer_lugar boolean not null default false
 );
 
 alter table public.tournaments enable row level security;
@@ -3545,6 +3548,10 @@ create table public.bracket_matches (
   status text not null default 'pendiente'
     check (status in ('pendiente', 'jugado', 'en_disputa')),
   created_at timestamptz not null default now(),
+  -- Migración 046: el partido por el tercer lugar comparte la ronda de
+  -- la final (en paralelo), distinguido por esta bandera -- no forma
+  -- parte de la progresión normal de rondas.
+  es_tercer_lugar boolean not null default false,
   unique (tournament_id, round, match_number)
 );
 
@@ -3562,6 +3569,11 @@ grant select on public.bracket_matches to anon, authenticated;
 
 alter table public.tournaments
   add column if not exists campeon_participant_id uuid references public.tournament_participants (id);
+
+-- Migración 046: se llena solo cuando se juega el partido por el
+-- tercer lugar, mismo patrón que campeon_participant_id.
+alter table public.tournaments
+  add column if not exists tercer_lugar_participant_id uuid references public.tournament_participants (id);
 
 -- ------------------------------------------------------------
 -- Etapa de grupos (migración 041): todos contra todos dentro de cada
@@ -4009,6 +4021,7 @@ set search_path = public
 as $$
 declare
   v_match record;
+  v_torneo record;
   v_total_en_ronda int;
   v_target_match_number int;
   v_target record;
@@ -4016,8 +4029,14 @@ declare
   v_user1 uuid;
   v_user2 uuid;
   v_user_ganador uuid;
+  v_semis_jugadas int;
+  v_semi1 record;
+  v_semi2 record;
+  v_perdedor1 uuid;
+  v_perdedor2 uuid;
 begin
   select * into v_match from public.bracket_matches where id = p_match_id;
+  select * into v_torneo from public.tournaments where id = v_match.tournament_id;
 
   -- Registro de actividad (migración 020): solo en partidas reales,
   -- con los dos participantes presentes -- un bye no se jugó. Cubre
@@ -4026,6 +4045,8 @@ begin
   -- reparto de XP que hacía este mismo punto antes (migración 013);
   -- el ajuste de MMR por resultado todavía no existe -- eso es la
   -- fase de Clan Wars -- pero la actividad sí se registra desde ya.
+  -- También cubre el partido por el tercer lugar (migración 046): es
+  -- una partida 1v1 real como cualquier otra.
   if v_match.participant1_id is not null and v_match.participant2_id is not null then
     perform public.registrar_actividad_participante(v_match.participant1_id);
     perform public.registrar_actividad_participante(v_match.participant2_id);
@@ -4055,9 +4076,59 @@ begin
     end if;
   end if;
 
+  -- El partido por el tercer lugar (migración 046) no avanza a ningún
+  -- lado: solo guarda su ganador y termina acá.
+  if v_match.es_tercer_lugar then
+    update public.tournaments
+      set tercer_lugar_participant_id = v_match.winner_id
+      where id = v_match.tournament_id;
+    return;
+  end if;
+
   select count(*) into v_total_en_ronda
   from public.bracket_matches
-  where tournament_id = v_match.tournament_id and round = v_match.round;
+  where tournament_id = v_match.tournament_id and round = v_match.round and not es_tercer_lugar;
+
+  -- Partido por el tercer lugar (migración 046): se genera al
+  -- completarse las dos semifinales, reconocibles porque su ronda
+  -- tiene exactamente 2 partidos (la ronda siguiente, la final,
+  -- siempre tiene 1 solo). Si alguna semifinal fue un bye (sin
+  -- segundo participante) no hay un perdedor real de ese lado -- se
+  -- omite el partido por el tercer lugar en ese caso.
+  if v_total_en_ronda = 2 and v_torneo.tiene_tercer_lugar then
+    select count(*) into v_semis_jugadas
+    from public.bracket_matches
+    where tournament_id = v_match.tournament_id
+      and round = v_match.round
+      and not es_tercer_lugar
+      and status = 'jugado';
+
+    if v_semis_jugadas = 2 and not exists (
+      select 1 from public.bracket_matches
+      where tournament_id = v_match.tournament_id and es_tercer_lugar
+    ) then
+      select * into v_semi1 from public.bracket_matches
+        where tournament_id = v_match.tournament_id and round = v_match.round
+          and match_number = 1 and not es_tercer_lugar;
+      select * into v_semi2 from public.bracket_matches
+        where tournament_id = v_match.tournament_id and round = v_match.round
+          and match_number = 2 and not es_tercer_lugar;
+
+      if v_semi1.participant2_id is not null and v_semi2.participant2_id is not null then
+        v_perdedor1 := case when v_semi1.winner_id = v_semi1.participant1_id
+          then v_semi1.participant2_id else v_semi1.participant1_id end;
+        v_perdedor2 := case when v_semi2.winner_id = v_semi2.participant1_id
+          then v_semi2.participant2_id else v_semi2.participant1_id end;
+
+        insert into public.bracket_matches (
+          tournament_id, round, match_number, participant1_id, participant2_id, status, es_tercer_lugar
+        )
+        values (
+          v_match.tournament_id, v_match.round + 1, 2, v_perdedor1, v_perdedor2, 'pendiente', true
+        );
+      end if;
+    end if;
+  end if;
 
   if v_total_en_ronda = 1 then
     update public.tournaments
@@ -4074,6 +4145,7 @@ begin
   where tournament_id = v_match.tournament_id
     and round = v_match.round + 1
     and match_number = v_target_match_number
+    and not es_tercer_lugar
   for update;
 
   if not found then

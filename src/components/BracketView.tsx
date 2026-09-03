@@ -52,9 +52,15 @@ export default function BracketView({
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
 
-  const rondas = [...new Set(matches.map((m) => m.round))].sort((a, b) => a - b);
+  // El partido por el tercer lugar (migración 046) comparte la ronda
+  // de la final pero se muestra aparte, en su propia cajita -- se
+  // excluye acá de la grilla normal de rondas.
+  const partidosLlave = matches.filter((m) => !m.es_tercer_lugar);
+  const partidoTercerLugar = matches.find((m) => m.es_tercer_lugar) ?? null;
+
+  const rondas = [...new Set(partidosLlave.map((m) => m.round))].sort((a, b) => a - b);
   const partidosPorRonda = rondas.map((r) =>
-    matches.filter((m) => m.round === r).sort((a, b) => a.match_number - b.match_number)
+    partidosLlave.filter((m) => m.round === r).sort((a, b) => a.match_number - b.match_number)
   );
   // La ronda 1 siempre tiene la mayor cantidad de partidas: se usa esa
   // altura para las demás columnas, y "justify-content: space-around"
@@ -103,6 +109,64 @@ export default function BracketView({
     onCambio();
   };
 
+  const renderPartido = (match: BracketMatchRow) => {
+    const p1Gana = !!match.winner_id && match.winner_id === match.participant1_id;
+    const p2Gana = !!match.winner_id && match.winner_id === match.participant2_id;
+
+    return (
+      <div key={match.id} className="bracket-match">
+        <div className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""}`}>
+          {logoDe(match.participant1_id) && (
+            <img src={logoDe(match.participant1_id) ?? ""} alt="" className="bracket-slot-logo" />
+          )}
+          {nombreDe(match.participant1_id)}
+        </div>
+        <div
+          className={`bracket-slot ${
+            p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""
+          }`}
+        >
+          {logoDe(match.participant2_id) && (
+            <img src={logoDe(match.participant2_id) ?? ""} alt="" className="bracket-slot-logo" />
+          )}
+          {nombreDe(match.participant2_id)}
+        </div>
+
+        {match.status === "en_disputa" && (
+          <p className="bracket-disputa">
+            Resultado en disputa, un administrador debe resolverlo.
+          </p>
+        )}
+
+        {match.status === "pendiente" &&
+          match.participant1_id &&
+          match.participant2_id &&
+          puedeReportar(match) && (
+            <div className="bracket-report">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={reportando === match.id}
+                onClick={() => handleReportar(match.id, match.participant1_id as string)}
+              >
+                Ganó {nombreDe(match.participant1_id)}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={reportando === match.id}
+                onClick={() => handleReportar(match.id, match.participant2_id as string)}
+              >
+                Ganó {nombreDe(match.participant2_id)}
+              </button>
+            </div>
+          )}
+
+        {errores[match.id] && <div className="form-error">{errores[match.id]}</div>}
+      </div>
+    );
+  };
+
   return (
     <>
       {estilo === "esports" && <div className="bracket-esports-banner">{nombreTorneo}</div>}
@@ -117,66 +181,20 @@ export default function BracketView({
             {partidos.length === 1 ? "Final" : `Ronda ${rondas[indiceRonda]}`}
           </div>
 
-          {partidos.map((match) => {
-            const p1Gana = !!match.winner_id && match.winner_id === match.participant1_id;
-            const p2Gana = !!match.winner_id && match.winner_id === match.participant2_id;
-
-            return (
-              <div key={match.id} className="bracket-match">
-                <div className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""}`}>
-                  {logoDe(match.participant1_id) && (
-                    <img src={logoDe(match.participant1_id) ?? ""} alt="" className="bracket-slot-logo" />
-                  )}
-                  {nombreDe(match.participant1_id)}
-                </div>
-                <div
-                  className={`bracket-slot ${
-                    p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""
-                  }`}
-                >
-                  {logoDe(match.participant2_id) && (
-                    <img src={logoDe(match.participant2_id) ?? ""} alt="" className="bracket-slot-logo" />
-                  )}
-                  {nombreDe(match.participant2_id)}
-                </div>
-
-                {match.status === "en_disputa" && (
-                  <p className="bracket-disputa">
-                    Resultado en disputa, un administrador debe resolverlo.
-                  </p>
-                )}
-
-                {match.status === "pendiente" &&
-                  match.participant1_id &&
-                  match.participant2_id &&
-                  puedeReportar(match) && (
-                    <div className="bracket-report">
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={reportando === match.id}
-                        onClick={() => handleReportar(match.id, match.participant1_id as string)}
-                      >
-                        Ganó {nombreDe(match.participant1_id)}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={reportando === match.id}
-                        onClick={() => handleReportar(match.id, match.participant2_id as string)}
-                      >
-                        Ganó {nombreDe(match.participant2_id)}
-                      </button>
-                    </div>
-                  )}
-
-                {errores[match.id] && <div className="form-error">{errores[match.id]}</div>}
-              </div>
-            );
-          })}
+          {partidos.map(renderPartido)}
         </div>
       ))}
       </div>
+
+      {/* Migración 046: el partido por el tercer lugar se muestra
+          aparte, claramente separado de la llave principal -- no
+          mezclado con las rondas normales. */}
+      {partidoTercerLugar && (
+        <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
+          <div className="bracket-round-title">Partido por el 3er lugar</div>
+          {renderPartido(partidoTercerLugar)}
+        </div>
+      )}
     </>
   );
 }
