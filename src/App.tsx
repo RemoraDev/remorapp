@@ -24,6 +24,8 @@ import AyudaPage from "./pages/AyudaPage";
 import StorePage from "./pages/StorePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 
 // Aparte de App para poder usar useAuth() (AuthProvider envuelve a
 // este componente, no a App -- App es quien lo declara).
@@ -76,6 +78,8 @@ function AppContent() {
           <Route path="/store" element={<StorePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
         </Routes>
       </main>
       <BottomNav />
