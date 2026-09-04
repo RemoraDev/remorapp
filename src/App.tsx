@@ -15,6 +15,7 @@ import PlayerDetailPage from "./pages/PlayerDetailPage";
 import MyTournamentsPage from "./pages/MyTournamentsPage";
 import ProfilePage from "./pages/ProfilePage";
 import AdminPage from "./pages/AdminPage";
+import PruebasLineupObservarPage from "./pages/PruebasLineupObservarPage";
 import TeamsPage from "./pages/TeamsPage";
 import CreateTeamPage from "./pages/CreateTeamPage";
 import TeamDetailPage from "./pages/TeamDetailPage";
@@ -69,6 +70,7 @@ function AppContent() {
           <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
           <Route path="/perfil" element={<ProfilePage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/pruebas/lineup/:clanWarId" element={<PruebasLineupObservarPage />} />
           <Route path="/equipos" element={<TeamsPage />} />
           <Route path="/equipos/crear" element={<CreateTeamPage />} />
           <Route path="/equipos/:tag" element={<TeamDetailPage />} />

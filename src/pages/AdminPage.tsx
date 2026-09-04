@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
@@ -10,7 +10,22 @@ import type { AdminUserRow } from "../types/admin";
 import type { TournamentRow } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
 
-type Tab = "torneos" | "usuarios" | "equipos" | "disputas" | "reportes" | "alianzas";
+type Tab = "torneos" | "usuarios" | "equipos" | "disputas" | "reportes" | "alianzas" | "pruebas";
+
+// Resultado de generar_escenario_prueba_lineup() (migración 053).
+interface EscenarioPruebaGenerado {
+  team_a_id: string;
+  team_a_tag: string;
+  team_b_id: string;
+  team_b_tag: string;
+  clan_war_id: string;
+}
+
+interface ResultadoLimpieza {
+  equipos: number;
+  retos: number;
+  cuentas: number;
+}
 
 interface ReporteConNombre {
   id: string;
@@ -90,6 +105,30 @@ export default function AdminPage() {
   const [errorAlianzas, setErrorAlianzas] = useState<string | null>(null);
   const [resolviendoAlianza, setResolviendoAlianza] = useState<string | null>(null);
   const [erroresAlianza, setErroresAlianza] = useState<Record<string, string>>({});
+
+  // --- Pruebas (migración 053): exclusivo del dueño de la plataforma
+  // -- la columna cruda es_dueno_plataforma no es legible desde el
+  // cliente (ver el revoke en profiles), así que el único modo de
+  // saberlo es llamando a la función. ---
+  const [esDuenoPlataforma, setEsDuenoPlataforma] = useState(false);
+  const [cargandoDueno, setCargandoDueno] = useState(true);
+  const [generandoEscenario, setGenerandoEscenario] = useState(false);
+  const [errorEscenario, setErrorEscenario] = useState<string | null>(null);
+  const [escenarioGenerado, setEscenarioGenerado] = useState<EscenarioPruebaGenerado | null>(null);
+  const [limpiando, setLimpiando] = useState(false);
+  const [errorLimpieza, setErrorLimpieza] = useState<string | null>(null);
+  const [resultadoLimpieza, setResultadoLimpieza] = useState<ResultadoLimpieza | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setCargandoDueno(false);
+      return;
+    }
+    supabase.rpc("es_dueno_plataforma").then(({ data }) => {
+      setEsDuenoPlataforma(!!data);
+      setCargandoDueno(false);
+    });
+  }, [user]);
 
   const esAdmin = !!profile?.es_admin;
 
@@ -268,10 +307,45 @@ export default function AdminPage() {
   // consulta aparte, después de la sesión) y recién ahí se puede saber
   // si es admin. Mostrar "nada" mientras cualquiera de los dos está
   // cargando, para no mandar a Inicio a un admin real por apurarse.
-  if (loading) return null;
+  if (loading || cargandoDueno) return null;
   if (!user) return <Navigate to="/" replace />;
   if (!profile) return null;
-  if (!profile.es_admin) return <Navigate to="/" replace />;
+  if (!profile.es_admin && !esDuenoPlataforma) return <Navigate to="/" replace />;
+
+  const handleGenerarEscenario = async () => {
+    setGenerandoEscenario(true);
+    setErrorEscenario(null);
+    setEscenarioGenerado(null);
+
+    const { data, error } = await supabase.rpc("generar_escenario_prueba_lineup");
+
+    setGenerandoEscenario(false);
+
+    if (error) {
+      setErrorEscenario(error.message);
+      return;
+    }
+
+    setEscenarioGenerado(data as EscenarioPruebaGenerado);
+  };
+
+  const handleLimpiarEscenarios = async () => {
+    setLimpiando(true);
+    setErrorLimpieza(null);
+    setResultadoLimpieza(null);
+
+    const { data, error } = await supabase.rpc("limpiar_escenarios_prueba");
+
+    setLimpiando(false);
+
+    if (error) {
+      setErrorLimpieza(error.message);
+      return;
+    }
+
+    setResultadoLimpieza(data as ResultadoLimpieza);
+    setEscenarioGenerado(null);
+  };
 
   const handleConfirmar = async (torneoId: string) => {
     setConfirmando(torneoId);
@@ -488,6 +562,17 @@ export default function AdminPage() {
           Alianzas
           {alianzas.length > 0 && ` (${alianzas.length})`}
         </button>
+        {/* Pruebas (migración 053): exclusiva del dueño de la
+            plataforma -- ni el botón existe para un admin común. */}
+        {esDuenoPlataforma && (
+          <button
+            type="button"
+            className={`admin-tab ${tab === "pruebas" ? "active" : ""}`}
+            onClick={() => setTab("pruebas")}
+          >
+            Pruebas
+          </button>
+        )}
       </div>
 
       {tab === "torneos" && (
@@ -755,6 +840,68 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {tab === "pruebas" && esDuenoPlataforma && (
+        <div className="admin-panel">
+          <h3 className="detail-subtitle">Salas de lineup</h3>
+          <p className="tournament-card-meta">
+            Genera un escenario de Clan War de prueba (2 equipos ficticios, 4 jugadores cada uno) para
+            observar la sala de lineup -- armado, check-in y fondo -- sin ser parte de ninguno de los dos
+            equipos. Ver esta sala no genera ningún registro ni notificación: es una consulta de solo
+            lectura, no existe ningún mecanismo en la base que registre quién mira un reto.
+          </p>
+
+          {errorEscenario && <div className="form-error">{errorEscenario}</div>}
+
+          <div className="admin-row-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={generandoEscenario}
+              onClick={handleGenerarEscenario}
+            >
+              {generandoEscenario ? "Generando..." : "Generar escenario de prueba"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={limpiando}
+              onClick={handleLimpiarEscenarios}
+            >
+              {limpiando ? "Limpiando..." : "Limpiar escenarios de prueba"}
+            </button>
+          </div>
+
+          {escenarioGenerado && (
+            <div className="admin-row">
+              <div className="admin-row-info">
+                <p className="admin-row-title">
+                  {escenarioGenerado.team_a_tag} vs {escenarioGenerado.team_b_tag} -- reto ya aceptado
+                </p>
+                <p className="admin-row-meta">
+                  Ventana de check-in ya abierta. Entra a observar la sala de lineup:
+                </p>
+                <Link
+                  className="btn-link"
+                  to={`/pruebas/lineup/${escenarioGenerado.clan_war_id}`}
+                >
+                  Ver sala de lineup
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {errorLimpieza && <div className="form-error">{errorLimpieza}</div>}
+
+          {resultadoLimpieza && (
+            <p className="tournament-card-meta">
+              Se borraron {resultadoLimpieza.equipos} equipo(s), {resultadoLimpieza.retos} reto(s) de
+              Clan War y {resultadoLimpieza.cuentas} cuenta(s) ficticia(s). No queda ningún rastro del
+              escenario de prueba.
+            </p>
+          )}
         </div>
       )}
     </section>

@@ -96,9 +96,17 @@ export const SC2_REGION_OPTIONS: { value: Sc2Region; label: string }[] = [
 
 // Un link de transmisión (migración 035) -- "plataforma" es texto
 // libre (Twitch, YouTube, Kick, etc.), no un enum cerrado.
+// "tipo" (reorganización del Panel de control) distingue un link de
+// presencia general (Discord, redes -- sin horario) de una plataforma
+// de transmisión propiamente dicha (con días y horario). Las entradas
+// guardadas antes de este cambio no tienen "tipo": se tratan como
+// "personal", que era el comportamiento general de siempre.
 export interface LinkTransmision {
   plataforma: string;
   url: string;
+  tipo?: "personal" | "transmision";
+  dias?: string;
+  horario?: string;
 }
 
 // Coincide con la fila completa de profiles tras la migración 004.

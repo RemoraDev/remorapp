@@ -2161,6 +2161,22 @@ input[type="radio"] {
   background-color: #06070a;
 }
 
+/* Dos columnas lado a lado (challenger/challenged) -- usado en la sala
+   de lineup de observación del dueño (migración 053). En pantallas
+   angostas cae a una sola columna. */
+.detail-columns {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .detail-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ---------- Fondo de la sala de lineup de Clan War (migración 051) ----------
    Catálogo APARTE del de arriba (fondo_bracket, tournaments) -- ni la
    tabla, ni la columna, ni estas reglas de acá se comparten con esas.

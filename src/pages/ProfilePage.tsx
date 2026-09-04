@@ -104,18 +104,32 @@ function calcularProgresoPerfil(profile: Profile | null) {
   return { completos, total: campos.length, mensaje };
 }
 
-// Migración 048: reorganización completa del Panel de control en 5
-// accesos. "datos" y "juego" muestran contenido directo; "logros",
-// "historial" y "configuracion" son un segundo menú con sus propios
-// botones (subseccion), mismo patrón anidado que ya usa el Panel de
-// control de /equipos/:tag.
+// Reorganización del Panel de control: cuadrito principal -> botón
+// interno -> formulario interno, mismo patrón anidado de 3 niveles que
+// ya usa el Panel de control de /equipos/:tag (team-panel-menu /
+// team-panel-menu-item). null en seccionActiva muestra solo los
+// cuadritos del Panel de control, sin ningún formulario desparramado
+// -- recién al elegir uno se abre su contenido, reemplazando el menú
+// (no al lado).
 type SeccionPerfil = "datos" | "juego" | "logros" | "historial" | "configuracion";
 const SECCIONES_VALIDAS: SeccionPerfil[] = ["datos", "juego", "logros", "historial", "configuracion"];
 
-type SubseccionPerfil = "gestor-titulos" | "clan-wars" | "torneos" | "apariencia" | "idioma" | null;
+type SubseccionPerfil =
+  | "personales"
+  | "transmision"
+  | "titulos"
+  | "recompensas"
+  | "clan-wars"
+  | "torneos"
+  | "tema"
+  | "apariencia"
+  | "idioma"
+  | null;
 
-function resolverSeccion(valor: string | null): SeccionPerfil {
-  return SECCIONES_VALIDAS.includes(valor as SeccionPerfil) ? (valor as SeccionPerfil) : "datos";
+type SubsubseccionPerfil = "titulos-adquiridos" | "forma-avatar" | "avatares-adquiridos" | null;
+
+function resolverSeccion(valor: string | null): SeccionPerfil | null {
+  return SECCIONES_VALIDAS.includes(valor as SeccionPerfil) ? (valor as SeccionPerfil) : null;
 }
 
 export default function ProfilePage() {
@@ -124,10 +138,11 @@ export default function ProfilePage() {
   const location = useLocation();
   // El Panel de control de /jugador/:nick/:uniqueId (vitrina propia)
   // manda acá con ?tab=... -- sin el parámetro (o con cualquier otro
-  // valor), arranca en "Editar datos" como siempre.
+  // valor), arranca mostrando solo los cuadritos del Panel de control.
   const [searchParams] = useSearchParams();
-  const [seccionActiva, setSeccionActiva] = useState<SeccionPerfil>(resolverSeccion(searchParams.get("tab")));
+  const [seccionActiva, setSeccionActiva] = useState<SeccionPerfil | null>(resolverSeccion(searchParams.get("tab")));
   const [subseccion, setSubseccion] = useState<SubseccionPerfil>(null);
+  const [subsubseccion, setSubsubseccion] = useState<SubsubseccionPerfil>(null);
   // El valor inicial de useState solo se lee en el primer montaje: si
   // ya se está parado en /perfil y se navega de nuevo acá con un ?tab=
   // distinto (el menú de la vitrina usa <Link>, no recarga la página),
@@ -137,6 +152,7 @@ export default function ProfilePage() {
   useEffect(() => {
     setSeccionActiva(resolverSeccion(searchParams.get("tab")));
     setSubseccion(null);
+    setSubsubseccion(null);
   }, [searchParams]);
   // Llega desde LoginPage/RegisterPage cuando alguien con sesión activa
   // intentó entrar o registrarse de nuevo (ver Navigate en esas páginas).
@@ -166,6 +182,15 @@ export default function ProfilePage() {
   const [errorEmail, setErrorEmail] = useState<string | null>(null);
   const [emailCambioEnviado, setEmailCambioEnviado] = useState(false);
 
+  // --- Contraseña: mismo supabase.auth.updateUser() que usa
+  // ResetPasswordPage.tsx, pero con la sesión ya iniciada -- no hace
+  // falta pasar por el correo. ---
+  const [passwordNueva, setPasswordNueva] = useState("");
+  const [passwordConfirmar, setPasswordConfirmar] = useState("");
+  const [guardandoPassword, setGuardandoPassword] = useState(false);
+  const [errorPassword, setErrorPassword] = useState<string | null>(null);
+  const [passwordGuardada, setPasswordGuardada] = useState(false);
+
   // --- Perfil de juego de StarCraft II (migración 034): razas, en
   // perfiles_juego -- opcional, no bloquea cuenta_validada. juegoIdSc2
   // se resuelve una vez y queda guardado para el guardar/cargar. ---
@@ -176,12 +201,20 @@ export default function ProfilePage() {
   const [errorRaza, setErrorRaza] = useState<string | null>(null);
   const [razaGuardada, setRazaGuardada] = useState(false);
 
-  // --- Links de transmisión (migración 035): array libre, se edita
-  // entero en memoria y se guarda de una sola vez. ---
+  // --- Links (migración 035, con "tipo" agregado en la reorganización
+  // del Panel de control): array libre, se edita entero en memoria y
+  // se guarda de una sola vez. Los de tipo "personal" (Discord,
+  // redes...) se editan en "Editar datos personales"; los de tipo
+  // "transmision" (con días y horario) en "Editar datos de
+  // transmisión" -- ambos formularios agregan al mismo array, cada
+  // uno con sus propios campos de "nuevo link". ---
   const [linksTransmision, setLinksTransmision] = useState<LinkTransmision[]>([]);
   const [nuevaPlataforma, setNuevaPlataforma] = useState("");
   const [nuevaUrlLink, setNuevaUrlLink] = useState("");
-  const [horarioStream, setHorarioStream] = useState("");
+  const [nuevaPlataformaTx, setNuevaPlataformaTx] = useState("");
+  const [nuevaUrlTx, setNuevaUrlTx] = useState("");
+  const [nuevosDiasTx, setNuevosDiasTx] = useState("");
+  const [nuevoHorarioTx, setNuevoHorarioTx] = useState("");
   const [guardandoLinks, setGuardandoLinks] = useState(false);
   const [errorLinks, setErrorLinks] = useState<string | null>(null);
   const [linksGuardados, setLinksGuardados] = useState(false);
@@ -270,7 +303,6 @@ export default function ProfilePage() {
     setLiga(profile.liga ?? "");
     setEsCaster(profile.es_caster);
     setLinksTransmision(profile.links_transmision ?? []);
-    setHorarioStream(profile.horario_stream ?? "");
     setPerfilBio(profile.bio ?? "");
   }, [profile]);
 
@@ -786,6 +818,34 @@ export default function ProfilePage() {
     setEmailCambioEnviado(true);
   };
 
+  const handleCambiarPassword = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorPassword(null);
+    setPasswordGuardada(false);
+
+    if (passwordNueva.length < 6) {
+      setErrorPassword("La contraseña tiene que tener al menos 6 caracteres.");
+      return;
+    }
+    if (passwordNueva !== passwordConfirmar) {
+      setErrorPassword("Las dos contraseñas no coinciden.");
+      return;
+    }
+
+    setGuardandoPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: passwordNueva });
+    setGuardandoPassword(false);
+
+    if (error) {
+      setErrorPassword(error.message);
+      return;
+    }
+
+    setPasswordNueva("");
+    setPasswordConfirmar("");
+    setPasswordGuardada(true);
+  };
+
   // Migración 048: raza (perfiles_juego) y liga (profiles) se guardan
   // juntas con un solo botón -- las dos son "datos de juego" de
   // StarCraft II, aunque técnicamente vivan en tablas distintas.
@@ -835,9 +895,36 @@ export default function ProfilePage() {
 
     setErrorLinks(null);
     setLinksGuardados(false);
-    setLinksTransmision((prev) => [...prev, { plataforma: nuevaPlataforma.trim(), url: nuevaUrlLink.trim() }]);
+    setLinksTransmision((prev) => [
+      ...prev,
+      { plataforma: nuevaPlataforma.trim(), url: nuevaUrlLink.trim(), tipo: "personal" },
+    ]);
     setNuevaPlataforma("");
     setNuevaUrlLink("");
+  };
+
+  const handleAgregarLinkTransmision = () => {
+    if (!nuevaPlataformaTx.trim() || !nuevaUrlTx.trim()) {
+      setErrorLinks("Completa la plataforma y el link.");
+      return;
+    }
+
+    setErrorLinks(null);
+    setLinksGuardados(false);
+    setLinksTransmision((prev) => [
+      ...prev,
+      {
+        plataforma: nuevaPlataformaTx.trim(),
+        url: nuevaUrlTx.trim(),
+        tipo: "transmision",
+        dias: nuevosDiasTx.trim() || undefined,
+        horario: nuevoHorarioTx.trim() || undefined,
+      },
+    ]);
+    setNuevaPlataformaTx("");
+    setNuevaUrlTx("");
+    setNuevosDiasTx("");
+    setNuevoHorarioTx("");
   };
 
   const handleQuitarLink = (indice: number) => {
@@ -854,7 +941,7 @@ export default function ProfilePage() {
 
     const { error } = await supabase
       .from("profiles")
-      .update({ links_transmision: linksTransmision, horario_stream: horarioStream.trim() || null })
+      .update({ links_transmision: linksTransmision })
       .eq("id", user.id);
 
     setGuardandoLinks(false);
@@ -1120,156 +1207,6 @@ export default function ProfilePage() {
         </>
       )}
 
-      <h2 className="detail-subtitle" id="titulos-padre-hijo">
-        Títulos Padre/Hijo
-      </h2>
-      <p className="tournament-card-meta">
-        Se resuelven solos cuando ganas o pierdes una partida 1v1 real contra el rival, en cualquier
-        torneo.
-      </p>
-      {profile && <TitulosActivosList tipo="jugador" id={profile.id} className="detail-map-list" />}
-
-      <h3 className="detail-subtitle">Pendientes de responder</h3>
-      {titulosPendientesResponder.length === 0 ? (
-        <p className="detail-empty">No tienes retos de título pendientes de responder.</p>
-      ) : (
-        <div className="detail-participant-list">
-          {titulosPendientesResponder.map((t) => (
-            <div key={t.id} className="reto-item">
-              <p className="reto-desc">
-                {t.retadorNombre} te reta a un título ({t.duracionDias} días)
-              </p>
-              {erroresResponderTitulo[t.id] && (
-                <div className="form-error">{erroresResponderTitulo[t.id]}</div>
-              )}
-              <div className="invitation-actions">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={respondiendoTitulo === t.id}
-                  onClick={() => handleResponderTitulo(t.id, true)}
-                >
-                  Aceptar
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={respondiendoTitulo === t.id}
-                  onClick={() => handleResponderTitulo(t.id, false)}
-                >
-                  Rechazar
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <h3 className="detail-subtitle">Propuestos por mí</h3>
-      {titulosPropuestosPorMi.length === 0 ? (
-        <p className="detail-empty">No propusiste ningún título.</p>
-      ) : (
-        <div className="detail-participant-list">
-          {titulosPropuestosPorMi.map((t) => (
-            <div key={t.id} className="reto-item">
-              <p className="reto-desc">
-                Título contra {t.retadoNombre} ({t.duracionDias} días)
-                <span className="reto-status">
-                  {t.aceptado ? "Acordado, esperando la partida" : "Esperando respuesta"}
-                </span>
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <h3 className="detail-subtitle">Proponer un título</h3>
-      <form className="auth-form" onSubmit={handleBuscarRivalTitulo}>
-        {errorBusquedaTitulo && <div className="form-error">{errorBusquedaTitulo}</div>}
-        {tituloEnviado && <div className="form-success">¡Título propuesto!</div>}
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="titulo-buscar-nick">
-            Nick#ID del rival
-          </label>
-          <input
-            id="titulo-buscar-nick"
-            className="form-input"
-            type="text"
-            placeholder="CarpeDiem#12345"
-            value={busquedaNickTitulo}
-            onChange={(e) => setBusquedaNickTitulo(e.target.value)}
-          />
-        </div>
-
-        <button type="submit" className="btn btn-ghost btn-block" disabled={buscandoTitulo}>
-          {buscandoTitulo ? "Buscando..." : "Buscar"}
-        </button>
-      </form>
-
-      {rivalTitulo && (
-        <div className="detail-participant-item">
-          {rivalTitulo.nick}
-          <span className="profile-nick-id">#{rivalTitulo.uniqueId}</span>
-        </div>
-      )}
-
-      {rivalTitulo && (
-        <div className="auth-form">
-          {errorTitulo && <div className="form-error">{errorTitulo}</div>}
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="titulo-duracion-jugador">
-              Duración (entre 7 y 90 días)
-            </label>
-            <input
-              id="titulo-duracion-jugador"
-              className="form-input"
-              type="number"
-              min={7}
-              max={90}
-              value={duracionTitulo}
-              onChange={(e) => setDuracionTitulo(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="titulo-caster-nombre">
-              Nombre del caster
-            </label>
-            <input
-              id="titulo-caster-nombre"
-              className="form-input"
-              type="text"
-              value={casterNombreTitulo}
-              onChange={(e) => setCasterNombreTitulo(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="titulo-caster-link">
-              Link de la transmisión
-            </label>
-            <input
-              id="titulo-caster-link"
-              className="form-input"
-              type="text"
-              value={casterLinkTitulo}
-              onChange={(e) => setCasterLinkTitulo(e.target.value)}
-            />
-          </div>
-
-          <button
-            type="button"
-            className="btn btn-primary btn-block"
-            disabled={proponiendoTitulo}
-            onClick={handleProponerTitulo}
-          >
-            {proponiendoTitulo ? "Proponiendo..." : "Proponer título"}
-          </button>
-        </div>
-      )}
-
       {profile?.nick ? (
         <p className="profile-nick-display">
           {profile.nick}
@@ -1304,352 +1241,510 @@ export default function ProfilePage() {
           justamente lo que hacía que "Editar mis datos" y "Mi perfil"
           se sintieran mezclados en una sola pantalla. */}
       <h2 className="detail-subtitle">Panel de control</h2>
-      <div className="settings-tabs" role="tablist">
+      {seccionActiva === null ? (
+        <div className="team-panel-menu">
+          <button
+            type="button"
+            className="team-panel-menu-item"
+            onClick={() => setSeccionActiva("datos")}
+          >
+            <span className="team-panel-menu-item-title">Editar datos</span>
+            <span className="team-panel-menu-item-desc">Datos personales y datos de transmisión</span>
+          </button>
+          <button
+            type="button"
+            className="team-panel-menu-item"
+            onClick={() => setSeccionActiva("juego")}
+          >
+            <span className="team-panel-menu-item-title">Editar datos de juego</span>
+            <span className="team-panel-menu-item-desc">Raza principal, secundaria y liga</span>
+          </button>
+          <button
+            type="button"
+            className="team-panel-menu-item"
+            onClick={() => setSeccionActiva("logros")}
+          >
+            <span className="team-panel-menu-item-title">Logros y Recompensas</span>
+            <span className="team-panel-menu-item-desc">Títulos Padre/Hijo y recompensas de la tienda</span>
+          </button>
+          <button
+            type="button"
+            className="team-panel-menu-item"
+            onClick={() => setSeccionActiva("historial")}
+          >
+            <span className="team-panel-menu-item-title">Historial de eventos</span>
+            <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que participaste</span>
+          </button>
+          <button
+            type="button"
+            className="team-panel-menu-item"
+            onClick={() => setSeccionActiva("configuracion")}
+          >
+            <span className="team-panel-menu-item-title">Configuración</span>
+            <span className="team-panel-menu-item-desc">Tema del sitio, apariencia del avatar e idioma</span>
+          </button>
+        </div>
+      ) : (
         <button
           type="button"
-          role="tab"
-          aria-selected={seccionActiva === "datos"}
-          className={`settings-tab ${seccionActiva === "datos" ? "active" : ""}`}
+          className="team-panel-back"
           onClick={() => {
-            setSeccionActiva("datos");
+            setSeccionActiva(null);
             setSubseccion(null);
+            setSubsubseccion(null);
           }}
         >
-          Editar datos
+          ← Volver al panel
         </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={seccionActiva === "juego"}
-          className={`settings-tab ${seccionActiva === "juego" ? "active" : ""}`}
-          onClick={() => {
-            setSeccionActiva("juego");
-            setSubseccion(null);
-          }}
-        >
-          Editar datos de juego
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={seccionActiva === "logros"}
-          className={`settings-tab ${seccionActiva === "logros" ? "active" : ""}`}
-          onClick={() => {
-            setSeccionActiva("logros");
-            setSubseccion(null);
-          }}
-        >
-          Logros y Recompensas
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={seccionActiva === "historial"}
-          className={`settings-tab ${seccionActiva === "historial" ? "active" : ""}`}
-          onClick={() => {
-            setSeccionActiva("historial");
-            setSubseccion(null);
-          }}
-        >
-          Historial de eventos
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={seccionActiva === "configuracion"}
-          className={`settings-tab ${seccionActiva === "configuracion" ? "active" : ""}`}
-          onClick={() => {
-            setSeccionActiva("configuracion");
-            setSubseccion(null);
-          }}
-        >
-          Configuración
-        </button>
-      </div>
+      )}
 
       {seccionActiva === "datos" && (
         <div className="settings-panel">
-          <div className="profile-avatar-section">
-            <AvatarSkin clave={skinAvatarClave} forma={profile?.avatar_forma}>
-              <Avatar
-                url={avatarPreview ?? profile?.avatar_url}
-                nombre={profile?.nick ?? profile?.nombre}
-                className="profile-avatar"
-                forma={profile?.avatar_forma}
-              />
-            </AvatarSkin>
-            {!avatarPreview && !profile?.avatar_url && (
-              <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
-            )}
-            <form className="profile-avatar-form" onSubmit={handleGuardarAvatar}>
-              {errorAvatar && <div className="form-error">{errorAvatar}</div>}
-              {avatarGuardado && <div className="form-success">¡Foto actualizada!</div>}
-              <input
-                id="perfil-avatar"
-                className="form-input"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={handleAvatarChange}
-              />
-              {avatarFile && (
-                <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoAvatar}>
-                  {guardandoAvatar ? "Subiendo..." : "Guardar foto"}
-                </button>
-              )}
-            </form>
-          </div>
-
-          <h3 className="detail-subtitle">Portada y descripción</h3>
-          <form className="auth-form" onSubmit={handleGuardarPerfilPublico}>
-            {errorPerfilPublico && <div className="form-error">{errorPerfilPublico}</div>}
-            {perfilPublicoGuardado && <div className="form-success">Tu perfil público se guardó correctamente.</div>}
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-banner">
-                Banner (opcional, máx. 3MB, se recorta a 4:1)
-              </label>
-              <input
-                id="perfil-banner"
-                className="form-input"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={handleBannerChange}
-              />
-              {(bannerPreview ?? profile?.banner_url) && (
-                <img
-                  src={bannerPreview ?? profile?.banner_url ?? ""}
-                  alt="Vista previa del banner"
-                  className="team-banner-preview"
-                />
-              )}
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-bio">
-                Descripción
-              </label>
-              <textarea
-                id="perfil-bio"
-                className="form-textarea"
-                maxLength={280}
-                value={perfilBio}
-                onChange={(e) => setPerfilBio(e.target.value)}
-              />
-            </div>
-
-            <button type="submit" className="btn btn-primary btn-block" disabled={guardandoPerfilPublico}>
-              {guardandoPerfilPublico ? "Guardando..." : "Guardar"}
-            </button>
-          </form>
-
-          <form className="auth-form" onSubmit={handleGuardarIdentidad}>
-            {errorIdentidad && <div className="form-error">{errorIdentidad}</div>}
-            {identidadGuardada && <div className="form-success">Tu perfil se guardó correctamente.</div>}
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-nick">
-                Nick
-              </label>
-              <input
-                id="perfil-nick"
-                className="form-input"
-                type="text"
-                required
-                value={nick}
-                onChange={(e) => setNick(e.target.value)}
-              />
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-country">
-                País (de dónde eres)
-              </label>
-              <select
-                id="perfil-country"
-                className="form-select"
-                required
-                value={country}
-                onChange={(e) => setCountry(e.target.value as Country)}
+          {subseccion === null && (
+            <div className="team-panel-menu">
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubseccion("personales")}
               >
-                <option value="" disabled>
-                  Elige tu país
-                </option>
-                {COUNTRY_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Servidor e ID de StarCraft II siguen acá (no en "Editar
-                datos de juego"): son, junto con nick y país, los 4
-                campos que exige el gate de perfil completo -- separarlos
-                hubiera partido esa identidad mínima en dos secciones. */}
-            <h3 className="detail-subtitle">StarCraft II</h3>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-sc2-region">
-                Servidor de StarCraft II (al que te conectas)
-              </label>
-              <select
-                id="perfil-sc2-region"
-                className="form-select"
-                required
-                value={sc2Region}
-                onChange={(e) => setSc2Region(e.target.value as Sc2Region)}
+                <span className="team-panel-menu-item-title">Editar datos personales</span>
+                <span className="team-panel-menu-item-desc">
+                  Foto, nombre, correo, contraseña, país y links de presencia
+                </span>
+              </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubseccion("transmision")}
               >
-                <option value="" disabled>
-                  Elige tu servidor
-                </option>
-                {SC2_REGION_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-sc2-id">
-                ID de StarCraft II
-              </label>
-              <input
-                id="perfil-sc2-id"
-                className="form-input"
-                type="text"
-                required
-                value={sc2Id}
-                onChange={(e) => setSc2Id(e.target.value)}
-              />
-            </div>
-
-            <button type="submit" className="btn btn-primary btn-block" disabled={guardandoIdentidad}>
-              {guardandoIdentidad ? "Guardando..." : "Guardar"}
-            </button>
-          </form>
-
-          <h3 className="detail-subtitle">Correo electrónico</h3>
-          <form className="auth-form" onSubmit={handleGuardarEmail}>
-            {errorEmail && <div className="form-error">{errorEmail}</div>}
-            {emailCambioEnviado && (
-              <div className="form-success">
-                Te mandamos un link de confirmación al correo nuevo. Hasta que no lo confirmes, tu
-                correo de acceso sigue siendo el actual.
-              </div>
-            )}
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-email">
-                Correo electrónico
-              </label>
-              <input
-                id="perfil-email"
-                className="form-input"
-                type="email"
-                required
-                value={nuevoEmail}
-                onChange={(e) => setNuevoEmail(e.target.value)}
-              />
-            </div>
-            <button
-              type="submit"
-              className="btn btn-ghost btn-block"
-              disabled={guardandoEmail || nuevoEmail.trim() === (user?.email ?? "")}
-            >
-              {guardandoEmail ? "Guardando..." : "Cambiar correo"}
-            </button>
-          </form>
-
-          <div className="auth-form">
-            {errorCaster && <div className="form-error">{errorCaster}</div>}
-            <label className="profile-caster-toggle">
-              <input
-                type="checkbox"
-                checked={esCaster}
-                onChange={handleToggleCaster}
-                disabled={guardandoCaster}
-              />
-              Soy caster
-            </label>
-          </div>
-
-          {/* Migración 048: los links ya no son exclusivos de un
-              caster -- son un dato general (Discord, YouTube, Twitch,
-              lo que sea), disponible para cualquier jugador. "Soy
-              caster" arriba solo decide si además se muestran como
-              "Transmisión" en el perfil público. */}
-          <h3 className="detail-subtitle">Links (Discord, YouTube, Twitch...)</h3>
-          {errorLinks && <div className="form-error">{errorLinks}</div>}
-          {linksGuardados && <div className="form-success">Tus links se guardaron correctamente.</div>}
-
-          {linksTransmision.length > 0 && (
-            <div className="detail-participant-list">
-              {linksTransmision.map((link, indice) => (
-                <div key={`${link.plataforma}-${indice}`} className="detail-participant-item">
-                  {link.plataforma}
-                  <span className="profile-nick-id">{link.url}</span>
-                  <button type="button" className="btn btn-ghost" onClick={() => handleQuitarLink(indice)}>
-                    Quitar
-                  </button>
-                </div>
-              ))}
+                <span className="team-panel-menu-item-title">Editar datos de transmisión</span>
+                <span className="team-panel-menu-item-desc">
+                  Plataformas donde transmitís, con días y horarios
+                </span>
+              </button>
             </div>
           )}
 
-          <div className="auth-form">
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-link-plataforma">
-                Plataforma
-              </label>
-              <input
-                id="perfil-link-plataforma"
-                className="form-input"
-                type="text"
-                placeholder="Twitch, YouTube, Kick..."
-                value={nuevaPlataforma}
-                onChange={(e) => setNuevaPlataforma(e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-link-url">
-                Link
-              </label>
-              <input
-                id="perfil-link-url"
-                className="form-input"
-                type="text"
-                placeholder="https://twitch.tv/tu-canal"
-                value={nuevaUrlLink}
-                onChange={(e) => setNuevaUrlLink(e.target.value)}
-              />
-            </div>
-            <button type="button" className="btn btn-ghost btn-block" onClick={handleAgregarLink}>
-              Agregar link
-            </button>
+          {subseccion === "personales" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-horario-stream">
-                Horario habitual de transmisión (opcional)
-              </label>
-              <input
-                id="perfil-horario-stream"
-                className="form-input"
-                type="text"
-                placeholder="Ej: Martes y jueves, 20:00 (hora Chile)"
-                value={horarioStream}
-                onChange={(e) => setHorarioStream(e.target.value)}
-              />
-            </div>
+              <div className="profile-avatar-section">
+                <AvatarSkin clave={skinAvatarClave} forma={profile?.avatar_forma}>
+                  <Avatar
+                    url={avatarPreview ?? profile?.avatar_url}
+                    nombre={profile?.nick ?? profile?.nombre}
+                    className="profile-avatar"
+                    forma={profile?.avatar_forma}
+                  />
+                </AvatarSkin>
+                {!avatarPreview && !profile?.avatar_url && (
+                  <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
+                )}
+                <form className="profile-avatar-form" onSubmit={handleGuardarAvatar}>
+                  {errorAvatar && <div className="form-error">{errorAvatar}</div>}
+                  {avatarGuardado && <div className="form-success">¡Foto actualizada!</div>}
+                  <input
+                    id="perfil-avatar"
+                    className="form-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleAvatarChange}
+                  />
+                  {avatarFile && (
+                    <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoAvatar}>
+                      {guardandoAvatar ? "Subiendo..." : "Guardar foto"}
+                    </button>
+                  )}
+                </form>
+              </div>
 
-            <button
-              type="button"
-              className="btn btn-primary btn-block"
-              disabled={guardandoLinks}
-              onClick={handleGuardarLinks}
-            >
-              {guardandoLinks ? "Guardando..." : "Guardar links"}
-            </button>
-          </div>
+              <h3 className="detail-subtitle">Portada y descripción</h3>
+              <form className="auth-form" onSubmit={handleGuardarPerfilPublico}>
+                {errorPerfilPublico && <div className="form-error">{errorPerfilPublico}</div>}
+                {perfilPublicoGuardado && (
+                  <div className="form-success">Tu perfil público se guardó correctamente.</div>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-banner">
+                    Banner (opcional, máx. 3MB, se recorta a 4:1)
+                  </label>
+                  <input
+                    id="perfil-banner"
+                    className="form-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleBannerChange}
+                  />
+                  {(bannerPreview ?? profile?.banner_url) && (
+                    <img
+                      src={bannerPreview ?? profile?.banner_url ?? ""}
+                      alt="Vista previa del banner"
+                      className="team-banner-preview"
+                    />
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-bio">
+                    Descripción
+                  </label>
+                  <textarea
+                    id="perfil-bio"
+                    className="form-textarea"
+                    maxLength={280}
+                    value={perfilBio}
+                    onChange={(e) => setPerfilBio(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block" disabled={guardandoPerfilPublico}>
+                  {guardandoPerfilPublico ? "Guardando..." : "Guardar"}
+                </button>
+              </form>
+
+              <form className="auth-form" onSubmit={handleGuardarIdentidad}>
+                {errorIdentidad && <div className="form-error">{errorIdentidad}</div>}
+                {identidadGuardada && <div className="form-success">Tu perfil se guardó correctamente.</div>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-nick">
+                    Nick
+                  </label>
+                  <input
+                    id="perfil-nick"
+                    className="form-input"
+                    type="text"
+                    required
+                    value={nick}
+                    onChange={(e) => setNick(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-country">
+                    País (de dónde eres)
+                  </label>
+                  <select
+                    id="perfil-country"
+                    className="form-select"
+                    required
+                    value={country}
+                    onChange={(e) => setCountry(e.target.value as Country)}
+                  >
+                    <option value="" disabled>
+                      Elige tu país
+                    </option>
+                    {COUNTRY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Servidor e ID de StarCraft II siguen acá (no en
+                    "Editar datos de juego"): son, junto con nick y
+                    país, los 4 campos que exige el gate de perfil
+                    completo -- separarlos hubiera partido esa
+                    identidad mínima en dos secciones. */}
+                <h3 className="detail-subtitle">StarCraft II</h3>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-sc2-region">
+                    Servidor de StarCraft II (al que te conectas)
+                  </label>
+                  <select
+                    id="perfil-sc2-region"
+                    className="form-select"
+                    required
+                    value={sc2Region}
+                    onChange={(e) => setSc2Region(e.target.value as Sc2Region)}
+                  >
+                    <option value="" disabled>
+                      Elige tu servidor
+                    </option>
+                    {SC2_REGION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-sc2-id">
+                    ID de StarCraft II
+                  </label>
+                  <input
+                    id="perfil-sc2-id"
+                    className="form-input"
+                    type="text"
+                    required
+                    value={sc2Id}
+                    onChange={(e) => setSc2Id(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block" disabled={guardandoIdentidad}>
+                  {guardandoIdentidad ? "Guardando..." : "Guardar"}
+                </button>
+              </form>
+
+              <h3 className="detail-subtitle">Correo electrónico</h3>
+              <form className="auth-form" onSubmit={handleGuardarEmail}>
+                {errorEmail && <div className="form-error">{errorEmail}</div>}
+                {emailCambioEnviado && (
+                  <div className="form-success">
+                    Te mandamos un link de confirmación al correo nuevo. Hasta que no lo confirmes, tu
+                    correo de acceso sigue siendo el actual.
+                  </div>
+                )}
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-email">
+                    Correo electrónico
+                  </label>
+                  <input
+                    id="perfil-email"
+                    className="form-input"
+                    type="email"
+                    required
+                    value={nuevoEmail}
+                    onChange={(e) => setNuevoEmail(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="btn btn-ghost btn-block"
+                  disabled={guardandoEmail || nuevoEmail.trim() === (user?.email ?? "")}
+                >
+                  {guardandoEmail ? "Guardando..." : "Cambiar correo"}
+                </button>
+              </form>
+
+              <h3 className="detail-subtitle">Contraseña</h3>
+              <form className="auth-form" onSubmit={handleCambiarPassword}>
+                {errorPassword && <div className="form-error">{errorPassword}</div>}
+                {passwordGuardada && <div className="form-success">Tu contraseña se cambió correctamente.</div>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-password-nueva">
+                    Contraseña nueva
+                  </label>
+                  <input
+                    id="perfil-password-nueva"
+                    className="form-input"
+                    type="password"
+                    minLength={6}
+                    value={passwordNueva}
+                    onChange={(e) => setPasswordNueva(e.target.value)}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-password-confirmar">
+                    Repite la contraseña nueva
+                  </label>
+                  <input
+                    id="perfil-password-confirmar"
+                    className="form-input"
+                    type="password"
+                    minLength={6}
+                    value={passwordConfirmar}
+                    onChange={(e) => setPasswordConfirmar(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoPassword}>
+                  {guardandoPassword ? "Guardando..." : "Cambiar contraseña"}
+                </button>
+              </form>
+
+              {/* Links de presencia general (Discord, redes...), sin
+                  horario -- los de transmisión (con días y horario)
+                  se editan aparte, en "Editar datos de transmisión". */}
+              <h3 className="detail-subtitle">Links (Discord, YouTube...)</h3>
+              {errorLinks && <div className="form-error">{errorLinks}</div>}
+              {linksGuardados && <div className="form-success">Tus links se guardaron correctamente.</div>}
+
+              {linksTransmision.filter((link) => (link.tipo ?? "personal") === "personal").length > 0 && (
+                <div className="detail-participant-list">
+                  {linksTransmision
+                    .map((link, indice) => ({ link, indice }))
+                    .filter(({ link }) => (link.tipo ?? "personal") === "personal")
+                    .map(({ link, indice }) => (
+                      <div key={indice} className="detail-participant-item">
+                        {link.plataforma}
+                        <span className="profile-nick-id">{link.url}</span>
+                        <button type="button" className="btn btn-ghost" onClick={() => handleQuitarLink(indice)}>
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              <div className="auth-form">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-link-plataforma">
+                    Plataforma
+                  </label>
+                  <input
+                    id="perfil-link-plataforma"
+                    className="form-input"
+                    type="text"
+                    placeholder="Discord, YouTube..."
+                    value={nuevaPlataforma}
+                    onChange={(e) => setNuevaPlataforma(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-link-url">
+                    Link
+                  </label>
+                  <input
+                    id="perfil-link-url"
+                    className="form-input"
+                    type="text"
+                    placeholder="https://discord.gg/tu-server"
+                    value={nuevaUrlLink}
+                    onChange={(e) => setNuevaUrlLink(e.target.value)}
+                  />
+                </div>
+                <button type="button" className="btn btn-ghost btn-block" onClick={handleAgregarLink}>
+                  Agregar link
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block"
+                  disabled={guardandoLinks}
+                  onClick={handleGuardarLinks}
+                >
+                  {guardandoLinks ? "Guardando..." : "Guardar links"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {subseccion === "transmision" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+
+              <div className="auth-form">
+                {errorCaster && <div className="form-error">{errorCaster}</div>}
+                <label className="profile-caster-toggle">
+                  <input
+                    type="checkbox"
+                    checked={esCaster}
+                    onChange={handleToggleCaster}
+                    disabled={guardandoCaster}
+                  />
+                  Soy caster
+                </label>
+              </div>
+
+              <h3 className="detail-subtitle">Plataformas de transmisión</h3>
+              {errorLinks && <div className="form-error">{errorLinks}</div>}
+              {linksGuardados && <div className="form-success">Tus links se guardaron correctamente.</div>}
+
+              {linksTransmision.filter((link) => link.tipo === "transmision").length > 0 && (
+                <div className="detail-participant-list">
+                  {linksTransmision
+                    .map((link, indice) => ({ link, indice }))
+                    .filter(({ link }) => link.tipo === "transmision")
+                    .map(({ link, indice }) => (
+                      <div key={indice} className="reto-item">
+                        <p className="reto-desc">
+                          {link.plataforma}
+                          <span className="profile-nick-id">{link.url}</span>
+                        </p>
+                        {(link.dias || link.horario) && (
+                          <p className="tournament-card-meta">
+                            {[link.dias, link.horario].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                        <button type="button" className="btn btn-ghost" onClick={() => handleQuitarLink(indice)}>
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              <div className="auth-form">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-tx-plataforma">
+                    Plataforma
+                  </label>
+                  <input
+                    id="perfil-tx-plataforma"
+                    className="form-input"
+                    type="text"
+                    placeholder="Twitch, YouTube, Kick..."
+                    value={nuevaPlataformaTx}
+                    onChange={(e) => setNuevaPlataformaTx(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-tx-url">
+                    Link del canal
+                  </label>
+                  <input
+                    id="perfil-tx-url"
+                    className="form-input"
+                    type="text"
+                    placeholder="https://twitch.tv/tu-canal"
+                    value={nuevaUrlTx}
+                    onChange={(e) => setNuevaUrlTx(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-tx-dias">
+                    Qué días transmitís (opcional)
+                  </label>
+                  <input
+                    id="perfil-tx-dias"
+                    className="form-input"
+                    type="text"
+                    placeholder="Ej: Martes y jueves"
+                    value={nuevosDiasTx}
+                    onChange={(e) => setNuevosDiasTx(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-tx-horario">
+                    A qué hora (opcional)
+                  </label>
+                  <input
+                    id="perfil-tx-horario"
+                    className="form-input"
+                    type="text"
+                    placeholder="Ej: 20:00 (hora Chile)"
+                    value={nuevoHorarioTx}
+                    onChange={(e) => setNuevoHorarioTx(e.target.value)}
+                  />
+                </div>
+                <button type="button" className="btn btn-ghost btn-block" onClick={handleAgregarLinkTransmision}>
+                  Agregar plataforma
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block"
+                  disabled={guardandoLinks}
+                  onClick={handleGuardarLinks}
+                >
+                  {guardandoLinks ? "Guardando..." : "Guardar links"}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1734,36 +1829,207 @@ export default function ProfilePage() {
 
       {seccionActiva === "logros" && (
         <div className="settings-panel">
-          {subseccion === null ? (
+          {subseccion === null && (
+            <div className="team-panel-menu">
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubseccion("titulos")}
+              >
+                <span className="team-panel-menu-item-title">Títulos</span>
+                <span className="team-panel-menu-item-desc">
+                  Títulos Padre/Hijo activos, pendientes, propuestas y títulos adquiridos
+                </span>
+              </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubseccion("recompensas")}
+              >
+                <span className="team-panel-menu-item-title">Recompensas</span>
+                <span className="team-panel-menu-item-desc">Canjear en la tienda</span>
+              </button>
+            </div>
+          )}
+
+          {subseccion === "titulos" && subsubseccion === null && (
             <>
-              <h3 className="detail-subtitle">Títulos por nivel</h3>
-              <p className="detail-empty">
-                Todavía no existe un catálogo de títulos o recompensas por nivel -- esta vitrina va a
-                mostrarlos acá en cuanto ese catálogo esté listo.
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+
+              <h3 className="detail-subtitle">Títulos Padre/Hijo</h3>
+              <p className="tournament-card-meta">
+                Se resuelven solos cuando ganas o pierdes una partida 1v1 real contra el rival, en
+                cualquier torneo.
               </p>
+              {profile && <TitulosActivosList tipo="jugador" id={profile.id} className="detail-map-list" />}
+
+              <h3 className="detail-subtitle">Pendientes de responder</h3>
+              {titulosPendientesResponder.length === 0 ? (
+                <p className="detail-empty">No tienes retos de título pendientes de responder.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {titulosPendientesResponder.map((t) => (
+                    <div key={t.id} className="reto-item">
+                      <p className="reto-desc">
+                        {t.retadorNombre} te reta a un título ({t.duracionDias} días)
+                      </p>
+                      {erroresResponderTitulo[t.id] && (
+                        <div className="form-error">{erroresResponderTitulo[t.id]}</div>
+                      )}
+                      <div className="invitation-actions">
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          disabled={respondiendoTitulo === t.id}
+                          onClick={() => handleResponderTitulo(t.id, true)}
+                        >
+                          Aceptar
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={respondiendoTitulo === t.id}
+                          onClick={() => handleResponderTitulo(t.id, false)}
+                        >
+                          Rechazar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 className="detail-subtitle">Propuestos por mí</h3>
+              {titulosPropuestosPorMi.length === 0 ? (
+                <p className="detail-empty">No propusiste ningún título.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {titulosPropuestosPorMi.map((t) => (
+                    <div key={t.id} className="reto-item">
+                      <p className="reto-desc">
+                        Título contra {t.retadoNombre} ({t.duracionDias} días)
+                        <span className="reto-status">
+                          {t.aceptado ? "Acordado, esperando la partida" : "Esperando respuesta"}
+                        </span>
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 className="detail-subtitle">Proponer un título</h3>
+              <form className="auth-form" onSubmit={handleBuscarRivalTitulo}>
+                {errorBusquedaTitulo && <div className="form-error">{errorBusquedaTitulo}</div>}
+                {tituloEnviado && <div className="form-success">¡Título propuesto!</div>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="titulo-buscar-nick">
+                    Nick#ID del rival
+                  </label>
+                  <input
+                    id="titulo-buscar-nick"
+                    className="form-input"
+                    type="text"
+                    placeholder="CarpeDiem#12345"
+                    value={busquedaNickTitulo}
+                    onChange={(e) => setBusquedaNickTitulo(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-ghost btn-block" disabled={buscandoTitulo}>
+                  {buscandoTitulo ? "Buscando..." : "Buscar"}
+                </button>
+              </form>
+
+              {rivalTitulo && (
+                <div className="detail-participant-item">
+                  {rivalTitulo.nick}
+                  <span className="profile-nick-id">#{rivalTitulo.uniqueId}</span>
+                </div>
+              )}
+
+              {rivalTitulo && (
+                <div className="auth-form">
+                  {errorTitulo && <div className="form-error">{errorTitulo}</div>}
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="titulo-duracion-jugador">
+                      Duración (entre 7 y 90 días)
+                    </label>
+                    <input
+                      id="titulo-duracion-jugador"
+                      className="form-input"
+                      type="number"
+                      min={7}
+                      max={90}
+                      value={duracionTitulo}
+                      onChange={(e) => setDuracionTitulo(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="titulo-caster-nombre">
+                      Nombre del caster
+                    </label>
+                    <input
+                      id="titulo-caster-nombre"
+                      className="form-input"
+                      type="text"
+                      value={casterNombreTitulo}
+                      onChange={(e) => setCasterNombreTitulo(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="titulo-caster-link">
+                      Link de la transmisión
+                    </label>
+                    <input
+                      id="titulo-caster-link"
+                      className="form-input"
+                      type="text"
+                      value={casterLinkTitulo}
+                      onChange={(e) => setCasterLinkTitulo(e.target.value)}
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={proponiendoTitulo}
+                    onClick={handleProponerTitulo}
+                  >
+                    {proponiendoTitulo ? "Proponiendo..." : "Proponer título"}
+                  </button>
+                </div>
+              )}
 
               <div className="team-panel-menu">
                 <button
                   type="button"
                   className="team-panel-menu-item"
                   onClick={() => {
-                    setSubseccion("gestor-titulos");
+                    setSubsubseccion("titulos-adquiridos");
                     cargarGestorTitulos();
                   }}
                 >
-                  <span className="team-panel-menu-item-title">Gestor de eventos de títulos</span>
+                  <span className="team-panel-menu-item-title">Títulos adquiridos</span>
                   <span className="team-panel-menu-item-desc">
                     Cuántas veces ganaste o perdiste un título Padre/Hijo, y de quién
                   </span>
                 </button>
               </div>
             </>
-          ) : (
+          )}
+
+          {subseccion === "titulos" && subsubseccion === "titulos-adquiridos" && (
             <>
-              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
                 ← Volver
               </button>
-              <h3 className="detail-subtitle">Gestor de eventos de títulos</h3>
+              <h3 className="detail-subtitle">Títulos adquiridos</h3>
               {cargandoGestorTitulos ? (
                 <p className="tournament-card-meta">Cargando...</p>
               ) : gestorTitulos.length === 0 ? (
@@ -1789,6 +2055,19 @@ export default function ProfilePage() {
                   </div>
                 </>
               )}
+            </>
+          )}
+
+          {subseccion === "recompensas" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Recompensas</h3>
+              <p className="detail-empty">
+                Todavía no existe un catálogo de recompensas para canjear -- esta vitrina va a mostrarlas
+                acá en cuanto ese catálogo esté listo.
+              </p>
             </>
           )}
         </div>
@@ -1881,13 +2160,17 @@ export default function ProfilePage() {
         <div className="settings-panel">
           {subseccion === null && (
             <div className="team-panel-menu">
+              <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("tema")}>
+                <span className="team-panel-menu-item-title">Tema del sitio</span>
+                <span className="team-panel-menu-item-desc">Oscuro o claro</span>
+              </button>
               <button
                 type="button"
                 className="team-panel-menu-item"
                 onClick={() => setSubseccion("apariencia")}
               >
-                <span className="team-panel-menu-item-title">Apariencia</span>
-                <span className="team-panel-menu-item-desc">Tema del sitio y forma del avatar</span>
+                <span className="team-panel-menu-item-title">Cambiar apariencia</span>
+                <span className="team-panel-menu-item-desc">Forma del avatar y avatares adquiridos</span>
               </button>
               <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("idioma")}>
                 <span className="team-panel-menu-item-title">Idioma</span>
@@ -1896,7 +2179,7 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {subseccion === "apariencia" && (
+          {subseccion === "tema" && (
             <>
               <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
                 ← Volver
@@ -1904,29 +2187,67 @@ export default function ProfilePage() {
               <p className="tournament-card-meta">
                 Elige cómo se ve RemorApp en este dispositivo. La elección se guarda solo en tu navegador.
               </p>
-          <div className="pill-radio-group">
-            <label className={`pill-radio-option ${tema === "oscuro" ? "selected" : ""}`}>
-              <input
-                type="radio"
-                className="sr-only"
-                name="tema-visual"
-                checked={tema === "oscuro"}
-                onChange={() => setTema("oscuro")}
-              />
-              Oscuro
-            </label>
-            <label className={`pill-radio-option ${tema === "claro" ? "selected" : ""}`}>
-              <input
-                type="radio"
-                className="sr-only"
-                name="tema-visual"
-                checked={tema === "claro"}
-                onChange={() => setTema("claro")}
-              />
-              Claro
-            </label>
-          </div>
+              <div className="pill-radio-group">
+                <label className={`pill-radio-option ${tema === "oscuro" ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="tema-visual"
+                    checked={tema === "oscuro"}
+                    onChange={() => setTema("oscuro")}
+                  />
+                  Oscuro
+                </label>
+                <label className={`pill-radio-option ${tema === "claro" ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="tema-visual"
+                    checked={tema === "claro"}
+                    onChange={() => setTema("claro")}
+                  />
+                  Claro
+                </label>
+              </div>
+            </>
+          )}
 
+          {subseccion === "apariencia" && subsubseccion === null && (
+            <div className="team-panel-menu">
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubsubseccion("forma-avatar")}
+              >
+                <span className="team-panel-menu-item-title">Forma del avatar</span>
+                <span className="team-panel-menu-item-desc">Cuadrado o redondo</span>
+              </button>
+              {/* catalogo_skins_avatar solo trae filas cuando
+                  es_dueno_plataforma() es verdadero (RLS) -- para
+                  cualquier otra cuenta, catalogoSkins queda vacío y
+                  este botón directamente no existe, ni gris ni
+                  bloqueado. */}
+              {catalogoSkins.length > 0 && (
+                <button
+                  type="button"
+                  className="team-panel-menu-item"
+                  onClick={() => setSubsubseccion("avatares-adquiridos")}
+                >
+                  <span className="team-panel-menu-item-title">Avatares adquiridos</span>
+                  <span className="team-panel-menu-item-desc">Colección exclusiva del dueño de la plataforma</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {subseccion === "apariencia" && subsubseccion === "forma-avatar" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
               <h3 className="detail-subtitle">Forma del avatar</h3>
               {errorForma && <div className="form-error">{errorForma}</div>}
               <div className="avatar-forma-options">
@@ -1949,51 +2270,51 @@ export default function ProfilePage() {
                   Redondo
                 </button>
               </div>
+            </>
+          )}
 
-              {/* catalogo_skins_avatar solo trae filas cuando
-                  es_dueno_plataforma() es verdadero (RLS) -- para
-                  cualquier otra cuenta, catalogoSkins queda vacío y
-                  esta sección directamente no existe, ni gris ni
-                  bloqueada. */}
-              {catalogoSkins.length > 0 && (
-                <div className="skins-exclusivas">
-                  <h3 className="detail-subtitle skins-exclusivas-titulo">Skins exclusivas</h3>
-                  <p className="tournament-card-meta">
-                    Colección del dueño de la plataforma -- todavía no está disponible para el resto de las cuentas.
-                  </p>
-                  {errorSkin && <div className="form-error">{errorSkin}</div>}
-                  <div className="skins-exclusivas-grid">
+          {subseccion === "apariencia" && subsubseccion === "avatares-adquiridos" && catalogoSkins.length > 0 && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
+              <div className="skins-exclusivas">
+                <h3 className="detail-subtitle skins-exclusivas-titulo">Avatares adquiridos</h3>
+                <p className="tournament-card-meta">
+                  Colección del dueño de la plataforma -- todavía no está disponible para el resto de las cuentas.
+                </p>
+                {errorSkin && <div className="form-error">{errorSkin}</div>}
+                <div className="skins-exclusivas-grid">
+                  <button
+                    type="button"
+                    className={`skin-exclusiva-option ${profile?.skin_avatar_activa === null ? "selected" : ""}`}
+                    disabled={guardandoSkin}
+                    onClick={() => handleActivarSkin(null)}
+                  >
+                    <span className="skin-exclusiva-preview">
+                      <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
+                    </span>
+                    <span className="skin-exclusiva-nombre">Sin skin</span>
+                  </button>
+                  {catalogoSkins.map((skin) => (
                     <button
+                      key={skin.id}
                       type="button"
-                      className={`skin-exclusiva-option ${profile?.skin_avatar_activa === null ? "selected" : ""}`}
+                      className={`skin-exclusiva-option ${profile?.skin_avatar_activa === skin.id ? "selected" : ""}`}
                       disabled={guardandoSkin}
-                      onClick={() => handleActivarSkin(null)}
+                      onClick={() => handleActivarSkin(skin.id)}
+                      title={skin.descripcion}
                     >
                       <span className="skin-exclusiva-preview">
-                        <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
+                        <AvatarSkin clave={skin.clave}>
+                          <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
+                        </AvatarSkin>
                       </span>
-                      <span className="skin-exclusiva-nombre">Sin skin</span>
+                      <span className="skin-exclusiva-nombre">{skin.nombre}</span>
                     </button>
-                    {catalogoSkins.map((skin) => (
-                      <button
-                        key={skin.id}
-                        type="button"
-                        className={`skin-exclusiva-option ${profile?.skin_avatar_activa === skin.id ? "selected" : ""}`}
-                        disabled={guardandoSkin}
-                        onClick={() => handleActivarSkin(skin.id)}
-                        title={skin.descripcion}
-                      >
-                        <span className="skin-exclusiva-preview">
-                          <AvatarSkin clave={skin.clave}>
-                            <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
-                          </AvatarSkin>
-                        </span>
-                        <span className="skin-exclusiva-nombre">{skin.nombre}</span>
-                      </button>
-                    ))}
-                  </div>
+                  ))}
                 </div>
-              )}
+              </div>
             </>
           )}
 
