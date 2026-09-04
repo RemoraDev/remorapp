@@ -38,7 +38,6 @@ interface PerfilPublico {
 interface EquipoActual {
   name: string;
   tag: string;
-  logoUrl: string | null;
 }
 
 // El título más "importante" cuando hay varios activos a la vez: el
@@ -155,7 +154,7 @@ export default function PlayerDetailPage() {
       // Equipo actual (si tiene) -- team_members.user_id -> teams.id.
       const { data: miembroData } = await supabase
         .from("team_members")
-        .select("teams(name, tag, logo_url, disuelto)")
+        .select("teams(name, tag, disuelto)")
         .eq("user_id", perfilCargado.id)
         .maybeSingle();
       const equipo = miembroData
@@ -163,12 +162,10 @@ export default function PlayerDetailPage() {
           ? miembroData.teams[0]
           : miembroData.teams
         : null;
-      const equipoTipado = equipo as
-        | { name: string; tag: string; logo_url: string | null; disuelto: boolean }
-        | null;
+      const equipoTipado = equipo as { name: string; tag: string; disuelto: boolean } | null;
       setEquipoActual(
         equipoTipado && !equipoTipado.disuelto
-          ? { name: equipoTipado.name, tag: equipoTipado.tag, logoUrl: equipoTipado.logo_url }
+          ? { name: equipoTipado.name, tag: equipoTipado.tag }
           : null
       );
 
@@ -251,21 +248,17 @@ export default function PlayerDetailPage() {
             </p>
           )}
 
+          {/* Solo un link de texto con el nombre y el tag -- sin logo ni
+              banner, misma caja chica que antes del rediseño de perfil
+              público. La vista previa completa (con logo) queda para
+              /equipos, donde sí tiene sentido un listado de tarjetas. */}
           {equipoActual && (
-            <>
-              <h3 className="detail-subtitle">Equipo actual</h3>
-              <Link to={`/equipos/${equipoActual.tag}`} className="team-card">
-                {equipoActual.logoUrl ? (
-                  <img src={equipoActual.logoUrl} alt={equipoActual.name} className="team-card-logo" />
-                ) : (
-                  <div className="team-card-logo team-card-logo-placeholder">{equipoActual.tag.charAt(0)}</div>
-                )}
-                <div className="team-card-info">
-                  <p className="team-card-name">{equipoActual.name}</p>
-                  <p className="team-card-tag">[{equipoActual.tag}]</p>
-                </div>
+            <p className="tournament-card-meta">
+              Equipo actual:{" "}
+              <Link to={`/equipos/${equipoActual.tag}`} className="btn-link">
+                {equipoActual.name} [{equipoActual.tag}]
               </Link>
-            </>
+            </p>
           )}
 
           {perfil.esCaster && (
@@ -318,20 +311,34 @@ export default function PlayerDetailPage() {
 
           {panelAbierto && (
             <div className="team-leader-panel">
+              {/* Migración 048: reorganización completa en 5 accesos --
+                  el contenido real de cada uno vive en ProfilePage.tsx
+                  (esta página se mantiene de solo lectura), acá solo se
+                  navega con ?tab=. */}
               <div className="team-panel-menu">
-                <Link to="/perfil" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Editar mis datos</span>
+                <Link to="/perfil?tab=datos" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Editar datos</span>
                   <span className="team-panel-menu-item-desc">
-                    Identidad, portada, descripción y links de transmisión
+                    Nick, correo, país y links (Discord, YouTube, Twitch...)
                   </span>
                 </Link>
-                <Link to="/perfil?tab=apariencia" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Apariencia</span>
-                  <span className="team-panel-menu-item-desc">Tema del sitio y forma del avatar</span>
+                <Link to="/perfil?tab=juego" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Editar datos de juego</span>
+                  <span className="team-panel-menu-item-desc">Raza y liga de StarCraft II</span>
                 </Link>
-                <Link to="/perfil#titulos-padre-hijo" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Títulos Padre/Hijo</span>
-                  <span className="team-panel-menu-item-desc">Responder y proponer títulos</span>
+                <Link to="/perfil?tab=logros" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Logros y Recompensas</span>
+                  <span className="team-panel-menu-item-desc">
+                    Títulos por nivel y el gestor de títulos Padre/Hijo
+                  </span>
+                </Link>
+                <Link to="/perfil?tab=historial" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Historial de eventos</span>
+                  <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que jugaste</span>
+                </Link>
+                <Link to="/perfil?tab=configuracion" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Configuración</span>
+                  <span className="team-panel-menu-item-desc">Apariencia e idioma</span>
                 </Link>
               </div>
             </div>

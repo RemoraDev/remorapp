@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { validarNick } from "../lib/nickValidation";
 import { recortarImagenConProporcion, recortarImagenCuadrada } from "../lib/teams";
+import { formatFecha } from "../lib/formatters";
 import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
 import type { AvatarForma, Country, Liga, LinkTransmision, Sc2Region, Profile } from "../types/profile";
 import { RAZA_SC2_OPTIONS } from "../types/juegos";
@@ -39,6 +40,32 @@ interface TituloJugadorConNombre {
   retadoNombre: string;
   duracionDias: number;
   aceptado: boolean;
+}
+
+// Gestor de eventos de títulos (migración 048): un título Padre/Hijo
+// ya resuelto (ganador_id no nulo) -- gane indica si el usuario lo
+// ganó (quedó como Padre) o lo perdió (quedó como Hijo).
+interface TituloResueltoConNombre {
+  id: string;
+  rivalNombre: string;
+  gane: boolean;
+  status: "activo" | "expirado";
+  fechaInicio: string | null;
+}
+
+interface ClanWarHistorialItem {
+  id: string;
+  rivalNombre: string;
+  fechaHoraCet: string;
+  resultado: "Victoria" | "Derrota" | "Empate";
+}
+
+interface TorneoHistorialItem {
+  id: string;
+  nombre: string;
+  modo: string;
+  fechaInicio: string;
+  resultado: string;
 }
 
 // PostgREST embebe una relación "to-one" a veces como objeto y a veces
@@ -75,27 +102,39 @@ function calcularProgresoPerfil(profile: Profile | null) {
   return { completos, total: campos.length, mensaje };
 }
 
-type PestanaConfiguracion = "datos" | "apariencia";
+// Migración 048: reorganización completa del Panel de control en 5
+// accesos. "datos" y "juego" muestran contenido directo; "logros",
+// "historial" y "configuracion" son un segundo menú con sus propios
+// botones (subseccion), mismo patrón anidado que ya usa el Panel de
+// control de /equipos/:tag.
+type SeccionPerfil = "datos" | "juego" | "logros" | "historial" | "configuracion";
+const SECCIONES_VALIDAS: SeccionPerfil[] = ["datos", "juego", "logros", "historial", "configuracion"];
+
+type SubseccionPerfil = "gestor-titulos" | "clan-wars" | "torneos" | "apariencia" | "idioma" | null;
+
+function resolverSeccion(valor: string | null): SeccionPerfil {
+  return SECCIONES_VALIDAS.includes(valor as SeccionPerfil) ? (valor as SeccionPerfil) : "datos";
+}
 
 export default function ProfilePage() {
   const { user, profile, loading, refreshProfile } = useAuth();
   const { tema, setTema } = useTheme();
   const location = useLocation();
-  // El menú del avatar en el header manda acá con ?tab=apariencia para
-  // "Configuración" -- sin el parámetro (o con cualquier otro valor),
-  // arranca en "Editar mis datos" como siempre.
+  // El Panel de control de /jugador/:nick/:uniqueId (vitrina propia)
+  // manda acá con ?tab=... -- sin el parámetro (o con cualquier otro
+  // valor), arranca en "Editar datos" como siempre.
   const [searchParams] = useSearchParams();
-  const [pestanaActiva, setPestanaActiva] = useState<PestanaConfiguracion>(
-    searchParams.get("tab") === "apariencia" ? "apariencia" : "datos"
-  );
+  const [seccionActiva, setSeccionActiva] = useState<SeccionPerfil>(resolverSeccion(searchParams.get("tab")));
+  const [subseccion, setSubseccion] = useState<SubseccionPerfil>(null);
   // El valor inicial de useState solo se lee en el primer montaje: si
   // ya se está parado en /perfil y se navega de nuevo acá con un ?tab=
-  // distinto (el menú del avatar usa <Link>, no recarga la página), el
-  // componente no se vuelve a montar y la pestaña se quedaba pegada en
-  // la que estaba. Este efecto la resincroniza cada vez que cambia el
-  // parámetro de la URL.
+  // distinto (el menú de la vitrina usa <Link>, no recarga la página),
+  // el componente no se vuelve a montar y la sección se quedaba
+  // pegada en la que estaba. Este efecto la resincroniza cada vez que
+  // cambia el parámetro de la URL.
   useEffect(() => {
-    setPestanaActiva(searchParams.get("tab") === "apariencia" ? "apariencia" : "datos");
+    setSeccionActiva(resolverSeccion(searchParams.get("tab")));
+    setSubseccion(null);
   }, [searchParams]);
   // Llega desde LoginPage/RegisterPage cuando alguien con sesión activa
   // intentó entrar o registrarse de nuevo (ver Navigate en esas páginas).
@@ -111,6 +150,19 @@ export default function ProfilePage() {
   const [guardandoIdentidad, setGuardandoIdentidad] = useState(false);
   const [errorIdentidad, setErrorIdentidad] = useState<string | null>(null);
   const [identidadGuardada, setIdentidadGuardada] = useState(false);
+
+  // --- Correo electrónico (migración 048): auth.updateUser(), no la
+  // tabla profiles -- el correo vive únicamente en auth.users. Probado
+  // en vivo contra el proyecto real: el cambio SÍ exige confirmación
+  // -- auth.updateUser() devuelve el usuario con new_email = el correo
+  // pendiente, pero email sigue siendo el actual hasta que se confirma
+  // el link que Supabase manda al correo NUEVO. Esto es independiente
+  // de "Confirm email" (esa opción es solo para el registro inicial);
+  // el correo de acceso no cambia mientras no se confirme ese link.
+  const [nuevoEmail, setNuevoEmail] = useState("");
+  const [guardandoEmail, setGuardandoEmail] = useState(false);
+  const [errorEmail, setErrorEmail] = useState<string | null>(null);
+  const [emailCambioEnviado, setEmailCambioEnviado] = useState(false);
 
   // --- Perfil de juego de StarCraft II (migración 034): razas, en
   // perfiles_juego -- opcional, no bloquea cuenta_validada. juegoIdSc2
@@ -182,6 +234,21 @@ export default function ProfilePage() {
   const [errorTitulo, setErrorTitulo] = useState<string | null>(null);
   const [tituloEnviado, setTituloEnviado] = useState(false);
 
+  // --- Gestor de eventos de títulos (migración 048): historial
+  // completo de títulos Padre/Hijo YA RESUELTOS (ganador_id no nulo),
+  // activos o vencidos -- distinto de "Pendientes de responder"/
+  // "Propuestos por mí" de arriba, que son solo los que siguen sin
+  // jugarse. Se carga recién al abrir la subsección, no de entrada. ---
+  const [gestorTitulos, setGestorTitulos] = useState<TituloResueltoConNombre[]>([]);
+  const [cargandoGestorTitulos, setCargandoGestorTitulos] = useState(false);
+
+  // --- Historial de eventos (migración 048): Clan Wars y torneos 1v1
+  // en los que jugó, cada uno cargado recién al abrir su subsección. ---
+  const [historialClanWars, setHistorialClanWars] = useState<ClanWarHistorialItem[]>([]);
+  const [cargandoHistorialClanWars, setCargandoHistorialClanWars] = useState(false);
+  const [historialTorneos, setHistorialTorneos] = useState<TorneoHistorialItem[]>([]);
+  const [cargandoHistorialTorneos, setCargandoHistorialTorneos] = useState(false);
+
   // El perfil llega después del primer render (consulta async): cuando
   // aparece (o cambia tras guardar), sincroniza los campos del form.
   useEffect(() => {
@@ -196,6 +263,11 @@ export default function ProfilePage() {
     setHorarioStream(profile.horario_stream ?? "");
     setPerfilBio(profile.bio ?? "");
   }, [profile]);
+
+  // El correo vive en auth.users (user), no en profiles.
+  useEffect(() => {
+    setNuevoEmail(user?.email ?? "");
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -424,6 +496,194 @@ export default function ProfilePage() {
     await cargarTitulos();
   };
 
+  // Gestor de eventos de títulos (migración 048): historial de títulos
+  // Padre/Hijo ya resueltos (ganador_id no nulo) -- se carga recién al
+  // abrir la subsección, no de entrada.
+  const cargarGestorTitulos = async () => {
+    if (!user) return;
+    setCargandoGestorTitulos(true);
+
+    const { data } = await supabase
+      .from("titulos_padre_hijo")
+      .select("*")
+      .eq("tipo", "jugador")
+      .or(`retador_id.eq.${user.id},retado_id.eq.${user.id}`)
+      .not("ganador_id", "is", null)
+      .order("fecha_inicio", { ascending: false });
+
+    const filas = data ?? [];
+    const rivalIds = [
+      ...new Set(filas.map((t) => (t.retador_id === user.id ? t.retado_id : t.retador_id))),
+    ];
+    let nombrePorId: Record<string, string> = {};
+    if (rivalIds.length > 0) {
+      const { data: perfilesData } = await supabase.from("profiles").select("id, nick, unique_id").in("id", rivalIds);
+      nombrePorId = Object.fromEntries(
+        (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : "Jugador de RemorApp"])
+      );
+    }
+
+    setGestorTitulos(
+      filas.map((t) => ({
+        id: t.id,
+        rivalNombre: nombrePorId[t.retador_id === user.id ? t.retado_id : t.retador_id] ?? "Jugador de RemorApp",
+        gane: t.ganador_id === user.id,
+        status: t.status === "activo" ? "activo" : "expirado",
+        fechaInicio: t.fecha_inicio,
+      }))
+    );
+    setCargandoGestorTitulos(false);
+  };
+
+  // Historial de Clan Wars (migración 048): solo los retos ya resueltos
+  // (finalizada/empatada) donde el usuario formó parte del lineup real
+  // -- no cualquier reto de su equipo, específicamente los que jugó.
+  const cargarHistorialClanWars = async () => {
+    if (!user) return;
+    setCargandoHistorialClanWars(true);
+
+    const { data: lineupData } = await supabase
+      .from("clan_war_lineup")
+      .select("clan_war_id, team_id, clan_wars(id, challenger_team_id, challenged_team_id, status, ganador_team_id, fecha_hora_cet)")
+      .eq("jugador_id", user.id);
+
+    const filas = (lineupData ?? [])
+      .map((f) => ({ teamId: f.team_id, reto: extraerUno<{
+        id: string;
+        challenger_team_id: string;
+        challenged_team_id: string;
+        status: string;
+        ganador_team_id: string | null;
+        fecha_hora_cet: string;
+      }>(f.clan_wars) }))
+      .filter((f) => f.reto && (f.reto.status === "finalizada" || f.reto.status === "empatada"));
+
+    const teamIds = [
+      ...new Set(
+        filas.flatMap((f) => [f.reto!.challenger_team_id, f.reto!.challenged_team_id])
+      ),
+    ];
+    let nombrePorTeamId: Record<string, string> = {};
+    if (teamIds.length > 0) {
+      const { data: equiposData } = await supabase.from("teams").select("id, name, tag").in("id", teamIds);
+      nombrePorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`]));
+    }
+
+    setHistorialClanWars(
+      filas.map((f) => {
+        const reto = f.reto!;
+        const rivalTeamId = reto.challenger_team_id === f.teamId ? reto.challenged_team_id : reto.challenger_team_id;
+        const resultado: ClanWarHistorialItem["resultado"] =
+          reto.status === "empatada" ? "Empate" : reto.ganador_team_id === f.teamId ? "Victoria" : "Derrota";
+        return {
+          id: reto.id,
+          rivalNombre: nombrePorTeamId[rivalTeamId] ?? "Equipo",
+          fechaHoraCet: reto.fecha_hora_cet,
+          resultado,
+        };
+      })
+    );
+    setCargandoHistorialClanWars(false);
+  };
+
+  // Historial de torneos 1v1 independientes (migración 048): por
+  // tournament_participants.user_id -- los torneos por equipo ya
+  // tienen su propio historial en la página del equipo, este es solo
+  // el de inscripción individual (incluye los organizados por un
+  // caster de forma independiente: son torneos comunes, sin ningún
+  // caso especial).
+  const cargarHistorialTorneos = async () => {
+    if (!user) return;
+    setCargandoHistorialTorneos(true);
+
+    // tournaments!tournament_participants_tournament_id_fkey: hace
+    // falta calificar la relación -- tournaments tiene DOS FK más hacia
+    // tournament_participants (campeon_participant_id y
+    // tercer_lugar_participant_id), así que el embed por defecto queda
+    // ambiguo (PGRST201) sin esto.
+    const { data: participacionesData } = await supabase
+      .from("tournament_participants")
+      .select(
+        "id, tournament_id, tournaments!tournament_participants_tournament_id_fkey(nombre, modo, estado, fecha_inicio, campeon_participant_id, tercer_lugar_participant_id)"
+      )
+      .eq("user_id", user.id);
+
+    const filas = (participacionesData ?? [])
+      .map((p) => ({
+        participantId: p.id as string,
+        tournamentId: p.tournament_id as string,
+        torneo: extraerUno<{
+          nombre: string;
+          modo: string;
+          estado: string;
+          fecha_inicio: string;
+          campeon_participant_id: string | null;
+          tercer_lugar_participant_id: string | null;
+        }>(p.tournaments),
+      }))
+      .filter((p) => p.torneo && p.torneo.estado === "finalizado");
+
+    const idsEliminacion = filas.filter((p) => p.torneo!.modo === "eliminacion_simple").map((p) => p.participantId);
+    let perdioPorParticipante: Record<string, boolean> = {};
+    if (idsEliminacion.length > 0) {
+      const { data: partidasData } = await supabase
+        .from("bracket_matches")
+        .select("participant1_id, participant2_id, winner_id, status")
+        .eq("status", "jugado")
+        .or(
+          idsEliminacion
+            .map((id) => `participant1_id.eq.${id},participant2_id.eq.${id}`)
+            .join(",")
+        );
+      for (const m of partidasData ?? []) {
+        for (const pid of [m.participant1_id, m.participant2_id]) {
+          if (pid && idsEliminacion.includes(pid) && m.winner_id !== pid) {
+            perdioPorParticipante[pid] = true;
+          }
+        }
+      }
+    }
+
+    const idsOtrosModos = filas.filter((p) => p.torneo!.modo !== "eliminacion_simple").map((p) => p.participantId);
+    let resultadosPorParticipante: Record<string, { ganados: number; jugados: number }> = {};
+    if (idsOtrosModos.length > 0) {
+      const { data: resultadosData } = await supabase
+        .from("tournament_results")
+        .select("participant_id, gano")
+        .in("participant_id", idsOtrosModos);
+      for (const r of resultadosData ?? []) {
+        const actual = resultadosPorParticipante[r.participant_id] ?? { ganados: 0, jugados: 0 };
+        actual.jugados += 1;
+        if (r.gano) actual.ganados += 1;
+        resultadosPorParticipante[r.participant_id] = actual;
+      }
+    }
+
+    setHistorialTorneos(
+      filas.map((p) => {
+        const torneo = p.torneo!;
+        let resultado: string;
+        if (torneo.modo === "eliminacion_simple") {
+          if (torneo.campeon_participant_id === p.participantId) resultado = "Campeón";
+          else if (torneo.tercer_lugar_participant_id === p.participantId) resultado = "Tercer lugar";
+          else if (perdioPorParticipante[p.participantId]) resultado = "Eliminado";
+          else resultado = "Sin resultado registrado";
+        } else {
+          const r = resultadosPorParticipante[p.participantId];
+          resultado = r ? `${r.ganados} ganadas de ${r.jugados}` : "Sin resultado registrado";
+        }
+        return {
+          id: p.tournamentId,
+          nombre: torneo.nombre,
+          modo: torneo.modo,
+          fechaInicio: torneo.fecha_inicio,
+          resultado,
+        };
+      })
+    );
+    setCargandoHistorialTorneos(false);
+  };
+
   if (!loading && !user) {
     return (
       <section className="page-placeholder">
@@ -457,10 +717,11 @@ export default function ProfilePage() {
 
     // cuenta_validada no se manda: se recalcula sola en la base
     // (trigger actualizar_cuenta_validada) a partir de los 4 campos
-    // obligatorios. liga es opcional -- puede ir vacía sin problema.
+    // obligatorios. Migración 048: liga se movió a "Editar datos de
+    // juego" (handleGuardarDatosJuego), ya no se manda acá.
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ nick, country, sc2_region: sc2Region, sc2_id: sc2Id.trim(), liga: liga || null })
+      .update({ nick, country, sc2_region: sc2Region, sc2_id: sc2Id.trim() })
       .eq("id", user.id);
 
     setGuardandoIdentidad(false);
@@ -474,7 +735,36 @@ export default function ProfilePage() {
     setIdentidadGuardada(true);
   };
 
-  const handleGuardarRaza = async (event: FormEvent) => {
+  // Correo electrónico (migración 048): auth.updateUser(), no la tabla
+  // profiles -- ver el comentario largo junto a los estados de acá
+  // arriba sobre la confirmación obligatoria por correo.
+  const handleGuardarEmail = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user) return;
+
+    const emailLimpio = nuevoEmail.trim();
+    if (!emailLimpio || emailLimpio === user.email) return;
+
+    setGuardandoEmail(true);
+    setErrorEmail(null);
+    setEmailCambioEnviado(false);
+
+    const { error } = await supabase.auth.updateUser({ email: emailLimpio });
+
+    setGuardandoEmail(false);
+
+    if (error) {
+      setErrorEmail(error.message);
+      return;
+    }
+
+    setEmailCambioEnviado(true);
+  };
+
+  // Migración 048: raza (perfiles_juego) y liga (profiles) se guardan
+  // juntas con un solo botón -- las dos son "datos de juego" de
+  // StarCraft II, aunque técnicamente vivan en tablas distintas.
+  const handleGuardarDatosJuego = async (event: FormEvent) => {
     event.preventDefault();
     if (!user || !juegoIdSc2) return;
 
@@ -491,13 +781,24 @@ export default function ProfilePage() {
       .from("perfiles_juego")
       .upsert({ user_id: user.id, juego_id: juegoIdSc2, datos }, { onConflict: "user_id,juego_id" });
 
-    setGuardandoRaza(false);
-
     if (error) {
+      setGuardandoRaza(false);
       setErrorRaza(error.message);
       return;
     }
 
+    // liga es de profiles, no de perfiles_juego -- se guarda en el
+    // mismo envío para que "Editar datos de juego" tenga un solo botón.
+    const { error: errorLiga } = await supabase.from("profiles").update({ liga: liga || null }).eq("id", user.id);
+
+    setGuardandoRaza(false);
+
+    if (errorLiga) {
+      setErrorRaza(errorLiga.message);
+      return;
+    }
+
+    await refreshProfile();
     setRazaGuardada(true);
   };
 
@@ -959,29 +1260,71 @@ export default function ProfilePage() {
           no de esta página de edición. Mostrarlas acá también era
           justamente lo que hacía que "Editar mis datos" y "Mi perfil"
           se sintieran mezclados en una sola pantalla. */}
-      <h2 className="detail-subtitle">Configuración general</h2>
+      <h2 className="detail-subtitle">Panel de control</h2>
       <div className="settings-tabs" role="tablist">
         <button
           type="button"
           role="tab"
-          aria-selected={pestanaActiva === "datos"}
-          className={`settings-tab ${pestanaActiva === "datos" ? "active" : ""}`}
-          onClick={() => setPestanaActiva("datos")}
+          aria-selected={seccionActiva === "datos"}
+          className={`settings-tab ${seccionActiva === "datos" ? "active" : ""}`}
+          onClick={() => {
+            setSeccionActiva("datos");
+            setSubseccion(null);
+          }}
         >
           Editar datos
         </button>
         <button
           type="button"
           role="tab"
-          aria-selected={pestanaActiva === "apariencia"}
-          className={`settings-tab ${pestanaActiva === "apariencia" ? "active" : ""}`}
-          onClick={() => setPestanaActiva("apariencia")}
+          aria-selected={seccionActiva === "juego"}
+          className={`settings-tab ${seccionActiva === "juego" ? "active" : ""}`}
+          onClick={() => {
+            setSeccionActiva("juego");
+            setSubseccion(null);
+          }}
         >
-          Apariencia
+          Editar datos de juego
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={seccionActiva === "logros"}
+          className={`settings-tab ${seccionActiva === "logros" ? "active" : ""}`}
+          onClick={() => {
+            setSeccionActiva("logros");
+            setSubseccion(null);
+          }}
+        >
+          Logros y Recompensas
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={seccionActiva === "historial"}
+          className={`settings-tab ${seccionActiva === "historial" ? "active" : ""}`}
+          onClick={() => {
+            setSeccionActiva("historial");
+            setSubseccion(null);
+          }}
+        >
+          Historial de eventos
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={seccionActiva === "configuracion"}
+          className={`settings-tab ${seccionActiva === "configuracion" ? "active" : ""}`}
+          onClick={() => {
+            setSeccionActiva("configuracion");
+            setSubseccion(null);
+          }}
+        >
+          Configuración
         </button>
       </div>
 
-      {pestanaActiva === "datos" && (
+      {seccionActiva === "datos" && (
         <div className="settings-panel">
           <div className="profile-avatar-section">
             <Avatar
@@ -1094,10 +1437,10 @@ export default function ProfilePage() {
               </select>
             </div>
 
-            {/* Agrupa visualmente esto y los dos siguientes (ID de SC2,
-                liga) bajo "StarCraft II", igual que la raza más abajo,
-                aunque técnicamente sigan viviendo en profiles -- ver el
-                pedido del perfil de juego agnóstico. */}
+            {/* Servidor e ID de StarCraft II siguen acá (no en "Editar
+                datos de juego"): son, junto con nick y país, los 4
+                campos que exige el gate de perfil completo -- separarlos
+                hubiera partido esa identidad mínima en dos secciones. */}
             <h3 className="detail-subtitle">StarCraft II</h3>
 
             <div className="form-group">
@@ -1136,78 +1479,39 @@ export default function ProfilePage() {
               />
             </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-liga">
-                Liga (opcional)
-              </label>
-              <select
-                id="perfil-liga"
-                className="form-select"
-                value={liga}
-                onChange={(e) => setLiga(e.target.value as Liga)}
-              >
-                <option value="">Prefiero no decirlo</option>
-                {LIGA_OPTIONS.map((opcion) => (
-                  <option key={opcion} value={opcion}>
-                    {opcion}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <button type="submit" className="btn btn-primary btn-block" disabled={guardandoIdentidad}>
               {guardandoIdentidad ? "Guardando..." : "Guardar"}
             </button>
           </form>
 
-          {/* Raza principal/secundaria: perfiles_juego, no profiles --
-              se guarda aparte, con su propio botón, aunque quede
-              agrupada bajo "StarCraft II" con lo de arriba. Opcional,
-              no bloquea cuenta_validada. */}
-          <form className="auth-form" onSubmit={handleGuardarRaza}>
-            {errorRaza && <div className="form-error">{errorRaza}</div>}
-            {razaGuardada && <div className="form-success">Tu raza se guardó correctamente.</div>}
-
+          <h3 className="detail-subtitle">Correo electrónico</h3>
+          <form className="auth-form" onSubmit={handleGuardarEmail}>
+            {errorEmail && <div className="form-error">{errorEmail}</div>}
+            {emailCambioEnviado && (
+              <div className="form-success">
+                Te mandamos un link de confirmación al correo nuevo. Hasta que no lo confirmes, tu
+                correo de acceso sigue siendo el actual.
+              </div>
+            )}
             <div className="form-group">
-              <label className="form-label" htmlFor="perfil-raza-principal">
-                Raza principal
+              <label className="form-label" htmlFor="perfil-email">
+                Correo electrónico
               </label>
-              <select
-                id="perfil-raza-principal"
-                className="form-select"
-                value={razaPrincipal}
-                onChange={(e) => setRazaPrincipal(e.target.value as RazaSc2)}
-              >
-                <option value="">Prefiero no decirlo</option>
-                {RAZA_SC2_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
+              <input
+                id="perfil-email"
+                className="form-input"
+                type="email"
+                required
+                value={nuevoEmail}
+                onChange={(e) => setNuevoEmail(e.target.value)}
+              />
             </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-raza-secundaria">
-                Raza secundaria (opcional)
-              </label>
-              <select
-                id="perfil-raza-secundaria"
-                className="form-select"
-                value={razaSecundaria}
-                onChange={(e) => setRazaSecundaria(e.target.value as RazaSc2)}
-              >
-                <option value="">Ninguna</option>
-                {RAZA_SC2_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoRaza || !juegoIdSc2}>
-              {guardandoRaza ? "Guardando..." : "Guardar raza"}
+            <button
+              type="submit"
+              className="btn btn-ghost btn-block"
+              disabled={guardandoEmail || nuevoEmail.trim() === (user?.email ?? "")}
+            >
+              {guardandoEmail ? "Guardando..." : "Cambiar correo"}
             </button>
           </form>
 
@@ -1224,7 +1528,12 @@ export default function ProfilePage() {
             </label>
           </div>
 
-          <h3 className="detail-subtitle">Links de transmisión</h3>
+          {/* Migración 048: los links ya no son exclusivos de un
+              caster -- son un dato general (Discord, YouTube, Twitch,
+              lo que sea), disponible para cualquier jugador. "Soy
+              caster" arriba solo decide si además se muestran como
+              "Transmisión" en el perfil público. */}
+          <h3 className="detail-subtitle">Links (Discord, YouTube, Twitch...)</h3>
           {errorLinks && <div className="form-error">{errorLinks}</div>}
           {linksGuardados && <div className="form-success">Tus links se guardaron correctamente.</div>}
 
@@ -1299,11 +1608,257 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {pestanaActiva === "apariencia" && (
+      {/* Editar datos de juego (migración 048): por ahora solo
+          StarCraft II, el único juego activo -- perfiles_juego ya está
+          preparada para más juegos (juego_id genérico), acá solo hace
+          falta agregar un bloque análogo a este el día que exista un
+          segundo juego, sin tocar el esquema. */}
+      {seccionActiva === "juego" && (
         <div className="settings-panel">
+          <h3 className="detail-subtitle">StarCraft II</h3>
           <p className="tournament-card-meta">
-            Elige cómo se ve RemorApp en este dispositivo. La elección se guarda solo en tu navegador.
+            Estos datos se ven en el roster de tu equipo, junto al resto de tus compañeros.
           </p>
+          <form className="auth-form" onSubmit={handleGuardarDatosJuego}>
+            {errorRaza && <div className="form-error">{errorRaza}</div>}
+            {razaGuardada && <div className="form-success">Tus datos de juego se guardaron correctamente.</div>}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-raza-principal">
+                Raza principal
+              </label>
+              <select
+                id="perfil-raza-principal"
+                className="form-select"
+                value={razaPrincipal}
+                onChange={(e) => setRazaPrincipal(e.target.value as RazaSc2)}
+              >
+                <option value="">Prefiero no decirlo</option>
+                {RAZA_SC2_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-raza-secundaria">
+                Raza secundaria (opcional)
+              </label>
+              <select
+                id="perfil-raza-secundaria"
+                className="form-select"
+                value={razaSecundaria}
+                onChange={(e) => setRazaSecundaria(e.target.value as RazaSc2)}
+              >
+                <option value="">Ninguna</option>
+                {RAZA_SC2_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="perfil-liga">
+                Liga (opcional)
+              </label>
+              <select
+                id="perfil-liga"
+                className="form-select"
+                value={liga}
+                onChange={(e) => setLiga(e.target.value as Liga)}
+              >
+                <option value="">Prefiero no decirlo</option>
+                {LIGA_OPTIONS.map((opcion) => (
+                  <option key={opcion} value={opcion}>
+                    {opcion}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={guardandoRaza || !juegoIdSc2}>
+              {guardandoRaza ? "Guardando..." : "Guardar"}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {seccionActiva === "logros" && (
+        <div className="settings-panel">
+          {subseccion === null ? (
+            <>
+              <h3 className="detail-subtitle">Títulos por nivel</h3>
+              <p className="detail-empty">
+                Todavía no existe un catálogo de títulos o recompensas por nivel -- esta vitrina va a
+                mostrarlos acá en cuanto ese catálogo esté listo.
+              </p>
+
+              <div className="team-panel-menu">
+                <button
+                  type="button"
+                  className="team-panel-menu-item"
+                  onClick={() => {
+                    setSubseccion("gestor-titulos");
+                    cargarGestorTitulos();
+                  }}
+                >
+                  <span className="team-panel-menu-item-title">Gestor de eventos de títulos</span>
+                  <span className="team-panel-menu-item-desc">
+                    Cuántas veces ganaste o perdiste un título Padre/Hijo, y de quién
+                  </span>
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Gestor de eventos de títulos</h3>
+              {cargandoGestorTitulos ? (
+                <p className="tournament-card-meta">Cargando...</p>
+              ) : gestorTitulos.length === 0 ? (
+                <p className="detail-empty">Todavía no tienes ningún título Padre/Hijo resuelto.</p>
+              ) : (
+                <>
+                  <p className="tournament-card-meta">
+                    Ganaste {gestorTitulos.filter((t) => t.gane).length} · Perdiste{" "}
+                    {gestorTitulos.filter((t) => !t.gane).length}
+                  </p>
+                  <div className="detail-participant-list">
+                    {gestorTitulos.map((t) => (
+                      <div key={t.id} className="reto-item">
+                        <p className="reto-desc">
+                          {t.gane ? "Padre" : "Hijo"} de {t.rivalNombre}
+                          <span className="reto-status">{t.gane ? "Ganaste" : "Perdiste"}</span>
+                        </p>
+                        <p className="tournament-card-meta">
+                          {t.status === "activo" ? "Título activo" : "Título vencido"}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {seccionActiva === "historial" && (
+        <div className="settings-panel">
+          {subseccion === null && (
+            <div className="team-panel-menu">
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => {
+                  setSubseccion("clan-wars");
+                  cargarHistorialClanWars();
+                }}
+              >
+                <span className="team-panel-menu-item-title">Clan Wars</span>
+                <span className="team-panel-menu-item-desc">Contra qué equipo jugaste y el resultado</span>
+              </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => {
+                  setSubseccion("torneos");
+                  cargarHistorialTorneos();
+                }}
+              >
+                <span className="team-panel-menu-item-title">Torneos</span>
+                <span className="team-panel-menu-item-desc">Torneos independientes en los que participaste</span>
+              </button>
+            </div>
+          )}
+
+          {subseccion === "clan-wars" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Clan Wars</h3>
+              {cargandoHistorialClanWars ? (
+                <p className="tournament-card-meta">Cargando...</p>
+              ) : historialClanWars.length === 0 ? (
+                <p className="detail-empty">Todavía no jugaste ninguna Clan War.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {historialClanWars.map((cw) => (
+                    <div key={cw.id} className="reto-item">
+                      <p className="reto-desc">
+                        vs {cw.rivalNombre}
+                        <span className="reto-status">{cw.resultado}</span>
+                      </p>
+                      <p className="tournament-card-meta">{formatFecha(cw.fechaHoraCet)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {subseccion === "torneos" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Torneos</h3>
+              {cargandoHistorialTorneos ? (
+                <p className="tournament-card-meta">Cargando...</p>
+              ) : historialTorneos.length === 0 ? (
+                <p className="detail-empty">Todavía no participaste en ningún torneo independiente.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {historialTorneos.map((t) => (
+                    <div key={t.id} className="reto-item">
+                      <p className="reto-desc">
+                        {t.nombre}
+                        <span className="reto-status">{t.resultado}</span>
+                      </p>
+                      <p className="tournament-card-meta">{formatFecha(t.fechaInicio)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {seccionActiva === "configuracion" && (
+        <div className="settings-panel">
+          {subseccion === null && (
+            <div className="team-panel-menu">
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubseccion("apariencia")}
+              >
+                <span className="team-panel-menu-item-title">Apariencia</span>
+                <span className="team-panel-menu-item-desc">Tema del sitio y forma del avatar</span>
+              </button>
+              <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("idioma")}>
+                <span className="team-panel-menu-item-title">Idioma</span>
+                <span className="team-panel-menu-item-desc">Idioma de la interfaz</span>
+              </button>
+            </div>
+          )}
+
+          {subseccion === "apariencia" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <p className="tournament-card-meta">
+                Elige cómo se ve RemorApp en este dispositivo. La elección se guarda solo en tu navegador.
+              </p>
           <div className="pill-radio-group">
             <label className={`pill-radio-option ${tema === "oscuro" ? "selected" : ""}`}>
               <input
@@ -1327,28 +1882,53 @@ export default function ProfilePage() {
             </label>
           </div>
 
-          <h3 className="detail-subtitle">Forma del avatar</h3>
-          {errorForma && <div className="form-error">{errorForma}</div>}
-          <div className="avatar-forma-options">
-            <button
-              type="button"
-              className={`avatar-forma-option ${profile?.avatar_forma === "cuadrado" ? "selected" : ""}`}
-              disabled={guardandoForma}
-              onClick={() => handleCambiarFormaAvatar("cuadrado")}
-            >
-              <span className="avatar-forma-preview avatar-shape-cuadrado" />
-              Cuadrado
-            </button>
-            <button
-              type="button"
-              className={`avatar-forma-option ${profile?.avatar_forma === "redondo" ? "selected" : ""}`}
-              disabled={guardandoForma}
-              onClick={() => handleCambiarFormaAvatar("redondo")}
-            >
-              <span className="avatar-forma-preview avatar-shape-redondo" />
-              Redondo
-            </button>
-          </div>
+              <h3 className="detail-subtitle">Forma del avatar</h3>
+              {errorForma && <div className="form-error">{errorForma}</div>}
+              <div className="avatar-forma-options">
+                <button
+                  type="button"
+                  className={`avatar-forma-option ${profile?.avatar_forma === "cuadrado" ? "selected" : ""}`}
+                  disabled={guardandoForma}
+                  onClick={() => handleCambiarFormaAvatar("cuadrado")}
+                >
+                  <span className="avatar-forma-preview avatar-shape-cuadrado" />
+                  Cuadrado
+                </button>
+                <button
+                  type="button"
+                  className={`avatar-forma-option ${profile?.avatar_forma === "redondo" ? "selected" : ""}`}
+                  disabled={guardandoForma}
+                  onClick={() => handleCambiarFormaAvatar("redondo")}
+                >
+                  <span className="avatar-forma-preview avatar-shape-redondo" />
+                  Redondo
+                </button>
+              </div>
+            </>
+          )}
+
+          {subseccion === "idioma" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Idioma</h3>
+              {/* Placeholder honesto: no hay ningún sistema de
+                  traducción real todavía (es un proyecto aparte, mucho
+                  más grande) -- Español es la única opción que de
+                  verdad funciona, el resto queda marcado "Próximamente"
+                  y deshabilitado, sin fingir que hacen algo. */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="perfil-idioma">
+                  Idioma de la interfaz
+                </label>
+                <select id="perfil-idioma" className="form-select" value="es" disabled>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+              <p className="detail-empty">English, Português y otros idiomas -- Próximamente.</p>
+            </>
+          )}
         </div>
       )}
     </section>

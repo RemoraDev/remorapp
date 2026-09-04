@@ -5,7 +5,6 @@ import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
-import SuggestionModal from "./SuggestionModal";
 
 interface FanMenuProps {
   isOpen: boolean;
@@ -20,27 +19,29 @@ interface FanItem {
 
 // "Mi perfil" se movió fuera del abanico: ahora el nombre en el header
 // lleva directo a /perfil. En su lugar queda "Ayuda" (antes "Foro",
-// reemplazado por completo -- ver AyudaPage.tsx). Sugerencias sigue
-// exactamente igual (sin requiresAuth, con su propio flujo aparte).
-// "Check-in" es nuevo (migración 037, Lineup de Clan War) -- no existía
-// ningún botón de check-in en el abanico antes de esto. "Torneos" se
-// sumó acá al reordenar la barra inferior (Torneos salió de ahí, Voice
-// ocupó ese lugar) -- mismo destino de siempre, solo cambió de menú.
-// "Torneos inscritos" pasó a llamarse "Mis torneos" (mismo destino).
+// reemplazado por completo -- ver AyudaPage.tsx). "Sugerencias" se
+// sacó del abanico: ya vivía dentro de "Ayuda" con su propio
+// formulario real (ver handleEnviarSugerencia en AyudaPage.tsx); este
+// acceso aparte usaba un modal que ni siquiera guardaba nada todavía
+// (ver el comentario histórico que tenía SuggestionModal.tsx, ya
+// eliminado). "Check-in" es nuevo (migración 037, Lineup de Clan War)
+// -- no existía ningún botón de check-in en el abanico antes de esto.
+// "Torneos" se sumó acá al reordenar la barra inferior (Torneos salió
+// de ahí, Voice ocupó ese lugar) -- mismo destino de siempre, solo
+// cambió de menú. "Torneos inscritos" pasó a llamarse "Mis torneos"
+// (mismo destino).
 const FAN_ITEMS: FanItem[] = [
   { key: "torneos", label: "Torneos", requiresAuth: false },
   { key: "torneos-inscritos", label: "Mis torneos", requiresAuth: true },
   { key: "mi-equipo", label: "Mi equipo", requiresAuth: true },
   { key: "checkin", label: "Check-in", requiresAuth: true },
   { key: "ayuda", label: "Ayuda", requiresAuth: false },
-  { key: "sugerencias", label: "Sugerencias", requiresAuth: false },
 ];
 
 export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [notice, setNotice] = useState<string | null>(null);
-  const [showSuggestions, setShowSuggestions] = useState(false);
   // Equipo del usuario (si tiene uno), para "Mi equipo" y "Check-in" --
   // hace falta el id (para buscar la Clan War) y el tag (para navegar).
   const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
@@ -70,11 +71,6 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
     if (item.key === "torneos-inscritos") {
       navigate("/tournaments/inscritos");
       onClose();
-      return;
-    }
-
-    if (item.key === "sugerencias") {
-      setShowSuggestions(true);
       return;
     }
 
@@ -155,9 +151,7 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
               key={item.key}
               type="button"
               tabIndex={isOpen ? 0 : -1}
-              className={`fan-menu-item ${disabled ? "disabled" : ""} ${
-                item.key === "sugerencias" ? "suggestion" : ""
-              }`}
+              className={`fan-menu-item ${disabled ? "disabled" : ""}`}
               onClick={() => handleItemClick(item)}
             >
               {/* Hexágono en SVG real (polygon con fill/stroke nativos),
@@ -182,14 +176,6 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
           </div>
         )}
       </div>
-      {showSuggestions && (
-        <SuggestionModal
-          onClose={() => {
-            setShowSuggestions(false);
-            onClose();
-          }}
-        />
-      )}
     </>
   );
 }

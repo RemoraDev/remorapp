@@ -2329,14 +2329,6 @@ input[type="radio"] {
   stroke: var(--color-border);
 }
 
-.fan-menu-item.suggestion {
-  color: var(--h-accent);
-}
-
-.fan-menu-item.suggestion .fan-menu-item-hex polygon {
-  stroke: var(--h-accent);
-}
-
 /* Efecto "energizado": brillo breve cuando el abanico aparece. Se
    dispara cada vez que .fan-menu suma la clase .is-open (el panel
    queda siempre montado, así que esto sí vuelve a correr en cada
