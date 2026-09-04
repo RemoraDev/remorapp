@@ -71,6 +71,12 @@ export default function PlayerDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
 
+  // --- Carisma (migración 049): dar like y el placeholder de canje ---
+  const [dandoLike, setDandoLike] = useState(false);
+  const [errorLike, setErrorLike] = useState<string | null>(null);
+  const [likeDado, setLikeDado] = useState(false);
+  const [mostrarProximamenteTienda, setMostrarProximamenteTienda] = useState(false);
+
   useEffect(() => {
     const cargarPerfilPublico = async () => {
       if (!nick || !uniqueId) return;
@@ -194,6 +200,27 @@ export default function PlayerDetailPage() {
 
   const claseForma = perfil.avatarForma === "cuadrado" ? "avatar-shape-cuadrado" : "avatar-shape-redondo";
 
+  const handleDarLike = async () => {
+    if (!perfil) return;
+    setDandoLike(true);
+    setErrorLike(null);
+
+    // dar_like_caster() (en la base) es la que de verdad chequea que
+    // no sea a uno mismo, que el destino sea caster, y el límite de
+    // un like por día -- esto de acá es solo el botón.
+    const { error } = await supabase.rpc("dar_like_caster", { p_caster_id: perfil.id });
+
+    setDandoLike(false);
+
+    if (error) {
+      setErrorLike(error.message);
+      return;
+    }
+
+    setLikeDado(true);
+    setPerfil((prev) => (prev ? { ...prev, carisma: prev.carisma + 1 } : prev));
+  };
+
   return (
     <section className="section section-page">
       <div className="player-detail-banner-wrap">
@@ -294,9 +321,52 @@ export default function PlayerDetailPage() {
           {equipoActual && (
             <PercentBar label="Responsabilidad en Clan War" value={perfil.responsabilidadCw} vertical />
           )}
-          {perfil.esCaster && <PercentBar label="Carisma" value={perfil.carisma} vertical />}
+          {/* Migración 049: Carisma dejó de ser una barra de 0-100 --
+              ahora es un contador de puntos sin tope, así que se
+              muestra como un número simple con su ícono, no como una
+              barra más dentro del mismo grupo. */}
+          {perfil.esCaster && (
+            <div className="carisma-stat">
+              <span className="carisma-stat-icon" aria-hidden="true">
+                🎤
+              </span>
+              <p className="carisma-stat-value">{perfil.carisma}</p>
+              <p className="carisma-stat-label">Carisma</p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Migración 049: dar like (cualquier cuenta logueada, menos al
+          propio caster) y el acceso -- todavía solo un placeholder --
+          para canjear puntos en la Tienda. */}
+      {perfil.esCaster && (
+        <div className="detail-register-box">
+          {user && user.id !== perfil.id && (
+            <>
+              {errorLike && <div className="form-error">{errorLike}</div>}
+              <button
+                type="button"
+                className="btn btn-ghost btn-block"
+                disabled={dandoLike || likeDado}
+                onClick={handleDarLike}
+              >
+                {dandoLike ? "Enviando..." : likeDado ? "¡Like enviado!" : "Dar like a este caster"}
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            className="btn btn-ghost btn-block"
+            onClick={() => setMostrarProximamenteTienda(true)}
+          >
+            Canjear en la Tienda
+          </button>
+          {mostrarProximamenteTienda && (
+            <p className="detail-empty">Próximamente — la Tienda está en construcción.</p>
+          )}
+        </div>
+      )}
 
       {/* Panel de control: solo cuando el usuario ve su propio perfil,
           nunca en el de otra persona. Mismo patrón visual que el de

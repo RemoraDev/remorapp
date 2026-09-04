@@ -151,8 +151,9 @@ export interface Profile {
   links_transmision: LinkTransmision[];
   // Horario habitual de transmisión (migración 036): texto libre.
   horario_stream: string | null;
-  // Carisma (migración 036): 0-100, mismo formato que valentia_jugador
-  // -- sin ninguna lógica todavía que lo suba o baje.
+  // Carisma (migración 036, rediseñado en la 049): contador de puntos
+  // que solo sube, sin tope -- +10 al crear un torneo o proponer una
+  // Clan War (si es caster), +1 por like recibido. Ver carisma_log.
   carisma: number;
   cuenta_validada: boolean;
   // Cuenta suspendida desde /admin: no puede crear torneos ni

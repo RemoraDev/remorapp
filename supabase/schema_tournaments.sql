@@ -71,11 +71,13 @@ create table public.profiles (
   -- Horario habitual de transmisión (migración 036): texto libre, sin
   -- estructura de días/horas por ahora.
   horario_stream text,
-  -- Carisma (migración 036): mismo formato que valentia_jugador, pero
-  -- todavía SIN ninguna lógica que lo suba o baje -- valor fijo hasta
-  -- que se defina cómo debería cambiar.
-  -- Migración 039: nace en 100, no en 50.
-  carisma integer not null default 100 check (carisma >= 0 and carisma <= 100),
+  -- Carisma (migración 036, rediseñado en la 049): contador de PUNTOS
+  -- que solo sube, sin tope -- +10 al crear un torneo o proponer una
+  -- Clan War (si es caster), +1 por cada like recibido (máximo uno por
+  -- persona por día). carisma_log guarda de dónde salió cada punto.
+  -- Cuentas nuevas nacen en 0; las que ya tenían 100 del diseño
+  -- anterior no se tocaron con la migración.
+  carisma integer not null default 0 check (carisma >= 0),
   -- Se recalcula sola (ver trigger actualizar_cuenta_validada): la
   -- app nunca la setea a mano, alcanza con guardar nick/country/
   -- sc2_region/sc2_id.
@@ -489,6 +491,130 @@ create policy "tournaments_update_admin"
   to authenticated
   using (public.is_admin())
   with check (public.is_admin());
+
+-- ------------------------------------------------------------
+-- Carisma (migración 049): contador de puntos que solo sube, sin
+-- tope -- ver el comentario largo junto a profiles.carisma más
+-- arriba. Solo para casters por ahora.
+-- ------------------------------------------------------------
+create table public.carisma_log (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  cantidad integer not null,
+  origen text not null check (origen in ('evento_creado', 'like')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.carisma_log enable row level security;
+
+-- Público, igual que el resto de la vitrina de un caster -- de dónde
+-- salió cada punto no es información privada.
+create policy "carisma_log_select_publico"
+  on public.carisma_log for select
+  using (true);
+
+-- Sin política de insert para authenticated a propósito -- la única
+-- forma de escribir acá es registrar_carisma(), security definer, sin
+-- grant a authenticated tampoco (solo se llama desde otras funciones y
+-- triggers de la base, nunca directo desde el cliente).
+grant select on public.carisma_log to anon, authenticated;
+
+create or replace function public.registrar_carisma(p_user_id uuid, p_cantidad integer, p_origen text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.profiles set carisma = carisma + p_cantidad where id = p_user_id;
+  insert into public.carisma_log (user_id, cantidad, origen) values (p_user_id, p_cantidad, p_origen);
+end;
+$$;
+
+-- tournaments se inserta con un INSERT directo del cliente (ver
+-- CreateTournamentPage.tsx), no hay ninguna RPC de por medio -- un
+-- trigger es la única forma de engancharse ahí sin reescribir esa
+-- pantalla para que pase por una función nueva.
+create or replace function public.otorgar_carisma_torneo_creado()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_es_caster boolean;
+begin
+  select es_caster into v_es_caster from public.profiles where id = new.creador_id;
+  if v_es_caster then
+    perform public.registrar_carisma(new.creador_id, 10, 'evento_creado');
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists after_insert_tournaments_carisma on public.tournaments;
+create trigger after_insert_tournaments_carisma
+  after insert on public.tournaments
+  for each row execute function public.otorgar_carisma_torneo_creado();
+
+-- caster_likes: +1 de carisma, máximo uno por (caster, quien lo da)
+-- por día -- calculado en UTC, fijo de antemano con "at time zone
+-- 'utc'" para que la expresión del índice sea inmutable (un cast
+-- directo timestamptz::date depende del huso horario de la sesión).
+create table public.caster_likes (
+  id uuid primary key default gen_random_uuid(),
+  caster_id uuid not null references public.profiles (id) on delete cascade,
+  dado_por uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  check (caster_id <> dado_por)
+);
+
+alter table public.caster_likes enable row level security;
+
+create policy "caster_likes_select_publico"
+  on public.caster_likes for select
+  using (true);
+
+-- Sin política de insert para authenticated -- la única forma de
+-- escribir acá es dar_like_caster(), security definer.
+grant select on public.caster_likes to anon, authenticated;
+
+create unique index caster_likes_un_like_por_dia
+  on public.caster_likes (caster_id, dado_por, ((created_at at time zone 'utc')::date));
+
+create or replace function public.dar_like_caster(p_caster_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_es_caster boolean;
+begin
+  if p_caster_id = auth.uid() then
+    raise exception 'No puedes darte like a ti mismo.';
+  end if;
+
+  select es_caster into v_es_caster from public.profiles where id = p_caster_id;
+  if v_es_caster is null then
+    raise exception 'Ese jugador no existe.';
+  end if;
+  if not v_es_caster then
+    raise exception 'Ese jugador no es caster.';
+  end if;
+
+  begin
+    insert into public.caster_likes (caster_id, dado_por) values (p_caster_id, auth.uid());
+  exception
+    when unique_violation then
+      raise exception 'Ya le diste like a este caster hoy. Puedes volver a darle mañana.';
+  end;
+
+  perform public.registrar_carisma(p_caster_id, 1, 'like');
+end;
+$$;
+
+grant execute on function public.dar_like_caster(uuid) to authenticated;
 
 -- ------------------------------------------------------------
 -- tournament_maps: mapas elegidos para un torneo y si se
@@ -1822,6 +1948,7 @@ declare
   v_challenger record;
   v_challenged record;
   v_ultimo_reto timestamptz;
+  v_es_caster boolean;
 begin
   if p_formato not in ('simple', 'wtl') then
     raise exception 'Ese formato no es válido.';
@@ -1884,6 +2011,12 @@ begin
 
   insert into public.clan_wars (challenger_team_id, challenged_team_id, fecha_hora_cet, formato, temporada_id)
   values (v_challenger.id, p_challenged_team_id, p_fecha_hora_cet, p_formato, p_temporada_id);
+
+  -- Migración 049: +10 de carisma si quien propone es caster.
+  select es_caster into v_es_caster from public.profiles where id = auth.uid();
+  if v_es_caster then
+    perform public.registrar_carisma(auth.uid(), 10, 'evento_creado');
+  end if;
 end;
 $$;
 
