@@ -31,6 +31,21 @@ import TitulosActivosList from "../components/TitulosActivosList";
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const BANNER_MAX_BYTES = 3 * 1024 * 1024;
 
+// Ranking de jugadores: torneosGanados + clanWarsGanadas = total, el
+// criterio de orden. torneosGanados incluye tanto los 1v1 ganados
+// individualmente por ese jugador como los torneos por equipo
+// (2v2/3v3/4v4) que ganó este equipo -- ver el comentario largo en
+// cargarRanking() sobre por qué esos se le cuentan completos a cada
+// miembro ACTUAL, no repartidos.
+interface JugadorRanking {
+  userId: string;
+  nick: string | null;
+  uniqueId: string | null;
+  torneosGanados: number;
+  clanWarsGanadas: number;
+  total: number;
+}
+
 interface MiembroConNombre {
   userId: string;
   nick: string | null;
@@ -255,7 +270,8 @@ type SeccionPanel =
   | "titulos"
   | "logros"
   | "reportar"
-  | "temporada";
+  | "temporada"
+  | "ranking";
 
 // Migración 047: una temporada es "la actual" cuando hoy cae dentro
 // de su fecha_inicio/fecha_fin -- sin esto, "de la temporada actual"
@@ -334,6 +350,11 @@ export default function TeamDetailPage() {
   const [errorQuitar, setErrorQuitar] = useState<string | null>(null);
   const [asignandoCapitan, setAsignandoCapitan] = useState<string | null>(null);
   const [errorCapitan, setErrorCapitan] = useState<string | null>(null);
+
+  // --- Ranking de jugadores: torneos + Clan Wars ganadas, se carga
+  // recién al abrir la sección. ---
+  const [rankingJugadores, setRankingJugadores] = useState<JugadorRanking[]>([]);
+  const [cargandoRanking, setCargandoRanking] = useState(false);
   // El panel entero vive colapsado atrás de un botón -- nada de esto
   // se ve desperdigado en la página, solo cuando el dueño lo abre.
   // Adentro, el panel es un menú de 5 secciones (más "configuracion");
@@ -1229,9 +1250,17 @@ export default function TeamDetailPage() {
       // los que participó este equipo, ya finalizados. Solo hace
       // falta el resultado de LA PROPIA fila de participación -- el
       // ranking completo de cada torneo ya se ve en /tournaments/:id.
+      // tournaments!tournament_participants_tournament_id_fkey: hace
+      // falta calificar la relación desde la migración 046 -- tournaments
+      // ganó una segunda FK hacia tournament_participants
+      // (tercer_lugar_participant_id, además de campeon_participant_id),
+      // así que el embed sin calificar quedó ambiguo (PGRST201) y esta
+      // consulta dejó de funcionar en silencio hasta este arreglo.
       const { data: participacionesData } = await supabase
         .from("tournament_participants")
-        .select("id, tournaments(id, nombre, fecha_inicio, estado, modo, campeon_participant_id)")
+        .select(
+          "id, tournaments!tournament_participants_tournament_id_fkey(id, nombre, fecha_inicio, estado, modo, campeon_participant_id)"
+        )
         .eq("team_id", equipoData.id);
 
       const finalizadas = (participacionesData ?? [])
@@ -1580,6 +1609,99 @@ export default function TeamDetailPage() {
     }
 
     await cargar();
+  };
+
+  // Ranking de jugadores: torneos ganados + Clan Wars ganadas, de
+  // mayor a menor. Se carga recién al abrir la sección.
+  const cargarRanking = async () => {
+    setCargandoRanking(true);
+
+    // Clan Wars ganadas: clan_war_lineup ya guarda, partido por
+    // partido, quién jugó de cada lado -- se cuenta cuántas veces
+    // aparece cada jugador del lado que resultó ganador. Exacto,
+    // histórico de verdad (a diferencia de los torneos por equipo, ver
+    // más abajo).
+    const { data: lineupData } = await supabase
+      .from("clan_war_lineup")
+      .select("jugador_id, clan_wars!inner(status, ganador_team_id)")
+      .eq("team_id", equipo.id)
+      .eq("clan_wars.status", "finalizada")
+      .eq("clan_wars.ganador_team_id", equipo.id);
+
+    const clanWarsPorJugador: Record<string, number> = {};
+    for (const fila of lineupData ?? []) {
+      if (!fila.jugador_id) continue;
+      clanWarsPorJugador[fila.jugador_id] = (clanWarsPorJugador[fila.jugador_id] ?? 0) + 1;
+    }
+
+    const idsMiembros = miembros.map((m) => m.userId);
+    const torneosPorJugador: Record<string, number> = {};
+
+    if (idsMiembros.length > 0) {
+      // Torneos 1v1 ganados por cada jugador individualmente --
+      // tournament_participants.user_id es exacto, un jugador se
+      // representa a sí mismo en un torneo 1v1.
+      const { data: participacionesData } = await supabase
+        .from("tournament_participants")
+        .select(
+          "id, user_id, tournaments!tournament_participants_tournament_id_fkey(estado, campeon_participant_id)"
+        )
+        .in("user_id", idsMiembros);
+
+      for (const p of participacionesData ?? []) {
+        const torneo = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
+        const t = torneo as { estado: string; campeon_participant_id: string | null } | undefined;
+        if (t?.estado === "finalizado" && t.campeon_participant_id === p.id && p.user_id) {
+          torneosPorJugador[p.user_id] = (torneosPorJugador[p.user_id] ?? 0) + 1;
+        }
+      }
+
+      // Torneos POR EQUIPO (2v2/3v3/4v4) ganados por este equipo: a
+      // diferencia de Clan Wars, acá no existe un roster histórico por
+      // torneo -- tournament_participants.team_id es el equipo
+      // completo, no dice quién jugó. Sin esa información, cada torneo
+      // por equipo ganado se le cuenta COMPLETO a cada miembro ACTUAL
+      // del equipo (no repartido ni excluido) -- la aproximación más
+      // razonable disponible con los datos que existen hoy.
+      const { data: participacionesEquipoData } = await supabase
+        .from("tournament_participants")
+        .select(
+          "id, tournaments!tournament_participants_tournament_id_fkey(estado, campeon_participant_id)"
+        )
+        .eq("team_id", equipo.id);
+
+      let torneosEquipoGanados = 0;
+      for (const p of participacionesEquipoData ?? []) {
+        const torneo = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
+        const t = torneo as { estado: string; campeon_participant_id: string | null } | undefined;
+        if (t?.estado === "finalizado" && t.campeon_participant_id === p.id) {
+          torneosEquipoGanados += 1;
+        }
+      }
+      if (torneosEquipoGanados > 0) {
+        for (const id of idsMiembros) {
+          torneosPorJugador[id] = (torneosPorJugador[id] ?? 0) + torneosEquipoGanados;
+        }
+      }
+    }
+
+    const ranking: JugadorRanking[] = miembros
+      .map((m) => {
+        const torneosGanados = torneosPorJugador[m.userId] ?? 0;
+        const clanWarsGanadas = clanWarsPorJugador[m.userId] ?? 0;
+        return {
+          userId: m.userId,
+          nick: m.nick,
+          uniqueId: m.uniqueId,
+          torneosGanados,
+          clanWarsGanadas,
+          total: torneosGanados + clanWarsGanadas,
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+
+    setRankingJugadores(ranking);
+    setCargandoRanking(false);
   };
 
   const handleSalirEquipo = async () => {
@@ -2748,6 +2870,19 @@ export default function TeamDetailPage() {
                       Lista de jugadores, invitar, quitar e investigar jugador
                     </span>
                   </button>
+                  <button
+                    type="button"
+                    className="team-panel-menu-item"
+                    onClick={() => {
+                      setSeccionPanel("ranking");
+                      cargarRanking();
+                    }}
+                  >
+                    <span className="team-panel-menu-item-title">Ranking de jugadores</span>
+                    <span className="team-panel-menu-item-desc">
+                      Torneos y Clan Wars ganadas, jugador por jugador
+                    </span>
+                  </button>
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("eventos")}>
                     <span className="team-panel-menu-item-title">Gestor de eventos</span>
                     <span className="team-panel-menu-item-desc">
@@ -3098,6 +3233,35 @@ export default function TeamDetailPage() {
                 </div>
               )}
               </>
+              )}
+
+              {seccionPanel === "ranking" && (
+                <>
+                  <h3 className="detail-subtitle">Ranking de jugadores</h3>
+                  <p className="tournament-card-meta">
+                    Suma de torneos ganados y Clan Wars ganadas, de mayor a menor.
+                  </p>
+                  {cargandoRanking ? (
+                    <p className="tournament-card-meta">Cargando...</p>
+                  ) : rankingJugadores.length === 0 ? (
+                    <p className="detail-empty">Este equipo todavía no tiene miembros.</p>
+                  ) : (
+                    <div className="detail-participant-list">
+                      {rankingJugadores.map((r, i) => (
+                        <div key={r.userId} className="detail-participant-item">
+                          <span className="liga-badge">{i + 1}</span>
+                          {r.nick ?? "Jugador de RemorApp"}
+                          {r.uniqueId && <span className="profile-nick-id">#{r.uniqueId}</span>}
+                          <span className="team-owner-badge">{r.total}</span>
+                          <span className="tournament-card-meta">
+                            {r.torneosGanados} torneo{r.torneosGanados === 1 ? "" : "s"} · {r.clanWarsGanadas} Clan
+                            War{r.clanWarsGanadas === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
 
               {seccionPanel === "eventos" && (
