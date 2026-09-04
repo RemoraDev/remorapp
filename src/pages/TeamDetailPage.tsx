@@ -12,6 +12,7 @@ import type {
   ClanWarMotivoRechazo,
   ClanWarReporteMotivo,
   ClanWarStatus,
+  FondoLineup,
   TeamRow,
   TemaEquipo,
   TemporadaRow,
@@ -27,6 +28,7 @@ import MmrProgressBar from "../components/MmrProgressBar";
 import PercentBar from "../components/PercentBar";
 import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
 import TitulosActivosList from "../components/TitulosActivosList";
+import LineupFondoPicker from "../components/LineupFondoPicker";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const BANNER_MAX_BYTES = 3 * 1024 * 1024;
@@ -125,6 +127,9 @@ interface ClanWarConNombres {
   // Migración 047: opcional -- null significa que ninguna regla de
   // mercenarios/alianzas/rangos de MMR aplica a este reto.
   temporadaId: string | null;
+  // Fondo de la sala de lineup (migración 051): catálogo propio,
+  // distinto del fondo de bracket de torneos.
+  fondoLineup: FondoLineup;
 }
 
 interface MiembroRoster {
@@ -866,6 +871,7 @@ export default function TeamDetailPage() {
         resultadoMapasChallenged: r.resultado_mapas_challenged,
         reprogramacionesUsadas: r.reprogramaciones_usadas,
         temporadaId: r.temporada_id,
+        fondoLineup: r.fondo_lineup,
       }));
 
       setRetosPendientesResponder(
@@ -3580,9 +3586,14 @@ export default function TeamDetailPage() {
                           </>
                         )}
 
+                        {/* Fondo de la sala de lineup (migración 051): envuelve tanto
+                            el armado del lineup como el check-in posterior, para que
+                            la decoración se mantenga durante toda esa etapa del reto. */}
+                        <div className="clan-war-lineup-room" data-fondo-lineup={r.fondoLineup}>
                         {!lineupAprobado ? (
                           <>
                             <h5 className="detail-subtitle">Lineup: tu equipo</h5>
+                            <LineupFondoPicker clanWarId={r.id} fondo={r.fondoLineup} onCambio={cargar} />
                             {erroresLineup[r.id] && <div className="form-error">{erroresLineup[r.id]}</div>}
                             {lineupDeReto.propio.length === 0 ? (
                               <p className="detail-empty">Todavía no agregaste jugadores al lineup.</p>
@@ -3871,6 +3882,7 @@ export default function TeamDetailPage() {
                             )}
                           </>
                         )}
+                        </div>
 
                         {soyChallenger && r.status === "aceptada" && (
                           <>

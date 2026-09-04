@@ -180,7 +180,25 @@ export interface ClanWarRow {
   // Migración 047: opcional -- si es null, ninguna regla de
   // mercenarios/alianzas/rangos de MMR aplica a este reto.
   temporada_id: string | null;
+  // Fondo de la sala de lineup (migración 051): catálogo propio,
+  // distinto de tournaments.fondo_bracket -- ver FONDO_LINEUP_OPTIONS.
+  fondo_lineup: FondoLineup;
 }
+
+// Fondo de la sala de lineup (migración 051): mismos 5 valores que
+// FondoBracket (types/tournaments.ts) por coincidencia de diseño, pero
+// es un catálogo aparte -- clan_wars.fondo_lineup, no
+// tournaments.fondo_bracket. Ver el bloque de CSS bajo
+// data-fondo-lineup en halcon.css, separado del de data-fondo-bracket.
+export type FondoLineup = "ninguno" | "campo_estrellas" | "nebulosa" | "constelacion" | "vortice";
+
+export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
+  { value: "ninguno", label: "Ninguno" },
+  { value: "campo_estrellas", label: "Campo de estrellas" },
+  { value: "nebulosa", label: "Nebulosa" },
+  { value: "constelacion", label: "Constelación" },
+  { value: "vortice", label: "Vórtice" },
+];
 
 // Temporadas (migración 047): contenedor mínimo para torneos/ligas,
 // sin historial de temporadas pasadas todavía.

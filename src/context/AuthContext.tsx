@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabaseClient";
 import type { Profile } from "../types/profile";
+import type { SkinAvatarClave } from "../types/skins";
 
 export type { Profile };
 
@@ -10,6 +11,13 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   profile: Profile | null;
+  // Clave técnica de la skin de avatar activa (migración 052), ya
+  // resuelta contra el catálogo -- null si no tiene ninguna, o si la
+  // consulta al catálogo no trae filas (RLS: solo el dueño de la
+  // plataforma puede resolverla, así que para cualquier otra cuenta
+  // esto queda en null aunque nunca debería tener skin_avatar_activa
+  // asignada de todos modos).
+  skinAvatarClave: SkinAvatarClave | null;
   loading: boolean;
   // Invitaciones de equipo pendientes para el usuario logueado -- el
   // contador que se ve en el header. Se recarga junto con el perfil.
@@ -26,6 +34,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [skinAvatarClave, setSkinAvatarClave] = useState<SkinAvatarClave | null>(null);
   const [invitacionesPendientes, setInvitacionesPendientes] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -43,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, gran_maestro_alcanzado_en, avatar_url, avatar_forma, banner_url, bio, links_transmision, horario_stream, carisma, cuenta_validada, suspendido"
+        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, gran_maestro_alcanzado_en, avatar_url, avatar_forma, banner_url, bio, links_transmision, horario_stream, carisma, cuenta_validada, suspendido, skin_avatar_activa"
       )
       .eq("id", userId)
       .single();
@@ -51,10 +60,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       console.error("Error cargando perfil:", error);
       setProfile(null);
+      setSkinAvatarClave(null);
       return;
     }
 
     setProfile(data);
+
+    if (data.skin_avatar_activa) {
+      const { data: skinData } = await supabase
+        .from("catalogo_skins_avatar")
+        .select("clave")
+        .eq("id", data.skin_avatar_activa)
+        .maybeSingle();
+      setSkinAvatarClave((skinData?.clave as SkinAvatarClave | undefined) ?? null);
+    } else {
+      setSkinAvatarClave(null);
+    }
 
     const { count } = await supabase
       .from("team_invitations")
@@ -80,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         cargarPerfil(newSession.user.id);
       } else {
         setProfile(null);
+        setSkinAvatarClave(null);
         setInvitacionesPendientes(0);
       }
     });
@@ -103,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         user: session?.user ?? null,
         profile,
+        skinAvatarClave,
         loading,
         invitacionesPendientes,
         signOut,

@@ -159,6 +159,11 @@ export interface Profile {
   // Cuenta suspendida desde /admin: no puede crear torneos ni
   // inscribirse (bloqueado también a nivel de RLS, no solo acá).
   suspendido: boolean;
+  // Skin de avatar activa (migración 052): id de catalogo_skins_avatar,
+  // null si no tiene ninguna. Es solo un puntero -- el catálogo en sí
+  // (nombre/descripcion/clave) es privado, exclusivo del dueño de la
+  // plataforma por ahora.
+  skin_avatar_activa: string | null;
 }
 
 // Los 4 campos que exige el gate de /perfil. Se usa tanto para

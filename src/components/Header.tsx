@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
+import AvatarSkin from "./AvatarSkin";
 import { useAuth } from "../context/AuthContext";
 
 export default function Header() {
-  const { user, profile, invitacionesPendientes, signOut } = useAuth();
+  const { user, profile, skinAvatarClave, invitacionesPendientes, signOut } = useAuth();
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   const cerrarMenu = () => setMenuAbierto(false);
@@ -35,12 +36,14 @@ export default function Header() {
                 aria-expanded={menuAbierto}
                 onClick={() => setMenuAbierto((abierto) => !abierto)}
               >
-                <Avatar
-                  url={profile?.avatar_url}
-                  nombre={profile?.nick ?? profile?.nombre}
-                  className="header-avatar"
-                  forma={profile?.avatar_forma}
-                />
+                <AvatarSkin clave={skinAvatarClave} forma={profile?.avatar_forma}>
+                  <Avatar
+                    url={profile?.avatar_url}
+                    nombre={profile?.nick ?? profile?.nombre}
+                    className="header-avatar"
+                    forma={profile?.avatar_forma}
+                  />
+                </AvatarSkin>
                 {invitacionesPendientes > 0 && (
                   <span className="header-invite-badge">{invitacionesPendientes}</span>
                 )}

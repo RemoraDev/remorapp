@@ -12,7 +12,9 @@ import type { AvatarForma, Country, Liga, LinkTransmision, Sc2Region, Profile } 
 import { RAZA_SC2_OPTIONS } from "../types/juegos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
+import type { SkinAvatar } from "../types/skins";
 import Avatar from "../components/Avatar";
+import AvatarSkin from "../components/AvatarSkin";
 import TitulosActivosList from "../components/TitulosActivosList";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
@@ -117,7 +119,7 @@ function resolverSeccion(valor: string | null): SeccionPerfil {
 }
 
 export default function ProfilePage() {
-  const { user, profile, loading, refreshProfile } = useAuth();
+  const { user, profile, skinAvatarClave, loading, refreshProfile } = useAuth();
   const { tema, setTema } = useTheme();
   const location = useLocation();
   // El Panel de control de /jugador/:nick/:uniqueId (vitrina propia)
@@ -194,6 +196,14 @@ export default function ProfilePage() {
   // "Soy caster", se guarda solo al elegir una opción. ---
   const [guardandoForma, setGuardandoForma] = useState(false);
   const [errorForma, setErrorForma] = useState<string | null>(null);
+
+  // --- Skins de avatar (migración 052): catalogo_skins_avatar solo es
+  // legible vía RLS cuando es_dueno_plataforma() es verdadero -- si la
+  // consulta vuelve vacía, esta sección no se muestra, sin necesidad
+  // de otra verificación aparte. ---
+  const [catalogoSkins, setCatalogoSkins] = useState<SkinAvatar[]>([]);
+  const [guardandoSkin, setGuardandoSkin] = useState(false);
+  const [errorSkin, setErrorSkin] = useState<string | null>(null);
 
   // --- Foto de perfil ---
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -287,6 +297,21 @@ export default function ProfilePage() {
       const datos = data?.datos as DatosSc2 | undefined;
       setRazaPrincipal(datos?.raza_principal ?? "");
       setRazaSecundaria(datos?.raza_secundaria ?? "");
+    })();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setCatalogoSkins([]);
+      return;
+    }
+
+    (async () => {
+      const { data } = await supabase
+        .from("catalogo_skins_avatar")
+        .select("id, clave, nombre, descripcion")
+        .order("nombre");
+      setCatalogoSkins((data as SkinAvatar[] | null) ?? []);
     })();
   }, [user]);
 
@@ -888,6 +913,24 @@ export default function ProfilePage() {
     await refreshProfile();
   };
 
+  const handleActivarSkin = async (skinId: string | null) => {
+    if (!user || skinId === profile?.skin_avatar_activa) return;
+
+    setGuardandoSkin(true);
+    setErrorSkin(null);
+
+    const { error: rpcError } = await supabase.rpc("activar_skin_avatar", { p_skin_id: skinId });
+
+    setGuardandoSkin(false);
+
+    if (rpcError) {
+      setErrorSkin(rpcError.message);
+      return;
+    }
+
+    await refreshProfile();
+  };
+
   const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
     setErrorAvatar(null);
@@ -1327,12 +1370,14 @@ export default function ProfilePage() {
       {seccionActiva === "datos" && (
         <div className="settings-panel">
           <div className="profile-avatar-section">
-            <Avatar
-              url={avatarPreview ?? profile?.avatar_url}
-              nombre={profile?.nick ?? profile?.nombre}
-              className="profile-avatar"
-              forma={profile?.avatar_forma}
-            />
+            <AvatarSkin clave={skinAvatarClave} forma={profile?.avatar_forma}>
+              <Avatar
+                url={avatarPreview ?? profile?.avatar_url}
+                nombre={profile?.nick ?? profile?.nombre}
+                className="profile-avatar"
+                forma={profile?.avatar_forma}
+              />
+            </AvatarSkin>
             {!avatarPreview && !profile?.avatar_url && (
               <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
             )}
@@ -1904,6 +1949,51 @@ export default function ProfilePage() {
                   Redondo
                 </button>
               </div>
+
+              {/* catalogo_skins_avatar solo trae filas cuando
+                  es_dueno_plataforma() es verdadero (RLS) -- para
+                  cualquier otra cuenta, catalogoSkins queda vacío y
+                  esta sección directamente no existe, ni gris ni
+                  bloqueada. */}
+              {catalogoSkins.length > 0 && (
+                <div className="skins-exclusivas">
+                  <h3 className="detail-subtitle skins-exclusivas-titulo">Skins exclusivas</h3>
+                  <p className="tournament-card-meta">
+                    Colección del dueño de la plataforma -- todavía no está disponible para el resto de las cuentas.
+                  </p>
+                  {errorSkin && <div className="form-error">{errorSkin}</div>}
+                  <div className="skins-exclusivas-grid">
+                    <button
+                      type="button"
+                      className={`skin-exclusiva-option ${profile?.skin_avatar_activa === null ? "selected" : ""}`}
+                      disabled={guardandoSkin}
+                      onClick={() => handleActivarSkin(null)}
+                    >
+                      <span className="skin-exclusiva-preview">
+                        <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
+                      </span>
+                      <span className="skin-exclusiva-nombre">Sin skin</span>
+                    </button>
+                    {catalogoSkins.map((skin) => (
+                      <button
+                        key={skin.id}
+                        type="button"
+                        className={`skin-exclusiva-option ${profile?.skin_avatar_activa === skin.id ? "selected" : ""}`}
+                        disabled={guardandoSkin}
+                        onClick={() => handleActivarSkin(skin.id)}
+                        title={skin.descripcion}
+                      >
+                        <span className="skin-exclusiva-preview">
+                          <AvatarSkin clave={skin.clave}>
+                            <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
+                          </AvatarSkin>
+                        </span>
+                        <span className="skin-exclusiva-nombre">{skin.nombre}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
 
