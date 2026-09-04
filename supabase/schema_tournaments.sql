@@ -519,13 +519,40 @@ create policy "carisma_log_select_publico"
 -- triggers de la base, nunca directo desde el cliente).
 grant select on public.carisma_log to anon, authenticated;
 
+-- Migración 050: 80/20 con el clan actual del caster, solo para
+-- origen = 'evento_creado' -- los likes (origen 'like') siguen 100%
+-- para el caster. registrar_carisma_equipo() y team_members/teams se
+-- definen más abajo en este archivo (después de crear la tabla
+-- teams), pero eso no afecta a esta función: Postgres no valida que
+-- existan las tablas/funciones que usa un cuerpo plpgsql hasta que se
+-- ejecuta, no cuando se crea.
 create or replace function public.registrar_carisma(p_user_id uuid, p_cantidad integer, p_origen text)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  v_team_id uuid;
+  v_parte_caster integer;
+  v_parte_equipo integer;
 begin
+  if p_origen = 'evento_creado' then
+    select team_id into v_team_id from public.team_members where user_id = p_user_id;
+
+    if v_team_id is not null then
+      v_parte_caster := floor(p_cantidad * 0.8)::integer;
+      v_parte_equipo := p_cantidad - v_parte_caster;
+
+      update public.profiles set carisma = carisma + v_parte_caster where id = p_user_id;
+      insert into public.carisma_log (user_id, cantidad, origen) values (p_user_id, v_parte_caster, p_origen);
+
+      perform public.registrar_carisma_equipo(v_team_id, v_parte_equipo, 'caster_del_clan');
+      return;
+    end if;
+  end if;
+
+  -- Sin equipo, o un like: 100% para el caster.
   update public.profiles set carisma = carisma + p_cantidad where id = p_user_id;
   insert into public.carisma_log (user_id, cantidad, origen) values (p_user_id, p_cantidad, p_origen);
 end;
@@ -2017,6 +2044,10 @@ begin
   if v_es_caster then
     perform public.registrar_carisma(auth.uid(), 10, 'evento_creado');
   end if;
+
+  -- Migración 050: carisma de equipo -- una Clan War siempre es
+  -- "evento normal" (siempre exactamente 2 clanes).
+  perform public.registrar_carisma_equipo(v_challenger.id, 5, 'evento_normal');
 end;
 $$;
 
@@ -4370,6 +4401,13 @@ declare
   v_p1 uuid;
   v_p2 uuid;
   v_partidos_pendientes int;
+  v_checked_in_count int;
+  v_jugadores_por_equipo int;
+  v_total_clanes int;
+  v_total_jugadores int;
+  v_cantidad_evento int;
+  v_origen_evento text;
+  v_team_organizador uuid;
 begin
   select * into v_torneo from public.tournaments where id = p_tournament_id for update;
 
@@ -4485,6 +4523,51 @@ begin
       );
     end if;
   end loop;
+
+  -- Migración 050: carisma de equipo por el tamaño real del evento --
+  -- se cuenta acá, con las inscripciones ya cerradas y la llave ya
+  -- generada. Se recuenta directo de tournament_participants (no se
+  -- reutiliza v_n) para que, en un torneo con etapa de grupos, el
+  -- tamaño refleje a TODOS los que se inscribieron y confirmaron, no
+  -- solo a quienes avanzaron de grupos.
+  select count(*) into v_checked_in_count
+  from public.tournament_participants
+  where tournament_id = p_tournament_id and checked_in = true;
+
+  v_jugadores_por_equipo := case v_torneo.formato
+    when '2v2' then 2
+    when '3v3' then 3
+    when '4v4' then 4
+    else 1
+  end;
+  -- "Clanes" solo tiene sentido en un torneo por equipos -- en 1v1
+  -- queda en 0 a propósito, así el nivel "evento_masivo" (más de 5
+  -- clanes) nunca se puede alcanzar ahí.
+  v_total_clanes := case when v_torneo.formato = '1v1' then 0 else v_checked_in_count end;
+  v_total_jugadores := v_checked_in_count * v_jugadores_por_equipo;
+
+  if v_total_clanes > 5 and v_total_jugadores > 16 then
+    v_cantidad_evento := 40;
+    v_origen_evento := 'evento_masivo';
+  elsif v_total_jugadores > 16 then
+    v_cantidad_evento := 15;
+    v_origen_evento := 'evento_grande';
+  else
+    v_cantidad_evento := 5;
+    v_origen_evento := 'evento_normal';
+  end if;
+
+  -- Solo si quien organiza (creador_id) es dueño o capitán de un
+  -- equipo actualmente -- sin eso, no hay a quién otorgarle el carisma.
+  select tm.team_id into v_team_organizador
+  from public.team_members tm
+  join public.teams t on t.id = tm.team_id
+  where tm.user_id = v_torneo.creador_id
+    and (t.owner_id = v_torneo.creador_id or tm.es_capitan);
+
+  if v_team_organizador is not null then
+    perform public.registrar_carisma_equipo(v_team_organizador, v_cantidad_evento, v_origen_evento);
+  end if;
 end;
 $$;
 
@@ -5343,6 +5426,44 @@ alter table public.teams add column liga text generated always as (public.calcul
 -- Migración 039: nacen en 100, no en 50 -- solo el default para
 -- cuentas/equipos nuevos, no se tocan las filas existentes.
 alter table public.teams add column valentia integer not null default 100 check (valentia >= 0 and valentia <= 100);
+
+-- Carisma de equipo (migración 050): mismo patrón sin tope que
+-- profiles.carisma. Se otorga cuando el dueño o un capitán organiza
+-- un torneo o una Clan War, según el tamaño real del evento (ver
+-- generar_llave() y proponer_clan_war()), más el 20% que le aporta un
+-- caster del clan por cada evento que organiza (ver registrar_carisma()
+-- más arriba).
+alter table public.teams add column if not exists carisma integer not null default 0 check (carisma >= 0);
+
+create table public.team_carisma_log (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams (id) on delete cascade,
+  cantidad integer not null,
+  origen text not null check (origen in ('evento_normal', 'evento_grande', 'evento_masivo', 'caster_del_clan')),
+  created_at timestamptz not null default now()
+);
+
+alter table public.team_carisma_log enable row level security;
+
+create policy "team_carisma_log_select_publico"
+  on public.team_carisma_log for select
+  using (true);
+
+-- Sin política de insert para authenticated -- la única forma de
+-- escribir acá es registrar_carisma_equipo(), security definer.
+grant select on public.team_carisma_log to anon, authenticated;
+
+create or replace function public.registrar_carisma_equipo(p_team_id uuid, p_cantidad integer, p_origen text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.teams set carisma = carisma + p_cantidad where id = p_team_id;
+  insert into public.team_carisma_log (team_id, cantidad, origen) values (p_team_id, p_cantidad, p_origen);
+end;
+$$;
 
 alter table public.profiles add column valentia_jugador integer not null default 100
   check (valentia_jugador >= 0 and valentia_jugador <= 100);

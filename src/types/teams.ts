@@ -20,6 +20,12 @@ export interface TeamRow {
   // Sube al aceptar un reto o al proponerlo cuando el rival rechaza;
   // baja al rechazar un reto propio.
   valentia: number;
+  // Carisma de equipo (migración 050): contador de puntos sin tope,
+  // igual que profiles.carisma -- se otorga cuando el dueño o un
+  // capitán organiza un torneo o una Clan War, según el tamaño real
+  // del evento, más el 20% que le aporta un caster del clan por cada
+  // evento que organiza. Ver team_carisma_log.
+  carisma: number;
   is_public: boolean;
   invite_code: string;
   owner_id: string;

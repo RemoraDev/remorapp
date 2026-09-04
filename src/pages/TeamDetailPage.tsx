@@ -2711,11 +2711,19 @@ export default function TeamDetailPage() {
       <h2 className="detail-subtitle">Estadísticas</h2>
       <MmrProgressBar mmr={equipo.mmr} liga={equipo.liga} bancaRota={equipo.banca_rota} />
 
-      {/* Misma tarjeta agrupada que en el perfil de jugador -- hoy solo
-          trae la Valentía del clan, la única barra que aplica a
-          equipos por ahora. */}
+      {/* Misma tarjeta agrupada que en el perfil de jugador. Carisma
+          (migración 050) se muestra igual que en el perfil de jugador:
+          número simple con ícono, no una barra -- es el mismo contador
+          de puntos sin tope, solo que del lado del equipo. */}
       <div className="stats-card-group">
         <PercentBar label="Valentía del clan" value={equipo.valentia} vertical />
+        <div className="carisma-stat">
+          <span className="carisma-stat-icon" aria-hidden="true">
+            🎤
+          </span>
+          <p className="carisma-stat-value">{equipo.carisma}</p>
+          <p className="carisma-stat-label">Carisma</p>
+        </div>
       </div>
 
       <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
