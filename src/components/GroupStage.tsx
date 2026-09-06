@@ -11,6 +11,11 @@ interface GroupStageProps {
   userId: string | null;
   organizadorId: string;
   onCambio: () => void;
+  // Migración 057: First Stand organiza sus partidos por jornada y
+  // pide el resultado detallado (2-0/2-1) para calcular puntos -- un
+  // torneo de grupos "clásico" (varios grupos) sigue reportando con un
+  // solo clic, sin jornadas.
+  esFirstStand?: boolean;
 }
 
 // Etapa de grupos (migración 041): tabla de posiciones + partidos de
@@ -27,6 +32,7 @@ export default function GroupStage({
   userId,
   organizadorId,
   onCambio,
+  esFirstStand = false,
 }: GroupStageProps) {
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -39,13 +45,14 @@ export default function GroupStage({
     return !!puedeReportarPorParticipante[match.participant1_id] || !!puedeReportarPorParticipante[match.participant2_id];
   };
 
-  const handleReportar = async (matchId: string, ganadorId: string) => {
+  const handleReportar = async (matchId: string, ganadorId: string, resultadoPerdedor: number | null = null) => {
     setReportando(matchId);
     setErrores((prev) => ({ ...prev, [matchId]: "" }));
 
     const { error } = await supabase.rpc("reportar_resultado_grupo", {
       p_match_id: matchId,
       p_ganador_id: ganadorId,
+      p_resultado_perdedor: resultadoPerdedor,
     });
 
     setReportando(null);
@@ -75,6 +82,12 @@ export default function GroupStage({
                   <th>Participante</th>
                   <th>G</th>
                   <th>J</th>
+                  {esFirstStand && (
+                    <>
+                      <th>Pts</th>
+                      <th>Dif</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -84,46 +97,117 @@ export default function GroupStage({
                     <td>{nombreDe(p.participant_id)}</td>
                     <td>{p.ganados}</td>
                     <td>{p.jugados}</td>
+                    {esFirstStand && (
+                      <>
+                        <td>{p.puntos}</td>
+                        <td>{p.dif_mapas > 0 ? `+${p.dif_mapas}` : p.dif_mapas}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
 
-            <div className="group-stage-matches">
-              {partidasGrupo.map((match) => (
-                <div key={match.id} className="bracket-match group-stage-match">
-                  <div className={`bracket-slot ${match.ganador_id === match.participant1_id ? "winner" : match.status === "jugado" ? "loser" : ""}`}>
-                    {nombreDe(match.participant1_id)}
-                  </div>
-                  <div className={`bracket-slot ${match.ganador_id === match.participant2_id ? "winner" : match.status === "jugado" ? "loser" : ""}`}>
-                    {nombreDe(match.participant2_id)}
-                  </div>
+            {/* First Stand organiza el fixture en 7 jornadas -- se
+                muestran agrupadas; la etapa de grupos "clásica" (varios
+                grupos chicos) sigue sin jornadas, todo junto. */}
+            {(esFirstStand
+              ? [...new Set(partidasGrupo.map((m) => m.jornada ?? 0))].sort((a, b) => a - b)
+              : [null]
+            ).map((jornada) => (
+              <div key={jornada ?? "unica"} className="group-stage-matches">
+                {esFirstStand && <h4 className="detail-subtitle">Jornada {jornada}</h4>}
+                {partidasGrupo
+                  .filter((m) => !esFirstStand || m.jornada === jornada)
+                  .map((match) => (
+                    <div key={match.id} className="bracket-match group-stage-match">
+                      <div
+                        className={`bracket-slot ${
+                          match.ganador_id === match.participant1_id ? "winner" : match.status === "jugado" ? "loser" : ""
+                        }`}
+                      >
+                        {nombreDe(match.participant1_id)}
+                        {match.status === "jugado" && match.resultado_participant1 !== null && (
+                          <span className="veto-tag">
+                            {" "}
+                            {match.resultado_participant1}-{match.resultado_participant2}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`bracket-slot ${
+                          match.ganador_id === match.participant2_id ? "winner" : match.status === "jugado" ? "loser" : ""
+                        }`}
+                      >
+                        {nombreDe(match.participant2_id)}
+                      </div>
 
-                  {match.status === "pendiente" && puedeReportar(match) && (
-                    <div className="bracket-report">
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={reportando === match.id}
-                        onClick={() => handleReportar(match.id, match.participant1_id)}
-                      >
-                        Ganó {nombreDe(match.participant1_id)}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        disabled={reportando === match.id}
-                        onClick={() => handleReportar(match.id, match.participant2_id)}
-                      >
-                        Ganó {nombreDe(match.participant2_id)}
-                      </button>
+                      {match.status === "pendiente" && puedeReportar(match) && !esFirstStand && (
+                        <div className="bracket-report">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={reportando === match.id}
+                            onClick={() => handleReportar(match.id, match.participant1_id)}
+                          >
+                            Ganó {nombreDe(match.participant1_id)}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={reportando === match.id}
+                            onClick={() => handleReportar(match.id, match.participant2_id)}
+                          >
+                            Ganó {nombreDe(match.participant2_id)}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* First Stand es al mejor de 3: hace falta el
+                          resultado del que pierde (0 o 1) para el
+                          sistema de puntos, además de quién gana. */}
+                      {match.status === "pendiente" && puedeReportar(match) && esFirstStand && (
+                        <div className="bracket-report">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={reportando === match.id}
+                            onClick={() => handleReportar(match.id, match.participant1_id, 0)}
+                          >
+                            Ganó {nombreDe(match.participant1_id)} 2-0
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={reportando === match.id}
+                            onClick={() => handleReportar(match.id, match.participant1_id, 1)}
+                          >
+                            Ganó {nombreDe(match.participant1_id)} 2-1
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={reportando === match.id}
+                            onClick={() => handleReportar(match.id, match.participant2_id, 1)}
+                          >
+                            Ganó {nombreDe(match.participant2_id)} 2-1
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={reportando === match.id}
+                            onClick={() => handleReportar(match.id, match.participant2_id, 0)}
+                          >
+                            Ganó {nombreDe(match.participant2_id)} 2-0
+                          </button>
+                        </div>
+                      )}
+
+                      {errores[match.id] && <div className="form-error">{errores[match.id]}</div>}
                     </div>
-                  )}
-
-                  {errores[match.id] && <div className="form-error">{errores[match.id]}</div>}
-                </div>
-              ))}
-            </div>
+                  ))}
+              </div>
+            ))}
           </div>
         );
       })}

@@ -33,6 +33,14 @@ export default function CreateTournamentPage() {
   // modo que tiene llave.
   const [tieneTercerLugar, setTieneTercerLugar] = useState(false);
 
+  // Formato de liga "First Stand" (migración 057) -- 7 clanes, fixture
+  // round-robin completo y playoffs top 4. Reemplaza la configuración
+  // manual de etapa de grupos/tercer lugar (las oculta en el JSX): ya
+  // trae su propia etapa de grupos de un solo grupo de 7 y su propia
+  // llave de 4, sin partido por el tercer lugar.
+  const [formatoLiga, setFormatoLiga] = useState(false);
+  const [puntosVictoria21, setPuntosVictoria21] = useState("3");
+
   const [mapas, setMapas] = useState<MapRow[]>([]);
   const [mapasIncluidos, setMapasIncluidos] = useState<Record<string, boolean>>({});
   const [mapasVeteables, setMapasVeteables] = useState<Record<string, boolean>>({});
@@ -105,10 +113,14 @@ export default function CreateTournamentPage() {
         cupos_totales: Number(cuposTotales),
         fecha_inicio: new Date(fechaInicio).toISOString(),
         creador_id: user.id,
-        tiene_fase_grupos: modo === "eliminacion_simple" && tieneFaseGrupos,
-        cantidad_grupos: modo === "eliminacion_simple" && tieneFaseGrupos ? Number(cantidadGrupos) : null,
-        avanzan_por_grupo: modo === "eliminacion_simple" && tieneFaseGrupos ? Number(avanzanPorGrupo) : null,
-        tiene_tercer_lugar: modo === "eliminacion_simple" && tieneTercerLugar,
+        tiene_fase_grupos: modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos,
+        cantidad_grupos:
+          modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(cantidadGrupos) : null,
+        avanzan_por_grupo:
+          modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(avanzanPorGrupo) : null,
+        tiene_tercer_lugar: modo === "eliminacion_simple" && !formatoLiga && tieneTercerLugar,
+        formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
+        puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
       })
       .select()
       .single();
@@ -218,13 +230,61 @@ export default function CreateTournamentPage() {
           </div>
         </div>
 
+        {/* Formato de liga "First Stand" (migración 057): 7 clanes,
+            todos contra todos completo y playoffs top 4 -- solo tiene
+            sentido con eliminación simple y un formato por equipos
+            (necesita clanes, no jugadores individuales). Al activarlo
+            se ocultan la etapa de grupos y el tercer lugar manuales:
+            First Stand ya trae su propia etapa de grupos (un solo
+            grupo de 7) y su propia llave (top 4, sin tercer lugar). */}
+        {modo === "eliminacion_simple" && formato !== "1v1" && (
+          <div className="form-group">
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formatoLiga}
+                onChange={(e) => {
+                  setFormatoLiga(e.target.checked);
+                  if (e.target.checked) setCuposTotales("7");
+                }}
+              />
+              Formato de liga "First Stand"
+            </label>
+            <p className="form-hint">
+              Pensado para 7 clanes: fixture de todos contra todos completo (21 partidos en 7
+              jornadas, nadie repite rival) y playoffs entre los 4 mejores, con la final al mejor
+              de 5.
+            </p>
+
+            {formatoLiga && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="torneo-puntos-2-1">
+                  Puntos por una victoria 2-1
+                </label>
+                <select
+                  id="torneo-puntos-2-1"
+                  className="form-select"
+                  value={puntosVictoria21}
+                  onChange={(e) => setPuntosVictoria21(e.target.value)}
+                >
+                  <option value="3">3 puntos (igual que una victoria 2-0)</option>
+                  <option value="2">2 puntos (sistema alternativo)</option>
+                </select>
+                <p className="form-hint">Una victoria 2-0 siempre vale 3 puntos.</p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Etapa de grupos (migración 041): todos contra todos dentro
             de cada grupo, con los mejores avanzando a la llave. Solo
             tiene sentido con eliminación simple -- generar_grupos()
             en la base rechaza cualquier otro modo, así que se oculta
             acá directamente en vez de dejar armar una configuración
-            que después va a fallar al generarla. */}
-        {modo === "eliminacion_simple" && (
+            que después va a fallar al generarla. Se oculta también
+            con First Stand activo: ese formato arma su propia etapa
+            de grupos automáticamente. */}
+        {modo === "eliminacion_simple" && !formatoLiga && (
           <div className="form-group">
             <label className="form-checkbox-label">
               <input
@@ -272,8 +332,9 @@ export default function CreateTournamentPage() {
         {/* Partido por el tercer lugar (migración 046): entre los
             perdedores de semifinal, en paralelo a la final -- mismo
             gate que la etapa de grupos, solo eliminación simple tiene
-            llave. */}
-        {modo === "eliminacion_simple" && (
+            llave. Se oculta con First Stand activo, que no tiene
+            partido por el tercer lugar. */}
+        {modo === "eliminacion_simple" && !formatoLiga && (
           <div className="form-group">
             <label className="form-checkbox-label">
               <input
@@ -347,9 +408,11 @@ export default function CreateTournamentPage() {
             type="number"
             min={2}
             required
+            disabled={formatoLiga}
             value={cuposTotales}
             onChange={(e) => setCuposTotales(e.target.value)}
           />
+          {formatoLiga && <p className="form-hint">First Stand es siempre para 7 clanes.</p>}
         </div>
 
         <div className="form-group">

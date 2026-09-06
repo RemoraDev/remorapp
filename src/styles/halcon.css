@@ -853,9 +853,18 @@ input[type="radio"] {
   color: var(--color-text-muted);
 }
 
-.detail-map-chip .veto-tag {
+.veto-tag {
   color: var(--color-accent-soft);
   font-weight: 600;
+}
+
+/* Migración 057: etiqueta "Bo5" de la final de playoffs de First
+   Stand -- reutiliza .veto-tag, solo se posiciona dentro del partido. */
+.bracket-bo5-tag {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.6rem;
+  font-size: 0.7rem;
 }
 
 .detail-participant-list {
@@ -1674,6 +1683,7 @@ input[type="radio"] {
 }
 
 .bracket-match {
+  position: relative;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   background: var(--color-card);

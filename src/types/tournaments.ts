@@ -70,6 +70,11 @@ export interface TournamentRow {
   cantidad_grupos: number | null;
   avanzan_por_grupo: number | null;
   fase_actual: "grupos" | "eliminacion";
+  // Migración 057: formato de liga "First Stand" -- 7 clanes, fixture
+  // round-robin completo (todos contra todos) y playoffs top 4.
+  formato_liga: "first_stand" | null;
+  puntos_victoria_2_0: number;
+  puntos_victoria_2_1: number;
 }
 
 // Migración 041: etapa de grupos.
@@ -87,17 +92,31 @@ export interface TournamentGroupMatchRow {
   participant2_id: string;
   ganador_id: string | null;
   status: "pendiente" | "jugado";
+  // Migración 057: jornada del fixture de First Stand (1 a 7). Queda
+  // en null para la etapa de grupos "clásica" (varios grupos), que no
+  // organiza sus partidos por jornada.
+  jornada: number | null;
+  // Migración 057: resultado detallado (0, 1 o 2 mapas ganados) para
+  // distinguir un 2-0 de un 2-1 -- necesario para el sistema de
+  // puntos de First Stand. Queda en null para partidos reportados sin
+  // este detalle.
+  resultado_participant1: number | null;
+  resultado_participant2: number | null;
 }
 
 // Resultado de la función posiciones_grupos() -- una fila por
-// participante, ya ordenada (ganados desc, orden de inscripción como
-// desempate).
+// participante, ya ordenada (puntos desc, diferencia de mapas como
+// desempate, orden de inscripción como último desempate).
 export interface PosicionGrupo {
   group_id: string;
   group_nombre: string;
   participant_id: string;
   ganados: number;
   jugados: number;
+  // Migración 057: puntos según puntos_victoria_2_0/puntos_victoria_2_1
+  // del torneo, y diferencia de mapas ganados/perdidos como desempate.
+  puntos: number;
+  dif_mapas: number;
   inscrito_en: string;
 }
 

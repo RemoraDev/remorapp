@@ -95,6 +95,20 @@ export default function TournamentDetailPage() {
   const [errorLlave, setErrorLlave] = useState<string | null>(null);
   const [generandoGrupos, setGenerandoGrupos] = useState(false);
   const [errorGrupos, setErrorGrupos] = useState<string | null>(null);
+  // Migración 057: fixture de First Stand (todos contra todos en 7
+  // jornadas), separado de "generar grupos" -- generar_grupos() no
+  // sirve acá, exige cantidad_grupos >= 2.
+  const [generandoFixture, setGenerandoFixture] = useState(false);
+  const [errorFixture, setErrorFixture] = useState<string | null>(null);
+
+  // Invitación rápida de varios clanes a la vez (migración 057),
+  // solo para el organizador de un torneo por equipos abierto.
+  const [invitarAbierto, setInvitarAbierto] = useState(false);
+  const [equiposPublicos, setEquiposPublicos] = useState<{ id: string; name: string; tag: string }[]>([]);
+  const [cargandoEquiposPublicos, setCargandoEquiposPublicos] = useState(false);
+  const [equiposSeleccionados, setEquiposSeleccionados] = useState<Record<string, boolean>>({});
+  const [invitandoEquipos, setInvitandoEquipos] = useState(false);
+  const [errorInvitarEquipos, setErrorInvitarEquipos] = useState<string | null>(null);
 
   const [abriendoCheckIn, setAbriendoCheckIn] = useState(false);
   const [errorCheckIn, setErrorCheckIn] = useState<string | null>(null);
@@ -262,7 +276,7 @@ export default function TournamentDetailPage() {
       const { data: partidasData } = await supabase
         .from("bracket_matches")
         .select(
-          "id, tournament_id, round, match_number, participant1_id, participant2_id, winner_id, reported_p1_winner, reported_p2_winner, status, es_tercer_lugar"
+          "id, tournament_id, round, match_number, participant1_id, participant2_id, winner_id, reported_p1_winner, reported_p2_winner, status, es_tercer_lugar, formato_partido"
         )
         .eq("tournament_id", id);
 
@@ -285,7 +299,9 @@ export default function TournamentDetailPage() {
 
       const { data: partidasGrupoData } = await supabase
         .from("tournament_group_matches")
-        .select("id, group_id, participant1_id, participant2_id, ganador_id, status")
+        .select(
+          "id, group_id, participant1_id, participant2_id, ganador_id, status, jornada, resultado_participant1, resultado_participant2"
+        )
         .in("group_id", idsGrupos.length > 0 ? idsGrupos : ["00000000-0000-0000-0000-000000000000"]);
 
       const { data: posicionesData } = await supabase.rpc("posiciones_grupos", { p_tournament_id: id });
@@ -615,6 +631,93 @@ export default function TournamentDetailPage() {
     await cargarTorneo();
   };
 
+  // Migración 057: cierra el check-in y arma las 7 jornadas (21
+  // partidos) del fixture de First Stand -- reemplaza a
+  // handleGenerarGrupos para este formato de liga, que no puede usar
+  // generar_grupos() (exige al menos 2 grupos).
+  const handleGenerarFixtureFirstStand = async () => {
+    if (!torneo) return;
+
+    setGenerandoFixture(true);
+    setErrorFixture(null);
+
+    const { error } = await supabase.rpc("generar_fixture_first_stand", { p_tournament_id: torneo.id });
+
+    setGenerandoFixture(false);
+
+    if (error) {
+      setErrorFixture(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  // Invitación rápida de varios clanes a la vez (migración 057):
+  // lista los equipos públicos no disueltos que todavía no están
+  // inscritos, para que el organizador los marque e inscriba de una.
+  const handleAbrirInvitarEquipos = async () => {
+    if (invitarAbierto) {
+      setInvitarAbierto(false);
+      return;
+    }
+
+    setInvitarAbierto(true);
+    setCargandoEquiposPublicos(true);
+    setErrorInvitarEquipos(null);
+
+    const { data } = await supabase
+      .from("teams")
+      .select("id, name, tag")
+      .eq("is_public", true)
+      .eq("disuelto", false)
+      .order("name");
+
+    const idsYaInscritos = new Set(participantes.map((p) => p.teamId).filter((t): t is string => t !== null));
+    setEquiposPublicos((data ?? []).filter((t) => !idsYaInscritos.has(t.id)));
+    setEquiposSeleccionados({});
+    setCargandoEquiposPublicos(false);
+  };
+
+  const handleSeleccionarTodosLosEquipos = () => {
+    const todosMarcados = equiposPublicos.every((t) => equiposSeleccionados[t.id]);
+    setEquiposSeleccionados(
+      Object.fromEntries(equiposPublicos.map((t) => [t.id, !todosMarcados]))
+    );
+  };
+
+  const handleInvitarEquiposMarcados = async () => {
+    if (!torneo) return;
+
+    const idsMarcados = equiposPublicos.filter((t) => equiposSeleccionados[t.id]).map((t) => t.id);
+    if (idsMarcados.length === 0) return;
+
+    setInvitandoEquipos(true);
+    setErrorInvitarEquipos(null);
+
+    // Se llama una vez por equipo marcado -- organizador_inscribir_equipo()
+    // ya valida cupos, tamaño mínimo y que el torneo siga abierto en
+    // cada llamada, así que un equipo que falla no bloquea al resto.
+    const errores: string[] = [];
+    for (const teamId of idsMarcados) {
+      const { error } = await supabase.rpc("organizador_inscribir_equipo", {
+        p_tournament_id: torneo.id,
+        p_team_id: teamId,
+      });
+      if (error) errores.push(error.message);
+    }
+
+    setInvitandoEquipos(false);
+
+    if (errores.length > 0) {
+      setErrorInvitarEquipos(errores.join(" · "));
+    } else {
+      setInvitarAbierto(false);
+    }
+
+    await cargarTorneo();
+  };
+
   // Overlay para OBS (migración 044): copia el link completo, no una
   // ruta relativa -- OBS necesita una URL absoluta para poder abrirla
   // como "Fuente de navegador".
@@ -939,6 +1042,62 @@ export default function TournamentDetailPage() {
         </div>
       )}
 
+      {/* Invitación rápida de varios clanes a la vez (migración 057):
+          comodidad para el organizador -- automatiza llamar a
+          organizador_inscribir_equipo() varias veces en vez de tener
+          que esperar a que cada equipo se inscriba solo. */}
+      {esOrganizador && esPorEquipos && torneo.estado === "abierto" && (
+        <div className="detail-register-box">
+          <button type="button" className="btn btn-ghost btn-block" onClick={handleAbrirInvitarEquipos}>
+            {invitarAbierto ? "Cerrar" : "Invitar varios clanes a la vez"}
+          </button>
+
+          {invitarAbierto && (
+            <>
+              {errorInvitarEquipos && <div className="form-error">{errorInvitarEquipos}</div>}
+              {cargandoEquiposPublicos ? (
+                <p className="tournament-card-meta">Cargando clanes públicos...</p>
+              ) : equiposPublicos.length === 0 ? (
+                <p className="tournament-card-meta">
+                  No hay clanes públicos disponibles para invitar (ya están todos inscritos o no
+                  hay ninguno creado).
+                </p>
+              ) : (
+                <>
+                  <button type="button" className="btn btn-ghost" onClick={handleSeleccionarTodosLosEquipos}>
+                    {equiposPublicos.every((t) => equiposSeleccionados[t.id])
+                      ? "Desmarcar todos"
+                      : "Seleccionar todos"}
+                  </button>
+                  <div className="detail-participant-list">
+                    {equiposPublicos.map((equipo) => (
+                      <label key={equipo.id} className="form-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={!!equiposSeleccionados[equipo.id]}
+                          onChange={(e) =>
+                            setEquiposSeleccionados((prev) => ({ ...prev, [equipo.id]: e.target.checked }))
+                          }
+                        />
+                        {equipo.name} [{equipo.tag}]
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={invitandoEquipos || equiposPublicos.every((t) => !equiposSeleccionados[t.id])}
+                    onClick={handleInvitarEquiposMarcados}
+                  >
+                    {invitandoEquipos ? "Inscribiendo..." : "Inscribir a los clanes marcados"}
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {torneo.modo === "eliminacion_simple" && (
         <>
           {puedeAbrirCheckIn && (
@@ -983,7 +1142,21 @@ export default function TournamentDetailPage() {
                 <p className="form-success">Ya confirmaste tu asistencia.</p>
               )}
 
-              {esOrganizador && torneo.tiene_fase_grupos && (
+              {esOrganizador && torneo.formato_liga === "first_stand" && (
+                <>
+                  {errorFixture && <div className="form-error">{errorFixture}</div>}
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={generandoFixture}
+                    onClick={handleGenerarFixtureFirstStand}
+                  >
+                    {generandoFixture ? "Generando..." : "Cerrar check-in y generar fixture"}
+                  </button>
+                </>
+              )}
+
+              {esOrganizador && torneo.formato_liga !== "first_stand" && torneo.tiene_fase_grupos && (
                 <>
                   {errorGrupos && <div className="form-error">{errorGrupos}</div>}
                   <button
@@ -997,7 +1170,7 @@ export default function TournamentDetailPage() {
                 </>
               )}
 
-              {esOrganizador && !torneo.tiene_fase_grupos && (
+              {esOrganizador && torneo.formato_liga !== "first_stand" && !torneo.tiene_fase_grupos && (
                 <button
                   type="button"
                   className="btn btn-primary btn-block"
@@ -1024,6 +1197,7 @@ export default function TournamentDetailPage() {
                 userId={user?.id ?? null}
                 organizadorId={torneo.creador_id}
                 onCambio={cargarTorneo}
+                esFirstStand={torneo.formato_liga === "first_stand"}
               />
 
               {esOrganizador && (
@@ -1036,7 +1210,11 @@ export default function TournamentDetailPage() {
                       disabled={generandoLlave}
                       onClick={handleGenerarLlave}
                     >
-                      {generandoLlave ? "Generando..." : "Cerrar etapa de grupos y generar llave"}
+                      {generandoLlave
+                        ? "Generando..."
+                        : torneo.formato_liga === "first_stand"
+                        ? "Generar playoffs"
+                        : "Cerrar etapa de grupos y generar llave"}
                     </button>
                   ) : (
                     <p className="tournament-card-meta">

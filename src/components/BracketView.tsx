@@ -115,6 +115,11 @@ export default function BracketView({
 
     return (
       <div key={match.id} className="bracket-match">
+        {/* Migración 057: etiqueta informativa -- no hay puntaje por
+            mapa dentro de la llave, solo le indica a los jugadores
+            cómo tienen que jugar esta partida puntual (usada por la
+            final de los playoffs de First Stand). */}
+        {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
         <div className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""}`}>
           {logoDe(match.participant1_id) && (
             <img src={logoDe(match.participant1_id) ?? ""} alt="" className="bracket-slot-logo" />

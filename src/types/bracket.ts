@@ -16,4 +16,9 @@ export interface BracketMatchRow {
   // Migración 046: partido por el tercer lugar, en paralelo a la
   // final -- no forma parte de la progresión normal de rondas.
   es_tercer_lugar: boolean;
+  // Migración 057: etiqueta informativa -- no existe un sistema de
+  // puntaje por mapa dentro de la llave, así que "bo5" solo cambia lo
+  // que la interfaz le indica a los jugadores sobre cómo jugar esa
+  // partida puntual. Usada por la final de los playoffs de First Stand.
+  formato_partido: "normal" | "bo5";
 }
