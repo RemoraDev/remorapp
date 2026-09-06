@@ -954,68 +954,46 @@ input[type="radio"] {
 
 /* Fuego con electricidad -- adaptación de "Electric Border" (MIT). El
    filtro en sí (FiltroElectrico, en AvatarSkin.tsx) hace todo el
-   trabajo de distorsión; acá solo el layout de las capas. */
+   trabajo de distorsión; acá solo el layout de las capas.
+
+   Sin resplandor de fondo ni partículas sueltas a propósito: el efecto
+   tiene que quedar contenido exactamente en el grosor del anillo, sin
+   nada visible más allá del borde del avatar -- por eso, a diferencia
+   del resto de las skins, esta ni siquiera usa avatar-skin-glow. */
 [data-skin="fuego_electricidad"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(255, 138, 0, 0.85) 0%, rgba(255, 61, 0, 0.35) 55%, transparent 75%);
-  animation: skin-fuego-glow 2.4s ease-in-out infinite;
+  display: none;
 }
 .avatar-skin-electric-defs {
   position: absolute;
   width: 0;
   height: 0;
 }
+.avatar-skin-electric-clip {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  /* La distorsión del filtro necesita margen de sobra para no
+     recortarse a mitad de camino (ver x/y -30% en FiltroElectrico),
+     pero ese margen no puede pintarse más allá del propio avatar --
+     este overflow:hidden, del mismo tamaño y forma exactos que la
+     foto, es lo que garantiza que nada se escape hacia afuera. */
+  overflow: hidden;
+  pointer-events: none;
+}
 .avatar-skin-electric-border {
   position: absolute;
   inset: 0;
-  /* Por encima de avatar-skin-inner (z-index 1) a propósito -- pero
-     el interior de este elemento queda 100% transparente (sin fill,
-     sin box-shadow hacia adentro), así que lo único que se ve encima
-     de la foto es el trazo del borde en sí, exactamente en el borde
-     -- nunca un lavado de color sobre la imagen. */
-  z-index: 3;
   border: 2px solid #ff9a3d;
-  /* El halo azul sale hacia AFUERA del anillo (nunca "inset"): un
-     resplandor hacia adentro pintaría color encima de la foto, que es
-     justo lo que esta capa tiene que evitar. */
-  box-shadow: 0 0 6px 2px rgba(79, 195, 255, 0.85);
+  /* Resplandor mínimo, pensado para quedar DENTRO del recorte de
+     avatar-skin-electric-clip -- nunca "inset" (pintaría encima de la
+     foto) y con un radio chico para no proyectarse fuera del anillo. */
+  box-shadow: 0 0 2px rgba(79, 195, 255, 0.9);
   background: transparent;
-  pointer-events: none;
+  animation: skin-electrico-pulso 2.2s ease-in-out infinite;
 }
-.avatar-skin-electric-glow-azul {
-  position: absolute;
-  inset: -22%;
-  /* Detrás de la foto (avatar-skin-inner es z-index 1) -- este brillo
-     solo se ve en el borde/derrame alrededor del avatar, nunca
-     encima: si estuviera por delante, su degradado taparía buena
-     parte de la imagen con un velo azul. */
-  z-index: 0;
-  border-radius: 50%;
-  pointer-events: none;
-  background: radial-gradient(circle, rgba(79, 195, 255, 0.7) 0%, transparent 65%);
-  filter: blur(2px);
-  mix-blend-mode: screen;
-  animation: skin-fuego-glow-azul 2.8s ease-in-out infinite;
-}
-.avatar-skin-spark {
-  position: absolute;
-  width: 10%;
-  height: 10%;
-  border-radius: 50%;
-  background: radial-gradient(circle, #bfe9ff 0%, #4fc3ff 45%, transparent 75%);
-  opacity: 0;
-  z-index: 3;
-}
-/* Los destellos saltan DESDE el anillo hacia afuera (top/bottom
-   negativos) -- nunca caen dentro del cuadro de la foto. */
-.avatar-skin-spark-1 { top: -6%; left: 68%; animation: skin-spark 3.4s ease-in-out infinite; }
-.avatar-skin-spark-2 { bottom: -6%; left: 6%; animation: skin-spark 3.4s ease-in-out 1.6s infinite; }
-@keyframes skin-fuego-glow {
-  0%, 100% { opacity: 0.55; transform: scale(1); }
-  50% { opacity: 0.9; transform: scale(1.06); }
-}
-@keyframes skin-fuego-glow-azul {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 0.85; }
+@keyframes skin-electrico-pulso {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
 }
 @keyframes skin-spark {
   0%, 82%, 100% { opacity: 0; transform: scale(0.4); }

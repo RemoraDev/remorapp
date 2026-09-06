@@ -112,17 +112,21 @@ export default function AvatarSkin({ clave, forma = "redondo", children }: Avata
           real para leerse como electricidad, no quedar cortada en
           seco. */}
       {clave === "fuego_electricidad" && (
-        <>
+        // overflow:hidden acá adentro, del mismo tamaño exacto que el
+        // avatar (inset:0 + claseForma) -- el filtro necesita margen
+        // de sobra (x/y -30%) para no recortar la distorsión a mitad
+        // de camino, pero ese margen no puede pintarse más allá del
+        // propio avatar: este contenedor lo recorta en seco justo en
+        // el borde, así el efecto queda contenido en el grosor del
+        // anillo, ni para adentro (toca la foto) ni para afuera
+        // (resplandor/partículas flotando alrededor).
+        <span className={`avatar-skin-electric-clip ${claseForma}`} aria-hidden="true">
           <FiltroElectrico id={`${idBase}-electrico`} />
           <span
-            className={`avatar-skin-electric-border ${claseForma}`}
+            className="avatar-skin-electric-border"
             style={{ filter: `url(#${idBase}-electrico)` }}
-            aria-hidden="true"
           />
-          <span className="avatar-skin-electric-glow-azul" aria-hidden="true" />
-          <span className="avatar-skin-spark avatar-skin-spark-1" />
-          <span className="avatar-skin-spark avatar-skin-spark-2" />
-        </>
+        </span>
       )}
       <span className={`avatar-skin-overlay ${claseForma}`} aria-hidden="true">
         {clave === "demoniaca" && (
