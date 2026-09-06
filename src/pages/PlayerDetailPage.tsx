@@ -3,10 +3,12 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
+import AvatarSkin from "../components/AvatarSkin";
 import MmrProgressBar from "../components/MmrProgressBar";
 import PercentBar from "../components/PercentBar";
 import { COUNTRY_OPTIONS } from "../types/profile";
 import type { AvatarForma, Country, LinkTransmision } from "../types/profile";
+import type { SkinAvatarClave } from "../types/skins";
 import type { TituloActivoTodos } from "../types/titulos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
@@ -33,6 +35,13 @@ interface PerfilPublico {
   responsabilidadTorneos: number;
   razaPrincipal: RazaSc2 | null;
   razaSecundaria: RazaSc2 | null;
+  // Skin de avatar activa (migración 052): id de catalogo_skins_avatar,
+  // null si no tiene. Solo se puede resolver a "clave" (y por lo tanto
+  // mostrarse) cuando quien mira esta página es, a su vez, el dueño de
+  // la plataforma -- el catálogo sigue siendo privado (RLS), así que
+  // para cualquier otro visitante el efecto simplemente no aparece
+  // todavía, aunque el perfil que mira sea el del dueño.
+  skinAvatarActiva: string | null;
 }
 
 interface EquipoActual {
@@ -65,6 +74,7 @@ export default function PlayerDetailPage() {
   const { user } = useAuth();
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
+  const [skinAvatarClave, setSkinAvatarClave] = useState<SkinAvatarClave | null>(null);
   const [tituloTexto, setTituloTexto] = useState<string | null>(null);
   const [equipoActual, setEquipoActual] = useState<EquipoActual | null>(null);
   const [loading, setLoading] = useState(true);
@@ -86,7 +96,7 @@ export default function PlayerDetailPage() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, nick, unique_id, avatar_url, avatar_forma, banner_url, bio, country, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, valentia_jugador, responsabilidad_cw, responsabilidad_torneos"
+          "id, nick, unique_id, avatar_url, avatar_forma, banner_url, bio, country, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, skin_avatar_activa"
         )
         .eq("nick", nick)
         .eq("unique_id", uniqueId)
@@ -120,6 +130,7 @@ export default function PlayerDetailPage() {
         responsabilidadTorneos: data.responsabilidad_torneos,
         razaPrincipal: null,
         razaSecundaria: null,
+        skinAvatarActiva: data.skin_avatar_activa,
       };
 
       // Perfil de juego de StarCraft II (migración 034): opcional, así
@@ -139,6 +150,17 @@ export default function PlayerDetailPage() {
       }
 
       setPerfil(perfilCargado);
+
+      if (perfilCargado.skinAvatarActiva) {
+        const { data: skinData } = await supabase
+          .from("catalogo_skins_avatar")
+          .select("clave")
+          .eq("id", perfilCargado.skinAvatarActiva)
+          .maybeSingle();
+        setSkinAvatarClave((skinData?.clave as SkinAvatarClave | undefined) ?? null);
+      } else {
+        setSkinAvatarClave(null);
+      }
 
       // Título Padre/Hijo activo (si tiene) -- mismo RPC público que
       // usa la Sala de la Fama para el Muro de Jugadores.
@@ -230,12 +252,14 @@ export default function PlayerDetailPage() {
           <div className="player-detail-banner player-detail-banner-placeholder" />
         )}
         <div className={`player-detail-avatar-overlap ${claseForma}`}>
-          <Avatar
-            url={perfil.avatarUrl}
-            nombre={perfil.nick}
-            className="player-detail-avatar"
-            forma={perfil.avatarForma}
-          />
+          <AvatarSkin clave={skinAvatarClave} forma={perfil.avatarForma}>
+            <Avatar
+              url={perfil.avatarUrl}
+              nombre={perfil.nick}
+              className="player-detail-avatar"
+              forma={perfil.avatarForma}
+            />
+          </AvatarSkin>
           <span className="nivel-badge nivel-badge-corner">Nv. {perfil.nivel}</span>
         </div>
       </div>
