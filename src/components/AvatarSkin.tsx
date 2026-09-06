@@ -48,6 +48,51 @@ function TexturaTurbulencia({
   );
 }
 
+// "Fuego con electricidad": adaptación del efecto "Electric Border"
+// (MIT, provisto por el usuario como referencia técnica) -- mismo
+// grafo de filtro exacto (4x feTurbulence+feOffset animado con
+// <animate> nativo sobre dx/dy, cruzados con feComposite, mezclados
+// con feBlend color-dodge, y aplicados como feDisplacementMap sobre
+// SourceGraphic), corriendo en la GPU sin JavaScript. Los únicos
+// números que se ajustaron respecto del original son baseFrequency y
+// scale: el original estaba calibrado para una tarjeta de 350x500px,
+// y un avatar mide una fracción de eso -- con los valores originales
+// el ruido se ve como una onda suave en vez de una distorsión
+// eléctrica jagged. Se subió baseFrequency (más ciclos de ruido por
+// unidad) y se bajó scale (desplazamiento en px absolutos) en la
+// misma proporción en que bajó el tamaño del elemento, para conservar
+// el mismo carácter visual a esta escala.
+function FiltroElectrico({ id }: { id: string }) {
+  return (
+    <svg className="avatar-skin-electric-defs" aria-hidden="true">
+      <defs>
+        <filter id={id} colorInterpolationFilters="sRGB" x="-30%" y="-30%" width="160%" height="160%">
+          <feTurbulence type="turbulence" baseFrequency="0.09" numOctaves="10" result="ruido1" seed="1" />
+          <feOffset in="ruido1" dx="0" dy="0" result="ruido1Despl">
+            <animate attributeName="dy" values="140; 0" dur="6s" repeatCount="indefinite" calcMode="linear" />
+          </feOffset>
+          <feTurbulence type="turbulence" baseFrequency="0.09" numOctaves="10" result="ruido2" seed="1" />
+          <feOffset in="ruido2" dx="0" dy="0" result="ruido2Despl">
+            <animate attributeName="dy" values="0; -140" dur="6s" repeatCount="indefinite" calcMode="linear" />
+          </feOffset>
+          <feTurbulence type="turbulence" baseFrequency="0.09" numOctaves="10" result="ruido3" seed="2" />
+          <feOffset in="ruido3" dx="0" dy="0" result="ruido3Despl">
+            <animate attributeName="dx" values="98; 0" dur="6s" repeatCount="indefinite" calcMode="linear" />
+          </feOffset>
+          <feTurbulence type="turbulence" baseFrequency="0.09" numOctaves="10" result="ruido4" seed="2" />
+          <feOffset in="ruido4" dx="0" dy="0" result="ruido4Despl">
+            <animate attributeName="dx" values="0; -98" dur="6s" repeatCount="indefinite" calcMode="linear" />
+          </feOffset>
+          <feComposite in="ruido1Despl" in2="ruido2Despl" result="parte1" />
+          <feComposite in="ruido3Despl" in2="ruido4Despl" result="parte2" />
+          <feBlend in="parte1" in2="parte2" mode="color-dodge" result="ruidoCombinado" />
+          <feDisplacementMap in="SourceGraphic" in2="ruidoCombinado" scale="7" xChannelSelector="R" yChannelSelector="B" />
+        </filter>
+      </defs>
+    </svg>
+  );
+}
+
 export default function AvatarSkin({ clave, forma = "redondo", children }: AvatarSkinProps) {
   const idBase = useId().replace(/:/g, "");
   const claseForma = forma === "cuadrado" ? "avatar-shape-cuadrado" : "avatar-shape-redondo";
@@ -60,16 +105,26 @@ export default function AvatarSkin({ clave, forma = "redondo", children }: Avata
     <span className="avatar-skin" data-skin={clave}>
       <span className="avatar-skin-glow" aria-hidden="true" />
       <span className="avatar-skin-inner">{children}</span>
+      {/* El borde eléctrico va FUERA de avatar-skin-overlay a propósito
+          -- ese contenedor recorta con overflow:hidden (lo necesitan
+          otras skins con reflejos/escaneos), y la distorsión de
+          feDisplacementMap necesita poder salirse un poco del borde
+          real para leerse como electricidad, no quedar cortada en
+          seco. */}
+      {clave === "fuego_electricidad" && (
+        <>
+          <FiltroElectrico id={`${idBase}-electrico`} />
+          <span
+            className={`avatar-skin-electric-border ${claseForma}`}
+            style={{ filter: `url(#${idBase}-electrico)` }}
+            aria-hidden="true"
+          />
+          <span className="avatar-skin-electric-glow-azul" aria-hidden="true" />
+          <span className="avatar-skin-spark avatar-skin-spark-1" />
+          <span className="avatar-skin-spark avatar-skin-spark-2" />
+        </>
+      )}
       <span className={`avatar-skin-overlay ${claseForma}`} aria-hidden="true">
-        {clave === "fuego_electricidad" && (
-          <>
-            <TexturaTurbulencia id={`${idBase}-fuego`} baseFrequency={0.12} seed={4} colorA="#ff8a00" colorB="#ff3d00" />
-            <span className="avatar-skin-spark avatar-skin-spark-1" />
-            <span className="avatar-skin-spark avatar-skin-spark-2" />
-            <span className="avatar-skin-spark avatar-skin-spark-3" />
-          </>
-        )}
-
         {clave === "demoniaca" && (
           <svg className="avatar-skin-svg" viewBox="0 0 100 100" aria-hidden="true">
             <path
