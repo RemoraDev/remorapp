@@ -898,7 +898,8 @@ input[type="radio"] {
   border-radius: var(--radius-md);
 }
 
-/* ---------- Skins de avatar (migración 052) ---------- */
+/* ---------- Skins de avatar (migración 052, catálogo "Electric" ----------
+   reemplazado por completo en la migración 054) */
 /* Envoltorio decorativo alrededor de <Avatar> (componente AvatarSkin):
    por ahora exclusivo del dueño de la plataforma. Todas las
    animaciones de acá abajo tocan solo transform/opacity/filter --
@@ -915,54 +916,19 @@ input[type="radio"] {
   display: block;
 }
 
-.avatar-skin-glow {
-  position: absolute;
-  inset: -26%;
-  z-index: 0;
-  border-radius: 50%;
-  pointer-events: none;
-  filter: blur(3px);
-}
-
-.avatar-skin-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.avatar-skin-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-}
-
-@keyframes skin-rotar {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .avatar-skin-glow,
-  .avatar-skin-overlay,
-  .avatar-skin-overlay * {
+  .avatar-skin-electric-border {
     animation: none !important;
   }
 }
 
-/* Fuego con electricidad -- adaptación de "Electric Border" (MIT). El
-   filtro en sí (FiltroElectrico, en AvatarSkin.tsx) hace todo el
-   trabajo de distorsión; acá solo el layout de las capas.
-
-   Sin resplandor de fondo ni partículas sueltas a propósito: el efecto
+/* Las 8 skins "Electric" comparten un único bloque de CSS: la técnica
+   (FiltroElectrico, en AvatarSkin.tsx) y el layout de capas son
+   exactamente iguales para todas -- solo cambia la paleta
+   (borderColor/boxShadow, por variable inline desde React) y los
+   parámetros de turbulencia. Ninguna usa un halo de fondo: el efecto
    tiene que quedar contenido exactamente en el grosor del anillo, sin
-   nada visible más allá del borde del avatar -- por eso, a diferencia
-   del resto de las skins, esta ni siquiera usa avatar-skin-glow. */
-[data-skin="fuego_electricidad"] .avatar-skin-glow {
-  display: none;
-}
+   nada visible más allá del borde del avatar. */
 .avatar-skin-electric-defs {
   position: absolute;
   width: 0;
@@ -983,230 +949,17 @@ input[type="radio"] {
 .avatar-skin-electric-border {
   position: absolute;
   inset: 0;
-  border: 2px solid #ff9a3d;
+  border-width: 2px;
+  border-style: solid;
   /* Resplandor mínimo, pensado para quedar DENTRO del recorte de
      avatar-skin-electric-clip -- nunca "inset" (pintaría encima de la
      foto) y con un radio chico para no proyectarse fuera del anillo. */
-  box-shadow: 0 0 2px rgba(79, 195, 255, 0.9);
   background: transparent;
   animation: skin-electrico-pulso 2.2s ease-in-out infinite;
 }
 @keyframes skin-electrico-pulso {
   0%, 100% { opacity: 0.85; }
   50% { opacity: 1; }
-}
-@keyframes skin-spark {
-  0%, 82%, 100% { opacity: 0; transform: scale(0.4); }
-  88% { opacity: 1; transform: scale(1.1); }
-  94% { opacity: 0.7; transform: scale(0.9); }
-}
-
-/* Demoníaca */
-[data-skin="demoniaca"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(180, 0, 20, 0.75) 0%, rgba(20, 0, 5, 0.5) 60%, transparent 78%);
-  animation: skin-demoniaca-pulso 2.6s ease-in-out infinite;
-}
-[data-skin="demoniaca"] .avatar-skin-overlay {
-  border: 2px solid rgba(160, 0, 30, 0.6);
-}
-.avatar-skin-grieta {
-  opacity: 0.55;
-}
-@keyframes skin-demoniaca-pulso {
-  0%, 100% { opacity: 0.5; transform: scale(1); filter: brightness(1); }
-  50% { opacity: 0.85; transform: scale(1.05); filter: brightness(1.3); }
-}
-
-/* Élfica */
-[data-skin="elfica"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(217, 196, 106, 0.55) 0%, rgba(143, 214, 143, 0.3) 55%, transparent 75%);
-  animation: skin-elfica-respiro 4.2s ease-in-out infinite;
-}
-[data-skin="elfica"] .avatar-skin-overlay {
-  border: 2px solid rgba(217, 196, 106, 0.5);
-}
-@keyframes skin-elfica-respiro {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 0.8; }
-}
-
-/* Orca -- borde irregular a propósito (clip-path), no un anillo
-   perfecto como el resto de las skins. */
-[data-skin="orca"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(58, 89, 45, 0.6) 0%, rgba(74, 53, 36, 0.35) 60%, transparent 78%);
-  animation: skin-orca-respiro 3.6s ease-in-out infinite;
-}
-[data-skin="orca"] .avatar-skin-overlay {
-  clip-path: polygon(
-    50% 0%, 62% 4%, 74% 0%, 88% 10%, 100% 24%, 96% 40%, 100% 56%, 90% 70%,
-    96% 86%, 80% 96%, 64% 100%, 50% 94%, 36% 100%, 18% 94%, 6% 82%, 12% 66%,
-    2% 50%, 10% 32%, 4% 16%, 22% 6%, 38% 8%
-  );
-}
-@keyframes skin-orca-respiro {
-  0%, 100% { filter: brightness(1); opacity: 0.6; }
-  50% { filter: brightness(1.2); opacity: 0.8; }
-}
-
-/* Sagrada */
-[data-skin="sagrada"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.8) 0%, rgba(255, 214, 120, 0.35) 55%, transparent 76%);
-  animation: skin-sagrada-glow 3s ease-in-out infinite;
-}
-[data-skin="sagrada"] .avatar-skin-overlay {
-  border: 2px solid rgba(255, 244, 214, 0.7);
-}
-.avatar-skin-rayos {
-  position: absolute;
-  inset: -35%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg, rgba(255, 244, 200, 0.55) 4deg, transparent 10deg,
-    transparent 30deg, rgba(255, 244, 200, 0.5) 34deg, transparent 40deg,
-    transparent 60deg, rgba(255, 244, 200, 0.55) 64deg, transparent 70deg,
-    transparent 90deg, rgba(255, 244, 200, 0.5) 94deg, transparent 100deg,
-    transparent 120deg, rgba(255, 244, 200, 0.55) 124deg, transparent 130deg,
-    transparent 150deg, rgba(255, 244, 200, 0.5) 154deg, transparent 160deg,
-    transparent 180deg, rgba(255, 244, 200, 0.55) 184deg, transparent 190deg,
-    transparent 210deg, rgba(255, 244, 200, 0.5) 214deg, transparent 220deg,
-    transparent 240deg, rgba(255, 244, 200, 0.55) 244deg, transparent 250deg,
-    transparent 270deg, rgba(255, 244, 200, 0.5) 274deg, transparent 280deg,
-    transparent 300deg, rgba(255, 244, 200, 0.55) 304deg, transparent 310deg,
-    transparent 330deg, rgba(255, 244, 200, 0.5) 334deg, transparent 340deg,
-    transparent 360deg
-  );
-  animation: skin-rotar 16s linear infinite;
-  transform-origin: center;
-}
-@keyframes skin-sagrada-glow {
-  0%, 100% { opacity: 0.55; }
-  50% { opacity: 0.9; }
-}
-
-/* Cristal negro */
-[data-skin="cristal_negro"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(90, 40, 140, 0.55) 0%, rgba(10, 5, 20, 0.5) 60%, transparent 78%);
-}
-[data-skin="cristal_negro"] .avatar-skin-overlay {
-  border: 2px solid rgba(150, 110, 220, 0.45);
-}
-.avatar-skin-faceta {
-  position: absolute;
-  inset: 0;
-  mix-blend-mode: overlay;
-  opacity: 0.5;
-}
-.avatar-skin-faceta-1 { background: linear-gradient(115deg, transparent 40%, rgba(200, 170, 255, 0.5) 50%, transparent 60%); }
-.avatar-skin-faceta-2 { background: linear-gradient(35deg, transparent 45%, rgba(120, 80, 180, 0.45) 55%, transparent 65%); }
-.avatar-skin-faceta-3 { background: linear-gradient(160deg, transparent 50%, rgba(60, 20, 90, 0.5) 58%, transparent 68%); }
-.avatar-skin-reflejo {
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 60%;
-  height: 220%;
-  background: linear-gradient(100deg, transparent 40%, rgba(255, 255, 255, 0.55) 50%, transparent 60%);
-  transform: translateX(-160%) rotate(12deg);
-  animation: skin-cristal-reflejo 5s ease-in-out infinite;
-}
-@keyframes skin-cristal-reflejo {
-  0% { transform: translateX(-160%) rotate(12deg); }
-  100% { transform: translateX(220%) rotate(12deg); }
-}
-
-/* Gatitos */
-[data-skin="gatitos"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(255, 182, 213, 0.6) 0%, rgba(183, 196, 255, 0.35) 55%, transparent 76%);
-  animation: skin-gatitos-glow 3.4s ease-in-out infinite;
-}
-[data-skin="gatitos"] .avatar-skin-overlay {
-  border: 2px solid rgba(255, 200, 221, 0.6);
-}
-.avatar-skin-oreja {
-  position: absolute;
-  top: -10%;
-  width: 22%;
-  height: 22%;
-  background: linear-gradient(135deg, #ffc7de, #c9b8ff);
-  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-}
-.avatar-skin-oreja-izq { left: 6%; transform: rotate(-18deg); }
-.avatar-skin-oreja-der { right: 6%; transform: rotate(18deg); }
-.avatar-skin-brillo {
-  position: absolute;
-  width: 8%;
-  height: 8%;
-  border-radius: 50%;
-  background: #fff;
-  opacity: 0;
-}
-.avatar-skin-brillo-1 { top: 20%; left: 20%; animation: skin-brillo-parpadeo 2.6s ease-in-out infinite; }
-.avatar-skin-brillo-2 { top: 65%; left: 78%; animation: skin-brillo-parpadeo 2.6s ease-in-out 1.3s infinite; }
-@keyframes skin-gatitos-glow {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 0.85; }
-}
-@keyframes skin-brillo-parpadeo {
-  0%, 70%, 100% { opacity: 0; transform: scale(0.5); }
-  85% { opacity: 1; transform: scale(1.2); }
-}
-
-/* Zerg */
-[data-skin="zerg"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(150, 50, 220, 0.6) 0%, rgba(45, 10, 69, 0.5) 60%, transparent 78%);
-  animation: skin-zerg-latido 1.8s ease-in-out infinite;
-}
-[data-skin="zerg"] .avatar-skin-overlay {
-  border: 2px solid rgba(198, 91, 255, 0.5);
-}
-@keyframes skin-zerg-latido {
-  0%, 100% { opacity: 0.5; transform: scale(1); filter: brightness(1); }
-  30% { opacity: 0.85; transform: scale(1.05); filter: brightness(1.25); }
-  45% { opacity: 0.6; transform: scale(1); filter: brightness(1); }
-  60% { opacity: 0.8; transform: scale(1.03); filter: brightness(1.15); }
-}
-
-/* Protoss */
-[data-skin="protoss"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(120, 180, 255, 0.5) 0%, rgba(255, 215, 106, 0.35) 55%, transparent 76%);
-  animation: skin-protoss-glow 3s ease-in-out infinite;
-}
-[data-skin="protoss"] .avatar-skin-overlay {
-  border: 2px solid rgba(255, 215, 106, 0.55);
-}
-.avatar-skin-arco {
-  position: absolute;
-  inset: -22%;
-  background: conic-gradient(from 0deg, transparent 0deg, rgba(140, 200, 255, 0.8) 18deg, transparent 40deg, transparent 360deg);
-  animation: skin-rotar 4.5s linear infinite;
-}
-@keyframes skin-protoss-glow {
-  0%, 100% { opacity: 0.5; }
-  50% { opacity: 0.85; }
-}
-
-/* Terran */
-[data-skin="terran"] .avatar-skin-glow {
-  background: radial-gradient(circle, rgba(180, 200, 220, 0.5) 0%, rgba(60, 80, 100, 0.4) 60%, transparent 78%);
-}
-[data-skin="terran"] .avatar-skin-overlay {
-  border: 2px solid rgba(180, 200, 220, 0.55);
-  background: linear-gradient(135deg, rgba(120, 140, 160, 0.18), rgba(40, 50, 60, 0.1) 50%, rgba(120, 140, 160, 0.18));
-}
-.avatar-skin-escaneo {
-  position: absolute;
-  left: 0;
-  width: 100%;
-  height: 14%;
-  background: linear-gradient(to bottom, transparent, rgba(140, 220, 255, 0.55), transparent);
-  transform: translateY(-120%);
-  animation: skin-terran-escaneo 3.2s ease-in-out infinite;
-}
-@keyframes skin-terran-escaneo {
-  0% { transform: translateY(-120%); opacity: 0; }
-  10% { opacity: 0.9; }
-  90% { opacity: 0.9; }
-  100% { transform: translateY(820%); opacity: 0; }
 }
 
 /* ---------- Panel de administración ---------- */
