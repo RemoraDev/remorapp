@@ -14,10 +14,21 @@ export default function ForgotPasswordPage() {
     setLoading(true);
     setError(null);
 
+    // Migración 061: si lo que se escribió no es el correo principal
+    // de ninguna cuenta, resolver_correo_recuperacion() intenta
+    // encontrarla por su correo de recuperación (configurado en
+    // Editar Datos) y devuelve el correo PRINCIPAL de esa cuenta --
+    // nunca manda el link al secundario, solo lo usa para identificar
+    // a quién pertenece. Si no encuentra ninguna coincidencia,
+    // devuelve el correo tal cual se escribió, así
+    // resetPasswordForEmail() sigue sin revelar si existe o no una
+    // cuenta con ese correo.
+    const { data: correoResuelto } = await supabase.rpc("resolver_correo_recuperacion", { p_correo: email });
+
     // redirectTo apunta a /reset-password: ahí es donde Supabase manda
     // de vuelta al usuario después de que hace clic en el link del
     // correo, con la sesión de recuperación ya armada en la URL.
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(correoResuelto ?? email, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
 

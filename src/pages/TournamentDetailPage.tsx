@@ -1030,12 +1030,7 @@ export default function TournamentDetailPage() {
               <Avatar url={p.avatarUrl} nombre={p.nombre} className="detail-participant-avatar" forma={p.avatarForma} />
               {p.nombre ?? "Jugador de RemorApp"}
               {p.liga !== null && p.mmr !== null && (
-                <LigaBadge
-                  liga={p.liga}
-                  mmr={p.mmr}
-                  nivel={p.nivel ?? undefined}
-                  bancaRota={p.bancaRota}
-                />
+                <LigaBadge liga={p.liga} mmr={p.mmr} bancaRota={p.bancaRota} />
               )}
             </div>
           ))}

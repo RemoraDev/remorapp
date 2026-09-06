@@ -213,38 +213,51 @@ export default function ProfilePage() {
     obtenerEquipoDelUsuario(user.id).then((equipo) => setTieneEquipo(!!equipo));
   }, [user]);
 
-  // --- Identidad de jugador: nick, país, servidor SC2, id SC2 ---
-  // (los 4 campos que exige el gate de perfil completo).
+  // --- Identidad de jugador: nick y país -- reorganización posterior:
+  // servidor SC2 e ID SC2 se mudaron enteros a "Editar Datos del
+  // Juego" (junto con el resto de lo específico de StarCraft II), así
+  // que ya no forman parte de este formulario. El gate de perfil
+  // completo (perfilEstaCompleto()) sigue exigiendo los 4 campos
+  // igual que antes -- ahora, completarlo requiere pasar por las dos
+  // pantallas en vez de una sola.
   const [nick, setNick] = useState("");
   const [country, setCountry] = useState<Country | "">("");
-  const [sc2Region, setSc2Region] = useState<Sc2Region | "">("");
-  const [sc2Id, setSc2Id] = useState("");
-  const [liga, setLiga] = useState<Liga | "">("");
   const [guardandoIdentidad, setGuardandoIdentidad] = useState(false);
   const [errorIdentidad, setErrorIdentidad] = useState<string | null>(null);
   const [identidadGuardada, setIdentidadGuardada] = useState(false);
 
-  // --- Correo electrónico (migración 048): auth.updateUser(), no la
-  // tabla profiles -- el correo vive únicamente en auth.users. Probado
-  // en vivo contra el proyecto real: el cambio SÍ exige confirmación
-  // -- auth.updateUser() devuelve el usuario con new_email = el correo
-  // pendiente, pero email sigue siendo el actual hasta que se confirma
-  // el link que Supabase manda al correo NUEVO. Esto es independiente
-  // de "Confirm email" (esa opción es solo para el registro inicial);
-  // el correo de acceso no cambia mientras no se confirme ese link.
-  const [nuevoEmail, setNuevoEmail] = useState("");
-  const [guardandoEmail, setGuardandoEmail] = useState(false);
-  const [errorEmail, setErrorEmail] = useState<string | null>(null);
-  const [emailCambioEnviado, setEmailCambioEnviado] = useState(false);
+  // --- Servidor e ID de StarCraft II: se mudaron acá, junto a raza y
+  // liga -- ver handleGuardarDatosJuego() más abajo, que ahora guarda
+  // las cuatro cosas juntas. ---
+  const [sc2Region, setSc2Region] = useState<Sc2Region | "">("");
+  const [sc2Id, setSc2Id] = useState("");
+  const [liga, setLiga] = useState<Liga | "">("");
 
   // --- Contraseña: mismo supabase.auth.updateUser() que usa
-  // ResetPasswordPage.tsx, pero con la sesión ya iniciada -- no hace
-  // falta pasar por el correo. ---
+  // ResetPasswordPage.tsx, pero con la sesión ya iniciada. Reorganización:
+  // ahora pide la contraseña actual primero, como confirmación --
+  // supabase-js no tiene una forma directa de "verificar sin cambiar
+  // sesión", así que un signInWithPassword exitoso con esa contraseña
+  // ES la confirmación (ver handleCambiarPassword). ---
+  const [passwordActual, setPasswordActual] = useState("");
   const [passwordNueva, setPasswordNueva] = useState("");
   const [passwordConfirmar, setPasswordConfirmar] = useState("");
   const [guardandoPassword, setGuardandoPassword] = useState(false);
   const [errorPassword, setErrorPassword] = useState<string | null>(null);
   const [passwordGuardada, setPasswordGuardada] = useState(false);
+
+  // --- Correo de recuperación (migración 061): segundo correo
+  // opcional, privado (no viaja con el resto del perfil vía
+  // AuthContext) -- se lee con mi_correo_recuperacion() recién al
+  // abrir "Editar Datos", no antes. Sirve únicamente para IDENTIFICAR
+  // la cuenta en "¿Olvidaste tu contraseña?" cuando el correo
+  // principal no coincide con ninguna -- el link de recuperación
+  // siempre se manda al correo principal, nunca a este. ---
+  const [correoRecuperacion, setCorreoRecuperacion] = useState("");
+  const [cargandoCorreoRecuperacion, setCargandoCorreoRecuperacion] = useState(false);
+  const [guardandoCorreoRecuperacion, setGuardandoCorreoRecuperacion] = useState(false);
+  const [errorCorreoRecuperacion, setErrorCorreoRecuperacion] = useState<string | null>(null);
+  const [correoRecuperacionGuardado, setCorreoRecuperacionGuardado] = useState(false);
 
   // --- Perfil de juego de StarCraft II (migración 034): razas, en
   // perfiles_juego -- opcional, no bloquea cuenta_validada. juegoIdSc2
@@ -372,9 +385,19 @@ export default function ProfilePage() {
     setPerfilBio(profile.bio ?? "");
   }, [profile]);
 
-  // El correo vive en auth.users (user), no en profiles.
+  // Correo de recuperación (migración 061): privado, no viaja con el
+  // resto del perfil -- se resuelve aparte con mi_correo_recuperacion().
   useEffect(() => {
-    setNuevoEmail(user?.email ?? "");
+    if (!user) return;
+    setCargandoCorreoRecuperacion(true);
+    supabase.rpc("mi_correo_recuperacion").then(({ data, error }) => {
+      setCargandoCorreoRecuperacion(false);
+      if (error) {
+        console.error("Error cargando el correo de recuperación:", error);
+        return;
+      }
+      setCorreoRecuperacion(data ?? "");
+    });
   }, [user]);
 
   useEffect(() => {
@@ -840,6 +863,8 @@ export default function ProfilePage() {
     );
   }
 
+  // Reorganización: solo nick y país -- servidor/ID de SC2 se guardan
+  // ahora en handleGuardarDatosJuego(), junto con raza y liga.
   const handleGuardarIdentidad = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
@@ -849,7 +874,7 @@ export default function ProfilePage() {
       setErrorIdentidad(errorNick);
       return;
     }
-    if (!country || !sc2Region || !sc2Id.trim()) {
+    if (!country) {
       setErrorIdentidad("Debes completar todos los campos.");
       return;
     }
@@ -860,12 +885,10 @@ export default function ProfilePage() {
 
     // cuenta_validada no se manda: se recalcula sola en la base
     // (trigger actualizar_cuenta_validada) a partir de los 4 campos
-    // obligatorios. Migración 048: liga se movió a "Editar datos de
-    // juego" (handleGuardarDatosJuego), ya no se manda acá.
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ nick, country, sc2_region: sc2Region, sc2_id: sc2Id.trim() })
-      .eq("id", user.id);
+    // obligatorios -- nick y country se guardan acá, sc2_region/sc2_id
+    // en "Editar Datos del Juego", así que el perfil recién queda
+    // completo cuando se pasó por las dos pantallas.
+    const { error: updateError } = await supabase.from("profiles").update({ nick, country }).eq("id", user.id);
 
     setGuardandoIdentidad(false);
 
@@ -878,37 +901,21 @@ export default function ProfilePage() {
     setIdentidadGuardada(true);
   };
 
-  // Correo electrónico (migración 048): auth.updateUser(), no la tabla
-  // profiles -- ver el comentario largo junto a los estados de acá
-  // arriba sobre la confirmación obligatoria por correo.
-  const handleGuardarEmail = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!user) return;
-
-    const emailLimpio = nuevoEmail.trim();
-    if (!emailLimpio || emailLimpio === user.email) return;
-
-    setGuardandoEmail(true);
-    setErrorEmail(null);
-    setEmailCambioEnviado(false);
-
-    const { error } = await supabase.auth.updateUser({ email: emailLimpio });
-
-    setGuardandoEmail(false);
-
-    if (error) {
-      setErrorEmail(error.message);
-      return;
-    }
-
-    setEmailCambioEnviado(true);
-  };
-
+  // Reorganización: pide la contraseña ACTUAL primero, como
+  // confirmación -- supabase-js no tiene una forma directa de
+  // "verificar sin cambiar la sesión", así que un signInWithPassword
+  // exitoso con esa contraseña es, en los hechos, la confirmación (es
+  // la misma cuenta, mismo correo, y si la contraseña actual fuera
+  // incorrecta esa llamada falla antes de tocar nada).
   const handleCambiarPassword = async (event: FormEvent) => {
     event.preventDefault();
     setErrorPassword(null);
     setPasswordGuardada(false);
 
+    if (!passwordActual) {
+      setErrorPassword("Ingresa tu contraseña actual para confirmar el cambio.");
+      return;
+    }
     if (passwordNueva.length < 6) {
       setErrorPassword("La contraseña tiene que tener al menos 6 caracteres.");
       return;
@@ -917,8 +924,21 @@ export default function ProfilePage() {
       setErrorPassword("Las dos contraseñas no coinciden.");
       return;
     }
+    if (!user?.email) return;
 
     setGuardandoPassword(true);
+
+    const { error: verificarError } = await supabase.auth.signInWithPassword({
+      email: user.email,
+      password: passwordActual,
+    });
+
+    if (verificarError) {
+      setGuardandoPassword(false);
+      setErrorPassword("Tu contraseña actual no es correcta.");
+      return;
+    }
+
     const { error } = await supabase.auth.updateUser({ password: passwordNueva });
     setGuardandoPassword(false);
 
@@ -927,17 +947,48 @@ export default function ProfilePage() {
       return;
     }
 
+    setPasswordActual("");
     setPasswordNueva("");
     setPasswordConfirmar("");
     setPasswordGuardada(true);
   };
 
-  // Migración 048: raza (perfiles_juego) y liga (profiles) se guardan
-  // juntas con un solo botón -- las dos son "datos de juego" de
-  // StarCraft II, aunque técnicamente vivan en tablas distintas.
+  // Correo de recuperación (migración 061): privado, se guarda con una
+  // RPC (guardar_correo_recuperacion()) en vez de un update directo --
+  // la columna no tiene grant de select/update para authenticated,
+  // mismo criterio que profiles.email.
+  const handleGuardarCorreoRecuperacion = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorCorreoRecuperacion(null);
+    setCorreoRecuperacionGuardado(false);
+
+    setGuardandoCorreoRecuperacion(true);
+    const { error } = await supabase.rpc("guardar_correo_recuperacion", {
+      p_correo: correoRecuperacion.trim() || null,
+    });
+    setGuardandoCorreoRecuperacion(false);
+
+    if (error) {
+      setErrorCorreoRecuperacion(error.message);
+      return;
+    }
+
+    setCorreoRecuperacionGuardado(true);
+  };
+
+  // Migración 048, extendida en la reorganización posterior: servidor
+  // e ID de SC2 (profiles), raza principal/secundaria (perfiles_juego)
+  // y liga (profiles) se guardan juntas con un solo botón -- las
+  // cuatro son "datos de juego" de StarCraft II, aunque vivan en dos
+  // tablas distintas.
   const handleGuardarDatosJuego = async (event: FormEvent) => {
     event.preventDefault();
     if (!user || !juegoIdSc2) return;
+
+    if (!sc2Region || !sc2Id.trim()) {
+      setErrorRaza("Debes completar el servidor y el ID de StarCraft II.");
+      return;
+    }
 
     setGuardandoRaza(true);
     setErrorRaza(null);
@@ -958,14 +1009,18 @@ export default function ProfilePage() {
       return;
     }
 
-    // liga es de profiles, no de perfiles_juego -- se guarda en el
-    // mismo envío para que "Editar datos de juego" tenga un solo botón.
-    const { error: errorLiga } = await supabase.from("profiles").update({ liga: liga || null }).eq("id", user.id);
+    // sc2_region/sc2_id/liga son de profiles, no de perfiles_juego --
+    // se guardan en el mismo envío para que "Editar Datos del Juego"
+    // tenga un solo botón.
+    const { error: errorProfile } = await supabase
+      .from("profiles")
+      .update({ sc2_region: sc2Region, sc2_id: sc2Id.trim(), liga: liga || null })
+      .eq("id", user.id);
 
     setGuardandoRaza(false);
 
-    if (errorLiga) {
-      setErrorRaza(errorLiga.message);
+    if (errorProfile) {
+      setErrorRaza(errorProfile.message);
       return;
     }
 
@@ -1460,7 +1515,9 @@ export default function ProfilePage() {
             <div className="team-panel-menu">
               <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("datos")}>
                 <span className="team-panel-menu-item-title">Editar Datos</span>
-                <span className="team-panel-menu-item-desc">Nombre, correo, contraseña, país y links</span>
+                <span className="team-panel-menu-item-desc">
+                  Nick, contraseña, país y correo de recuperación
+                </span>
               </button>
               <button
                 type="button"
@@ -1481,8 +1538,10 @@ export default function ProfilePage() {
                 <span className="team-panel-menu-item-desc">Avatar, banner y bordes de avatar</span>
               </button>
               <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("juegos")}>
-                <span className="team-panel-menu-item-title">Configuración por Juegos</span>
-                <span className="team-panel-menu-item-desc">Raza principal, secundaria y liga</span>
+                <span className="team-panel-menu-item-title">Editar Datos del Juego</span>
+                <span className="team-panel-menu-item-desc">
+                  Links, servidor e ID de SC2, raza principal, secundaria y liga
+                </span>
               </button>
               <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("idioma")}>
                 <span className="team-panel-menu-item-title">Cambiar idioma general</span>
@@ -1545,89 +1604,36 @@ export default function ProfilePage() {
                   </select>
                 </div>
 
-                {/* Servidor e ID de StarCraft II siguen acá (no en
-                    "Editar datos de juego"): son, junto con nick y
-                    país, los 4 campos que exige el gate de perfil
-                    completo -- separarlos hubiera partido esa
-                    identidad mínima en dos secciones. */}
-                <h3 className="detail-subtitle">StarCraft II</h3>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="perfil-sc2-region">
-                    Servidor de StarCraft II (al que te conectas)
-                  </label>
-                  <select
-                    id="perfil-sc2-region"
-                    className="form-select"
-                    required
-                    value={sc2Region}
-                    onChange={(e) => setSc2Region(e.target.value as Sc2Region)}
-                  >
-                    <option value="" disabled>
-                      Elige tu servidor
-                    </option>
-                    {SC2_REGION_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="perfil-sc2-id">
-                    ID de StarCraft II
-                  </label>
-                  <input
-                    id="perfil-sc2-id"
-                    className="form-input"
-                    type="text"
-                    required
-                    value={sc2Id}
-                    onChange={(e) => setSc2Id(e.target.value)}
-                  />
-                </div>
-
                 <button type="submit" className="btn btn-primary btn-block" disabled={guardandoIdentidad}>
                   {guardandoIdentidad ? "Guardando..." : "Guardar"}
                 </button>
               </form>
 
+              {/* Correo electrónico: ya no se edita acá -- reorganización.
+                  Se muestra de solo lectura, viene directo de la sesión
+                  (auth.users), no de profiles. Cambiarlo dejó de ser
+                  parte de esta pantalla; si hace falta recuperarlo, ver
+                  el correo de recuperación más abajo. */}
               <h3 className="detail-subtitle">Correo electrónico</h3>
-              <form className="auth-form" onSubmit={handleGuardarEmail}>
-                {errorEmail && <div className="form-error">{errorEmail}</div>}
-                {emailCambioEnviado && (
-                  <div className="form-success">
-                    Te mandamos un link de confirmación al correo nuevo. Hasta que no lo confirmes, tu
-                    correo de acceso sigue siendo el actual.
-                  </div>
-                )}
-                <div className="form-group">
-                  <label className="form-label" htmlFor="perfil-email">
-                    Correo electrónico
-                  </label>
-                  <input
-                    id="perfil-email"
-                    className="form-input"
-                    type="email"
-                    required
-                    value={nuevoEmail}
-                    onChange={(e) => setNuevoEmail(e.target.value)}
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="btn btn-ghost btn-block"
-                  disabled={guardandoEmail || nuevoEmail.trim() === (user?.email ?? "")}
-                >
-                  {guardandoEmail ? "Guardando..." : "Cambiar correo"}
-                </button>
-              </form>
+              <p className="tournament-card-meta">{user?.email}</p>
 
               <h3 className="detail-subtitle">Contraseña</h3>
               <form className="auth-form" onSubmit={handleCambiarPassword}>
                 {errorPassword && <div className="form-error">{errorPassword}</div>}
                 {passwordGuardada && <div className="form-success">Tu contraseña se cambió correctamente.</div>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-password-actual">
+                    Contraseña actual
+                  </label>
+                  <input
+                    id="perfil-password-actual"
+                    className="form-input"
+                    type="password"
+                    value={passwordActual}
+                    onChange={(e) => setPasswordActual(e.target.value)}
+                  />
+                </div>
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="perfil-password-nueva">
@@ -1662,70 +1668,39 @@ export default function ProfilePage() {
                 </button>
               </form>
 
-              {/* Links de presencia general (Discord, redes...), sin
-                  horario -- los de transmisión (con días y horario)
-                  se editan aparte, en "Editar datos de transmisión". */}
-              <h3 className="detail-subtitle">Links (Discord, YouTube...)</h3>
-              {errorLinks && <div className="form-error">{errorLinks}</div>}
-              {linksGuardados && <div className="form-success">Tus links se guardaron correctamente.</div>}
-
-              {linksTransmision.filter((link) => (link.tipo ?? "personal") === "personal").length > 0 && (
-                <div className="detail-participant-list">
-                  {linksTransmision
-                    .map((link, indice) => ({ link, indice }))
-                    .filter(({ link }) => (link.tipo ?? "personal") === "personal")
-                    .map(({ link, indice }) => (
-                      <div key={indice} className="detail-participant-item">
-                        {link.plataforma}
-                        <span className="profile-nick-id">{link.url}</span>
-                        <button type="button" className="btn btn-ghost" onClick={() => handleQuitarLink(indice)}>
-                          Quitar
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              )}
-
-              <div className="auth-form">
+              <h3 className="detail-subtitle">Correo de recuperación (opcional)</h3>
+              <p className="tournament-card-meta">
+                Un segundo correo, solo para identificar tu cuenta en "¿Olvidaste tu contraseña?" si
+                alguna vez perdés acceso al principal -- el link de recuperación siempre se manda al
+                correo principal, nunca a este.
+              </p>
+              <form className="auth-form" onSubmit={handleGuardarCorreoRecuperacion}>
+                {errorCorreoRecuperacion && <div className="form-error">{errorCorreoRecuperacion}</div>}
+                {correoRecuperacionGuardado && (
+                  <div className="form-success">Tu correo de recuperación se guardó correctamente.</div>
+                )}
                 <div className="form-group">
-                  <label className="form-label" htmlFor="perfil-link-plataforma">
-                    Plataforma
+                  <label className="form-label" htmlFor="perfil-correo-recuperacion">
+                    Correo de recuperación
                   </label>
                   <input
-                    id="perfil-link-plataforma"
+                    id="perfil-correo-recuperacion"
                     className="form-input"
-                    type="text"
-                    placeholder="Discord, YouTube..."
-                    value={nuevaPlataforma}
-                    onChange={(e) => setNuevaPlataforma(e.target.value)}
+                    type="email"
+                    placeholder="otro-correo@ejemplo.com"
+                    value={correoRecuperacion}
+                    disabled={cargandoCorreoRecuperacion}
+                    onChange={(e) => setCorreoRecuperacion(e.target.value)}
                   />
                 </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="perfil-link-url">
-                    Link
-                  </label>
-                  <input
-                    id="perfil-link-url"
-                    className="form-input"
-                    type="text"
-                    placeholder="https://discord.gg/tu-server"
-                    value={nuevaUrlLink}
-                    onChange={(e) => setNuevaUrlLink(e.target.value)}
-                  />
-                </div>
-                <button type="button" className="btn btn-ghost btn-block" onClick={handleAgregarLink}>
-                  Agregar link
-                </button>
-
                 <button
-                  type="button"
-                  className="btn btn-primary btn-block"
-                  disabled={guardandoLinks}
-                  onClick={handleGuardarLinks}
+                  type="submit"
+                  className="btn btn-ghost btn-block"
+                  disabled={guardandoCorreoRecuperacion || cargandoCorreoRecuperacion}
                 >
-                  {guardandoLinks ? "Guardando..." : "Guardar links"}
+                  {guardandoCorreoRecuperacion ? "Guardando..." : "Guardar correo de recuperación"}
                 </button>
-              </div>
+              </form>
             </>
           )}
 
@@ -2112,7 +2087,9 @@ export default function ProfilePage() {
                 onClick={() => setSubsubseccion("sc2")}
               >
                 <span className="team-panel-menu-item-title">StarCraft II</span>
-                <span className="team-panel-menu-item-desc">Raza principal, secundaria y liga</span>
+                <span className="team-panel-menu-item-desc">
+                  Links, servidor, ID, raza principal, secundaria y liga
+                </span>
               </button>
             </div>
           )}
@@ -2126,9 +2103,115 @@ export default function ProfilePage() {
               <p className="tournament-card-meta">
                 Estos datos se ven en el roster de tu equipo, junto al resto de tus compañeros.
               </p>
+
+              {/* Links de presencia general (Discord, redes...), sin
+                  horario -- los de transmisión (con días y horario) se
+                  editan aparte, en "Editar Datos de Transmisión".
+                  Reorganización: se mudaron acá enteros desde "Editar
+                  Datos". */}
+              <h3 className="detail-subtitle">Links (Discord, YouTube...)</h3>
+              {errorLinks && <div className="form-error">{errorLinks}</div>}
+              {linksGuardados && <div className="form-success">Tus links se guardaron correctamente.</div>}
+
+              {linksTransmision.filter((link) => (link.tipo ?? "personal") === "personal").length > 0 && (
+                <div className="detail-participant-list">
+                  {linksTransmision
+                    .map((link, indice) => ({ link, indice }))
+                    .filter(({ link }) => (link.tipo ?? "personal") === "personal")
+                    .map(({ link, indice }) => (
+                      <div key={indice} className="detail-participant-item">
+                        {link.plataforma}
+                        <span className="profile-nick-id">{link.url}</span>
+                        <button type="button" className="btn btn-ghost" onClick={() => handleQuitarLink(indice)}>
+                          Quitar
+                        </button>
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              <div className="auth-form">
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-link-plataforma">
+                    Plataforma
+                  </label>
+                  <input
+                    id="perfil-link-plataforma"
+                    className="form-input"
+                    type="text"
+                    placeholder="Discord, YouTube..."
+                    value={nuevaPlataforma}
+                    onChange={(e) => setNuevaPlataforma(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-link-url">
+                    Link
+                  </label>
+                  <input
+                    id="perfil-link-url"
+                    className="form-input"
+                    type="text"
+                    placeholder="https://discord.gg/tu-server"
+                    value={nuevaUrlLink}
+                    onChange={(e) => setNuevaUrlLink(e.target.value)}
+                  />
+                </div>
+                <button type="button" className="btn btn-ghost btn-block" onClick={handleAgregarLink}>
+                  Agregar link
+                </button>
+
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block"
+                  disabled={guardandoLinks}
+                  onClick={handleGuardarLinks}
+                >
+                  {guardandoLinks ? "Guardando..." : "Guardar links"}
+                </button>
+              </div>
+
               <form className="auth-form" onSubmit={handleGuardarDatosJuego}>
                 {errorRaza && <div className="form-error">{errorRaza}</div>}
                 {razaGuardada && <div className="form-success">Tus datos de juego se guardaron correctamente.</div>}
+
+                {/* Servidor e ID de StarCraft II: reorganización --
+                    se mudaron acá desde "Editar Datos". */}
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-sc2-region">
+                    Servidor de StarCraft II (al que te conectas)
+                  </label>
+                  <select
+                    id="perfil-sc2-region"
+                    className="form-select"
+                    required
+                    value={sc2Region}
+                    onChange={(e) => setSc2Region(e.target.value as Sc2Region)}
+                  >
+                    <option value="" disabled>
+                      Elige tu servidor
+                    </option>
+                    {SC2_REGION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-sc2-id">
+                    ID de StarCraft II
+                  </label>
+                  <input
+                    id="perfil-sc2-id"
+                    className="form-input"
+                    type="text"
+                    required
+                    value={sc2Id}
+                    onChange={(e) => setSc2Id(e.target.value)}
+                  />
+                </div>
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="perfil-raza-principal">

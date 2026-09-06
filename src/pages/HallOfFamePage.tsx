@@ -299,7 +299,6 @@ export default function HallOfFamePage() {
               </span>
               <span className="liga-badge">{c.liga}</span>
               <span className="hall-mmr">{c.mmr} MMR</span>
-              <span className="nivel-badge">Nv. {c.nivel}</span>
               {c.titulo && <span className="liga-badge">{c.titulo}</span>}
             </div>
           ))}
@@ -321,7 +320,6 @@ export default function HallOfFamePage() {
                 <span className="profile-nick-id">#{j.uniqueId}</span>
               </span>
               <span className="liga-badge">{j.liga}</span>
-              <span className="nivel-badge">Nv. {j.nivel}</span>
               <span className="hall-mmr">Valentía {j.valentia}%</span>
               <span className="hall-mmr">Responsabilidad {j.responsabilidad}%</span>
               {j.titulo && <span className="liga-badge">{j.titulo}</span>}

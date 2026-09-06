@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import type { DivisionLiga, Liga, RankingClan } from "../types/ranking";
+import type { DivisionLiga, Liga, RankingClan, RankingJugador } from "../types/ranking";
 
 // null = "General" (suma las tres ligas, sin distinguir división) --
 // no es una fila de la tabla ligas, es un valor especial de la UI.
@@ -14,6 +14,12 @@ export default function RankingPage() {
   const [divisionId, setDivisionId] = useState<string | null>(null);
   const [ranking, setRanking] = useState<RankingClan[]>([]);
   const [cargando, setCargando] = useState(true);
+
+  // Ranking de jugadores (migración 063): independiente de liga,
+  // división o evento -- se carga una sola vez, no depende de
+  // categoria/divisionId.
+  const [rankingJugadores, setRankingJugadores] = useState<RankingJugador[]>([]);
+  const [cargandoJugadores, setCargandoJugadores] = useState(true);
 
   useEffect(() => {
     Promise.all([
@@ -55,6 +61,18 @@ export default function RankingPage() {
         setCargando(false);
       });
   }, [categoria, divisionId]);
+
+  useEffect(() => {
+    supabase.rpc("ranking_jugadores").then(({ data, error }) => {
+      if (error) {
+        console.error("Error cargando el ranking de jugadores:", error);
+        setRankingJugadores([]);
+      } else {
+        setRankingJugadores((data ?? []) as RankingJugador[]);
+      }
+      setCargandoJugadores(false);
+    });
+  }, []);
 
   return (
     <section className="section section-page">
@@ -138,6 +156,72 @@ export default function RankingPage() {
                   </Link>
                 </td>
                 <td>{fila.torneos_ganados}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {/* Ranking de jugadores (migración 063): independiente de liga,
+          división o evento -- suma victorias de torneos 1v1, Clan War
+          simple y sets WTL en un solo número por jugador. */}
+      <h2 className="section-title ranking-jugadores-titulo">Ranking de jugadores</h2>
+      <p className="tournament-card-meta">
+        Ordenado por cantidad total de partidas ganadas -- torneos 1v1, Clan Wars y sets WTL, todo
+        junto.
+      </p>
+
+      {cargandoJugadores ? (
+        <p className="tournament-card-meta">Cargando ranking de jugadores...</p>
+      ) : rankingJugadores.length === 0 ? (
+        <p className="detail-empty">Todavía nadie tiene ninguna partida ganada registrada.</p>
+      ) : (
+        <table className="group-standings-table ranking-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Jugador</th>
+              <th>Liga</th>
+              <th>Raza</th>
+              <th>Equipo</th>
+              <th>Victorias</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rankingJugadores.map((fila, indice) => (
+              <tr key={fila.jugador_id}>
+                <td>{indice + 1}</td>
+                <td>
+                  {fila.nick ?? "Jugador de RemorApp"}
+                  {fila.nick && <span className="profile-nick-id">#{fila.unique_id}</span>}
+                </td>
+                <td>{fila.liga ?? "--"}</td>
+                <td>{fila.raza_principal ?? "--"}</td>
+                <td>
+                  {fila.team_id ? (
+                    <span className="ranking-clan-link">
+                      {fila.team_logo_url ? (
+                        <img src={fila.team_logo_url} alt="" className="player-detail-equipo-actual-logo" />
+                      ) : (
+                        <span className="player-detail-equipo-actual-logo player-detail-equipo-actual-logo-placeholder">
+                          {fila.team_tag?.charAt(0)}
+                        </span>
+                      )}
+                      {fila.team_tag}
+                    </span>
+                  ) : (
+                    "NO"
+                  )}
+                </td>
+                <td>{fila.victorias}</td>
+                <td>
+                  {fila.nick ? (
+                    <Link to={`/jugador/${fila.nick}/${fila.unique_id}`} className="btn btn-ghost">
+                      Inspeccionar
+                    </Link>
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>

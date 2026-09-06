@@ -81,12 +81,6 @@ export default function Header() {
                   Configuración
                 </Link>
 
-                {profile?.es_admin && (
-                  <Link to="/admin" className="header-user-menu-item" onClick={cerrarMenu}>
-                    Administración
-                  </Link>
-                )}
-
                 <div className="header-user-menu-divider" />
 
                 <button type="button" className="header-user-menu-item" onClick={() => void handleCerrarSesion()}>

@@ -12,7 +12,7 @@ const strokeProps = {
 
 function HomeIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...strokeProps}>
+    <svg viewBox="0 0 24 24" {...strokeProps}>
       <path d="M4 11.5 12 4l8 7.5" />
       <path d="M6 10v9h12v-9" />
     </svg>
@@ -21,7 +21,7 @@ function HomeIcon() {
 
 function VoiceIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...strokeProps}>
+    <svg viewBox="0 0 24 24" {...strokeProps}>
       <rect x="9" y="3" width="6" height="11" rx="3" />
       <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
     </svg>
@@ -30,7 +30,7 @@ function VoiceIcon() {
 
 function RankingIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...strokeProps}>
+    <svg viewBox="0 0 24 24" {...strokeProps}>
       <path d="M5 21V10M12 21V3M19 21v-7" />
     </svg>
   );
@@ -38,7 +38,7 @@ function RankingIcon() {
 
 function ProfileIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-6 w-6" {...strokeProps}>
+    <svg viewBox="0 0 24 24" {...strokeProps}>
       <circle cx="12" cy="8.5" r="3.5" />
       <path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5" />
     </svg>

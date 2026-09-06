@@ -1196,17 +1196,33 @@ input[type="radio"] {
   margin: 0;
 }
 
-/* Banner arriba de todo, con el logo superpuesto sobre el borde
+/* Banner arriba de todo, con el logo/avatar superpuesto sobre el borde
    inferior (mismo look que portada + foto de perfil de cualquier red
-   social): el logo queda mitad sobre el banner, mitad debajo, así
-   .team-detail-header (título/meta) necesita un margen extra arriba
-   para no quedar tapado. */
-.team-detail-banner-wrap {
+   social): la imagen queda mitad sobre el banner, mitad debajo, así
+   .team-detail-header/.player-detail-header (título/meta) necesitan un
+   margen extra arriba para no quedar tapados.
+   Unificación (reorganización posterior): jugador y equipo comparten
+   EXACTAMENTE la misma proporción de banner (4:1), el mismo tamaño de
+   avatar/logo superpuesto (7rem) y el mismo comportamiento responsivo
+   -- antes el logo de equipo era bastante más chico (4.5rem) que el
+   avatar de jugador (7rem), con un overlap distinto (-2rem vs
+   -2.75rem); quedan las mismas medidas en los dos lugares. La forma
+   también queda igual en los dos: siempre "cuadrado"
+   (.avatar-shape-cuadrado), ya que ninguno de los dos permite elegir
+   otra forma en su propia vitrina pública. */
+.team-detail-banner-wrap,
+.player-detail-banner-wrap {
   position: relative;
-  margin-bottom: 2.75rem;
+  /* Más que los 2.75rem que sobresale el avatar/logo (bottom: -2.75rem
+     en .team-detail-logo-overlap/.player-detail-avatar-overlap): la
+     insignia de esquina (nivel o liga) sobresale todavía más allá
+     (bottom: -0.5rem adicional en .nivel-badge-corner), así que con
+     exactamente 2.75rem la insignia quedaba pisando el nombre debajo. */
+  margin-bottom: 3.75rem;
 }
 
-.team-detail-banner {
+.team-detail-banner,
+.player-detail-banner {
   width: 100%;
   aspect-ratio: 4 / 1;
   object-fit: cover;
@@ -1227,79 +1243,20 @@ input[type="radio"] {
 }
 
 /* Sin overflow:hidden a propósito: la insignia de nivel/liga se
-   superpone en una esquina del logo (ver .nivel-badge-corner) y no
-   debe recortarse -- el propio logo ya trae su radio de esquina. */
-.team-detail-logo-overlap {
-  position: absolute;
-  left: 1.25rem;
-  bottom: -2rem;
-  border: 3px solid var(--color-bg);
-  border-radius: 0.85rem;
-  line-height: 0;
-}
-
-.team-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-.team-detail-logo {
-  width: 4.5rem;
-  height: 4.5rem;
-  border-radius: 0.75rem;
-  object-fit: cover;
-  font-size: 1.5rem;
-  flex-shrink: 0;
-}
-
-.team-detail-description {
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  color: var(--color-text-muted);
-}
-
-/* ---------- Perfil Público de Jugador (/jugador/:nick/:uniqueId) ----------
-   Mismo espíritu visual que /equipos/:tag (banner + overlap), pero el
-   avatar respeta avatar_forma en vez de ser siempre cuadrado -- por
-   eso el wrapper y la imagen no traen su propio border-radius fijo,
-   lo reciben de .avatar-shape-cuadrado/.avatar-shape-redondo. */
-.player-detail-banner-wrap {
-  position: relative;
-  /* Más que los 2.75rem que sobresale el avatar (bottom: -2.75rem en
-     .player-detail-avatar-overlap): la insignia "Nv. X" sobresale
-     todavía más allá del propio avatar (bottom: -0.5rem adicional en
-     .nivel-badge-corner), así que con exactamente 2.75rem la insignia
-     quedaba pisando el nombre del jugador debajo. */
-  margin-bottom: 3.75rem;
-}
-
-.player-detail-banner {
-  width: 100%;
-  aspect-ratio: 4 / 1;
-  object-fit: cover;
-  border-radius: var(--radius-lg);
-  display: block;
-  border: 1px solid var(--color-border);
-}
-
-/* Avatar grande (más que el de un miembro en una lista, a propósito),
-   sin overflow:hidden por la misma razón que .team-detail-logo-overlap:
-   la insignia de nivel se superpone en una esquina y no debe recortarse. */
+   superpone en una esquina del logo/avatar (ver .nivel-badge-corner) y
+   no debe recortarse -- .avatar-shape-cuadrado ya le da el radio de
+   esquina correspondiente. */
+.team-detail-logo-overlap,
 .player-detail-avatar-overlap {
   position: absolute;
   left: 1.25rem;
   bottom: -2.75rem;
   border: 3px solid var(--color-bg);
-  border-radius: 50%;
+  border-radius: var(--radius-md);
   line-height: 0;
 }
 
-.player-detail-avatar-overlap.avatar-shape-cuadrado {
-  border-radius: var(--radius-md);
-}
-
+.team-detail-header,
 .player-detail-header {
   display: flex;
   align-items: center;
@@ -1307,12 +1264,20 @@ input[type="radio"] {
   margin-bottom: 1rem;
 }
 
+.team-detail-logo,
 .player-detail-avatar {
   width: 7rem;
   height: 7rem;
+  border-radius: var(--radius-md);
   object-fit: cover;
   font-size: 2.25rem;
   flex-shrink: 0;
+}
+
+.team-detail-description {
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: var(--color-text-muted);
 }
 
 /* Insignia de nivel (jugador) o de liga+MMR (equipo, que no tiene
@@ -2110,6 +2075,10 @@ input[type="radio"] {
   margin-bottom: 1.25rem;
 }
 
+.ranking-jugadores-titulo {
+  margin-top: 2.5rem;
+}
+
 .ranking-clan-link {
   display: inline-flex;
   align-items: center;
@@ -2430,7 +2399,17 @@ input[type="radio"] {
   color: var(--color-text-faint);
 }
 
+/* Reorganización: antes cada ícono confiaba en clases "h-6 w-6" que
+   nunca estuvieron definidas en este proyecto (no usa Tailwind) -- sin
+   ningún ancho/alto explícito, cada <svg> terminaba con un tamaño
+   distinto según el navegador (medido en vivo: 26px, 58px, 39px y
+   40px, los cuatro íconos del mismo alto nominal). 1.5rem (24px) fijo
+   para los cuatro por igual; el botón central (R) sigue siendo más
+   grande a propósito (3.25rem de diámetro, ver .logo-nav-btn), es el
+   elemento destacado del menú. */
 .bottom-nav-item svg {
+  width: 1.5rem;
+  height: 1.5rem;
   stroke: currentColor;
 }
 
@@ -3669,6 +3648,16 @@ body.overlay-obs {
   padding: 0.6rem 0.85rem;
   font-size: 0.8rem;
   color: #fca5a5;
+}
+
+/* Marca de intervención de administración (migración 062) -- reusa la
+   forma de .form-error, con un tono ámbar en vez de rojo: es un
+   aviso de transparencia, no un error. */
+.clan-war-intervenido-aviso {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+  font-weight: 600;
 }
 
 .form-success {

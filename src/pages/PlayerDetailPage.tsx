@@ -71,7 +71,7 @@ function tituloMasRelevante(
 // "Editar mis datos" en el menú del avatar (ver ProfilePage.tsx).
 export default function PlayerDetailPage() {
   const { nick, uniqueId } = useParams<{ nick: string; uniqueId: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
   const [skinAvatarClave, setSkinAvatarClave] = useState<SkinAvatarClave | null>(null);
@@ -251,7 +251,6 @@ export default function PlayerDetailPage() {
               forma="cuadrado"
             />
           </AvatarSkin>
-          <span className="nivel-badge nivel-badge-corner">Nv. {perfil.nivel}</span>
         </div>
       </div>
 
@@ -378,6 +377,16 @@ export default function PlayerDetailPage() {
                     Editar datos, transmisión, apariencia, juegos e idioma
                   </span>
                 </Link>
+
+                {/* Solo visible para es_admin -- el link "Administración"
+                    salió del header por completo, este es ahora el único
+                    acceso al Panel de Administración. */}
+                {profile?.es_admin && (
+                  <Link to="/admin" className="team-panel-menu-item">
+                    <span className="team-panel-menu-item-title">Panel de Administración</span>
+                    <span className="team-panel-menu-item-desc">Torneos, usuarios, equipos y Clan Wars</span>
+                  </Link>
+                )}
               </div>
             </div>
           )}

@@ -10,7 +10,7 @@ import type { AdminUserRow } from "../types/admin";
 import type { TournamentRow } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
 
-type Tab = "torneos" | "usuarios" | "equipos" | "disputas" | "reportes" | "alianzas" | "pruebas";
+type Tab = "torneos" | "usuarios" | "equipos" | "clanwars" | "disputas" | "reportes" | "alianzas" | "pruebas";
 
 // Resultado de generar_escenario_prueba_lineup() (migración 053).
 interface EscenarioPruebaGenerado {
@@ -40,6 +40,33 @@ interface EquipoEncontrado {
   name: string;
   tag: string;
   disuelto: boolean;
+}
+
+// Migración 062: gestión de Clan War para el dueño de la plataforma.
+interface ClanWarAdminRow {
+  id: string;
+  challengerTeamId: string;
+  challengerNombre: string;
+  challengedTeamId: string;
+  challengedNombre: string;
+  status: string;
+  fechaHoraCet: string;
+  formato: "simple" | "wtl";
+  lineupVistoBuenoChallenger: boolean;
+  lineupVistoBuenoChallenged: boolean;
+  intervenidoPorAdmin: boolean;
+}
+
+interface LineupEntryAdmin {
+  id: string;
+  jugadorId: string | null;
+  nombre: string;
+  posicion: number | null;
+}
+
+interface RosterElegibleAdmin {
+  jugadorId: string;
+  nombre: string;
 }
 
 interface DisputaConNombres extends BracketMatchRow {
@@ -86,6 +113,35 @@ export default function AdminPage() {
   const [errorBusquedaEquipo, setErrorBusquedaEquipo] = useState<string | null>(null);
   const [equipoEncontrado, setEquipoEncontrado] = useState<EquipoEncontrado | null>(null);
   const [eliminandoEquipo, setEliminandoEquipo] = useState(false);
+
+  // --- Torneos: buscar por nombre y eliminar cualquiera (migración 062) ---
+  const [busquedaNombreTorneo, setBusquedaNombreTorneo] = useState("");
+  const [buscandoTorneos, setBuscandoTorneos] = useState(false);
+  const [errorBusquedaTorneo, setErrorBusquedaTorneo] = useState<string | null>(null);
+  const [torneosEncontrados, setTorneosEncontrados] = useState<TournamentRow[]>([]);
+  const [eliminandoTorneo, setEliminandoTorneo] = useState<string | null>(null);
+
+  // --- Usuarios: dar de baja cuenta (migración 062) ---
+  const [motivosBaja, setMotivosBaja] = useState<Record<string, string>>({});
+  const [dandoDeBaja, setDandoDeBaja] = useState<string | null>(null);
+  const [erroresBaja, setErroresBaja] = useState<Record<string, string>>({});
+
+  // --- Gestión de Clan War (migración 062): visible para cualquier
+  // admin (RLS extendida), pero solo el dueño de la plataforma puede
+  // intervenir de verdad (armar_lineup_cw/confirmar_lineup_cw exigen
+  // es_dueno_plataforma() cuando se manda p_team_id_como_admin). ---
+  const [clanWarsAdmin, setClanWarsAdmin] = useState<ClanWarAdminRow[]>([]);
+  const [cargandoClanWarsAdmin, setCargandoClanWarsAdmin] = useState(true);
+  const [errorClanWarsAdmin, setErrorClanWarsAdmin] = useState<string | null>(null);
+  const [clanWarSeleccionada, setClanWarSeleccionada] = useState<string | null>(null);
+  const [equipoActuarComo, setEquipoActuarComo] = useState<string | null>(null);
+  const [lineupIntervencion, setLineupIntervencion] = useState<LineupEntryAdmin[]>([]);
+  const [rosterIntervencion, setRosterIntervencion] = useState<RosterElegibleAdmin[]>([]);
+  const [cargandoLineupIntervencion, setCargandoLineupIntervencion] = useState(false);
+  const [jugadorNuevoIntervencion, setJugadorNuevoIntervencion] = useState("");
+  const [posicionNuevoIntervencion, setPosicionNuevoIntervencion] = useState("");
+  const [interviniendo, setInterviniendo] = useState(false);
+  const [errorIntervencion, setErrorIntervencion] = useState<string | null>(null);
 
   // --- Disputas de bracket ---
   const [disputas, setDisputas] = useState<DisputaConNombres[]>([]);
@@ -301,6 +357,49 @@ export default function AdminPage() {
     };
 
     cargarAlianzas();
+
+    const cargarClanWarsAdmin = async () => {
+      // Gracias a la RLS extendida (migración 062), un admin ve
+      // cualquier Clan War, no solo las de equipos propios.
+      const { data, error } = await supabase
+        .from("clan_wars")
+        .select("*")
+        .in("status", ["aceptada", "en_curso"])
+        .order("fecha_hora_cet", { ascending: true });
+
+      if (error) {
+        setErrorClanWarsAdmin(error.message);
+        setCargandoClanWarsAdmin(false);
+        return;
+      }
+
+      const filas = data ?? [];
+      const teamIds = [...new Set(filas.flatMap((r) => [r.challenger_team_id, r.challenged_team_id]))];
+      let nombrePorTeamId: Record<string, string> = {};
+      if (teamIds.length > 0) {
+        const { data: equiposData } = await supabase.from("teams").select("id, name, tag").in("id", teamIds);
+        nombrePorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`]));
+      }
+
+      setClanWarsAdmin(
+        filas.map((r) => ({
+          id: r.id,
+          challengerTeamId: r.challenger_team_id,
+          challengerNombre: nombrePorTeamId[r.challenger_team_id] ?? "Equipo",
+          challengedTeamId: r.challenged_team_id,
+          challengedNombre: nombrePorTeamId[r.challenged_team_id] ?? "Equipo",
+          status: r.status,
+          fechaHoraCet: r.fecha_hora_cet,
+          formato: r.formato,
+          lineupVistoBuenoChallenger: r.lineup_visto_bueno_challenger,
+          lineupVistoBuenoChallenged: r.lineup_visto_bueno_challenged,
+          intervenidoPorAdmin: r.intervenido_por_admin,
+        }))
+      );
+      setCargandoClanWarsAdmin(false);
+    };
+
+    cargarClanWarsAdmin();
   }, [esAdmin]);
 
   // Orden importa: primero la sesión, después el perfil (llega por una
@@ -415,6 +514,40 @@ export default function AdminPage() {
     setUsuarios((data ?? []) as AdminUserRow[]);
   };
 
+  const handleDarDeBaja = async (usuarioId: string, correo: string | null) => {
+    setErroresBaja((prev) => ({ ...prev, [usuarioId]: "" }));
+
+    if (
+      !window.confirm(
+        `¿Confirmas dar de baja la cuenta ${correo ?? "sin correo"}? Se borran sus datos personales, ` +
+          "se le quita de sus equipos, y su correo queda bloqueado para registrarse de nuevo. Esta acción no se puede deshacer."
+      )
+    ) {
+      return;
+    }
+
+    setDandoDeBaja(usuarioId);
+    const { data, error } = await supabase.rpc("admin_dar_de_baja_cuenta", {
+      p_user_id: usuarioId,
+      p_motivo: motivosBaja[usuarioId]?.trim() || null,
+    });
+    setDandoDeBaja(null);
+
+    if (error) {
+      setErroresBaja((prev) => ({ ...prev, [usuarioId]: error.message }));
+      return;
+    }
+
+    window.alert(
+      data
+        ? "Cuenta dada de baja. También se eliminó la cuenta de acceso (auth.users)."
+        : "Cuenta dada de baja y correo bloqueado. La cuenta de acceso (auth.users) no se pudo eliminar -- revísala manualmente desde el dashboard de Supabase si hace falta."
+    );
+
+    const { data: listaActualizada } = await supabase.rpc("admin_listar_usuarios");
+    setUsuarios((listaActualizada ?? []) as AdminUserRow[]);
+  };
+
   const handleBuscarEquipo = async (event: FormEvent) => {
     event.preventDefault();
     setErrorBusquedaEquipo(null);
@@ -472,6 +605,215 @@ export default function AdminPage() {
 
     setEquipoEncontrado(null);
     setBusquedaTagEquipo("");
+  };
+
+  // --- Torneos: buscar por nombre y eliminar cualquiera (migración 062) ---
+  const handleBuscarTorneos = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorBusquedaTorneo(null);
+    setTorneosEncontrados([]);
+
+    const termino = busquedaNombreTorneo.trim();
+    if (!termino) {
+      setErrorBusquedaTorneo("Escribe (al menos parte de) el nombre del torneo.");
+      return;
+    }
+
+    setBuscandoTorneos(true);
+    const { data, error } = await supabase
+      .from("tournaments")
+      .select("*")
+      .ilike("nombre", `%${termino}%`)
+      .order("creado_en", { ascending: false })
+      .limit(20);
+    setBuscandoTorneos(false);
+
+    if (error) {
+      setErrorBusquedaTorneo(error.message);
+      return;
+    }
+    if (!data || data.length === 0) {
+      setErrorBusquedaTorneo("No encontré ningún torneo con ese nombre.");
+      return;
+    }
+
+    setTorneosEncontrados(data);
+  };
+
+  const handleEliminarTorneo = async (torneo: TournamentRow) => {
+    if (
+      !window.confirm(
+        `¿Confirmas que quieres eliminar definitivamente el torneo "${torneo.nombre}" (${torneo.cupos_ocupados} inscritos)? Esta acción no se puede deshacer.`
+      )
+    ) {
+      return;
+    }
+
+    setEliminandoTorneo(torneo.id);
+    // admin_eliminar_torneo() (en la base) es la que de verdad verifica
+    // is_admin() -- a diferencia de eliminar_equipo_definitivo(), no
+    // bloquea el borrado aunque el torneo tenga participantes.
+    const { error } = await supabase.rpc("admin_eliminar_torneo", { p_tournament_id: torneo.id });
+    setEliminandoTorneo(null);
+
+    if (error) {
+      setErrorBusquedaTorneo(error.message);
+      return;
+    }
+
+    setTorneosEncontrados((prev) => prev.filter((t) => t.id !== torneo.id));
+  };
+
+  // --- Gestión de Clan War (migración 062) ---
+  const handleSeleccionarClanWar = (clanWarId: string) => {
+    setClanWarSeleccionada((actual) => (actual === clanWarId ? null : clanWarId));
+    setEquipoActuarComo(null);
+    setLineupIntervencion([]);
+    setRosterIntervencion([]);
+    setErrorIntervencion(null);
+  };
+
+  const handleElegirEquipoActuarComo = async (clanWar: ClanWarAdminRow, teamId: string) => {
+    setEquipoActuarComo(teamId);
+    setErrorIntervencion(null);
+    setCargandoLineupIntervencion(true);
+
+    const [{ data: lineupData }, { data: rosterData }] = await Promise.all([
+      supabase
+        .from("clan_war_lineup")
+        .select("id, jugador_id, jugador_temporal_id, posicion")
+        .eq("clan_war_id", clanWar.id)
+        .eq("team_id", teamId),
+      supabase.rpc("roster_elegible_cw", { p_team_id: teamId, p_temporada_id: null }),
+    ]);
+
+    const jugadorIds = [
+      ...new Set([
+        ...((lineupData ?? []).map((l) => l.jugador_id).filter((id): id is string => id !== null)),
+        ...((rosterData ?? []).map((r: { jugador_id: string }) => r.jugador_id)),
+      ]),
+    ];
+
+    let nombrePorJugadorId: Record<string, string> = {};
+    if (jugadorIds.length > 0) {
+      const { data: perfilesData } = await supabase
+        .from("profiles")
+        .select("id, nick, unique_id")
+        .in("id", jugadorIds);
+      nombrePorJugadorId = Object.fromEntries(
+        (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : "Jugador de RemorApp"])
+      );
+    }
+
+    setLineupIntervencion(
+      (lineupData ?? []).map((l) => ({
+        id: l.id,
+        jugadorId: l.jugador_id,
+        nombre: l.jugador_id ? nombrePorJugadorId[l.jugador_id] ?? "Jugador de RemorApp" : "Jugador temporal",
+        posicion: l.posicion,
+      }))
+    );
+    setRosterIntervencion(
+      ((rosterData ?? []) as { jugador_id: string }[]).map((r) => ({
+        jugadorId: r.jugador_id,
+        nombre: nombrePorJugadorId[r.jugador_id] ?? "Jugador de RemorApp",
+      }))
+    );
+    setCargandoLineupIntervencion(false);
+  };
+
+  const handleAgregarLineupIntervencion = async (clanWar: ClanWarAdminRow) => {
+    if (!equipoActuarComo || !jugadorNuevoIntervencion) return;
+    setErrorIntervencion(null);
+    setInterviniendo(true);
+
+    const { error } = await supabase.rpc("armar_lineup_cw", {
+      p_clan_war_id: clanWar.id,
+      p_accion: "agregar",
+      p_jugador_id: jugadorNuevoIntervencion,
+      p_posicion: clanWar.formato === "wtl" ? Number(posicionNuevoIntervencion) || null : null,
+      p_team_id_como_admin: equipoActuarComo,
+    });
+
+    setInterviniendo(false);
+
+    if (error) {
+      setErrorIntervencion(error.message);
+      return;
+    }
+
+    setJugadorNuevoIntervencion("");
+    setPosicionNuevoIntervencion("");
+    await handleElegirEquipoActuarComo(clanWar, equipoActuarComo);
+    await recargarClanWarAdminPuntual(clanWar.id);
+  };
+
+  const handleQuitarLineupIntervencion = async (clanWar: ClanWarAdminRow, lineupId: string) => {
+    if (!equipoActuarComo) return;
+    setErrorIntervencion(null);
+    setInterviniendo(true);
+
+    const { error } = await supabase.rpc("armar_lineup_cw", {
+      p_clan_war_id: clanWar.id,
+      p_accion: "quitar",
+      p_lineup_id: lineupId,
+      p_team_id_como_admin: equipoActuarComo,
+    });
+
+    setInterviniendo(false);
+
+    if (error) {
+      setErrorIntervencion(error.message);
+      return;
+    }
+
+    await handleElegirEquipoActuarComo(clanWar, equipoActuarComo);
+    await recargarClanWarAdminPuntual(clanWar.id);
+  };
+
+  const handleConfirmarVistoBuenoIntervencion = async (clanWar: ClanWarAdminRow) => {
+    if (!equipoActuarComo) return;
+    setErrorIntervencion(null);
+    setInterviniendo(true);
+
+    const { error } = await supabase.rpc("confirmar_lineup_cw", {
+      p_clan_war_id: clanWar.id,
+      p_team_id_como_admin: equipoActuarComo,
+    });
+
+    setInterviniendo(false);
+
+    if (error) {
+      setErrorIntervencion(error.message);
+      return;
+    }
+
+    await recargarClanWarAdminPuntual(clanWar.id);
+  };
+
+  // Actualiza solo la fila de la Clan War puntual en la lista (visto
+  // bueno + intervenido_por_admin), sin recargar el listado completo.
+  const recargarClanWarAdminPuntual = async (clanWarId: string) => {
+    const { data } = await supabase
+      .from("clan_wars")
+      .select("lineup_visto_bueno_challenger, lineup_visto_bueno_challenged, intervenido_por_admin")
+      .eq("id", clanWarId)
+      .maybeSingle();
+
+    if (!data) return;
+
+    setClanWarsAdmin((prev) =>
+      prev.map((cw) =>
+        cw.id === clanWarId
+          ? {
+              ...cw,
+              lineupVistoBuenoChallenger: data.lineup_visto_bueno_challenger,
+              lineupVistoBuenoChallenged: data.lineup_visto_bueno_challenged,
+              intervenidoPorAdmin: data.intervenido_por_admin,
+            }
+          : cw
+      )
+    );
   };
 
   const handleResolverDisputa = async (matchId: string, ganadorId: string) => {
@@ -540,6 +882,13 @@ export default function AdminPage() {
         </button>
         <button
           type="button"
+          className={`admin-tab ${tab === "clanwars" ? "active" : ""}`}
+          onClick={() => setTab("clanwars")}
+        >
+          Clan Wars
+        </button>
+        <button
+          type="button"
           className={`admin-tab ${tab === "disputas" ? "active" : ""}`}
           onClick={() => setTab("disputas")}
         >
@@ -599,6 +948,53 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+
+          {/* Eliminar cualquier torneo de forma permanente (migración
+              062): a diferencia de la lista de arriba (torneos públicos
+              sin confirmar), esto busca entre TODOS los torneos, tengan
+              o no participantes. */}
+          <h3 className="detail-subtitle">Eliminar un torneo</h3>
+          <form className="auth-form" onSubmit={handleBuscarTorneos}>
+            {errorBusquedaTorneo && <div className="form-error">{errorBusquedaTorneo}</div>}
+            <div className="form-group">
+              <label className="form-label" htmlFor="admin-torneo-nombre">
+                Nombre del torneo
+              </label>
+              <input
+                id="admin-torneo-nombre"
+                className="form-input"
+                type="text"
+                value={busquedaNombreTorneo}
+                onChange={(e) => setBusquedaNombreTorneo(e.target.value)}
+              />
+            </div>
+            <button type="submit" className="btn btn-ghost btn-block" disabled={buscandoTorneos}>
+              {buscandoTorneos ? "Buscando..." : "Buscar"}
+            </button>
+          </form>
+
+          {torneosEncontrados.length > 0 && (
+            <div className="admin-list">
+              {torneosEncontrados.map((t) => (
+                <div key={t.id} className="admin-row">
+                  <div className="admin-row-info">
+                    <p className="admin-row-title">{t.nombre}</p>
+                    <p className="admin-row-meta">
+                      {t.formato} · {t.modo} · {t.cupos_ocupados}/{t.cupos_totales} inscritos · {t.estado}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={eliminandoTorneo === t.id}
+                    onClick={() => handleEliminarTorneo(t)}
+                  >
+                    {eliminandoTorneo === t.id ? "Eliminando..." : "Eliminar definitivamente"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -680,6 +1076,27 @@ export default function AdminPage() {
                   >
                     {usuario.suspendido ? "Reactivar" : "Suspender"}
                   </button>
+
+                  {/* Dar de baja cuenta (migración 062): borra los datos
+                      personales, la saca de sus equipos y bloquea su
+                      correo para que no pueda volver a registrarse --
+                      distinto de "Suspender" (reversible, no borra nada). */}
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="Motivo de la baja (opcional)"
+                    value={motivosBaja[usuario.id] ?? ""}
+                    onChange={(e) => setMotivosBaja((prev) => ({ ...prev, [usuario.id]: e.target.value }))}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={dandoDeBaja === usuario.id}
+                    onClick={() => handleDarDeBaja(usuario.id, usuario.email)}
+                  >
+                    {dandoDeBaja === usuario.id ? "Dando de baja..." : "Dar de baja cuenta"}
+                  </button>
+                  {erroresBaja[usuario.id] && <div className="form-error">{erroresBaja[usuario.id]}</div>}
                 </div>
               </div>
             ))}
@@ -727,6 +1144,158 @@ export default function AdminPage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {tab === "clanwars" && (
+        <div className="admin-panel">
+          <p className="tournament-card-meta">
+            Clan Wars confirmadas o en curso. {esDuenoPlataforma
+              ? "Elige una para entrar a su lineup y actuar en nombre de cualquiera de los dos equipos."
+              : "Solo el dueño de la plataforma puede intervenir un lineup -- acá se puede ver el listado y qué Clan Wars ya fueron intervenidas."}
+          </p>
+          {errorClanWarsAdmin && <div className="form-error">{errorClanWarsAdmin}</div>}
+          {cargandoClanWarsAdmin && <p className="tournament-card-meta">Cargando Clan Wars...</p>}
+          {!cargandoClanWarsAdmin && clanWarsAdmin.length === 0 && (
+            <p className="tournament-card-meta">No hay ninguna Clan War confirmada o en curso.</p>
+          )}
+
+          <div className="admin-list">
+            {clanWarsAdmin.map((cw) => (
+              <div key={cw.id} className="admin-row admin-row-clanwar">
+                <div className="admin-row-info" onClick={() => handleSeleccionarClanWar(cw.id)} style={{ cursor: "pointer" }}>
+                  <p className="admin-row-title">
+                    {cw.challengerNombre} vs {cw.challengedNombre}
+                  </p>
+                  <p className="admin-row-meta">
+                    {cw.status} · {cw.formato === "wtl" ? "WTL" : "Simple"} · {formatFecha(cw.fechaHoraCet)}
+                  </p>
+                  <p className="admin-row-meta">
+                    Visto bueno: {cw.challengerNombre} {cw.lineupVistoBuenoChallenger ? "✓" : "✗"} ·{" "}
+                    {cw.challengedNombre} {cw.lineupVistoBuenoChallenged ? "✓" : "✗"}
+                  </p>
+                  {cw.intervenidoPorAdmin && (
+                    <p className="clan-war-intervenido-aviso">Intervenido por administración de la plataforma</p>
+                  )}
+                </div>
+
+                {esDuenoPlataforma && clanWarSeleccionada === cw.id && (
+                  <div className="admin-row-info">
+                    {errorIntervencion && <div className="form-error">{errorIntervencion}</div>}
+
+                    <div className="pill-radio-group">
+                      <label className={`pill-radio-option ${equipoActuarComo === cw.challengerTeamId ? "selected" : ""}`}>
+                        <input
+                          type="radio"
+                          className="sr-only"
+                          name={`actuar-como-${cw.id}`}
+                          checked={equipoActuarComo === cw.challengerTeamId}
+                          onChange={() => handleElegirEquipoActuarComo(cw, cw.challengerTeamId)}
+                        />
+                        Actuar como {cw.challengerNombre}
+                      </label>
+                      <label className={`pill-radio-option ${equipoActuarComo === cw.challengedTeamId ? "selected" : ""}`}>
+                        <input
+                          type="radio"
+                          className="sr-only"
+                          name={`actuar-como-${cw.id}`}
+                          checked={equipoActuarComo === cw.challengedTeamId}
+                          onChange={() => handleElegirEquipoActuarComo(cw, cw.challengedTeamId)}
+                        />
+                        Actuar como {cw.challengedNombre}
+                      </label>
+                    </div>
+
+                    {equipoActuarComo && (
+                      <>
+                        {cargandoLineupIntervencion ? (
+                          <p className="tournament-card-meta">Cargando lineup...</p>
+                        ) : (
+                          <>
+                            {lineupIntervencion.length === 0 ? (
+                              <p className="detail-empty">Todavía no hay jugadores en el lineup de este equipo.</p>
+                            ) : (
+                              <div className="detail-participant-list">
+                                {lineupIntervencion.map((entry) => (
+                                  <div key={entry.id} className="detail-participant-item">
+                                    {entry.nombre}
+                                    {entry.posicion && ` (posición ${entry.posicion})`}
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      disabled={interviniendo}
+                                      onClick={() => handleQuitarLineupIntervencion(cw, entry.id)}
+                                    >
+                                      Quitar
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            <div className="form-group">
+                              <label className="form-label" htmlFor={`admin-lineup-jugador-${cw.id}`}>
+                                Agregar jugador
+                              </label>
+                              <select
+                                id={`admin-lineup-jugador-${cw.id}`}
+                                className="form-select"
+                                value={jugadorNuevoIntervencion}
+                                onChange={(e) => setJugadorNuevoIntervencion(e.target.value)}
+                              >
+                                <option value="">Selecciona un jugador</option>
+                                {rosterIntervencion.map((r) => (
+                                  <option key={r.jugadorId} value={r.jugadorId}>
+                                    {r.nombre}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {cw.formato === "wtl" && (
+                              <div className="form-group">
+                                <label className="form-label" htmlFor={`admin-lineup-posicion-${cw.id}`}>
+                                  Posición (1, 2 o 3)
+                                </label>
+                                <select
+                                  id={`admin-lineup-posicion-${cw.id}`}
+                                  className="form-select"
+                                  value={posicionNuevoIntervencion}
+                                  onChange={(e) => setPosicionNuevoIntervencion(e.target.value)}
+                                >
+                                  <option value="">Selecciona la posición</option>
+                                  <option value="1">Posición 1</option>
+                                  <option value="2">Posición 2</option>
+                                  <option value="3">Posición 3</option>
+                                </select>
+                              </div>
+                            )}
+                            <div className="admin-row-actions">
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                disabled={interviniendo || !jugadorNuevoIntervencion}
+                                onClick={() => handleAgregarLineupIntervencion(cw)}
+                              >
+                                Agregar al lineup
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-primary"
+                                disabled={interviniendo}
+                                onClick={() => handleConfirmarVistoBuenoIntervencion(cw)}
+                              >
+                                Confirmar visto bueno
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

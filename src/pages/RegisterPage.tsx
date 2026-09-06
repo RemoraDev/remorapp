@@ -37,6 +37,19 @@ export default function RegisterPage() {
     setLoading(true);
     setError(null);
 
+    // Migración 062: lista negra de correos -- se revisa ANTES de
+    // intentar el registro, para mostrar el mensaje genérico sin
+    // depender del error que devolvería Supabase Auth. La barrera
+    // real (a nivel de base) vive en el trigger handle_new_user(), que
+    // rechaza el alta igual aunque este chequeo del cliente se salte
+    // de alguna forma.
+    const { data: bloqueado } = await supabase.rpc("correo_esta_bloqueado", { p_correo: email });
+    if (bloqueado) {
+      setLoading(false);
+      setError("Este correo no puede registrarse.");
+      return;
+    }
+
     const result = await supabase.auth.signUp({
       email,
       password,

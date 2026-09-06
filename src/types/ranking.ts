@@ -21,3 +21,19 @@ export interface RankingClan {
   logo_url: string | null;
   torneos_ganados: number;
 }
+
+// Fila devuelta por ranking_jugadores() (migración 063): un jugador
+// por fila, ya ordenada por victorias totales desc, nick asc. team_*
+// vienen en null si el jugador no pertenece a ningún equipo.
+export interface RankingJugador {
+  jugador_id: string;
+  nick: string | null;
+  unique_id: string;
+  liga: string | null;
+  raza_principal: string | null;
+  team_id: string | null;
+  team_name: string | null;
+  team_tag: string | null;
+  team_logo_url: string | null;
+  victorias: number;
+}

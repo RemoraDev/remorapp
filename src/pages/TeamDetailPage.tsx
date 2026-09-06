@@ -130,6 +130,11 @@ interface ClanWarConNombres {
   // Fondo de la sala de lineup (migración 051): catálogo propio,
   // distinto del fondo de bracket de torneos.
   fondoLineup: FondoLineup;
+  // Migración 062: true cuando el dueño de la plataforma intervino el
+  // lineup de este reto (armó o confirmó en nombre de alguno de los
+  // dos equipos) -- la marca se muestra abajo, gateada a esAdmin o a
+  // ser dueño/capitán de alguno de los dos equipos.
+  intervenidoPorAdmin: boolean;
 }
 
 interface MiembroRoster {
@@ -276,7 +281,8 @@ type SeccionPanel =
   | "logros"
   | "reportar"
   | "temporada"
-  | "ranking";
+  | "ranking"
+  | "estadisticas";
 
 // Migración 047: una temporada es "la actual" cuando hoy cae dentro
 // de su fecha_inicio/fecha_fin -- sin esto, "de la temporada actual"
@@ -333,7 +339,7 @@ function extraerPerfil(profiles: unknown): {
 export default function TeamDetailPage() {
   const { tag } = useParams<{ tag: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [equipo, setEquipo] = useState<TeamRow | null>(null);
   const [miembros, setMiembros] = useState<MiembroConNombre[]>([]);
   const [loading, setLoading] = useState(true);
@@ -366,6 +372,12 @@ export default function TeamDetailPage() {
   // seccionPanel === null muestra el menú, no una sección puntual.
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [seccionPanel, setSeccionPanel] = useState<SeccionPanel | null>(null);
+
+  // Reorganización: 3 accesos públicos (Lista de Jugadores/Líderes de
+  // clan/Logros), independientes del Panel de control de arriba (ese
+  // es de gestión, exclusivo de dueño/capitán -- esto es solo
+  // organización de información pública, visible para cualquiera).
+  const [seccionPublica, setSeccionPublica] = useState<"jugadores" | "lideres" | "logros" | null>(null);
 
   // Acceso rápido desde "Check-in" en el abanico: ?panel=eventos abre
   // el Panel de control directo en Gestor de eventos, para no tener
@@ -868,6 +880,7 @@ export default function TeamDetailPage() {
         reprogramacionesUsadas: r.reprogramaciones_usadas,
         temporadaId: r.temporada_id,
         fondoLineup: r.fondo_lineup,
+        intervenidoPorAdmin: r.intervenido_por_admin,
       }));
 
       setRetosPendientesResponder(
@@ -2666,6 +2679,26 @@ export default function TeamDetailPage() {
     </div>
   );
 
+  // Reorganización, punto 5: "Lista de Jugadores" (vista pública) solo
+  // muestra Nick#ID, liga y raza principal -- sin Valentía,
+  // Responsabilidad, "Poco Responsable" ni insignias de rol/controles
+  // de gestión, que quedan reservados al perfil de cada jugador, a
+  // Estadísticas, o a "Líderes de clan"/Editar equipo respectivamente.
+  const renderMiembroSimple = (m: MiembroConNombre) => (
+    <div key={m.userId} className="detail-participant-item">
+      <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
+      {m.nick ?? "Jugador de RemorApp"}
+      {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+      <LigaBadge liga={m.ligaEquipos} mmr={m.mmrEquipos} bancaRota={m.bancaRota} />
+      {m.razaPrincipal && (
+        <span className="liga-badge">
+          {m.razaPrincipal}
+          {m.razaSecundaria && ` / ${m.razaSecundaria}`}
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <section className="section section-page" data-tema-equipo={equipo.tema_equipo}>
       <div className="team-detail-banner-wrap">
@@ -2713,12 +2746,6 @@ export default function TeamDetailPage() {
       <h2 className="detail-subtitle">Estadísticas</h2>
       <MmrProgressBar mmr={equipo.mmr} liga={equipo.liga} bancaRota={equipo.banca_rota} />
 
-      <div className="stats-card-group">
-        <PercentBar label="Valentía del clan" value={equipo.valentia} vertical />
-      </div>
-
-      <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
-
       {/* El código de invitación queda a mano en la página principal,
           fuera del Panel de control -- no hace falta abrir ningún
           submenú para encontrarlo. Lo ve el dueño o un capitán
@@ -2751,29 +2778,76 @@ export default function TeamDetailPage() {
         ))}
       </div>
 
-      <h2 className="detail-subtitle">Miembros</h2>
-      <div className="detail-participant-list">
-        {miembros.map((m) => renderMiembro(m, false))}
-        {jugadoresTemporales.map((t) =>
-          t.reemplazadoPorId ? (
-            <div key={t.id} className="detail-participant-item">
-              <Avatar
-                url={t.reemplazadoPorAvatarUrl}
-                nombre={t.reemplazadoPorNick}
-                className="detail-participant-avatar"
-                forma={t.reemplazadoPorAvatarForma}
-              />
-              {t.reemplazadoPorNick ?? "Jugador de RemorApp"}
-              {t.reemplazadoPorUniqueId && <span className="profile-nick-id">#{t.reemplazadoPorUniqueId}</span>}
-            </div>
-          ) : (
-            <div key={t.id} className="detail-participant-item">
-              {t.nickTemporal}
-              <span className="team-temp-badge">Temporal</span>
-            </div>
-          )
-        )}
-      </div>
+      {/* Reorganización: la información pública que antes iba toda
+          junta (roster completo con estadísticas, líderes mezclados
+          adentro, títulos aparte) ahora se agrupa en 3 accesos, mismo
+          patrón visual que el Panel de control (team-panel-menu). */}
+      {seccionPublica === null ? (
+        <div className="team-panel-menu">
+          <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("jugadores")}>
+            <span className="team-panel-menu-item-title">Lista de Jugadores</span>
+            <span className="team-panel-menu-item-desc">Nick#ID, liga y raza de cada miembro</span>
+          </button>
+          <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("lideres")}>
+            <span className="team-panel-menu-item-title">Líderes de clan</span>
+            <span className="team-panel-menu-item-desc">Dueño y capitanes</span>
+          </button>
+          <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("logros")}>
+            <span className="team-panel-menu-item-title">Logros</span>
+            <span className="team-panel-menu-item-desc">Títulos Padre/Hijo del equipo</span>
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="team-panel-back" onClick={() => setSeccionPublica(null)}>
+          ← Volver
+        </button>
+      )}
+
+      {seccionPublica === "jugadores" && (
+        <div className="detail-participant-list">
+          {miembros.map((m) => renderMiembroSimple(m))}
+          {jugadoresTemporales.map((t) =>
+            t.reemplazadoPorId ? (
+              <div key={t.id} className="detail-participant-item">
+                <Avatar
+                  url={t.reemplazadoPorAvatarUrl}
+                  nombre={t.reemplazadoPorNick}
+                  className="detail-participant-avatar"
+                  forma={t.reemplazadoPorAvatarForma}
+                />
+                {t.reemplazadoPorNick ?? "Jugador de RemorApp"}
+                {t.reemplazadoPorUniqueId && <span className="profile-nick-id">#{t.reemplazadoPorUniqueId}</span>}
+              </div>
+            ) : (
+              <div key={t.id} className="detail-participant-item">
+                {t.nickTemporal}
+                <span className="team-temp-badge">Temporal</span>
+              </div>
+            )
+          )}
+        </div>
+      )}
+
+      {seccionPublica === "lideres" && (
+        <div className="detail-participant-list">
+          {miembros
+            .filter((m) => m.roles.includes("owner") || m.esCapitan)
+            .map((m) => (
+              <div key={m.userId} className="detail-participant-item">
+                <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
+                {m.nick ?? "Jugador de RemorApp"}
+                {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+                {m.roles.includes("owner") ? (
+                  <span className="team-owner-badge">Dueño</span>
+                ) : (
+                  <span className="team-owner-badge team-captain-badge">Capitán</span>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
+
+      {seccionPublica === "logros" && <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />}
 
       {/* Migración 047: mercenarios y alianzas de la temporada actual,
           claramente separados de los miembros normales de arriba --
@@ -2859,6 +2933,17 @@ export default function TeamDetailPage() {
                       </span>
                     </button>
                   )}
+                  {/* Reorganización: Valentía del clan se sacó de la
+                      vista pública -- mismo criterio que Estadísticas
+                      en el Panel de control del jugador (Mi perfil). */}
+                  <button
+                    type="button"
+                    className="team-panel-menu-item"
+                    onClick={() => setSeccionPanel("estadisticas")}
+                  >
+                    <span className="team-panel-menu-item-title">Estadísticas</span>
+                    <span className="team-panel-menu-item-desc">Valentía del clan</span>
+                  </button>
                   <button
                     type="button"
                     className="team-panel-menu-item"
@@ -2928,6 +3013,15 @@ export default function TeamDetailPage() {
                       ← Volver al panel
                     </button>
                   </div>
+
+              {/* Estadísticas (reorganización): Valentía del clan, sacada
+                  de la vista pública -- mismo espíritu que Estadísticas
+                  en el Panel de control del jugador. */}
+              {seccionPanel === "estadisticas" && (
+                <div className="stats-card-group">
+                  <PercentBar label="Valentía del clan" value={equipo.valentia} vertical />
+                </div>
+              )}
 
               {/* El dueño no puede simplemente "salir": si hay más
                   miembros, primero tiene que transferir el liderazgo.
@@ -3573,6 +3667,16 @@ export default function TeamDetailPage() {
                             el armado del lineup como el check-in posterior, para que
                             la decoración se mantenga durante toda esa etapa del reto. */}
                         <div className="clan-war-lineup-room" data-fondo-lineup={r.fondoLineup}>
+                        {/* Migración 062: visible para es_admin y para
+                            dueño/capitán de cualquiera de los dos equipos
+                            (que es exactamente quien puede ver esta fila,
+                            ya que la RLS de clan_wars ya lo exige) --
+                            invisible para el resto de los jugadores. */}
+                        {r.intervenidoPorAdmin && (esDueño || esCapitan || profile?.es_admin) && (
+                          <p className="form-error clan-war-intervenido-aviso">
+                            Intervenido por administración de la plataforma
+                          </p>
+                        )}
                         {!lineupAprobado ? (
                           <>
                             <h5 className="detail-subtitle">Lineup: tu equipo</h5>
