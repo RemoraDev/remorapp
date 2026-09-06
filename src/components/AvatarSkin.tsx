@@ -7,6 +7,11 @@ interface AvatarSkinProps {
   // null/undefined = sin skin, se muestra el avatar normal sin nada
   // envolviéndolo (mismo elemento que si AvatarSkin no existiera).
   clave: SkinAvatarClave | null | undefined;
+  // Borde básico (migración 055), independiente de las skins de
+  // efectos -- si clave está seteada, gana la skin de efectos y estos
+  // dos props se ignoran del todo (ver el early-return de abajo).
+  bordeColor?: string | null;
+  bordeGrosor?: number | null;
   forma?: AvatarForma;
   children: ReactNode;
 }
@@ -164,13 +169,37 @@ function FiltroElectrico({ id, config }: { id: string; config: ConfigElectrico }
   );
 }
 
-export default function AvatarSkin({ clave, forma = "redondo", children }: AvatarSkinProps) {
+export default function AvatarSkin({
+  clave,
+  bordeColor,
+  bordeGrosor,
+  forma = "redondo",
+  children,
+}: AvatarSkinProps) {
   const idBase = useId().replace(/:/g, "");
   const claseForma = forma === "cuadrado" ? "avatar-shape-cuadrado" : "avatar-shape-redondo";
   const config = clave ? CONFIG_ELECTRICO[clave] : undefined;
 
-  if (!clave || !config) {
+  // Sin skin de efectos ni borde básico: el avatar se muestra tal
+  // cual, sin ningún envoltorio.
+  if ((!clave || !config) && !bordeColor) {
     return <>{children}</>;
+  }
+
+  // Regla dura (pedida explícitamente): si hay una skin de efectos
+  // activa, esa tiene prioridad visual -- el borde básico ni se
+  // renderiza, nunca se mezclan los dos a la vez.
+  if (!clave || !config) {
+    return (
+      <span className="avatar-skin" data-borde-basico="">
+        <span className="avatar-skin-inner">{children}</span>
+        <span
+          className={`avatar-skin-borde-basico ${claseForma}`}
+          style={{ borderColor: bordeColor ?? undefined, borderWidth: `${bordeGrosor ?? 3}px` }}
+          aria-hidden="true"
+        />
+      </span>
+    );
   }
 
   return (

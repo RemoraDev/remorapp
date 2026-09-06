@@ -7,7 +7,7 @@ import AvatarSkin from "../components/AvatarSkin";
 import MmrProgressBar from "../components/MmrProgressBar";
 import PercentBar from "../components/PercentBar";
 import { COUNTRY_OPTIONS } from "../types/profile";
-import type { AvatarForma, Country, LinkTransmision } from "../types/profile";
+import type { Country, LinkTransmision } from "../types/profile";
 import type { SkinAvatarClave } from "../types/skins";
 import type { TituloActivoTodos } from "../types/titulos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
@@ -18,7 +18,6 @@ interface PerfilPublico {
   nick: string;
   uniqueId: string;
   avatarUrl: string | null;
-  avatarForma: AvatarForma;
   bannerUrl: string | null;
   bio: string | null;
   country: Country | null;
@@ -42,6 +41,11 @@ interface PerfilPublico {
   // para cualquier otro visitante el efecto simplemente no aparece
   // todavía, aunque el perfil que mira sea el del dueño.
   skinAvatarActiva: string | null;
+  // Borde básico (migración 055): público para cualquier cuenta, a
+  // diferencia de skinAvatarActiva -- se resuelve siempre, sin
+  // importar quién esté mirando.
+  bordeBasicoActivo: string | null;
+  bordeGrosor: number;
 }
 
 interface EquipoActual {
@@ -75,6 +79,7 @@ export default function PlayerDetailPage() {
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
   const [skinAvatarClave, setSkinAvatarClave] = useState<SkinAvatarClave | null>(null);
+  const [bordeBasicoColorHex, setBordeBasicoColorHex] = useState<string | null>(null);
   const [tituloTexto, setTituloTexto] = useState<string | null>(null);
   const [equipoActual, setEquipoActual] = useState<EquipoActual | null>(null);
   const [loading, setLoading] = useState(true);
@@ -96,7 +101,7 @@ export default function PlayerDetailPage() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, nick, unique_id, avatar_url, avatar_forma, banner_url, bio, country, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, skin_avatar_activa"
+          "id, nick, unique_id, avatar_url, banner_url, bio, country, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, skin_avatar_activa, borde_basico_activo, borde_grosor"
         )
         .eq("nick", nick)
         .eq("unique_id", uniqueId)
@@ -113,7 +118,6 @@ export default function PlayerDetailPage() {
         nick: data.nick ?? nick,
         uniqueId: data.unique_id,
         avatarUrl: data.avatar_url,
-        avatarForma: data.avatar_forma,
         bannerUrl: data.banner_url,
         bio: data.bio,
         country: data.country,
@@ -131,6 +135,8 @@ export default function PlayerDetailPage() {
         razaPrincipal: null,
         razaSecundaria: null,
         skinAvatarActiva: data.skin_avatar_activa,
+        bordeBasicoActivo: data.borde_basico_activo,
+        bordeGrosor: data.borde_grosor,
       };
 
       // Perfil de juego de StarCraft II (migración 034): opcional, así
@@ -160,6 +166,17 @@ export default function PlayerDetailPage() {
         setSkinAvatarClave((skinData?.clave as SkinAvatarClave | undefined) ?? null);
       } else {
         setSkinAvatarClave(null);
+      }
+
+      if (perfilCargado.bordeBasicoActivo) {
+        const { data: bordeData } = await supabase
+          .from("catalogo_bordes_basicos")
+          .select("color_hex")
+          .eq("id", perfilCargado.bordeBasicoActivo)
+          .maybeSingle();
+        setBordeBasicoColorHex(bordeData?.color_hex ?? null);
+      } else {
+        setBordeBasicoColorHex(null);
       }
 
       // Título Padre/Hijo activo (si tiene) -- mismo RPC público que
@@ -220,7 +237,11 @@ export default function PlayerDetailPage() {
     );
   }
 
-  const claseForma = perfil.avatarForma === "cuadrado" ? "avatar-shape-cuadrado" : "avatar-shape-redondo";
+  // La forma ya no es elegible por el usuario: el avatar de la
+  // vitrina pública es SIEMPRE cuadrado (el del header es siempre
+  // redondo, ver Header.tsx) -- avatar_forma queda en la base sin
+  // usarse acá.
+  const claseForma = "avatar-shape-cuadrado";
 
   const handleDarLike = async () => {
     if (!perfil) return;
@@ -252,12 +273,17 @@ export default function PlayerDetailPage() {
           <div className="player-detail-banner player-detail-banner-placeholder" />
         )}
         <div className={`player-detail-avatar-overlap ${claseForma}`}>
-          <AvatarSkin clave={skinAvatarClave} forma={perfil.avatarForma}>
+          <AvatarSkin
+            clave={skinAvatarClave}
+            bordeColor={bordeBasicoColorHex}
+            bordeGrosor={perfil.bordeGrosor}
+            forma="cuadrado"
+          >
             <Avatar
               url={perfil.avatarUrl}
               nombre={perfil.nick}
               className="player-detail-avatar"
-              forma={perfil.avatarForma}
+              forma="cuadrado"
             />
           </AvatarSkin>
           <span className="nivel-badge nivel-badge-corner">Nv. {perfil.nivel}</span>

@@ -3,11 +3,11 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
-import AvatarSkin from "./AvatarSkin";
 import { useAuth } from "../context/AuthContext";
+import { BORDE_HEADER_OPTIONS } from "../types/profile";
 
 export default function Header() {
-  const { user, profile, skinAvatarClave, invitacionesPendientes, signOut } = useAuth();
+  const { user, profile, invitacionesPendientes, signOut } = useAuth();
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   const cerrarMenu = () => setMenuAbierto(false);
@@ -36,14 +36,25 @@ export default function Header() {
                 aria-expanded={menuAbierto}
                 onClick={() => setMenuAbierto((abierto) => !abierto)}
               >
-                <AvatarSkin clave={skinAvatarClave} forma={profile?.avatar_forma}>
+                {/* Borde del header (migración 056): sistema propio,
+                    independiente de los "Bordes de Avatar" de Mi
+                    perfil -- 4 colores lisos fijos, sin grosor
+                    editable, sin efectos. La forma acá es SIEMPRE
+                    redonda, ya no elegible (antes era avatar_forma). */}
+                <span
+                  className="header-avatar-borde"
+                  style={{
+                    borderColor: BORDE_HEADER_OPTIONS.find((o) => o.value === (profile?.borde_header ?? "negro"))
+                      ?.colorHex,
+                  }}
+                >
                   <Avatar
                     url={profile?.avatar_url}
                     nombre={profile?.nick ?? profile?.nombre}
                     className="header-avatar"
-                    forma={profile?.avatar_forma}
+                    forma="redondo"
                   />
-                </AvatarSkin>
+                </span>
                 {invitacionesPendientes > 0 && (
                   <span className="header-invite-badge">{invitacionesPendientes}</span>
                 )}
@@ -61,16 +72,12 @@ export default function Header() {
                 document.body
               )}
 
-              {/* Solo estas 3 opciones + Cerrar sesión -- el Nick#ID y la
-                  insignia de liga/MMR/nivel que antes iban acá ahora
-                  viven en "Mi perfil" (el perfil público), no hace
-                  falta repetirlos en el menú. */}
+              {/* Un solo acceso a Mi perfil: la reorganización dejó
+                  todo (editar datos, transmisión, apariencia, juegos,
+                  idioma) adentro de un único botón "Configuración" --
+                  ya no hace falta un segundo link separado acá. */}
               <div className={`header-user-menu ${menuAbierto ? "is-open" : ""}`} aria-hidden={!menuAbierto}>
-                <Link to="/perfil" className="header-user-menu-item" onClick={cerrarMenu}>
-                  Editar mis datos
-                </Link>
-
-                <Link to="/perfil?tab=apariencia" className="header-user-menu-item" onClick={cerrarMenu}>
+                <Link to="/perfil?tab=configuracion" className="header-user-menu-item" onClick={cerrarMenu}>
                   Configuración
                 </Link>
 

@@ -18,6 +18,11 @@ interface AuthContextValue {
   // esto queda en null aunque nunca debería tener skin_avatar_activa
   // asignada de todos modos).
   skinAvatarClave: SkinAvatarClave | null;
+  // Color del borde básico activo (migración 055), ya resuelto contra
+  // el catálogo -- null si no tiene ninguno. A diferencia del
+  // catálogo de skins, este es público: se resuelve igual para
+  // cualquier cuenta.
+  bordeBasicoColorHex: string | null;
   loading: boolean;
   // Invitaciones de equipo pendientes para el usuario logueado -- el
   // contador que se ve en el header. Se recarga junto con el perfil.
@@ -35,6 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [skinAvatarClave, setSkinAvatarClave] = useState<SkinAvatarClave | null>(null);
+  const [bordeBasicoColorHex, setBordeBasicoColorHex] = useState<string | null>(null);
   const [invitacionesPendientes, setInvitacionesPendientes] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -52,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, gran_maestro_alcanzado_en, avatar_url, avatar_forma, banner_url, bio, links_transmision, horario_stream, carisma, cuenta_validada, suspendido, skin_avatar_activa"
+        "id, nombre, perfil_tipo, es_caster, es_admin, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, gran_maestro_alcanzado_en, avatar_url, avatar_forma, banner_url, bio, links_transmision, horario_stream, carisma, cuenta_validada, suspendido, skin_avatar_activa, borde_basico_activo, borde_grosor, borde_header"
       )
       .eq("id", userId)
       .single();
@@ -61,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Error cargando perfil:", error);
       setProfile(null);
       setSkinAvatarClave(null);
+      setBordeBasicoColorHex(null);
       return;
     }
 
@@ -75,6 +82,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSkinAvatarClave((skinData?.clave as SkinAvatarClave | undefined) ?? null);
     } else {
       setSkinAvatarClave(null);
+    }
+
+    if (data.borde_basico_activo) {
+      const { data: bordeData } = await supabase
+        .from("catalogo_bordes_basicos")
+        .select("color_hex")
+        .eq("id", data.borde_basico_activo)
+        .maybeSingle();
+      setBordeBasicoColorHex(bordeData?.color_hex ?? null);
+    } else {
+      setBordeBasicoColorHex(null);
     }
 
     const { count } = await supabase
@@ -102,6 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setProfile(null);
         setSkinAvatarClave(null);
+        setBordeBasicoColorHex(null);
         setInvitacionesPendientes(0);
       }
     });
@@ -126,6 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user: session?.user ?? null,
         profile,
         skinAvatarClave,
+        bordeBasicoColorHex,
         loading,
         invitacionesPendientes,
         signOut,

@@ -172,7 +172,29 @@ export interface Profile {
   // (nombre/descripcion/clave) es privado, exclusivo del dueño de la
   // plataforma por ahora.
   skin_avatar_activa: string | null;
+  // Borde básico de avatar (migración 055): id de
+  // catalogo_bordes_basicos, público y gratuito para cualquier cuenta
+  // -- a diferencia de skin_avatar_activa. Si las dos están
+  // configuradas a la vez, skin_avatar_activa gana (ver AvatarSkin.tsx).
+  // Se aplica solo en la vitrina pública, nunca en el header (ver
+  // borde_header más abajo -- son dos sistemas independientes).
+  borde_basico_activo: string | null;
+  borde_grosor: number;
+  // Borde del header (migración 056): sistema aparte y mucho más
+  // simple que borde_basico_activo/skin_avatar_activa -- 4 colores
+  // lisos fijos, sin grosor editable, sin efectos. Exclusivo del
+  // avatar del header.
+  borde_header: BordeHeader;
 }
+
+export type BordeHeader = "negro" | "cyan" | "amarillo" | "verde";
+
+export const BORDE_HEADER_OPTIONS: { value: BordeHeader; label: string; colorHex: string }[] = [
+  { value: "negro", label: "Negro", colorHex: "#000000" },
+  { value: "cyan", label: "Cyan", colorHex: "#22d3ee" },
+  { value: "amarillo", label: "Amarillo", colorHex: "#eab308" },
+  { value: "verde", label: "Verde", colorHex: "#22c55e" },
+];
 
 // Los 4 campos que exige el gate de /perfil. Se usa tanto para
 // mostrar el aviso bloqueante como para decidir si conviene mostrar

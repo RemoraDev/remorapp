@@ -279,6 +279,16 @@ input[type="radio"] {
   flex-shrink: 0;
 }
 
+/* Borde del header (migración 056): color liso fijo, sin grosor
+   editable -- sistema aparte de los "Bordes de Avatar" de Mi perfil. */
+.header-avatar-borde {
+  position: relative;
+  display: inline-flex;
+  border-radius: 50%;
+  border: 2px solid;
+  flex-shrink: 0;
+}
+
 /* Contador de invitaciones de equipo pendientes: flota sobre la
    esquina del avatar -- antes iba en línea junto al nombre, que ya no
    se muestra en el header colapsado. */
@@ -960,6 +970,21 @@ input[type="radio"] {
 @keyframes skin-electrico-pulso {
   0%, 100% { opacity: 0.85; }
   50% { opacity: 1; }
+}
+
+/* Borde básico de avatar (migración 055): color liso, sin filtro ni
+   animación -- el nivel gratuito de personalización, disponible para
+   cualquier cuenta. Se pinta con inset:0 igual que el resto de los
+   anillos, pero sin overflow:hidden ni feDisplacementMap -- acá no
+   hace falta, es un borde estático que nunca se sale de su propia
+   caja. */
+.avatar-skin-borde-basico {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-style: solid;
+  background: transparent;
+  pointer-events: none;
 }
 
 /* ---------- Panel de administración ---------- */
@@ -2944,6 +2969,43 @@ input[type="radio"] {
 
 .avatar-forma-option.selected .avatar-forma-preview {
   opacity: 1;
+}
+
+/* ---------- Borde básico de avatar (migración 055) ---------- */
+
+.borde-basico-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.85rem 0;
+}
+
+.borde-basico-swatch {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.borde-basico-swatch.selected {
+  border-color: var(--color-text);
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.borde-basico-swatch-vacio {
+  background: repeating-conic-gradient(var(--color-border) 0% 25%, transparent 0% 50%) 0 0 / 60% 60%;
+}
+
+.borde-basico-swatch-nombre {
+  font-size: 0.55rem;
+  color: var(--color-text-muted);
+}
+
+.form-range {
+  width: 100%;
+  accent-color: var(--color-accent);
 }
 
 /* ---------- Skins exclusivas de avatar (migración 052) ---------- */

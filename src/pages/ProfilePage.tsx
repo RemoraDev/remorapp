@@ -7,12 +7,14 @@ import { useTheme } from "../context/ThemeContext";
 import { validarNick } from "../lib/nickValidation";
 import { recortarImagenConProporcion, recortarImagenCuadrada } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
-import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
-import type { AvatarForma, Country, Liga, LinkTransmision, Sc2Region, Profile } from "../types/profile";
+import { BORDE_HEADER_OPTIONS, COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
+import type { BordeHeader, Country, Liga, LinkTransmision, Sc2Region, Profile } from "../types/profile";
 import { RAZA_SC2_OPTIONS } from "../types/juegos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import type { SkinAvatar } from "../types/skins";
+import { BORDE_GROSOR_MAX, BORDE_GROSOR_MIN } from "../types/bordes";
+import type { BordeBasico } from "../types/bordes";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import TitulosActivosList from "../components/TitulosActivosList";
@@ -111,29 +113,43 @@ function calcularProgresoPerfil(profile: Profile | null) {
 // cuadritos del Panel de control, sin ningún formulario desparramado
 // -- recién al elegir uno se abre su contenido, reemplazando el menú
 // (no al lado).
-type SeccionPerfil = "datos" | "juego" | "logros" | "historial" | "configuracion";
-const SECCIONES_VALIDAS: SeccionPerfil[] = ["datos", "juego", "logros", "historial", "configuracion"];
+// Reorganización posterior: "Editar datos", "Editar datos de juego" y
+// "Configuración" se consolidaron en un solo botón de primer nivel
+// ("Configuración"), que ahora contiene los 6 accesos de la
+// estructura pedida. Logros y Recompensas / Historial de eventos
+// siguen siendo botones de primer nivel aparte -- no se mencionaron en
+// ese pedido, así que no se tocaron.
+type SeccionPerfil = "configuracion" | "logros" | "historial";
+const SECCIONES_VALIDAS: SeccionPerfil[] = ["configuracion", "logros", "historial"];
 
 type SubseccionPerfil =
-  | "personales"
+  | "datos"
   | "transmision"
+  | "apariencia-perfil"
+  | "juegos"
+  | "idioma"
+  | "apariencia"
   | "titulos"
   | "recompensas"
   | "clan-wars"
   | "torneos"
-  | "tema"
-  | "apariencia"
-  | "idioma"
   | null;
 
-type SubsubseccionPerfil = "titulos-adquiridos" | "forma-avatar" | "avatares-adquiridos" | null;
+type SubsubseccionPerfil =
+  | "titulos-adquiridos"
+  | "subir-avatar"
+  | "subir-banner"
+  | "bordes-avatar"
+  | "borde-header"
+  | "sc2"
+  | null;
 
 function resolverSeccion(valor: string | null): SeccionPerfil | null {
   return SECCIONES_VALIDAS.includes(valor as SeccionPerfil) ? (valor as SeccionPerfil) : null;
 }
 
 export default function ProfilePage() {
-  const { user, profile, skinAvatarClave, loading, refreshProfile } = useAuth();
+  const { user, profile, skinAvatarClave, bordeBasicoColorHex, loading, refreshProfile } = useAuth();
   const { tema, setTema } = useTheme();
   const location = useLocation();
   // El Panel de control de /jugador/:nick/:uniqueId (vitrina propia)
@@ -225,11 +241,6 @@ export default function ProfilePage() {
   const [guardandoCaster, setGuardandoCaster] = useState(false);
   const [errorCaster, setErrorCaster] = useState<string | null>(null);
 
-  // --- Forma de avatar (pestaña Apariencia, migración 031): igual que
-  // "Soy caster", se guarda solo al elegir una opción. ---
-  const [guardandoForma, setGuardandoForma] = useState(false);
-  const [errorForma, setErrorForma] = useState<string | null>(null);
-
   // --- Skins de avatar (migración 052): catalogo_skins_avatar solo es
   // legible vía RLS cuando es_dueno_plataforma() es verdadero -- si la
   // consulta vuelve vacía, esta sección no se muestra, sin necesidad
@@ -237,6 +248,22 @@ export default function ProfilePage() {
   const [catalogoSkins, setCatalogoSkins] = useState<SkinAvatar[]>([]);
   const [guardandoSkin, setGuardandoSkin] = useState(false);
   const [errorSkin, setErrorSkin] = useState<string | null>(null);
+
+  // --- Borde básico de avatar (migración 055): público y gratuito
+  // para cualquier cuenta, a diferencia de las skins de arriba. Elegir
+  // un color se aplica al toque (mismo patrón que las skins); el
+  // grosor es lo único que se ajusta en el slider antes de guardar --
+  // grosorSeleccionado es ese estado LOCAL, todavía sin guardar. ---
+  const [catalogoBordes, setCatalogoBordes] = useState<BordeBasico[]>([]);
+  const [grosorSeleccionado, setGrosorSeleccionado] = useState(3);
+  const [guardandoBorde, setGuardandoBorde] = useState(false);
+  const [errorBorde, setErrorBorde] = useState<string | null>(null);
+  const [bordeGuardado, setBordeGuardado] = useState(false);
+
+  // --- Borde del header (migración 056): sistema aparte, mucho más
+  // simple -- 4 colores fijos, se aplica al toque, sin grosor. ---
+  const [guardandoBordeHeader, setGuardandoBordeHeader] = useState(false);
+  const [errorBordeHeader, setErrorBordeHeader] = useState<string | null>(null);
 
   // --- Foto de perfil ---
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -346,6 +373,26 @@ export default function ProfilePage() {
       setCatalogoSkins((data as SkinAvatar[] | null) ?? []);
     })();
   }, [user]);
+
+  // Público (sin RLS restrictiva, a diferencia del catálogo de
+  // arriba): se carga siempre, para cualquier cuenta.
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase
+        .from("catalogo_bordes_basicos")
+        .select("id, nombre, color_hex")
+        .order("nombre");
+      setCatalogoBordes((data as BordeBasico[] | null) ?? []);
+    })();
+  }, []);
+
+  // El estado local de la vista previa se sincroniza con el perfil
+  // cada vez que llega (o cambia tras guardar) -- mismo patrón que el
+  // resto de los campos de "Editar datos".
+  useEffect(() => {
+    if (!profile) return;
+    setGrosorSeleccionado(profile.borde_grosor);
+  }, [profile]);
 
   const cargarInvitaciones = async () => {
     if (!user) {
@@ -979,27 +1026,11 @@ export default function ProfilePage() {
     await refreshProfile();
   };
 
-  const handleCambiarFormaAvatar = async (nuevaForma: AvatarForma) => {
-    if (!user || nuevaForma === profile?.avatar_forma) return;
-
-    setGuardandoForma(true);
-    setErrorForma(null);
-
-    const { error: updateError } = await supabase
-      .from("profiles")
-      .update({ avatar_forma: nuevaForma })
-      .eq("id", user.id);
-
-    setGuardandoForma(false);
-
-    if (updateError) {
-      setErrorForma(updateError.message);
-      return;
-    }
-
-    await refreshProfile();
-  };
-
+  // "Bordes de Avatar" es una sola lista (borde básico + skins de
+  // efectos): elegir cualquiera de las dos cosas apaga la otra --
+  // nunca quedan las dos activas a la vez, aunque la prioridad visual
+  // (si por algún motivo quedaran las dos escritas) ya está resuelta
+  // en AvatarSkin.tsx a favor de la skin.
   const handleActivarSkin = async (skinId: string | null) => {
     if (!user || skinId === profile?.skin_avatar_activa) return;
 
@@ -1012,6 +1043,77 @@ export default function ProfilePage() {
 
     if (rpcError) {
       setErrorSkin(rpcError.message);
+      return;
+    }
+
+    if (skinId !== null && profile?.borde_basico_activo) {
+      await supabase.from("profiles").update({ borde_basico_activo: null }).eq("id", user.id);
+    }
+
+    await refreshProfile();
+  };
+
+  const handleElegirBordeBasico = async (bordeId: string | null) => {
+    if (!user || bordeId === profile?.borde_basico_activo) return;
+
+    setGuardandoBorde(true);
+    setErrorBorde(null);
+    setBordeGuardado(false);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ borde_basico_activo: bordeId, borde_grosor: grosorSeleccionado })
+      .eq("id", user.id);
+
+    setGuardandoBorde(false);
+
+    if (error) {
+      setErrorBorde(error.message);
+      return;
+    }
+
+    if (bordeId !== null && profile?.skin_avatar_activa) {
+      await supabase.rpc("activar_skin_avatar", { p_skin_id: null });
+    }
+
+    await refreshProfile();
+  };
+
+  const handleGuardarGrosor = async () => {
+    if (!user) return;
+
+    setGuardandoBorde(true);
+    setErrorBorde(null);
+    setBordeGuardado(false);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ borde_grosor: grosorSeleccionado })
+      .eq("id", user.id);
+
+    setGuardandoBorde(false);
+
+    if (error) {
+      setErrorBorde(error.message);
+      return;
+    }
+
+    await refreshProfile();
+    setBordeGuardado(true);
+  };
+
+  const handleGuardarBordeHeader = async (valor: BordeHeader) => {
+    if (!user || valor === profile?.borde_header) return;
+
+    setGuardandoBordeHeader(true);
+    setErrorBordeHeader(null);
+
+    const { error } = await supabase.from("profiles").update({ borde_header: valor }).eq("id", user.id);
+
+    setGuardandoBordeHeader(false);
+
+    if (error) {
+      setErrorBordeHeader(error.message);
       return;
     }
 
@@ -1246,18 +1348,12 @@ export default function ProfilePage() {
           <button
             type="button"
             className="team-panel-menu-item"
-            onClick={() => setSeccionActiva("datos")}
+            onClick={() => setSeccionActiva("configuracion")}
           >
-            <span className="team-panel-menu-item-title">Editar datos</span>
-            <span className="team-panel-menu-item-desc">Datos personales y datos de transmisión</span>
-          </button>
-          <button
-            type="button"
-            className="team-panel-menu-item"
-            onClick={() => setSeccionActiva("juego")}
-          >
-            <span className="team-panel-menu-item-title">Editar datos de juego</span>
-            <span className="team-panel-menu-item-desc">Raza principal, secundaria y liga</span>
+            <span className="team-panel-menu-item-title">Configuración</span>
+            <span className="team-panel-menu-item-desc">
+              Datos, transmisión, apariencia, juegos e idioma
+            </span>
           </button>
           <button
             type="button"
@@ -1275,14 +1371,6 @@ export default function ProfilePage() {
             <span className="team-panel-menu-item-title">Historial de eventos</span>
             <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que participaste</span>
           </button>
-          <button
-            type="button"
-            className="team-panel-menu-item"
-            onClick={() => setSeccionActiva("configuracion")}
-          >
-            <span className="team-panel-menu-item-title">Configuración</span>
-            <span className="team-panel-menu-item-desc">Tema del sitio, apariencia del avatar e idioma</span>
-          </button>
         </div>
       ) : (
         <button
@@ -1298,113 +1386,61 @@ export default function ProfilePage() {
         </button>
       )}
 
-      {seccionActiva === "datos" && (
+      {/* Reorganización: "Editar datos", "Editar datos de juego" y
+          "Configuración" se consolidaron acá adentro -- los 6 accesos
+          de la estructura pedida (Editar Datos / Editar Datos de
+          Transmisión / Apariencia de Mi perfil / Configuración por
+          Juegos / Cambiar idioma general / Apariencia). */}
+      {seccionActiva === "configuracion" && (
         <div className="settings-panel">
           {subseccion === null && (
             <div className="team-panel-menu">
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubseccion("personales")}
-              >
-                <span className="team-panel-menu-item-title">Editar datos personales</span>
-                <span className="team-panel-menu-item-desc">
-                  Foto, nombre, correo, contraseña, país y links de presencia
-                </span>
+              <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("datos")}>
+                <span className="team-panel-menu-item-title">Editar Datos</span>
+                <span className="team-panel-menu-item-desc">Nombre, correo, contraseña, país y links</span>
               </button>
               <button
                 type="button"
                 className="team-panel-menu-item"
                 onClick={() => setSubseccion("transmision")}
               >
-                <span className="team-panel-menu-item-title">Editar datos de transmisión</span>
+                <span className="team-panel-menu-item-title">Editar Datos de Transmisión</span>
                 <span className="team-panel-menu-item-desc">
                   Plataformas donde transmitís, con días y horarios
                 </span>
               </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubseccion("apariencia-perfil")}
+              >
+                <span className="team-panel-menu-item-title">Apariencia de Mi perfil</span>
+                <span className="team-panel-menu-item-desc">Avatar, banner y bordes de avatar</span>
+              </button>
+              <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("juegos")}>
+                <span className="team-panel-menu-item-title">Configuración por Juegos</span>
+                <span className="team-panel-menu-item-desc">Raza principal, secundaria y liga</span>
+              </button>
+              <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("idioma")}>
+                <span className="team-panel-menu-item-title">Cambiar idioma general</span>
+                <span className="team-panel-menu-item-desc">Idioma de la interfaz</span>
+              </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubseccion("apariencia")}
+              >
+                <span className="team-panel-menu-item-title">Apariencia</span>
+                <span className="team-panel-menu-item-desc">Tema del sitio y borde del header</span>
+              </button>
             </div>
           )}
 
-          {subseccion === "personales" && (
+          {subseccion === "datos" && (
             <>
               <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
                 ← Volver
               </button>
-
-              <div className="profile-avatar-section">
-                <AvatarSkin clave={skinAvatarClave} forma={profile?.avatar_forma}>
-                  <Avatar
-                    url={avatarPreview ?? profile?.avatar_url}
-                    nombre={profile?.nick ?? profile?.nombre}
-                    className="profile-avatar"
-                    forma={profile?.avatar_forma}
-                  />
-                </AvatarSkin>
-                {!avatarPreview && !profile?.avatar_url && (
-                  <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
-                )}
-                <form className="profile-avatar-form" onSubmit={handleGuardarAvatar}>
-                  {errorAvatar && <div className="form-error">{errorAvatar}</div>}
-                  {avatarGuardado && <div className="form-success">¡Foto actualizada!</div>}
-                  <input
-                    id="perfil-avatar"
-                    className="form-input"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={handleAvatarChange}
-                  />
-                  {avatarFile && (
-                    <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoAvatar}>
-                      {guardandoAvatar ? "Subiendo..." : "Guardar foto"}
-                    </button>
-                  )}
-                </form>
-              </div>
-
-              <h3 className="detail-subtitle">Portada y descripción</h3>
-              <form className="auth-form" onSubmit={handleGuardarPerfilPublico}>
-                {errorPerfilPublico && <div className="form-error">{errorPerfilPublico}</div>}
-                {perfilPublicoGuardado && (
-                  <div className="form-success">Tu perfil público se guardó correctamente.</div>
-                )}
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="perfil-banner">
-                    Banner (opcional, máx. 3MB, se recorta a 4:1)
-                  </label>
-                  <input
-                    id="perfil-banner"
-                    className="form-input"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    onChange={handleBannerChange}
-                  />
-                  {(bannerPreview ?? profile?.banner_url) && (
-                    <img
-                      src={bannerPreview ?? profile?.banner_url ?? ""}
-                      alt="Vista previa del banner"
-                      className="team-banner-preview"
-                    />
-                  )}
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="perfil-bio">
-                    Descripción
-                  </label>
-                  <textarea
-                    id="perfil-bio"
-                    className="form-textarea"
-                    maxLength={280}
-                    value={perfilBio}
-                    onChange={(e) => setPerfilBio(e.target.value)}
-                  />
-                </div>
-
-                <button type="submit" className="btn btn-primary btn-block" disabled={guardandoPerfilPublico}>
-                  {guardandoPerfilPublico ? "Guardando..." : "Guardar"}
-                </button>
-              </form>
 
               <form className="auth-form" onSubmit={handleGuardarIdentidad}>
                 {errorIdentidad && <div className="form-error">{errorIdentidad}</div>}
@@ -1745,85 +1781,466 @@ export default function ProfilePage() {
               </div>
             </>
           )}
-        </div>
-      )}
 
-      {/* Editar datos de juego (migración 048): por ahora solo
-          StarCraft II, el único juego activo -- perfiles_juego ya está
-          preparada para más juegos (juego_id genérico), acá solo hace
-          falta agregar un bloque análogo a este el día que exista un
-          segundo juego, sin tocar el esquema. */}
-      {seccionActiva === "juego" && (
-        <div className="settings-panel">
-          <h3 className="detail-subtitle">StarCraft II</h3>
-          <p className="tournament-card-meta">
-            Estos datos se ven en el roster de tu equipo, junto al resto de tus compañeros.
-          </p>
-          <form className="auth-form" onSubmit={handleGuardarDatosJuego}>
-            {errorRaza && <div className="form-error">{errorRaza}</div>}
-            {razaGuardada && <div className="form-success">Tus datos de juego se guardaron correctamente.</div>}
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-raza-principal">
-                Raza principal
-              </label>
-              <select
-                id="perfil-raza-principal"
-                className="form-select"
-                value={razaPrincipal}
-                onChange={(e) => setRazaPrincipal(e.target.value as RazaSc2)}
+          {subseccion === "apariencia-perfil" && subsubseccion === null && (
+            <div className="team-panel-menu">
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubsubseccion("subir-avatar")}
               >
-                <option value="">Prefiero no decirlo</option>
-                {RAZA_SC2_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-raza-secundaria">
-                Raza secundaria (opcional)
-              </label>
-              <select
-                id="perfil-raza-secundaria"
-                className="form-select"
-                value={razaSecundaria}
-                onChange={(e) => setRazaSecundaria(e.target.value as RazaSc2)}
+                <span className="team-panel-menu-item-title">Subir Avatar</span>
+                <span className="team-panel-menu-item-desc">Foto de perfil</span>
+              </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubsubseccion("subir-banner")}
               >
-                <option value="">Ninguna</option>
-                {RAZA_SC2_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="perfil-liga">
-                Liga (opcional)
-              </label>
-              <select
-                id="perfil-liga"
-                className="form-select"
-                value={liga}
-                onChange={(e) => setLiga(e.target.value as Liga)}
+                <span className="team-panel-menu-item-title">Subir Banner</span>
+                <span className="team-panel-menu-item-desc">Portada y descripción</span>
+              </button>
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubsubseccion("bordes-avatar")}
               >
-                <option value="">Prefiero no decirlo</option>
-                {LIGA_OPTIONS.map((opcion) => (
-                  <option key={opcion} value={opcion}>
-                    {opcion}
-                  </option>
-                ))}
-              </select>
+                <span className="team-panel-menu-item-title">Bordes de Avatar</span>
+                <span className="team-panel-menu-item-desc">
+                  Bordes básicos de color y, si corresponde, skins de efectos
+                </span>
+              </button>
             </div>
+          )}
 
-            <button type="submit" className="btn btn-primary btn-block" disabled={guardandoRaza || !juegoIdSc2}>
-              {guardandoRaza ? "Guardando..." : "Guardar"}
-            </button>
-          </form>
+          {subseccion === "apariencia-perfil" && subsubseccion === "subir-avatar" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
+
+              {/* La forma ya no es elegible: en Mi perfil (esta vista
+                  previa) el avatar es SIEMPRE cuadrado -- en el header
+                  es siempre redondo (ver Header.tsx). */}
+              <div className="profile-avatar-section">
+                <AvatarSkin
+                  clave={skinAvatarClave}
+                  bordeColor={bordeBasicoColorHex}
+                  bordeGrosor={profile?.borde_grosor}
+                  forma="cuadrado"
+                >
+                  <Avatar
+                    url={avatarPreview ?? profile?.avatar_url}
+                    nombre={profile?.nick ?? profile?.nombre}
+                    className="profile-avatar"
+                    forma="cuadrado"
+                  />
+                </AvatarSkin>
+                {!avatarPreview && !profile?.avatar_url && (
+                  <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
+                )}
+                <form className="profile-avatar-form" onSubmit={handleGuardarAvatar}>
+                  {errorAvatar && <div className="form-error">{errorAvatar}</div>}
+                  {avatarGuardado && <div className="form-success">¡Foto actualizada!</div>}
+                  <input
+                    id="perfil-avatar"
+                    className="form-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleAvatarChange}
+                  />
+                  {avatarFile && (
+                    <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoAvatar}>
+                      {guardandoAvatar ? "Subiendo..." : "Guardar foto"}
+                    </button>
+                  )}
+                </form>
+              </div>
+            </>
+          )}
+
+          {subseccion === "apariencia-perfil" && subsubseccion === "subir-banner" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Banner y descripción</h3>
+              <form className="auth-form" onSubmit={handleGuardarPerfilPublico}>
+                {errorPerfilPublico && <div className="form-error">{errorPerfilPublico}</div>}
+                {perfilPublicoGuardado && (
+                  <div className="form-success">Tu perfil público se guardó correctamente.</div>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-banner">
+                    Banner (opcional, máx. 3MB, se recorta a 4:1)
+                  </label>
+                  <input
+                    id="perfil-banner"
+                    className="form-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleBannerChange}
+                  />
+                  {(bannerPreview ?? profile?.banner_url) && (
+                    <img
+                      src={bannerPreview ?? profile?.banner_url ?? ""}
+                      alt="Vista previa del banner"
+                      className="team-banner-preview"
+                    />
+                  )}
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-bio">
+                    Descripción
+                  </label>
+                  <textarea
+                    id="perfil-bio"
+                    className="form-textarea"
+                    maxLength={280}
+                    value={perfilBio}
+                    onChange={(e) => setPerfilBio(e.target.value)}
+                  />
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block" disabled={guardandoPerfilPublico}>
+                  {guardandoPerfilPublico ? "Guardando..." : "Guardar"}
+                </button>
+              </form>
+            </>
+          )}
+
+          {subseccion === "apariencia-perfil" && subsubseccion === "bordes-avatar" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Bordes de Avatar</h3>
+              <p className="tournament-card-meta">
+                Elegir un borde básico o una skin de efectos apaga la otra opción -- nunca quedan las dos
+                activas a la vez.
+              </p>
+
+              <div className="profile-avatar-section">
+                <AvatarSkin
+                  clave={skinAvatarClave}
+                  bordeColor={bordeBasicoColorHex}
+                  bordeGrosor={grosorSeleccionado}
+                  forma="cuadrado"
+                >
+                  <Avatar
+                    url={profile?.avatar_url}
+                    nombre={profile?.nick ?? profile?.nombre}
+                    className="profile-avatar"
+                    forma="cuadrado"
+                  />
+                </AvatarSkin>
+              </div>
+
+              {errorBorde && <div className="form-error">{errorBorde}</div>}
+              {errorSkin && <div className="form-error">{errorSkin}</div>}
+              {bordeGuardado && <div className="form-success">Tu borde se guardó correctamente.</div>}
+
+              <h4 className="detail-subtitle">Bordes básicos de color</h4>
+              <div className="borde-basico-options">
+                <button
+                  type="button"
+                  className={`borde-basico-swatch borde-basico-swatch-vacio ${
+                    profile?.borde_basico_activo === null && profile?.skin_avatar_activa === null ? "selected" : ""
+                  }`}
+                  disabled={guardandoBorde}
+                  onClick={() => handleElegirBordeBasico(null)}
+                  title="Sin borde"
+                >
+                  <span className="borde-basico-swatch-nombre">Sin borde</span>
+                </button>
+                {catalogoBordes.map((borde) => (
+                  <button
+                    key={borde.id}
+                    type="button"
+                    className={`borde-basico-swatch ${profile?.borde_basico_activo === borde.id ? "selected" : ""}`}
+                    style={{ backgroundColor: borde.color_hex }}
+                    disabled={guardandoBorde}
+                    onClick={() => handleElegirBordeBasico(borde.id)}
+                    title={borde.nombre}
+                  />
+                ))}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="perfil-borde-grosor">
+                  Grosor del borde ({grosorSeleccionado}px)
+                </label>
+                <input
+                  id="perfil-borde-grosor"
+                  className="form-range"
+                  type="range"
+                  min={BORDE_GROSOR_MIN}
+                  max={BORDE_GROSOR_MAX}
+                  value={grosorSeleccionado}
+                  onChange={(e) => setGrosorSeleccionado(Number(e.target.value))}
+                  disabled={profile?.borde_basico_activo == null}
+                />
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-ghost btn-block"
+                disabled={guardandoBorde || profile?.borde_basico_activo == null}
+                onClick={handleGuardarGrosor}
+              >
+                {guardandoBorde ? "Guardando..." : "Guardar grosor"}
+              </button>
+
+              {/* catalogo_skins_avatar solo trae filas cuando
+                  es_dueno_plataforma() es verdadero (RLS) -- para
+                  cualquier otra cuenta, catalogoSkins queda vacío y
+                  esta sección directamente no existe, ni gris ni
+                  bloqueada. */}
+              {catalogoSkins.length > 0 && (
+                <div className="skins-exclusivas">
+                  <h4 className="detail-subtitle skins-exclusivas-titulo">Skins de efectos</h4>
+                  <p className="tournament-card-meta">
+                    Colección del dueño de la plataforma -- todavía no está disponible para el resto de las
+                    cuentas.
+                  </p>
+                  <div className="skins-exclusivas-grid">
+                    {catalogoSkins.map((skin) => (
+                      <button
+                        key={skin.id}
+                        type="button"
+                        className={`skin-exclusiva-option ${profile?.skin_avatar_activa === skin.id ? "selected" : ""}`}
+                        disabled={guardandoSkin}
+                        onClick={() => handleActivarSkin(skin.id)}
+                        title={skin.descripcion}
+                      >
+                        <span className="skin-exclusiva-preview">
+                          <AvatarSkin clave={skin.clave}>
+                            <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
+                          </AvatarSkin>
+                        </span>
+                        <span className="skin-exclusiva-nombre">{skin.nombre}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {subseccion === "juegos" && subsubseccion === null && (
+            <div className="team-panel-menu">
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              {/* Selector de juego (migración 048): por ahora solo
+                  StarCraft II está activo -- perfiles_juego ya está
+                  preparada para más juegos (juego_id genérico), acá
+                  solo hace falta agregar un botón análogo a este el
+                  día que exista un segundo juego, sin tocar el
+                  esquema. */}
+              <button
+                type="button"
+                className="team-panel-menu-item"
+                onClick={() => setSubsubseccion("sc2")}
+              >
+                <span className="team-panel-menu-item-title">StarCraft II</span>
+                <span className="team-panel-menu-item-desc">Raza principal, secundaria y liga</span>
+              </button>
+            </div>
+          )}
+
+          {subseccion === "juegos" && subsubseccion === "sc2" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">StarCraft II</h3>
+              <p className="tournament-card-meta">
+                Estos datos se ven en el roster de tu equipo, junto al resto de tus compañeros.
+              </p>
+              <form className="auth-form" onSubmit={handleGuardarDatosJuego}>
+                {errorRaza && <div className="form-error">{errorRaza}</div>}
+                {razaGuardada && <div className="form-success">Tus datos de juego se guardaron correctamente.</div>}
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-raza-principal">
+                    Raza principal
+                  </label>
+                  <select
+                    id="perfil-raza-principal"
+                    className="form-select"
+                    value={razaPrincipal}
+                    onChange={(e) => setRazaPrincipal(e.target.value as RazaSc2)}
+                  >
+                    <option value="">Prefiero no decirlo</option>
+                    {RAZA_SC2_OPTIONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-raza-secundaria">
+                    Raza secundaria (opcional)
+                  </label>
+                  <select
+                    id="perfil-raza-secundaria"
+                    className="form-select"
+                    value={razaSecundaria}
+                    onChange={(e) => setRazaSecundaria(e.target.value as RazaSc2)}
+                  >
+                    <option value="">Ninguna</option>
+                    {RAZA_SC2_OPTIONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="perfil-liga">
+                    Liga (opcional)
+                  </label>
+                  <select
+                    id="perfil-liga"
+                    className="form-select"
+                    value={liga}
+                    onChange={(e) => setLiga(e.target.value as Liga)}
+                  >
+                    <option value="">Prefiero no decirlo</option>
+                    {LIGA_OPTIONS.map((opcion) => (
+                      <option key={opcion} value={opcion}>
+                        {opcion}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <button type="submit" className="btn btn-primary btn-block" disabled={guardandoRaza || !juegoIdSc2}>
+                  {guardandoRaza ? "Guardando..." : "Guardar"}
+                </button>
+              </form>
+            </>
+          )}
+
+          {subseccion === "idioma" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Idioma</h3>
+              {/* Placeholder honesto: no hay ningún sistema de
+                  traducción real todavía (es un proyecto aparte, mucho
+                  más grande) -- Español es la única opción que de
+                  verdad funciona, el resto queda marcado "Próximamente"
+                  y deshabilitado, sin fingir que hacen algo. */}
+              <div className="form-group">
+                <label className="form-label" htmlFor="perfil-idioma">
+                  Idioma de la interfaz
+                </label>
+                <select id="perfil-idioma" className="form-select" value="es" disabled>
+                  <option value="es">Español</option>
+                </select>
+              </div>
+              <p className="detail-empty">English, Português y otros idiomas -- Próximamente.</p>
+            </>
+          )}
+
+          {subseccion === "apariencia" && subsubseccion === null && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
+                ← Volver
+              </button>
+              <p className="tournament-card-meta">
+                Elige cómo se ve RemorApp en este dispositivo. La elección se guarda solo en tu navegador.
+              </p>
+              <div className="pill-radio-group">
+                <label className={`pill-radio-option ${tema === "oscuro" ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="tema-visual"
+                    checked={tema === "oscuro"}
+                    onChange={() => setTema("oscuro")}
+                  />
+                  Oscuro
+                </label>
+                <label className={`pill-radio-option ${tema === "claro" ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="tema-visual"
+                    checked={tema === "claro"}
+                    onChange={() => setTema("claro")}
+                  />
+                  Claro
+                </label>
+              </div>
+
+              <div className="team-panel-menu">
+                <button
+                  type="button"
+                  className="team-panel-menu-item"
+                  onClick={() => setSubsubseccion("borde-header")}
+                >
+                  <span className="team-panel-menu-item-title">Borde del Header</span>
+                  <span className="team-panel-menu-item-desc">4 colores lisos, exclusivo del avatar del header</span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {subseccion === "apariencia" && subsubseccion === "borde-header" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Borde del Header</h3>
+              <p className="tournament-card-meta">
+                Sistema aparte de los Bordes de Avatar de Mi perfil -- solo 4 colores lisos, sin grosor
+                editable, exclusivo del avatar del header.
+              </p>
+
+              <span
+                className="header-avatar-borde"
+                style={{
+                  borderColor: BORDE_HEADER_OPTIONS.find((o) => o.value === (profile?.borde_header ?? "negro"))
+                    ?.colorHex,
+                }}
+              >
+                <Avatar
+                  url={profile?.avatar_url}
+                  nombre={profile?.nick ?? profile?.nombre}
+                  className="header-avatar"
+                  forma="redondo"
+                />
+              </span>
+
+              {errorBordeHeader && <div className="form-error">{errorBordeHeader}</div>}
+
+              <div className="borde-basico-options">
+                {BORDE_HEADER_OPTIONS.map((opcion) => (
+                  <button
+                    key={opcion.value}
+                    type="button"
+                    className={`borde-basico-swatch ${profile?.borde_header === opcion.value ? "selected" : ""}`}
+                    style={{ backgroundColor: opcion.colorHex }}
+                    disabled={guardandoBordeHeader}
+                    onClick={() => handleGuardarBordeHeader(opcion.value)}
+                    title={opcion.label}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -2156,192 +2573,6 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {seccionActiva === "configuracion" && (
-        <div className="settings-panel">
-          {subseccion === null && (
-            <div className="team-panel-menu">
-              <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("tema")}>
-                <span className="team-panel-menu-item-title">Tema del sitio</span>
-                <span className="team-panel-menu-item-desc">Oscuro o claro</span>
-              </button>
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubseccion("apariencia")}
-              >
-                <span className="team-panel-menu-item-title">Cambiar apariencia</span>
-                <span className="team-panel-menu-item-desc">Forma del avatar y avatares adquiridos</span>
-              </button>
-              <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("idioma")}>
-                <span className="team-panel-menu-item-title">Idioma</span>
-                <span className="team-panel-menu-item-desc">Idioma de la interfaz</span>
-              </button>
-            </div>
-          )}
-
-          {subseccion === "tema" && (
-            <>
-              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
-                ← Volver
-              </button>
-              <p className="tournament-card-meta">
-                Elige cómo se ve RemorApp en este dispositivo. La elección se guarda solo en tu navegador.
-              </p>
-              <div className="pill-radio-group">
-                <label className={`pill-radio-option ${tema === "oscuro" ? "selected" : ""}`}>
-                  <input
-                    type="radio"
-                    className="sr-only"
-                    name="tema-visual"
-                    checked={tema === "oscuro"}
-                    onChange={() => setTema("oscuro")}
-                  />
-                  Oscuro
-                </label>
-                <label className={`pill-radio-option ${tema === "claro" ? "selected" : ""}`}>
-                  <input
-                    type="radio"
-                    className="sr-only"
-                    name="tema-visual"
-                    checked={tema === "claro"}
-                    onChange={() => setTema("claro")}
-                  />
-                  Claro
-                </label>
-              </div>
-            </>
-          )}
-
-          {subseccion === "apariencia" && subsubseccion === null && (
-            <div className="team-panel-menu">
-              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
-                ← Volver
-              </button>
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubsubseccion("forma-avatar")}
-              >
-                <span className="team-panel-menu-item-title">Forma del avatar</span>
-                <span className="team-panel-menu-item-desc">Cuadrado o redondo</span>
-              </button>
-              {/* catalogo_skins_avatar solo trae filas cuando
-                  es_dueno_plataforma() es verdadero (RLS) -- para
-                  cualquier otra cuenta, catalogoSkins queda vacío y
-                  este botón directamente no existe, ni gris ni
-                  bloqueado. */}
-              {catalogoSkins.length > 0 && (
-                <button
-                  type="button"
-                  className="team-panel-menu-item"
-                  onClick={() => setSubsubseccion("avatares-adquiridos")}
-                >
-                  <span className="team-panel-menu-item-title">Avatares adquiridos</span>
-                  <span className="team-panel-menu-item-desc">Colección exclusiva del dueño de la plataforma</span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {subseccion === "apariencia" && subsubseccion === "forma-avatar" && (
-            <>
-              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
-                ← Volver
-              </button>
-              <h3 className="detail-subtitle">Forma del avatar</h3>
-              {errorForma && <div className="form-error">{errorForma}</div>}
-              <div className="avatar-forma-options">
-                <button
-                  type="button"
-                  className={`avatar-forma-option ${profile?.avatar_forma === "cuadrado" ? "selected" : ""}`}
-                  disabled={guardandoForma}
-                  onClick={() => handleCambiarFormaAvatar("cuadrado")}
-                >
-                  <span className="avatar-forma-preview avatar-shape-cuadrado" />
-                  Cuadrado
-                </button>
-                <button
-                  type="button"
-                  className={`avatar-forma-option ${profile?.avatar_forma === "redondo" ? "selected" : ""}`}
-                  disabled={guardandoForma}
-                  onClick={() => handleCambiarFormaAvatar("redondo")}
-                >
-                  <span className="avatar-forma-preview avatar-shape-redondo" />
-                  Redondo
-                </button>
-              </div>
-            </>
-          )}
-
-          {subseccion === "apariencia" && subsubseccion === "avatares-adquiridos" && catalogoSkins.length > 0 && (
-            <>
-              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
-                ← Volver
-              </button>
-              <div className="skins-exclusivas">
-                <h3 className="detail-subtitle skins-exclusivas-titulo">Avatares adquiridos</h3>
-                <p className="tournament-card-meta">
-                  Colección del dueño de la plataforma -- todavía no está disponible para el resto de las cuentas.
-                </p>
-                {errorSkin && <div className="form-error">{errorSkin}</div>}
-                <div className="skins-exclusivas-grid">
-                  <button
-                    type="button"
-                    className={`skin-exclusiva-option ${profile?.skin_avatar_activa === null ? "selected" : ""}`}
-                    disabled={guardandoSkin}
-                    onClick={() => handleActivarSkin(null)}
-                  >
-                    <span className="skin-exclusiva-preview">
-                      <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
-                    </span>
-                    <span className="skin-exclusiva-nombre">Sin skin</span>
-                  </button>
-                  {catalogoSkins.map((skin) => (
-                    <button
-                      key={skin.id}
-                      type="button"
-                      className={`skin-exclusiva-option ${profile?.skin_avatar_activa === skin.id ? "selected" : ""}`}
-                      disabled={guardandoSkin}
-                      onClick={() => handleActivarSkin(skin.id)}
-                      title={skin.descripcion}
-                    >
-                      <span className="skin-exclusiva-preview">
-                        <AvatarSkin clave={skin.clave}>
-                          <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
-                        </AvatarSkin>
-                      </span>
-                      <span className="skin-exclusiva-nombre">{skin.nombre}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          {subseccion === "idioma" && (
-            <>
-              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
-                ← Volver
-              </button>
-              <h3 className="detail-subtitle">Idioma</h3>
-              {/* Placeholder honesto: no hay ningún sistema de
-                  traducción real todavía (es un proyecto aparte, mucho
-                  más grande) -- Español es la única opción que de
-                  verdad funciona, el resto queda marcado "Próximamente"
-                  y deshabilitado, sin fingir que hacen algo. */}
-              <div className="form-group">
-                <label className="form-label" htmlFor="perfil-idioma">
-                  Idioma de la interfaz
-                </label>
-                <select id="perfil-idioma" className="form-select" value="es" disabled>
-                  <option value="es">Español</option>
-                </select>
-              </div>
-              <p className="detail-empty">English, Português y otros idiomas -- Próximamente.</p>
-            </>
-          )}
-        </div>
-      )}
     </section>
   );
 }
