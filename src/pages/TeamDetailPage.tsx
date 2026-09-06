@@ -570,10 +570,6 @@ export default function TeamDetailPage() {
   const [reemplazandoTemp, setReemplazandoTemp] = useState<string | null>(null);
   const [erroresReemplazoPorTemp, setErroresReemplazoPorTemp] = useState<Record<string, string>>({});
 
-  // --- Logros y Recompensas: solo vitrina, sin catálogo real todavía
-  // (ver el comentario largo en migration_033_tema_temporal_logros_ayuda.sql) ---
-  const [vistaLogros, setVistaLogros] = useState<"desbloqueados" | "compradas">("desbloqueados");
-
   // --- Reportar un problema al staff ---
   const [asuntoReporte, setAsuntoReporte] = useState("");
   const [descripcionReporte, setDescripcionReporte] = useState("");
@@ -2717,19 +2713,8 @@ export default function TeamDetailPage() {
       <h2 className="detail-subtitle">Estadísticas</h2>
       <MmrProgressBar mmr={equipo.mmr} liga={equipo.liga} bancaRota={equipo.banca_rota} />
 
-      {/* Misma tarjeta agrupada que en el perfil de jugador. Carisma
-          (migración 050) se muestra igual que en el perfil de jugador:
-          número simple con ícono, no una barra -- es el mismo contador
-          de puntos sin tope, solo que del lado del equipo. */}
       <div className="stats-card-group">
         <PercentBar label="Valentía del clan" value={equipo.valentia} vertical />
-        <div className="carisma-stat">
-          <span className="carisma-stat-icon" aria-hidden="true">
-            🎤
-          </span>
-          <p className="carisma-stat-value">{equipo.carisma}</p>
-          <p className="carisma-stat-label">Carisma</p>
-        </div>
       </div>
 
       <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
@@ -2920,10 +2905,8 @@ export default function TeamDetailPage() {
                     </span>
                   </button>
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("logros")}>
-                    <span className="team-panel-menu-item-title">Logros y Recompensas</span>
-                    <span className="team-panel-menu-item-desc">
-                      Skins desbloqueadas por nivel y elementos comprados
-                    </span>
+                    <span className="team-panel-menu-item-title">Logros</span>
+                    <span className="team-panel-menu-item-desc">Skins desbloqueadas por nivel</span>
                   </button>
                   <button
                     type="button"
@@ -4679,26 +4662,9 @@ export default function TeamDetailPage() {
                 <>
                   <h3 className="detail-subtitle">Desbloqueadas por nivel</h3>
                   <p className="detail-empty">
-                    Todavía no existe un catálogo de skins o recompensas por nivel -- esta vitrina va a
-                    mostrarlas acá en cuanto ese catálogo esté listo.
+                    Todavía no existe un catálogo de skins por nivel -- esta vitrina va a mostrarlas acá
+                    en cuanto ese catálogo esté listo.
                   </p>
-
-                  <div className="team-panel-menu">
-                    <button
-                      type="button"
-                      className="team-panel-menu-item"
-                      onClick={() => setVistaLogros(vistaLogros === "compradas" ? "desbloqueados" : "compradas")}
-                    >
-                      <span className="team-panel-menu-item-title">Adquiridas por compra</span>
-                      <span className="team-panel-menu-item-desc">Elementos comprados en la Tienda</span>
-                    </button>
-                  </div>
-
-                  {vistaLogros === "compradas" && (
-                    <p className="detail-empty">
-                      Aún no tienes elementos comprados -- la Tienda estará disponible próximamente.
-                    </p>
-                  )}
                 </>
               )}
 

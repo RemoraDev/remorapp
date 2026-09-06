@@ -75,6 +75,12 @@ export interface TournamentRow {
   formato_liga: "first_stand" | null;
   puntos_victoria_2_0: number;
   puntos_victoria_2_1: number;
+  // Migración 060: liga y división para el ranking de clanes --
+  // independiente de formato_liga (que es el formato de competencia,
+  // no la liga). division_id, si está elegida, siempre pertenece a
+  // liga_id (validado en la base por un trigger).
+  liga_id: string | null;
+  division_id: string | null;
 }
 
 // Migración 041: etapa de grupos.

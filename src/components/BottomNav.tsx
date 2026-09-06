@@ -28,11 +28,10 @@ function VoiceIcon() {
   );
 }
 
-function StoreIcon() {
+function RankingIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-6 w-6" {...strokeProps}>
-      <path d="M4 9h16l-1 10H5L4 9Z" />
-      <path d="M8 9V7a4 4 0 0 1 8 0v2" />
+      <path d="M5 21V10M12 21V3M19 21v-7" />
     </svg>
   );
 }
@@ -98,9 +97,12 @@ export default function BottomNav() {
           <FanMenu isOpen={fanOpen} onClose={() => setFanOpen(false)} />
         </div>
 
-        <NavLink to="/store" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <StoreIcon />
-          <span>Tienda</span>
+        {/* Ranking (migración 059) ocupa el lugar que dejó Tienda --
+            Torneos ya vive en el abanico central, no hace falta
+            moverlo de nuevo (ver el comentario en FanMenu.tsx). */}
+        <NavLink to="/ranking" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <RankingIcon />
+          <span>Ranking</span>
         </NavLink>
 
         <NavLink to={miPerfilHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>

@@ -135,7 +135,6 @@ type SubseccionPerfil =
   | "idioma"
   | "apariencia"
   | "titulos"
-  | "recompensas"
   | "clan-wars"
   | "torneos"
   | null;
@@ -1409,8 +1408,8 @@ export default function ProfilePage() {
             className="team-panel-menu-item"
             onClick={() => setSeccionActiva("logros")}
           >
-            <span className="team-panel-menu-item-title">Logros y Recompensas</span>
-            <span className="team-panel-menu-item-desc">Títulos Padre/Hijo y recompensas de la tienda</span>
+            <span className="team-panel-menu-item-title">Logros</span>
+            <span className="team-panel-menu-item-desc">Títulos Padre/Hijo activos, pendientes y adquiridos</span>
           </button>
           <button
             type="button"
@@ -2322,14 +2321,6 @@ export default function ProfilePage() {
                   Títulos Padre/Hijo activos, pendientes, propuestas y títulos adquiridos
                 </span>
               </button>
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubseccion("recompensas")}
-              >
-                <span className="team-panel-menu-item-title">Recompensas</span>
-                <span className="team-panel-menu-item-desc">Canjear en la tienda</span>
-              </button>
             </div>
           )}
 
@@ -2536,19 +2527,6 @@ export default function ProfilePage() {
                   </div>
                 </>
               )}
-            </>
-          )}
-
-          {subseccion === "recompensas" && (
-            <>
-              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
-                ← Volver
-              </button>
-              <h3 className="detail-subtitle">Recompensas</h3>
-              <p className="detail-empty">
-                Todavía no existe un catálogo de recompensas para canjear -- esta vitrina va a mostrarlas
-                acá en cuanto ese catálogo esté listo.
-              </p>
             </>
           )}
         </div>

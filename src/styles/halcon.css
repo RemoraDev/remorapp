@@ -1333,9 +1333,9 @@ input[type="radio"] {
   box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.35);
 }
 
-/* Tarjeta que agrupa las barras verticales (Valentía, Responsabilidad,
-   Carisma) con un fondo propio, apenas distinto del fondo general de
-   la página -- así se leen como un solo bloque de estadísticas. Las
+/* Tarjeta que agrupa las barras verticales (Valentía, Responsabilidad)
+   con un fondo propio, apenas distinto del fondo general de la
+   página -- así se leen como un solo bloque de estadísticas. Las
    barras van EN FILA (una al lado de la otra), ancladas abajo, para
    que cada columna pueda crecer hacia arriba a su propia altura. */
 .stats-card-group {
@@ -1396,36 +1396,6 @@ input[type="radio"] {
   color: var(--color-text);
 }
 
-/* Carisma (migración 049): mismo footprint que .percent-bar-vertical
-   (ancho, alineado al piso del grupo) para que se vea a la par de las
-   barras, pero mostrando un número simple con ícono, no una barra. */
-.carisma-stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 4rem;
-}
-
-.carisma-stat-icon {
-  font-size: 1.8rem;
-  line-height: 1;
-}
-
-.carisma-stat-value {
-  margin: 0.4rem 0 0;
-  font-size: 1rem;
-  font-weight: 700;
-  text-align: center;
-  color: var(--color-accent);
-}
-
-.carisma-stat-label {
-  margin: 0.2rem 0 0;
-  font-size: 0.7rem;
-  line-height: 1.2;
-  text-align: center;
-  color: var(--color-text-muted);
-}
 
 /* Columna vertical de barras + columna de transmisión AL COSTADO
    (solo caster) -- en pantallas angostas cae a una sola columna sola,
@@ -2127,6 +2097,100 @@ input[type="radio"] {
 .group-standings-table th:nth-child(4),
 .group-standings-table td:nth-child(4) {
   text-align: center;
+}
+
+/* Ranking de clanes (migración 059): reutiliza .group-standings-table
+   tal cual, solo agrega el link con logo dentro de la celda del
+   clan. */
+.ranking-categorias {
+  margin-bottom: 0.75rem;
+}
+
+.ranking-divisiones {
+  margin-bottom: 1.25rem;
+}
+
+.ranking-clan-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text);
+}
+
+.ranking-clan-logo {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.4rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.ranking-clan-logo-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--color-accent-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+/* Clan Wars próximas en Inicio (migración 059). */
+.proximas-clan-wars {
+  margin: 2rem 0;
+}
+
+.proxima-clan-war-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+
+.proxima-clan-war-grupo-titulo {
+  font-size: 0.9rem;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 0.3rem;
+}
+
+.proxima-clan-war-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  font-size: 0.9rem;
+}
+
+.proxima-clan-war-item-completo {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.proxima-clan-war-hora {
+  font-weight: 700;
+  color: var(--color-accent-soft);
+  white-space: nowrap;
+}
+
+.proxima-clan-war-equipos {
+  color: var(--color-text-muted);
+  flex: 1 1 auto;
+}
+
+/* Contador en vivo (migración 060): se actualiza solo cada minuto,
+   ver useAhora() en ProximasClanWars.tsx. */
+.proxima-clan-war-cuenta-regresiva {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  white-space: nowrap;
 }
 
 .group-stage-matches {

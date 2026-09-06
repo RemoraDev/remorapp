@@ -1,5 +1,6 @@
 import Hero from "../components/Hero";
 import StatsBar from "../components/StatsBar";
+import ProximasClanWars from "../components/ProximasClanWars";
 import NewsSection from "../components/NewsSection";
 
 // Inicio se achicó a propósito: solo el Hero (título, países, CTA y el
@@ -9,11 +10,14 @@ import NewsSection from "../components/NewsSection";
 // única incorporación desde entonces -- tres conteos simples, sin
 // ningún sistema de presencia en tiempo real. Noticias se sumó acá
 // debajo (salió de la barra inferior, ya no tiene ícono propio).
+// Clan Wars próximas (migración 059) se suma entre las dos -- contenido
+// urgente/accionable, antes de Noticias.
 export default function HomePage() {
   return (
     <>
       <Hero />
       <StatsBar />
+      <ProximasClanWars />
       <NewsSection />
     </>
   );

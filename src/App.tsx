@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
@@ -22,7 +22,8 @@ import TeamDetailPage from "./pages/TeamDetailPage";
 import NewsPage from "./pages/NewsPage";
 import VoicePage from "./pages/VoicePage";
 import AyudaPage from "./pages/AyudaPage";
-import StorePage from "./pages/StorePage";
+import RankingPage from "./pages/RankingPage";
+import ClanWarsSchedulePage from "./pages/ClanWarsSchedulePage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -77,7 +78,13 @@ function AppContent() {
           <Route path="/news" element={<NewsPage />} />
           <Route path="/voice" element={<VoicePage />} />
           <Route path="/ayuda" element={<AyudaPage />} />
-          <Route path="/store" element={<StorePage />} />
+          <Route path="/ranking" element={<RankingPage />} />
+          <Route path="/calendario" element={<ClanWarsSchedulePage />} />
+          {/* La Tienda se descartó por completo -- la ruta se mantiene
+              únicamente para redirigir a Inicio a quien tenga un
+              enlace o marcador viejo, en vez de mostrar una página
+              rota. */}
+          <Route path="/store" element={<Navigate to="/" replace />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />

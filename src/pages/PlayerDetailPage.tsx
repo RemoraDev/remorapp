@@ -21,7 +21,6 @@ interface PerfilPublico {
   bio: string | null;
   country: Country | null;
   esCaster: boolean;
-  carisma: number;
   horarioStream: string | null;
   linksTransmision: LinkTransmision[];
   liga: string;
@@ -83,12 +82,6 @@ export default function PlayerDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
 
-  // --- Carisma (migración 049): dar like y el placeholder de canje ---
-  const [dandoLike, setDandoLike] = useState(false);
-  const [errorLike, setErrorLike] = useState<string | null>(null);
-  const [likeDado, setLikeDado] = useState(false);
-  const [mostrarProximamenteTienda, setMostrarProximamenteTienda] = useState(false);
-
   useEffect(() => {
     const cargarPerfilPublico = async () => {
       if (!nick || !uniqueId) return;
@@ -98,7 +91,7 @@ export default function PlayerDetailPage() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, nick, unique_id, avatar_url, banner_url, bio, country, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, skin_avatar_activa, borde_basico_activo, borde_grosor"
+          "id, nick, unique_id, avatar_url, banner_url, bio, country, es_caster, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, skin_avatar_activa, borde_basico_activo, borde_grosor"
         )
         .eq("nick", nick)
         .eq("unique_id", uniqueId)
@@ -119,7 +112,6 @@ export default function PlayerDetailPage() {
         bio: data.bio,
         country: data.country,
         esCaster: data.es_caster,
-        carisma: data.carisma,
         horarioStream: data.horario_stream,
         linksTransmision: (data.links_transmision as LinkTransmision[] | null) ?? [],
         liga: data.liga_1v1,
@@ -237,27 +229,6 @@ export default function PlayerDetailPage() {
   // usarse acá.
   const claseForma = "avatar-shape-cuadrado";
 
-  const handleDarLike = async () => {
-    if (!perfil) return;
-    setDandoLike(true);
-    setErrorLike(null);
-
-    // dar_like_caster() (en la base) es la que de verdad chequea que
-    // no sea a uno mismo, que el destino sea caster, y el límite de
-    // un like por día -- esto de acá es solo el botón.
-    const { error } = await supabase.rpc("dar_like_caster", { p_caster_id: perfil.id });
-
-    setDandoLike(false);
-
-    if (error) {
-      setErrorLike(error.message);
-      return;
-    }
-
-    setLikeDado(true);
-    setPerfil((prev) => (prev ? { ...prev, carisma: prev.carisma + 1 } : prev));
-  };
-
   return (
     <section className="section section-page">
       <div className="player-detail-banner-wrap">
@@ -364,58 +335,7 @@ export default function PlayerDetailPage() {
             </>
           )}
         </div>
-
-        {/* Las barras de Valentía/Responsabilidad se sacaron de acá --
-            ahora viven en Mi perfil -> Panel de control -> Estadísticas
-            (ver ProfilePage.tsx). Esta columna sigue existiendo solo
-            para el contador de Carisma, cuando corresponde. */}
-        {perfil.esCaster && (
-          <div className="player-detail-stats-column stats-card-group">
-            {/* Migración 049: Carisma dejó de ser una barra de 0-100 --
-                ahora es un contador de puntos sin tope, así que se
-                muestra como un número simple con su ícono, no como una
-                barra más dentro del mismo grupo. */}
-            <div className="carisma-stat">
-              <span className="carisma-stat-icon" aria-hidden="true">
-                🎤
-              </span>
-              <p className="carisma-stat-value">{perfil.carisma}</p>
-              <p className="carisma-stat-label">Carisma</p>
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* Migración 049: dar like (cualquier cuenta logueada, menos al
-          propio caster) y el acceso -- todavía solo un placeholder --
-          para canjear puntos en la Tienda. */}
-      {perfil.esCaster && (
-        <div className="detail-register-box">
-          {user && user.id !== perfil.id && (
-            <>
-              {errorLike && <div className="form-error">{errorLike}</div>}
-              <button
-                type="button"
-                className="btn btn-ghost btn-block"
-                disabled={dandoLike || likeDado}
-                onClick={handleDarLike}
-              >
-                {dandoLike ? "Enviando..." : likeDado ? "¡Like enviado!" : "Dar like a este caster"}
-              </button>
-            </>
-          )}
-          <button
-            type="button"
-            className="btn btn-ghost btn-block"
-            onClick={() => setMostrarProximamenteTienda(true)}
-          >
-            Canjear en la Tienda
-          </button>
-          {mostrarProximamenteTienda && (
-            <p className="detail-empty">Próximamente — la Tienda está en construcción.</p>
-          )}
-        </div>
-      )}
 
       {/* Panel de control: solo cuando el usuario ve su propio perfil,
           nunca en el de otra persona. Mismo patrón visual que el de
@@ -443,7 +363,7 @@ export default function PlayerDetailPage() {
                   </span>
                 </Link>
                 <Link to="/perfil?tab=logros" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Logros y Recompensas</span>
+                  <span className="team-panel-menu-item-title">Logros</span>
                   <span className="team-panel-menu-item-desc">
                     Títulos por nivel y el gestor de títulos Padre/Hijo
                   </span>

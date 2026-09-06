@@ -7,6 +7,7 @@ import InfoTooltip from "../components/InfoTooltip";
 import { MODOS } from "../lib/tournamentOptions";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import type { MapRow, TorneoFormato, TorneoModo } from "../types/tournaments";
+import type { DivisionLiga, Liga } from "../types/ranking";
 
 const FORMATOS: TorneoFormato[] = ["1v1", "2v2", "3v3", "4v4"];
 
@@ -41,6 +42,15 @@ export default function CreateTournamentPage() {
   const [formatoLiga, setFormatoLiga] = useState(false);
   const [puntosVictoria21, setPuntosVictoria21] = useState("3");
 
+  // Liga y división para el ranking de clanes (migración 060) --
+  // ambas opcionales, elegidas por el organizador; sin relación con
+  // formatoLiga (esa es el formato de competencia, esta es la
+  // categoría a efectos del ranking).
+  const [ligas, setLigas] = useState<Liga[]>([]);
+  const [divisiones, setDivisiones] = useState<DivisionLiga[]>([]);
+  const [ligaId, setLigaId] = useState("");
+  const [divisionId, setDivisionId] = useState("");
+
   const [mapas, setMapas] = useState<MapRow[]>([]);
   const [mapasIncluidos, setMapasIncluidos] = useState<Record<string, boolean>>({});
   const [mapasVeteables, setMapasVeteables] = useState<Record<string, boolean>>({});
@@ -64,6 +74,37 @@ export default function CreateTournamentPage() {
         setMapas(data ?? []);
       });
   }, []);
+
+  // Catálogo de ligas y divisiones (migración 060): se cargan las dos
+  // tablas enteras de una vez -- son chicas (3 ligas, un puñado de
+  // divisiones) -- y se filtra por liga elegida en el cliente.
+  useEffect(() => {
+    Promise.all([
+      supabase.from("ligas").select("id, nombre").order("nombre"),
+      supabase.from("divisiones_liga").select("id, liga_id, nombre, mmr_limite").order("nombre"),
+    ]).then(([ligasRes, divisionesRes]) => {
+      if (ligasRes.error) {
+        console.error("Error cargando ligas:", ligasRes.error);
+      } else {
+        setLigas(ligasRes.data ?? []);
+      }
+      if (divisionesRes.error) {
+        console.error("Error cargando divisiones:", divisionesRes.error);
+      } else {
+        setDivisiones(divisionesRes.data ?? []);
+      }
+    });
+  }, []);
+
+  // Al cambiar de liga, la división elegida (si era de otra liga) deja
+  // de tener sentido -- se limpia para no mandar una combinación
+  // inválida (el trigger de la base la rechazaría igual, pero es mejor
+  // no dejar que el usuario llegue a ese error).
+  const divisionesDeLaLiga = divisiones.filter((d) => d.liga_id === ligaId);
+  const handleCambiarLiga = (nuevaLigaId: string) => {
+    setLigaId(nuevaLigaId);
+    setDivisionId("");
+  };
 
   const toggleMapa = (id: string) => {
     setMapasIncluidos((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -121,6 +162,8 @@ export default function CreateTournamentPage() {
         tiene_tercer_lugar: modo === "eliminacion_simple" && !formatoLiga && tieneTercerLugar,
         formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
         puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
+        liga_id: ligaId || null,
+        division_id: divisionId || null,
       })
       .select()
       .single();
@@ -228,6 +271,55 @@ export default function CreateTournamentPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Liga para el ranking de clanes (migración 059): opcional,
+            sin relación con el formato de liga "First Stand" de más
+            abajo. Solo afecta el ranking en un torneo por equipos --
+            en 1v1 el campeón nunca es un clan, así que elegirla acá no
+            tiene efecto, pero no hace falta ocultarla por eso. */}
+        <div className="form-group">
+          <label className="form-label" htmlFor="torneo-liga-ranking">
+            Liga (para el ranking de clanes)
+          </label>
+          <select
+            id="torneo-liga-ranking"
+            className="form-select"
+            value={ligaId}
+            onChange={(e) => handleCambiarLiga(e.target.value)}
+          >
+            <option value="">Ninguna</option>
+            {ligas.map((liga) => (
+              <option key={liga.id} value={liga.id}>
+                {liga.nombre}
+              </option>
+            ))}
+          </select>
+          <p className="form-hint">
+            Si el torneo es por equipos, el campeón suma un torneo ganado en el ranking de esta
+            liga (y en "General").
+          </p>
+
+          {ligaId && (
+            <>
+              <label className="form-label" htmlFor="torneo-division-ranking">
+                División
+              </label>
+              <select
+                id="torneo-division-ranking"
+                className="form-select"
+                value={divisionId}
+                onChange={(e) => setDivisionId(e.target.value)}
+              >
+                <option value="">Ninguna</option>
+                {divisionesDeLaLiga.map((division) => (
+                  <option key={division.id} value={division.id}>
+                    {division.nombre}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
 
         {/* Formato de liga "First Stand" (migración 057): 7 clanes,
