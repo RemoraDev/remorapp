@@ -1,5 +1,4 @@
 ﻿import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -10,7 +9,16 @@ import type { AdminUserRow } from "../types/admin";
 import type { TournamentRow } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
 
-type Tab = "torneos" | "usuarios" | "equipos" | "clanwars" | "disputas" | "reportes" | "alianzas" | "pruebas";
+type Tab =
+  | "torneos"
+  | "usuarios"
+  | "equipos"
+  | "noticias"
+  | "clanwars"
+  | "disputas"
+  | "reportes"
+  | "alianzas"
+  | "pruebas";
 
 // Resultado de generar_escenario_prueba_lineup() (migración 053).
 interface EscenarioPruebaGenerado {
@@ -35,11 +43,31 @@ interface ReporteConNombre {
   reportadoPorNombre: string;
 }
 
-interface EquipoEncontrado {
+// Corrección: lista completa de equipos (no solo el resultado de una
+// búsqueda por tag exacto) -- el buscador pasa a ser un filtro sobre
+// esta lista, no el único camino para encontrar un equipo.
+interface EquipoAdminRow {
   id: string;
   name: string;
   tag: string;
   disuelto: boolean;
+  ownerNombre: string;
+}
+
+// Corrección: lista completa de torneos (no solo el resultado de una
+// búsqueda por nombre) -- mismo criterio que equipos.
+interface TorneoAdminRow extends TournamentRow {
+  organizadorNombre: string;
+}
+
+// Corrección: facultad (c) -- lista completa de noticias publicadas,
+// con eliminación permanente para cualquiera.
+interface NoticiaAdminRow {
+  id: string;
+  titulo: string;
+  contenido: string;
+  createdAt: string;
+  publicadoPorNombre: string;
 }
 
 // Migración 062: gestión de Clan War para el dueño de la plataforma.
@@ -107,19 +135,31 @@ export default function AdminPage() {
   const [motivosSuspension, setMotivosSuspension] = useState<Record<string, string>>({});
   const [erroresSuspender, setErroresSuspender] = useState<Record<string, string>>({});
 
-  // --- Equipos: buscar por tag y eliminar definitivamente ---
-  const [busquedaTagEquipo, setBusquedaTagEquipo] = useState("");
-  const [buscandoEquipo, setBuscandoEquipo] = useState(false);
-  const [errorBusquedaEquipo, setErrorBusquedaEquipo] = useState<string | null>(null);
-  const [equipoEncontrado, setEquipoEncontrado] = useState<EquipoEncontrado | null>(null);
-  const [eliminandoEquipo, setEliminandoEquipo] = useState(false);
+  // --- Equipos: lista completa, con el buscador como filtro opcional
+  // (corrección posterior a la migración 062, que solo tenía búsqueda
+  // exacta por tag) ---
+  const [equiposTodos, setEquiposTodos] = useState<EquipoAdminRow[]>([]);
+  const [cargandoEquipos, setCargandoEquipos] = useState(true);
+  const [errorEquipos, setErrorEquipos] = useState<string | null>(null);
+  const [filtroEquipos, setFiltroEquipos] = useState("");
+  const [eliminandoEquipoId, setEliminandoEquipoId] = useState<string | null>(null);
 
-  // --- Torneos: buscar por nombre y eliminar cualquiera (migración 062) ---
-  const [busquedaNombreTorneo, setBusquedaNombreTorneo] = useState("");
-  const [buscandoTorneos, setBuscandoTorneos] = useState(false);
-  const [errorBusquedaTorneo, setErrorBusquedaTorneo] = useState<string | null>(null);
-  const [torneosEncontrados, setTorneosEncontrados] = useState<TournamentRow[]>([]);
-  const [eliminandoTorneo, setEliminandoTorneo] = useState<string | null>(null);
+  // --- Torneos: lista completa, con el buscador como filtro opcional
+  // (corrección posterior a la migración 062, que solo tenía búsqueda
+  // por nombre) ---
+  const [torneosTodos, setTorneosTodos] = useState<TorneoAdminRow[]>([]);
+  const [cargandoTorneosTodos, setCargandoTorneosTodos] = useState(true);
+  const [errorTorneosTodos, setErrorTorneosTodos] = useState<string | null>(null);
+  const [filtroTorneos, setFiltroTorneos] = useState("");
+  const [eliminandoTorneoId, setEliminandoTorneoId] = useState<string | null>(null);
+
+  // --- Noticias: lista completa y eliminación permanente (migración
+  // 065) -- todavía no existe ninguna pantalla para publicar, solo la
+  // tabla y esta facultad de eliminar. ---
+  const [noticias, setNoticias] = useState<NoticiaAdminRow[]>([]);
+  const [cargandoNoticias, setCargandoNoticias] = useState(true);
+  const [errorNoticias, setErrorNoticias] = useState<string | null>(null);
+  const [eliminandoNoticiaId, setEliminandoNoticiaId] = useState<string | null>(null);
 
   // --- Usuarios: dar de baja cuenta (migración 062) ---
   const [motivosBaja, setMotivosBaja] = useState<Record<string, string>>({});
@@ -358,6 +398,125 @@ export default function AdminPage() {
 
     cargarAlianzas();
 
+    // Corrección: lista completa de equipos -- teams_select_publico ya
+    // permite leer cualquier equipo (mismo criterio que el buscador por
+    // tag que tenía antes), acá simplemente se trae todo en vez de un
+    // solo resultado.
+    const cargarEquiposTodos = async () => {
+      const { data, error } = await supabase
+        .from("teams")
+        .select("id, name, tag, disuelto, owner_id")
+        .order("name");
+
+      if (error) {
+        setErrorEquipos(error.message);
+        setCargandoEquipos(false);
+        return;
+      }
+
+      const filas = data ?? [];
+      const ownerIds = [...new Set(filas.map((t) => t.owner_id))];
+      let nombrePorOwnerId: Record<string, string> = {};
+      if (ownerIds.length > 0) {
+        const { data: perfilesData } = await supabase
+          .from("profiles")
+          .select("id, nick, unique_id")
+          .in("id", ownerIds);
+        nombrePorOwnerId = Object.fromEntries(
+          (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : "Jugador de RemorApp"])
+        );
+      }
+
+      setEquiposTodos(
+        filas.map((t) => ({
+          id: t.id,
+          name: t.name,
+          tag: t.tag,
+          disuelto: t.disuelto,
+          ownerNombre: nombrePorOwnerId[t.owner_id] ?? "Sin dueño",
+        }))
+      );
+      setCargandoEquipos(false);
+    };
+
+    cargarEquiposTodos();
+
+    // Corrección: lista completa de torneos -- tournaments_select_publico
+    // ya permite leer cualquier torneo (mismo criterio que el buscador
+    // por nombre que tenía antes), acá simplemente se trae todo.
+    const cargarTorneosTodos = async () => {
+      const { data, error } = await supabase
+        .from("tournaments")
+        .select("*")
+        .order("creado_en", { ascending: false });
+
+      if (error) {
+        setErrorTorneosTodos(error.message);
+        setCargandoTorneosTodos(false);
+        return;
+      }
+
+      const filas = (data ?? []) as TournamentRow[];
+      const creadorIds = [...new Set(filas.map((t) => t.creador_id))];
+      let nombrePorCreadorId: Record<string, string> = {};
+      if (creadorIds.length > 0) {
+        const { data: perfilesData } = await supabase
+          .from("profiles")
+          .select("id, nick, unique_id")
+          .in("id", creadorIds);
+        nombrePorCreadorId = Object.fromEntries(
+          (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : "Jugador de RemorApp"])
+        );
+      }
+
+      setTorneosTodos(
+        filas.map((t) => ({ ...t, organizadorNombre: nombrePorCreadorId[t.creador_id] ?? "Jugador de RemorApp" }))
+      );
+      setCargandoTorneosTodos(false);
+    };
+
+    cargarTorneosTodos();
+
+    // Facultad (c): lista completa de noticias (migración 065).
+    const cargarNoticias = async () => {
+      const { data, error } = await supabase
+        .from("noticias")
+        .select("id, titulo, contenido, created_at, publicado_por")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        setErrorNoticias(error.message);
+        setCargandoNoticias(false);
+        return;
+      }
+
+      const filas = data ?? [];
+      const autorIds = [...new Set(filas.map((n) => n.publicado_por))];
+      let nombrePorAutorId: Record<string, string> = {};
+      if (autorIds.length > 0) {
+        const { data: perfilesData } = await supabase
+          .from("profiles")
+          .select("id, nick, unique_id")
+          .in("id", autorIds);
+        nombrePorAutorId = Object.fromEntries(
+          (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : "Jugador de RemorApp"])
+        );
+      }
+
+      setNoticias(
+        filas.map((n) => ({
+          id: n.id,
+          titulo: n.titulo,
+          contenido: n.contenido,
+          createdAt: n.created_at,
+          publicadoPorNombre: nombrePorAutorId[n.publicado_por] ?? "Jugador de RemorApp",
+        }))
+      );
+      setCargandoNoticias(false);
+    };
+
+    cargarNoticias();
+
     const cargarClanWarsAdmin = async () => {
       // Gracias a la RLS extendida (migración 062), un admin ve
       // cualquier Clan War, no solo las de equipos propios.
@@ -548,99 +707,40 @@ export default function AdminPage() {
     setUsuarios((listaActualizada ?? []) as AdminUserRow[]);
   };
 
-  const handleBuscarEquipo = async (event: FormEvent) => {
-    event.preventDefault();
-    setErrorBusquedaEquipo(null);
-    setEquipoEncontrado(null);
-
-    const tag = busquedaTagEquipo.trim().toUpperCase();
-    if (!tag) {
-      setErrorBusquedaEquipo("Escribe el tag del equipo.");
-      return;
-    }
-
-    setBuscandoEquipo(true);
-    const { data, error } = await supabase
-      .from("teams")
-      .select("id, name, tag, disuelto")
-      .eq("tag", tag)
-      .maybeSingle();
-    setBuscandoEquipo(false);
-
-    if (error || !data) {
-      setErrorBusquedaEquipo("No encontré ningún equipo con ese tag.");
-      return;
-    }
-
-    setEquipoEncontrado(data);
-  };
-
-  const handleEliminarEquipo = async () => {
-    if (!equipoEncontrado) return;
+  // Corrección: elimina de la lista completa (equiposTodos), ya
+  // filtrada o no por el buscador -- este ya no busca un solo equipo
+  // exacto, es un filtro opcional sobre la lista completa.
+  const handleEliminarEquipo = async (equipo: EquipoAdminRow) => {
     if (
       !window.confirm(
-        `¿Confirmas que quieres eliminar definitivamente a ${equipoEncontrado.name} [${equipoEncontrado.tag}]? Esta acción no se puede deshacer.`
+        `¿Confirmas que quieres eliminar definitivamente a ${equipo.name} [${equipo.tag}]? Esta acción no se puede deshacer.`
       )
     ) {
       return;
     }
 
-    setEliminandoEquipo(true);
-    setErrorBusquedaEquipo(null);
+    setEliminandoEquipoId(equipo.id);
+    setErrorEquipos(null);
 
     // eliminar_equipo_definitivo() (en la base) es la que de verdad
     // verifica is_admin() y bloquea el borrado si el equipo tiene
     // historial de Clan Wars o de torneos -- esto de acá solo pide
     // confirmación y manda la orden.
-    const { error } = await supabase.rpc("eliminar_equipo_definitivo", {
-      p_team_id: equipoEncontrado.id,
-    });
+    const { error } = await supabase.rpc("eliminar_equipo_definitivo", { p_team_id: equipo.id });
 
-    setEliminandoEquipo(false);
+    setEliminandoEquipoId(null);
 
     if (error) {
-      setErrorBusquedaEquipo(error.message);
+      setErrorEquipos(error.message);
       return;
     }
 
-    setEquipoEncontrado(null);
-    setBusquedaTagEquipo("");
+    setEquiposTodos((prev) => prev.filter((e) => e.id !== equipo.id));
   };
 
-  // --- Torneos: buscar por nombre y eliminar cualquiera (migración 062) ---
-  const handleBuscarTorneos = async (event: FormEvent) => {
-    event.preventDefault();
-    setErrorBusquedaTorneo(null);
-    setTorneosEncontrados([]);
-
-    const termino = busquedaNombreTorneo.trim();
-    if (!termino) {
-      setErrorBusquedaTorneo("Escribe (al menos parte de) el nombre del torneo.");
-      return;
-    }
-
-    setBuscandoTorneos(true);
-    const { data, error } = await supabase
-      .from("tournaments")
-      .select("*")
-      .ilike("nombre", `%${termino}%`)
-      .order("creado_en", { ascending: false })
-      .limit(20);
-    setBuscandoTorneos(false);
-
-    if (error) {
-      setErrorBusquedaTorneo(error.message);
-      return;
-    }
-    if (!data || data.length === 0) {
-      setErrorBusquedaTorneo("No encontré ningún torneo con ese nombre.");
-      return;
-    }
-
-    setTorneosEncontrados(data);
-  };
-
-  const handleEliminarTorneo = async (torneo: TournamentRow) => {
+  // Corrección: elimina de la lista completa (torneosTodos), ya
+  // filtrada o no por el buscador.
+  const handleEliminarTorneo = async (torneo: TorneoAdminRow) => {
     if (
       !window.confirm(
         `¿Confirmas que quieres eliminar definitivamente el torneo "${torneo.nombre}" (${torneo.cupos_ocupados} inscritos)? Esta acción no se puede deshacer.`
@@ -649,19 +749,47 @@ export default function AdminPage() {
       return;
     }
 
-    setEliminandoTorneo(torneo.id);
+    setEliminandoTorneoId(torneo.id);
+    setErrorTorneosTodos(null);
+
     // admin_eliminar_torneo() (en la base) es la que de verdad verifica
     // is_admin() -- a diferencia de eliminar_equipo_definitivo(), no
     // bloquea el borrado aunque el torneo tenga participantes.
     const { error } = await supabase.rpc("admin_eliminar_torneo", { p_tournament_id: torneo.id });
-    setEliminandoTorneo(null);
+
+    setEliminandoTorneoId(null);
 
     if (error) {
-      setErrorBusquedaTorneo(error.message);
+      setErrorTorneosTodos(error.message);
       return;
     }
 
-    setTorneosEncontrados((prev) => prev.filter((t) => t.id !== torneo.id));
+    setTorneosTodos((prev) => prev.filter((t) => t.id !== torneo.id));
+    // La lista de "torneos por confirmar" también puede tener este
+    // torneo -- se saca de las dos para no dejar un botón "Confirmar"
+    // apuntando a un torneo que ya no existe.
+    setTorneos((prev) => prev.filter((t) => t.id !== torneo.id));
+  };
+
+  // Facultad (c): elimina una noticia de forma permanente.
+  const handleEliminarNoticia = async (noticia: NoticiaAdminRow) => {
+    if (!window.confirm(`¿Confirmas que quieres eliminar la noticia "${noticia.titulo}"? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    setEliminandoNoticiaId(noticia.id);
+    setErrorNoticias(null);
+
+    const { error } = await supabase.rpc("admin_eliminar_noticia", { p_noticia_id: noticia.id });
+
+    setEliminandoNoticiaId(null);
+
+    if (error) {
+      setErrorNoticias(error.message);
+      return;
+    }
+
+    setNoticias((prev) => prev.filter((n) => n.id !== noticia.id));
   };
 
   // --- Gestión de Clan War (migración 062) ---
@@ -882,6 +1010,13 @@ export default function AdminPage() {
         </button>
         <button
           type="button"
+          className={`admin-tab ${tab === "noticias" ? "active" : ""}`}
+          onClick={() => setTab("noticias")}
+        >
+          Noticias
+        </button>
+        <button
+          type="button"
           className={`admin-tab ${tab === "clanwars" ? "active" : ""}`}
           onClick={() => setTab("clanwars")}
         >
@@ -949,52 +1084,54 @@ export default function AdminPage() {
             ))}
           </div>
 
-          {/* Eliminar cualquier torneo de forma permanente (migración
-              062): a diferencia de la lista de arriba (torneos públicos
-              sin confirmar), esto busca entre TODOS los torneos, tengan
-              o no participantes. */}
-          <h3 className="detail-subtitle">Eliminar un torneo</h3>
-          <form className="auth-form" onSubmit={handleBuscarTorneos}>
-            {errorBusquedaTorneo && <div className="form-error">{errorBusquedaTorneo}</div>}
-            <div className="form-group">
-              <label className="form-label" htmlFor="admin-torneo-nombre">
-                Nombre del torneo
-              </label>
-              <input
-                id="admin-torneo-nombre"
-                className="form-input"
-                type="text"
-                value={busquedaNombreTorneo}
-                onChange={(e) => setBusquedaNombreTorneo(e.target.value)}
-              />
-            </div>
-            <button type="submit" className="btn btn-ghost btn-block" disabled={buscandoTorneos}>
-              {buscandoTorneos ? "Buscando..." : "Buscar"}
-            </button>
-          </form>
+          {/* Corrección: lista completa de TODOS los torneos existentes
+              (nombre, organizador, estado), tengan o no participantes --
+              el buscador es un filtro opcional sobre esta lista, no el
+              único camino para encontrar un torneo. */}
+          <h3 className="detail-subtitle">Todos los torneos</h3>
+          {errorTorneosTodos && <div className="form-error">{errorTorneosTodos}</div>}
+          <div className="form-group">
+            <label className="form-label" htmlFor="admin-torneo-filtro">
+              Filtrar por nombre
+            </label>
+            <input
+              id="admin-torneo-filtro"
+              className="form-input"
+              type="text"
+              placeholder="Escribe para filtrar la lista de abajo"
+              value={filtroTorneos}
+              onChange={(e) => setFiltroTorneos(e.target.value)}
+            />
+          </div>
 
-          {torneosEncontrados.length > 0 && (
-            <div className="admin-list">
-              {torneosEncontrados.map((t) => (
+          {cargandoTorneosTodos && <p className="tournament-card-meta">Cargando torneos...</p>}
+          {!cargandoTorneosTodos && torneosTodos.length === 0 && (
+            <p className="tournament-card-meta">Todavía no hay ningún torneo creado en la plataforma.</p>
+          )}
+
+          <div className="admin-list">
+            {torneosTodos
+              .filter((t) => t.nombre.toLowerCase().includes(filtroTorneos.trim().toLowerCase()))
+              .map((t) => (
                 <div key={t.id} className="admin-row">
                   <div className="admin-row-info">
                     <p className="admin-row-title">{t.nombre}</p>
                     <p className="admin-row-meta">
-                      {t.formato} · {t.modo} · {t.cupos_ocupados}/{t.cupos_totales} inscritos · {t.estado}
+                      Organizado por {t.organizadorNombre} · {t.formato} · {t.modo} · {t.cupos_ocupados}/
+                      {t.cupos_totales} inscritos · {t.estado}
                     </p>
                   </div>
                   <button
                     type="button"
                     className="btn btn-primary"
-                    disabled={eliminandoTorneo === t.id}
+                    disabled={eliminandoTorneoId === t.id}
                     onClick={() => handleEliminarTorneo(t)}
                   >
-                    {eliminandoTorneo === t.id ? "Eliminando..." : "Eliminar definitivamente"}
+                    {eliminandoTorneoId === t.id ? "Eliminando..." : "Eliminar definitivamente"}
                   </button>
                 </div>
               ))}
-            </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -1106,44 +1243,92 @@ export default function AdminPage() {
 
       {tab === "equipos" && (
         <div className="admin-panel">
-          <form className="auth-form" onSubmit={handleBuscarEquipo}>
-            {errorBusquedaEquipo && <div className="form-error">{errorBusquedaEquipo}</div>}
-            <div className="form-group">
-              <label className="form-label" htmlFor="admin-equipo-tag">
-                Tag del equipo
-              </label>
-              <input
-                id="admin-equipo-tag"
-                className="form-input"
-                type="text"
-                placeholder="QSQD"
-                value={busquedaTagEquipo}
-                onChange={(e) => setBusquedaTagEquipo(e.target.value.toUpperCase())}
-              />
-            </div>
-            <button type="submit" className="btn btn-ghost btn-block" disabled={buscandoEquipo}>
-              {buscandoEquipo ? "Buscando..." : "Buscar"}
-            </button>
-          </form>
+          {/* Corrección: lista completa de TODOS los equipos creados en
+              la plataforma (nombre, tag, dueño), no solo el resultado de
+              buscar un tag exacto -- el buscador es un filtro opcional
+              sobre esta lista. */}
+          {errorEquipos && <div className="form-error">{errorEquipos}</div>}
+          <div className="form-group">
+            <label className="form-label" htmlFor="admin-equipo-filtro">
+              Filtrar por nombre o tag
+            </label>
+            <input
+              id="admin-equipo-filtro"
+              className="form-input"
+              type="text"
+              placeholder="Escribe para filtrar la lista de abajo"
+              value={filtroEquipos}
+              onChange={(e) => setFiltroEquipos(e.target.value)}
+            />
+          </div>
 
-          {equipoEncontrado && (
-            <div className="admin-row">
-              <div className="admin-row-info">
-                <p className="admin-row-title">
-                  {equipoEncontrado.name} <span className="profile-nick-id">[{equipoEncontrado.tag}]</span>
-                </p>
-                <p className="admin-row-meta">{equipoEncontrado.disuelto ? "Disuelto" : "Activo"}</p>
-              </div>
-              <button
-                type="button"
-                className="btn btn-primary"
-                disabled={eliminandoEquipo}
-                onClick={handleEliminarEquipo}
-              >
-                {eliminandoEquipo ? "Eliminando..." : "Eliminar definitivamente"}
-              </button>
-            </div>
+          {cargandoEquipos && <p className="tournament-card-meta">Cargando equipos...</p>}
+          {!cargandoEquipos && equiposTodos.length === 0 && (
+            <p className="tournament-card-meta">Todavía no hay ningún equipo creado en la plataforma.</p>
           )}
+
+          <div className="admin-list">
+            {equiposTodos
+              .filter((e) => {
+                const termino = filtroEquipos.trim().toLowerCase();
+                return e.name.toLowerCase().includes(termino) || e.tag.toLowerCase().includes(termino);
+              })
+              .map((equipo) => (
+                <div key={equipo.id} className="admin-row">
+                  <div className="admin-row-info">
+                    <p className="admin-row-title">
+                      {equipo.name} <span className="profile-nick-id">[{equipo.tag}]</span>
+                    </p>
+                    <p className="admin-row-meta">
+                      Dueño: {equipo.ownerNombre} · {equipo.disuelto ? "Disuelto" : "Activo"}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={eliminandoEquipoId === equipo.id}
+                    onClick={() => handleEliminarEquipo(equipo)}
+                  >
+                    {eliminandoEquipoId === equipo.id ? "Eliminando..." : "Eliminar definitivamente"}
+                  </button>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "noticias" && (
+        <div className="admin-panel">
+          {/* Facultad (c): lista completa de noticias publicadas, con
+              eliminación permanente para cualquiera -- todavía no existe
+              ninguna pantalla para publicar una noticia nueva, esto es
+              solo la facultad de eliminar. */}
+          {errorNoticias && <div className="form-error">{errorNoticias}</div>}
+          {cargandoNoticias && <p className="tournament-card-meta">Cargando noticias...</p>}
+          {!cargandoNoticias && noticias.length === 0 && (
+            <p className="tournament-card-meta">Todavía no hay ninguna noticia publicada.</p>
+          )}
+          <div className="admin-list">
+            {noticias.map((n) => (
+              <div key={n.id} className="admin-row">
+                <div className="admin-row-info">
+                  <p className="admin-row-title">{n.titulo}</p>
+                  <p className="admin-row-meta">
+                    Publicada por {n.publicadoPorNombre} · {formatFecha(n.createdAt)}
+                  </p>
+                  <p className="admin-row-meta">{n.contenido}</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={eliminandoNoticiaId === n.id}
+                  onClick={() => handleEliminarNoticia(n)}
+                >
+                  {eliminandoNoticiaId === n.id ? "Eliminando..." : "Eliminar definitivamente"}
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

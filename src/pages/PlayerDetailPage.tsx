@@ -377,19 +377,22 @@ export default function PlayerDetailPage() {
                     Editar datos, transmisión, apariencia, juegos e idioma
                   </span>
                 </Link>
-
-                {/* Solo visible para es_admin -- el link "Administración"
-                    salió del header por completo, este es ahora el único
-                    acceso al Panel de Administración. */}
-                {profile?.es_admin && (
-                  <Link to="/admin" className="team-panel-menu-item">
-                    <span className="team-panel-menu-item-title">Panel de Administración</span>
-                    <span className="team-panel-menu-item-desc">Torneos, usuarios, equipos y Clan Wars</span>
-                  </Link>
-                )}
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Panel de Administración: acceso completamente separado del
+          Panel de control -- uno es la gestión personal como jugador,
+          el otro es el poder del dueño de la plataforma sobre TODA
+          ella, así que no vive anidado dentro del otro. Solo visible
+          para es_admin, mirando el propio perfil. */}
+      {user?.id === perfil.id && profile?.es_admin && (
+        <div className="team-control-panel-wrap">
+          <Link to="/admin" className="btn btn-primary btn-block">
+            Panel de Administración
+          </Link>
         </div>
       )}
     </section>
