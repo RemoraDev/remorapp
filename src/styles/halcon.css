@@ -1461,6 +1461,34 @@ input[type="radio"] {
   margin: 0.25rem 0 0.5rem;
 }
 
+/* Equipo actual: logo chico a modo de ícono junto al nombre -- no el
+   banner completo, que ya se sacó de acá por verse mal en este
+   espacio chico (ver player-detail-equipo-actual-link). */
+.player-detail-equipo-actual-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.player-detail-equipo-actual-logo {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 0.3rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.player-detail-equipo-actual-logo-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--color-accent-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+
 .team-owner-badge {
   margin-left: 0.5rem;
   border-radius: 999px;

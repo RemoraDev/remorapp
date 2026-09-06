@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { validarNick } from "../lib/nickValidation";
-import { recortarImagenConProporcion, recortarImagenCuadrada } from "../lib/teams";
+import { recortarImagenConProporcion, recortarImagenCuadrada, obtenerEquipoDelUsuario } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
 import { BORDE_HEADER_OPTIONS, COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
 import type { BordeHeader, Country, Liga, LinkTransmision, Sc2Region, Profile } from "../types/profile";
@@ -18,6 +18,7 @@ import type { BordeBasico } from "../types/bordes";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import TitulosActivosList from "../components/TitulosActivosList";
+import PercentBar from "../components/PercentBar";
 
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 const BANNER_MAX_BYTES = 3 * 1024 * 1024;
@@ -119,8 +120,12 @@ function calcularProgresoPerfil(profile: Profile | null) {
 // estructura pedida. Logros y Recompensas / Historial de eventos
 // siguen siendo botones de primer nivel aparte -- no se mencionaron en
 // ese pedido, así que no se tocaron.
-type SeccionPerfil = "configuracion" | "logros" | "historial";
-const SECCIONES_VALIDAS: SeccionPerfil[] = ["configuracion", "logros", "historial"];
+// Nueva reorganización: "Estadísticas" (Valentía del jugador,
+// Responsabilidad en Torneos y en Clan War) se suma como cuarto botón
+// de primer nivel -- esas barras ya no se muestran directo en la
+// vitrina pública de Mi perfil (PlayerDetailPage.tsx).
+type SeccionPerfil = "estadisticas" | "configuracion" | "logros" | "historial";
+const SECCIONES_VALIDAS: SeccionPerfil[] = ["estadisticas", "configuracion", "logros", "historial"];
 
 type SubseccionPerfil =
   | "datos"
@@ -148,6 +153,28 @@ function resolverSeccion(valor: string | null): SeccionPerfil | null {
   return SECCIONES_VALIDAS.includes(valor as SeccionPerfil) ? (valor as SeccionPerfil) : null;
 }
 
+interface DestinoPerfil {
+  seccion: SeccionPerfil | null;
+  subseccion: SubseccionPerfil;
+  subsubseccion: SubsubseccionPerfil;
+}
+
+// "datos" y "juego" son los valores de ?tab= de ANTES de que "Editar
+// Datos" y "Configuración por Juegos" pasaran a vivir dentro de
+// Configuración -- se resuelven acá como alias hacia su ubicación
+// actual (en vez de simplemente descartarse) para que un link o
+// marcador viejo siga llevando directo al contenido, en vez de
+// rebotar al menú principal del Panel de control.
+function resolverDestino(valor: string | null): DestinoPerfil {
+  if (valor === "datos") {
+    return { seccion: "configuracion", subseccion: "datos", subsubseccion: null };
+  }
+  if (valor === "juego") {
+    return { seccion: "configuracion", subseccion: "juegos", subsubseccion: "sc2" };
+  }
+  return { seccion: resolverSeccion(valor), subseccion: null, subsubseccion: null };
+}
+
 export default function ProfilePage() {
   const { user, profile, skinAvatarClave, bordeBasicoColorHex, loading, refreshProfile } = useAuth();
   const { tema, setTema } = useTheme();
@@ -156,9 +183,10 @@ export default function ProfilePage() {
   // manda acá con ?tab=... -- sin el parámetro (o con cualquier otro
   // valor), arranca mostrando solo los cuadritos del Panel de control.
   const [searchParams] = useSearchParams();
-  const [seccionActiva, setSeccionActiva] = useState<SeccionPerfil | null>(resolverSeccion(searchParams.get("tab")));
-  const [subseccion, setSubseccion] = useState<SubseccionPerfil>(null);
-  const [subsubseccion, setSubsubseccion] = useState<SubsubseccionPerfil>(null);
+  const destinoInicial = resolverDestino(searchParams.get("tab"));
+  const [seccionActiva, setSeccionActiva] = useState<SeccionPerfil | null>(destinoInicial.seccion);
+  const [subseccion, setSubseccion] = useState<SubseccionPerfil>(destinoInicial.subseccion);
+  const [subsubseccion, setSubsubseccion] = useState<SubsubseccionPerfil>(destinoInicial.subsubseccion);
   // El valor inicial de useState solo se lee en el primer montaje: si
   // ya se está parado en /perfil y se navega de nuevo acá con un ?tab=
   // distinto (el menú de la vitrina usa <Link>, no recarga la página),
@@ -166,13 +194,25 @@ export default function ProfilePage() {
   // pegada en la que estaba. Este efecto la resincroniza cada vez que
   // cambia el parámetro de la URL.
   useEffect(() => {
-    setSeccionActiva(resolverSeccion(searchParams.get("tab")));
-    setSubseccion(null);
-    setSubsubseccion(null);
+    const destino = resolverDestino(searchParams.get("tab"));
+    setSeccionActiva(destino.seccion);
+    setSubseccion(destino.subseccion);
+    setSubsubseccion(destino.subsubseccion);
   }, [searchParams]);
   // Llega desde LoginPage/RegisterPage cuando alguien con sesión activa
   // intentó entrar o registrarse de nuevo (ver Navigate en esas páginas).
   const avisoRedireccion = (location.state as { aviso?: string } | null)?.aviso ?? null;
+
+  // --- Estadísticas (nuevo botón de primer nivel): solo hace falta
+  // saber si el usuario pertenece a un equipo, para decidir si
+  // corresponde mostrar "Responsabilidad en Clan War" -- mismo
+  // criterio que usaba la vitrina pública antes de que estas barras se
+  // movieran para acá.
+  const [tieneEquipo, setTieneEquipo] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    obtenerEquipoDelUsuario(user.id).then((equipo) => setTieneEquipo(!!equipo));
+  }, [user]);
 
   // --- Identidad de jugador: nick, país, servidor SC2, id SC2 ---
   // (los 4 campos que exige el gate de perfil completo).
@@ -1336,15 +1376,24 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Las estadísticas (MMR, Valentía, Responsabilidad) NO se
-          repiten acá: son contenido de la vitrina pública
-          (/jugador/:nick/:uniqueId, "Mi perfil" en la barra inferior),
-          no de esta página de edición. Mostrarlas acá también era
-          justamente lo que hacía que "Editar mis datos" y "Mi perfil"
-          se sintieran mezclados en una sola pantalla. */}
+      {/* Las barras de Valentía/Responsabilidad ya no se muestran
+          directo en la vitrina pública (/jugador/:nick/:uniqueId,
+          "Mi perfil" en la barra inferior) -- viven acá, dentro del
+          botón "Estadísticas", igual que el resto del Panel de
+          control. */}
       <h2 className="detail-subtitle">Panel de control</h2>
       {seccionActiva === null ? (
         <div className="team-panel-menu">
+          <button
+            type="button"
+            className="team-panel-menu-item"
+            onClick={() => setSeccionActiva("estadisticas")}
+          >
+            <span className="team-panel-menu-item-title">Estadísticas</span>
+            <span className="team-panel-menu-item-desc">
+              Valentía del jugador y Responsabilidad en Torneos y Clan War
+            </span>
+          </button>
           <button
             type="button"
             className="team-panel-menu-item"
@@ -1384,6 +1433,21 @@ export default function ProfilePage() {
         >
           ← Volver al panel
         </button>
+      )}
+
+      {/* Estadísticas: Valentía del jugador y Responsabilidad en
+          Torneos/Clan War, sacadas de la vitrina pública de Mi perfil.
+          Responsabilidad en Clan War solo se muestra si el usuario
+          pertenece a un equipo -- mismo criterio que tenía antes en
+          PlayerDetailPage.tsx. */}
+      {seccionActiva === "estadisticas" && (
+        <div className="settings-panel stats-card-group">
+          <PercentBar label="Valentía del jugador" value={profile?.valentia_jugador ?? 0} vertical />
+          <PercentBar label="Responsabilidad en Torneos" value={profile?.responsabilidad_torneos ?? 0} vertical />
+          {tieneEquipo && (
+            <PercentBar label="Responsabilidad en Clan War" value={profile?.responsabilidad_cw ?? 0} vertical />
+          )}
+        </div>
       )}
 
       {/* Reorganización: "Editar datos", "Editar datos de juego" y

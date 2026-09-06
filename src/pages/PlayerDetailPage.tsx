@@ -5,7 +5,6 @@ import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import MmrProgressBar from "../components/MmrProgressBar";
-import PercentBar from "../components/PercentBar";
 import { COUNTRY_OPTIONS } from "../types/profile";
 import type { Country, LinkTransmision } from "../types/profile";
 import type { SkinAvatarClave } from "../types/skins";
@@ -29,9 +28,6 @@ interface PerfilPublico {
   mmr: number;
   nivel: number;
   bancaRota: boolean;
-  valentiaJugador: number;
-  responsabilidadCw: number;
-  responsabilidadTorneos: number;
   razaPrincipal: RazaSc2 | null;
   razaSecundaria: RazaSc2 | null;
   // Skin de avatar activa (migración 052): id de catalogo_skins_avatar,
@@ -51,6 +47,7 @@ interface PerfilPublico {
 interface EquipoActual {
   name: string;
   tag: string;
+  logoUrl: string | null;
 }
 
 // El título más "importante" cuando hay varios activos a la vez: el
@@ -101,7 +98,7 @@ export default function PlayerDetailPage() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, nick, unique_id, avatar_url, banner_url, bio, country, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, skin_avatar_activa, borde_basico_activo, borde_grosor"
+          "id, nick, unique_id, avatar_url, banner_url, bio, country, es_caster, carisma, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, skin_avatar_activa, borde_basico_activo, borde_grosor"
         )
         .eq("nick", nick)
         .eq("unique_id", uniqueId)
@@ -129,9 +126,6 @@ export default function PlayerDetailPage() {
         mmr: data.mmr_1v1,
         nivel: data.nivel_1v1,
         bancaRota: data.banca_rota,
-        valentiaJugador: data.valentia_jugador,
-        responsabilidadCw: data.responsabilidad_cw,
-        responsabilidadTorneos: data.responsabilidad_torneos,
         razaPrincipal: null,
         razaSecundaria: null,
         skinAvatarActiva: data.skin_avatar_activa,
@@ -199,7 +193,7 @@ export default function PlayerDetailPage() {
       // Equipo actual (si tiene) -- team_members.user_id -> teams.id.
       const { data: miembroData } = await supabase
         .from("team_members")
-        .select("teams(name, tag, disuelto)")
+        .select("teams(name, tag, logo_url, disuelto)")
         .eq("user_id", perfilCargado.id)
         .maybeSingle();
       const equipo = miembroData
@@ -207,10 +201,10 @@ export default function PlayerDetailPage() {
           ? miembroData.teams[0]
           : miembroData.teams
         : null;
-      const equipoTipado = equipo as { name: string; tag: string; disuelto: boolean } | null;
+      const equipoTipado = equipo as { name: string; tag: string; logo_url: string | null; disuelto: boolean } | null;
       setEquipoActual(
         equipoTipado && !equipoTipado.disuelto
-          ? { name: equipoTipado.name, tag: equipoTipado.tag }
+          ? { name: equipoTipado.name, tag: equipoTipado.tag, logoUrl: equipoTipado.logo_url }
           : null
       );
 
@@ -325,14 +319,20 @@ export default function PlayerDetailPage() {
             </p>
           )}
 
-          {/* Solo un link de texto con el nombre y el tag -- sin logo ni
-              banner, misma caja chica que antes del rediseño de perfil
-              público. La vista previa completa (con logo) queda para
-              /equipos, donde sí tiene sentido un listado de tarjetas. */}
+          {/* Logo chico a modo de ícono junto al nombre -- no el banner
+              completo, que ya se sacó antes de acá por verse mal en
+              este espacio chico. */}
           {equipoActual && (
-            <p className="tournament-card-meta">
+            <p className="tournament-card-meta player-detail-equipo-actual">
               Equipo actual:{" "}
-              <Link to={`/equipos/${equipoActual.tag}`} className="btn-link">
+              <Link to={`/equipos/${equipoActual.tag}`} className="btn-link player-detail-equipo-actual-link">
+                {equipoActual.logoUrl ? (
+                  <img src={equipoActual.logoUrl} alt="" className="player-detail-equipo-actual-logo" />
+                ) : (
+                  <span className="player-detail-equipo-actual-logo player-detail-equipo-actual-logo-placeholder">
+                    {equipoActual.tag.charAt(0)}
+                  </span>
+                )}
                 {equipoActual.name} [{equipoActual.tag}]
               </Link>
             </p>
@@ -365,17 +365,16 @@ export default function PlayerDetailPage() {
           )}
         </div>
 
-        <div className="player-detail-stats-column stats-card-group">
-          <PercentBar label="Valentía del jugador" value={perfil.valentiaJugador} vertical />
-          <PercentBar label="Responsabilidad en Torneos" value={perfil.responsabilidadTorneos} vertical />
-          {equipoActual && (
-            <PercentBar label="Responsabilidad en Clan War" value={perfil.responsabilidadCw} vertical />
-          )}
-          {/* Migración 049: Carisma dejó de ser una barra de 0-100 --
-              ahora es un contador de puntos sin tope, así que se
-              muestra como un número simple con su ícono, no como una
-              barra más dentro del mismo grupo. */}
-          {perfil.esCaster && (
+        {/* Las barras de Valentía/Responsabilidad se sacaron de acá --
+            ahora viven en Mi perfil -> Panel de control -> Estadísticas
+            (ver ProfilePage.tsx). Esta columna sigue existiendo solo
+            para el contador de Carisma, cuando corresponde. */}
+        {perfil.esCaster && (
+          <div className="player-detail-stats-column stats-card-group">
+            {/* Migración 049: Carisma dejó de ser una barra de 0-100 --
+                ahora es un contador de puntos sin tope, así que se
+                muestra como un número simple con su ícono, no como una
+                barra más dentro del mismo grupo. */}
             <div className="carisma-stat">
               <span className="carisma-stat-icon" aria-hidden="true">
                 🎤
@@ -383,8 +382,8 @@ export default function PlayerDetailPage() {
               <p className="carisma-stat-value">{perfil.carisma}</p>
               <p className="carisma-stat-label">Carisma</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Migración 049: dar like (cualquier cuenta logueada, menos al
@@ -431,20 +430,17 @@ export default function PlayerDetailPage() {
 
           {panelAbierto && (
             <div className="team-leader-panel">
-              {/* Migración 048: reorganización completa en 5 accesos --
-                  el contenido real de cada uno vive en ProfilePage.tsx
-                  (esta página se mantiene de solo lectura), acá solo se
-                  navega con ?tab=. */}
+              {/* Reorganización: 4 accesos, en línea con el Panel de
+                  control de ProfilePage.tsx (esta página se mantiene de
+                  solo lectura, acá solo se navega con ?tab=). "Editar
+                  datos" y "Editar datos de juego" ya no son accesos
+                  sueltos -- viven dentro de Configuración. */}
               <div className="team-panel-menu">
-                <Link to="/perfil?tab=datos" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Editar datos</span>
+                <Link to="/perfil?tab=estadisticas" className="team-panel-menu-item">
+                  <span className="team-panel-menu-item-title">Estadísticas</span>
                   <span className="team-panel-menu-item-desc">
-                    Nick, correo, país y links (Discord, YouTube, Twitch...)
+                    Valentía del jugador y Responsabilidad en Torneos y Clan War
                   </span>
-                </Link>
-                <Link to="/perfil?tab=juego" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Editar datos de juego</span>
-                  <span className="team-panel-menu-item-desc">Raza y liga de StarCraft II</span>
                 </Link>
                 <Link to="/perfil?tab=logros" className="team-panel-menu-item">
                   <span className="team-panel-menu-item-title">Logros y Recompensas</span>
@@ -458,7 +454,9 @@ export default function PlayerDetailPage() {
                 </Link>
                 <Link to="/perfil?tab=configuracion" className="team-panel-menu-item">
                   <span className="team-panel-menu-item-title">Configuración</span>
-                  <span className="team-panel-menu-item-desc">Apariencia e idioma</span>
+                  <span className="team-panel-menu-item-desc">
+                    Editar datos, transmisión, apariencia, juegos e idioma
+                  </span>
                 </Link>
               </div>
             </div>
