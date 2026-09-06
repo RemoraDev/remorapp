@@ -120,6 +120,10 @@ function calcularProgresoPerfil(profile: Profile | null) {
 // estructura pedida. Logros y Recompensas / Historial de eventos
 // siguen siendo botones de primer nivel aparte -- no se mencionaron en
 // ese pedido, así que no se tocaron.
+// Nueva reorganización: "Apariencia de Mi perfil" (Subir Avatar / Subir
+// Banner / Bordes de Avatar) dejó de ser un acceso de Configuración
+// aparte -- ahora vive anidada DENTRO de "Apariencia", junto al Tema y
+// al Borde del Header, como una sección más del mismo menú.
 // Nueva reorganización: "Estadísticas" (Valentía del jugador,
 // Responsabilidad en Torneos y en Clan War) se suma como cuarto botón
 // de primer nivel -- esas barras ya no se muestran directo en la
@@ -130,7 +134,6 @@ const SECCIONES_VALIDAS: SeccionPerfil[] = ["estadisticas", "configuracion", "lo
 type SubseccionPerfil =
   | "datos"
   | "transmision"
-  | "apariencia-perfil"
   | "juegos"
   | "idioma"
   | "apariencia"
@@ -1505,10 +1508,12 @@ export default function ProfilePage() {
       )}
 
       {/* Reorganización: "Editar datos", "Editar datos de juego" y
-          "Configuración" se consolidaron acá adentro -- los 6 accesos
-          de la estructura pedida (Editar Datos / Editar Datos de
-          Transmisión / Apariencia de Mi perfil / Configuración por
-          Juegos / Cambiar idioma general / Apariencia). */}
+          "Configuración" se consolidaron acá adentro -- los 5 accesos
+          de la estructura actual (Editar Datos / Editar Datos de
+          Transmisión / Configuración por Juegos / Cambiar idioma
+          general / Apariencia). "Apariencia de Mi perfil" ya no es un
+          acceso aparte: sus 3 opciones viven anidadas dentro de
+          Apariencia. */}
       {seccionActiva === "configuracion" && (
         <div className="settings-panel">
           {subseccion === null && (
@@ -1529,14 +1534,6 @@ export default function ProfilePage() {
                   Plataformas donde transmitís, con días y horarios
                 </span>
               </button>
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubseccion("apariencia-perfil")}
-              >
-                <span className="team-panel-menu-item-title">Apariencia de Mi perfil</span>
-                <span className="team-panel-menu-item-desc">Avatar, banner y bordes de avatar</span>
-              </button>
               <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("juegos")}>
                 <span className="team-panel-menu-item-title">Editar Datos del Juego</span>
                 <span className="team-panel-menu-item-desc">
@@ -1553,7 +1550,9 @@ export default function ProfilePage() {
                 onClick={() => setSubseccion("apariencia")}
               >
                 <span className="team-panel-menu-item-title">Apariencia</span>
-                <span className="team-panel-menu-item-desc">Tema del sitio y borde del header</span>
+                <span className="team-panel-menu-item-desc">
+                  Tema del sitio, avatar, banner y bordes de avatar y del header
+                </span>
               </button>
             </div>
           )}
@@ -1820,41 +1819,7 @@ export default function ProfilePage() {
             </>
           )}
 
-          {subseccion === "apariencia-perfil" && subsubseccion === null && (
-            <div className="team-panel-menu">
-              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
-                ← Volver
-              </button>
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubsubseccion("subir-avatar")}
-              >
-                <span className="team-panel-menu-item-title">Subir Avatar</span>
-                <span className="team-panel-menu-item-desc">Foto de perfil</span>
-              </button>
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubsubseccion("subir-banner")}
-              >
-                <span className="team-panel-menu-item-title">Subir Banner</span>
-                <span className="team-panel-menu-item-desc">Portada y descripción</span>
-              </button>
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubsubseccion("bordes-avatar")}
-              >
-                <span className="team-panel-menu-item-title">Bordes de Avatar</span>
-                <span className="team-panel-menu-item-desc">
-                  Bordes básicos de color y, si corresponde, skins de efectos
-                </span>
-              </button>
-            </div>
-          )}
-
-          {subseccion === "apariencia-perfil" && subsubseccion === "subir-avatar" && (
+          {subseccion === "apariencia" && subsubseccion === "subir-avatar" && (
             <>
               <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
                 ← Volver
@@ -1900,7 +1865,7 @@ export default function ProfilePage() {
             </>
           )}
 
-          {subseccion === "apariencia-perfil" && subsubseccion === "subir-banner" && (
+          {subseccion === "apariencia" && subsubseccion === "subir-banner" && (
             <>
               <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
                 ← Volver
@@ -1952,7 +1917,7 @@ export default function ProfilePage() {
             </>
           )}
 
-          {subseccion === "apariencia-perfil" && subsubseccion === "bordes-avatar" && (
+          {subseccion === "apariencia" && subsubseccion === "bordes-avatar" && (
             <>
               <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
                 ← Volver
@@ -2332,6 +2297,32 @@ export default function ProfilePage() {
               </div>
 
               <div className="team-panel-menu">
+                <button
+                  type="button"
+                  className="team-panel-menu-item"
+                  onClick={() => setSubsubseccion("subir-avatar")}
+                >
+                  <span className="team-panel-menu-item-title">Subir Avatar</span>
+                  <span className="team-panel-menu-item-desc">Foto de perfil</span>
+                </button>
+                <button
+                  type="button"
+                  className="team-panel-menu-item"
+                  onClick={() => setSubsubseccion("subir-banner")}
+                >
+                  <span className="team-panel-menu-item-title">Subir Banner</span>
+                  <span className="team-panel-menu-item-desc">Portada y descripción</span>
+                </button>
+                <button
+                  type="button"
+                  className="team-panel-menu-item"
+                  onClick={() => setSubsubseccion("bordes-avatar")}
+                >
+                  <span className="team-panel-menu-item-title">Bordes de Avatar</span>
+                  <span className="team-panel-menu-item-desc">
+                    Bordes básicos de color y, si corresponde, skins de efectos
+                  </span>
+                </button>
                 <button
                   type="button"
                   className="team-panel-menu-item"

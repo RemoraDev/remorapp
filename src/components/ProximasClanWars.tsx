@@ -37,20 +37,45 @@ function formatearCuentaRegresiva(objetivo: Date, ahora: Date): string {
   return horas > 0 ? `Comienza en ${horas}h ${minutos}min` : `Comienza en ${minutos}min`;
 }
 
+function LogoEquipo({ nombre, tag, logoUrl }: { nombre: string; tag: string; logoUrl: string | null }) {
+  return logoUrl ? (
+    <img src={logoUrl} alt={nombre} className="clan-war-card-logo" />
+  ) : (
+    <span className="clan-war-card-logo clan-war-card-logo-placeholder">{tag.charAt(0)}</span>
+  );
+}
+
 // No es un <Link>: una Clan War no tiene una página de detalle
 // pública (el detalle real, con lineup y resultado, es privado del
-// equipo -- ver clan_wars_select_propio) -- esta fila es solo un
-// aviso de horario, no un acceso a más contenido.
-function FilaClanWar({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
+// equipo -- ver clan_wars_select_propio) -- esta tarjeta es solo un
+// aviso de horario, no un acceso a más contenido. Mismo lenguaje
+// visual que el "Torneo destacado" (.featured*), adaptado a tarjeta de
+// grilla en vez de héroe único.
+function TarjetaClanWar({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
+  const categoria = [cw.liga_nombre, cw.division_nombre].filter(Boolean).join(" · ");
   return (
-    <div className="proxima-clan-war-item">
-      <span className="proxima-clan-war-hora">{formatoHora.format(new Date(cw.fecha_hora_cet))}</span>
-      <span className="proxima-clan-war-equipos">
-        {cw.challenger_nombre} [{cw.challenger_tag}] vs {cw.challenged_nombre} [{cw.challenged_tag}]
-      </span>
-      <span className="proxima-clan-war-cuenta-regresiva">
-        {formatearCuentaRegresiva(new Date(cw.fecha_hora_cet), ahora)}
-      </span>
+    <div className="clan-war-card">
+      <div className="clan-war-card-glow" />
+      <div className="clan-war-card-body">
+        {categoria && <span className="clan-war-card-badge">{categoria}</span>}
+        <div className="clan-war-card-equipos">
+          <div className="clan-war-card-equipo">
+            <LogoEquipo nombre={cw.challenger_nombre} tag={cw.challenger_tag} logoUrl={cw.challenger_logo_url} />
+            <span className="clan-war-card-tag">{cw.challenger_tag}</span>
+          </div>
+          <span className="clan-war-card-vs">VS</span>
+          <div className="clan-war-card-equipo">
+            <LogoEquipo nombre={cw.challenged_nombre} tag={cw.challenged_tag} logoUrl={cw.challenged_logo_url} />
+            <span className="clan-war-card-tag">{cw.challenged_tag}</span>
+          </div>
+        </div>
+        <div className="clan-war-card-footer">
+          <span className="clan-war-card-hora">{formatoHora.format(new Date(cw.fecha_hora_cet))}</span>
+          <span className="clan-war-card-cuenta-regresiva">
+            {formatearCuentaRegresiva(new Date(cw.fecha_hora_cet), ahora)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -122,17 +147,21 @@ export default function ProximasClanWars() {
           {deHoy.length > 0 && (
             <div className="proxima-clan-war-grupo">
               <h3 className="proxima-clan-war-grupo-titulo">Hoy</h3>
-              {deHoy.map((cw) => (
-                <FilaClanWar key={cw.id} cw={cw} ahora={ahora} />
-              ))}
+              <div className="clan-war-cards-grid">
+                {deHoy.map((cw) => (
+                  <TarjetaClanWar key={cw.id} cw={cw} ahora={ahora} />
+                ))}
+              </div>
             </div>
           )}
           {deManana.length > 0 && (
             <div className="proxima-clan-war-grupo">
               <h3 className="proxima-clan-war-grupo-titulo">Mañana</h3>
-              {deManana.map((cw) => (
-                <FilaClanWar key={cw.id} cw={cw} ahora={ahora} />
-              ))}
+              <div className="clan-war-cards-grid">
+                {deManana.map((cw) => (
+                  <TarjetaClanWar key={cw.id} cw={cw} ahora={ahora} />
+                ))}
+              </div>
             </div>
           )}
         </>
