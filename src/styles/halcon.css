@@ -2292,6 +2292,57 @@ input[type="radio"] {
   white-space: nowrap;
 }
 
+/* Insignia "EN VIVO" (migración 066): reemplaza el contador una vez
+   que la hora programada ya pasó -- ese contador deja de tener
+   sentido en ese momento. */
+.clan-war-card-en-vivo {
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #fff;
+  background: var(--color-danger, #ef4444);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  white-space: nowrap;
+  animation: clan-war-en-vivo-pulso 2s ease-in-out infinite;
+}
+
+@keyframes clan-war-en-vivo-pulso {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.clan-war-card-espera {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+  font-style: italic;
+}
+
+/* Clickeable solo cuando el lineup ya se reveló (migración 066) --
+   .clan-war-card-link envuelve la tarjeta en un <Link>, así que el
+   propio <a> no debe heredar el subrayado ni el color de enlace. */
+.clan-war-card-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.clan-war-card-clickeable {
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.clan-war-card-clickeable:hover {
+  transform: translateY(-2px);
+  border-color: rgba(34, 211, 238, 0.7);
+}
+
 .group-stage-matches {
   display: flex;
   flex-direction: column;

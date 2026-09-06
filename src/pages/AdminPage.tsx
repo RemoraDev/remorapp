@@ -3,6 +3,7 @@ import { Link, Navigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
+import { datetimeLocalAIso } from "../lib/clanWars";
 import { COUNTRY_OPTIONS, PERFIL_TIPO_OPTIONS } from "../types/profile";
 import type { PerfilTipo } from "../types/profile";
 import type { AdminUserRow } from "../types/admin";
@@ -15,6 +16,7 @@ type Tab =
   | "equipos"
   | "noticias"
   | "clanwars"
+  | "movimientos"
   | "disputas"
   | "reportes"
   | "alianzas"
@@ -83,6 +85,22 @@ interface ClanWarAdminRow {
   lineupVistoBuenoChallenger: boolean;
   lineupVistoBuenoChallenged: boolean;
   intervenidoPorAdmin: boolean;
+}
+
+// Migración 066: "Movimientos entre equipos" -- exclusivo del dueño de
+// la plataforma, junta las reprogramaciones (clan_war_reschedules) y
+// las extensiones de plazo de lineup (clan_war_lineup_extensiones) de
+// TODAS las Clan Wars, no solo las propias -- eso es justamente lo que
+// pidió: "el dueño de la web siempre sabrá todo".
+interface MovimientoEquipoRow {
+  id: string;
+  tipo: "reprogramacion" | "extension_lineup";
+  equiposNombre: string;
+  propuestoPorNombre: string;
+  detalle: string;
+  motivo: string | null;
+  status: "pendiente" | "aceptada" | "rechazada";
+  createdAt: string;
 }
 
 interface LineupEntryAdmin {
@@ -182,6 +200,11 @@ export default function AdminPage() {
   const [posicionNuevoIntervencion, setPosicionNuevoIntervencion] = useState("");
   const [interviniendo, setInterviniendo] = useState(false);
   const [errorIntervencion, setErrorIntervencion] = useState<string | null>(null);
+  // Extender el plazo de edición del lineup directamente, sin esperar
+  // la aprobación del rival (migración 066) -- exclusivo del dueño.
+  const [nuevaFechaLimitePorCw, setNuevaFechaLimitePorCw] = useState<Record<string, string>>({});
+  const [extendiendoPlazo, setExtendiendoPlazo] = useState<string | null>(null);
+  const [erroresExtenderPlazo, setErroresExtenderPlazo] = useState<Record<string, string>>({});
 
   // --- Disputas de bracket ---
   const [disputas, setDisputas] = useState<DisputaConNombres[]>([]);
@@ -215,6 +238,13 @@ export default function AdminPage() {
   const [errorLimpieza, setErrorLimpieza] = useState<string | null>(null);
   const [resultadoLimpieza, setResultadoLimpieza] = useState<ResultadoLimpieza | null>(null);
 
+  // --- Movimientos entre equipos (migración 066): exclusivo del
+  // dueño -- reprogramaciones y extensiones de plazo de lineup de
+  // TODAS las Clan Wars. ---
+  const [movimientos, setMovimientos] = useState<MovimientoEquipoRow[]>([]);
+  const [cargandoMovimientos, setCargandoMovimientos] = useState(true);
+  const [errorMovimientos, setErrorMovimientos] = useState<string | null>(null);
+
   useEffect(() => {
     if (!user) {
       setCargandoDueno(false);
@@ -225,6 +255,100 @@ export default function AdminPage() {
       setCargandoDueno(false);
     });
   }, [user]);
+
+  useEffect(() => {
+    if (!esDuenoPlataforma) return;
+
+    (async () => {
+      const [{ data: reprogramacionesData, error: errorReprogramaciones }, { data: extensionesData, error: errorExtensiones }] =
+        await Promise.all([
+          supabase
+            .from("clan_war_reschedules")
+            .select("id, clan_war_id, propuesto_por, nueva_fecha_hora_cet, motivo, status, created_at")
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("clan_war_lineup_extensiones")
+            .select("id, clan_war_id, propuesto_por, minutos_solicitados, motivo, status, created_at")
+            .order("created_at", { ascending: false }),
+        ]);
+
+      if (errorReprogramaciones || errorExtensiones) {
+        setErrorMovimientos((errorReprogramaciones ?? errorExtensiones)?.message ?? "Error desconocido.");
+        setCargandoMovimientos(false);
+        return;
+      }
+
+      const clanWarIds = [
+        ...new Set([
+          ...(reprogramacionesData ?? []).map((r) => r.clan_war_id),
+          ...(extensionesData ?? []).map((e) => e.clan_war_id),
+        ]),
+      ];
+      const teamIds = [
+        ...new Set([
+          ...(reprogramacionesData ?? []).map((r) => r.propuesto_por),
+          ...(extensionesData ?? []).map((e) => e.propuesto_por),
+        ]),
+      ];
+
+      let nombrePorClanWarId: Record<string, string> = {};
+      if (clanWarIds.length > 0) {
+        const { data: clanWarsData } = await supabase
+          .from("clan_wars")
+          .select("id, challenger_team_id, challenged_team_id")
+          .in("id", clanWarIds);
+
+        const teamIdsDeRetos = [
+          ...new Set((clanWarsData ?? []).flatMap((cw) => [cw.challenger_team_id, cw.challenged_team_id])),
+        ];
+        const { data: equiposDeRetosData } = await supabase
+          .from("teams")
+          .select("id, name, tag")
+          .in("id", teamIdsDeRetos);
+        const nombrePorTeamIdReto = Object.fromEntries(
+          (equiposDeRetosData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        );
+        nombrePorClanWarId = Object.fromEntries(
+          (clanWarsData ?? []).map((cw) => [
+            cw.id,
+            `${nombrePorTeamIdReto[cw.challenger_team_id] ?? "Equipo"} vs ${nombrePorTeamIdReto[cw.challenged_team_id] ?? "Equipo"}`,
+          ])
+        );
+      }
+
+      let nombrePorTeamId: Record<string, string> = {};
+      if (teamIds.length > 0) {
+        const { data: equiposData } = await supabase.from("teams").select("id, name, tag").in("id", teamIds);
+        nombrePorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`]));
+      }
+
+      const filas: MovimientoEquipoRow[] = [
+        ...(reprogramacionesData ?? []).map((r) => ({
+          id: r.id,
+          tipo: "reprogramacion" as const,
+          equiposNombre: nombrePorClanWarId[r.clan_war_id] ?? "Clan War",
+          propuestoPorNombre: nombrePorTeamId[r.propuesto_por] ?? "Equipo",
+          detalle: `Nueva fecha: ${formatFecha(r.nueva_fecha_hora_cet)}`,
+          motivo: r.motivo,
+          status: r.status as "pendiente" | "aceptada" | "rechazada",
+          createdAt: r.created_at,
+        })),
+        ...(extensionesData ?? []).map((e) => ({
+          id: e.id,
+          tipo: "extension_lineup" as const,
+          equiposNombre: nombrePorClanWarId[e.clan_war_id] ?? "Clan War",
+          propuestoPorNombre: nombrePorTeamId[e.propuesto_por] ?? "Equipo",
+          detalle: `+${e.minutos_solicitados} minutos de plazo de lineup`,
+          motivo: e.motivo,
+          status: e.status as "pendiente" | "aceptada" | "rechazada",
+          createdAt: e.created_at,
+        })),
+      ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      setMovimientos(filas);
+      setCargandoMovimientos(false);
+    })();
+  }, [esDuenoPlataforma]);
 
   const esAdmin = !!profile?.es_admin;
 
@@ -944,6 +1068,34 @@ export default function AdminPage() {
     );
   };
 
+  // Extender el plazo de edición del lineup directamente (migración
+  // 066) -- sin pasar por la aprobación del rival, exclusivo del
+  // dueño. Queda registrado en dueno_actividad_log.
+  const handleExtenderPlazo = async (clanWarId: string) => {
+    const valor = nuevaFechaLimitePorCw[clanWarId];
+    if (!valor) {
+      setErroresExtenderPlazo((prev) => ({ ...prev, [clanWarId]: "Elige la nueva fecha límite." }));
+      return;
+    }
+
+    setExtendiendoPlazo(clanWarId);
+    setErroresExtenderPlazo((prev) => ({ ...prev, [clanWarId]: "" }));
+
+    const { error } = await supabase.rpc("admin_extender_plazo_lineup_cw", {
+      p_clan_war_id: clanWarId,
+      p_nueva_fecha_limite: datetimeLocalAIso(valor),
+    });
+
+    setExtendiendoPlazo(null);
+
+    if (error) {
+      setErroresExtenderPlazo((prev) => ({ ...prev, [clanWarId]: error.message }));
+      return;
+    }
+
+    setNuevaFechaLimitePorCw((prev) => ({ ...prev, [clanWarId]: "" }));
+  };
+
   const handleResolverDisputa = async (matchId: string, ganadorId: string) => {
     setResolviendo(matchId);
     setErroresResolver((prev) => ({ ...prev, [matchId]: "" }));
@@ -1046,8 +1198,18 @@ export default function AdminPage() {
           Alianzas
           {alianzas.length > 0 && ` (${alianzas.length})`}
         </button>
-        {/* Pruebas (migración 053): exclusiva del dueño de la
-            plataforma -- ni el botón existe para un admin común. */}
+        {/* Movimientos entre equipos (migración 066) y Pruebas
+            (migración 053): exclusivas del dueño de la plataforma --
+            ni el botón existe para un admin común. */}
+        {esDuenoPlataforma && (
+          <button
+            type="button"
+            className={`admin-tab ${tab === "movimientos" ? "active" : ""}`}
+            onClick={() => setTab("movimientos")}
+          >
+            Movimientos entre equipos
+          </button>
+        )}
         {esDuenoPlataforma && (
           <button
             type="button"
@@ -1364,6 +1526,33 @@ export default function AdminPage() {
                   )}
                 </div>
 
+                {/* Extender el plazo de edición del lineup directamente
+                    (migración 066) -- sin depender de que el rival
+                    apruebe una solicitud. */}
+                {esDuenoPlataforma && (
+                  <div className="admin-row-actions" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      className="form-input"
+                      type="datetime-local"
+                      value={nuevaFechaLimitePorCw[cw.id] ?? ""}
+                      onChange={(e) =>
+                        setNuevaFechaLimitePorCw((prev) => ({ ...prev, [cw.id]: e.target.value }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={extendiendoPlazo === cw.id}
+                      onClick={() => handleExtenderPlazo(cw.id)}
+                    >
+                      {extendiendoPlazo === cw.id ? "Extendiendo..." : "Extender plazo de lineup hasta"}
+                    </button>
+                    {erroresExtenderPlazo[cw.id] && (
+                      <div className="form-error">{erroresExtenderPlazo[cw.id]}</div>
+                    )}
+                  </div>
+                )}
+
                 {esDuenoPlataforma && clanWarSeleccionada === cw.id && (
                   <div className="admin-row-info">
                     {errorIntervencion && <div className="form-error">{errorIntervencion}</div>}
@@ -1590,6 +1779,39 @@ export default function AdminPage() {
                   >
                     Rechazar
                   </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "movimientos" && esDuenoPlataforma && (
+        <div className="admin-panel">
+          <p className="tournament-card-meta">
+            Reprogramaciones y extensiones de plazo de lineup de todas las Clan Wars -- pendientes,
+            aceptadas o rechazadas.
+          </p>
+          {errorMovimientos && <div className="form-error">{errorMovimientos}</div>}
+          {cargandoMovimientos && <p className="tournament-card-meta">Cargando movimientos...</p>}
+          {!cargandoMovimientos && movimientos.length === 0 && (
+            <p className="tournament-card-meta">Todavía no hubo ningún movimiento entre equipos.</p>
+          )}
+          <div className="admin-list">
+            {movimientos.map((m) => (
+              <div key={m.id} className="admin-row">
+                <div className="admin-row-info">
+                  <p className="admin-row-title">
+                    {m.equiposNombre} · {m.tipo === "reprogramacion" ? "Reprogramación" : "Extensión de lineup"}
+                  </p>
+                  <p className="admin-row-meta">
+                    Propuesto por {m.propuestoPorNombre} · {m.detalle}
+                    {m.motivo && <> -- Motivo: {m.motivo}</>}
+                  </p>
+                  <p className="admin-row-meta">
+                    {formatFecha(m.createdAt)} ·{" "}
+                    {m.status === "pendiente" ? "Pendiente" : m.status === "aceptada" ? "Aceptada" : "Rechazada"}
+                  </p>
                 </div>
               </div>
             ))}

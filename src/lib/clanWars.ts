@@ -40,3 +40,25 @@ const VENTANA_CHECK_IN_MS = 15 * 60 * 1000;
 export function dentroDeVentanaCheckIn(fechaHoraCetIso: string, ahoraMs: number = Date.now()): boolean {
   return ahoraMs >= new Date(fechaHoraCetIso).getTime() - VENTANA_CHECK_IN_MS;
 }
+
+// Plazo de edición del lineup (migración 066): distinto de la ventana
+// de check-in de arriba -- este es el plazo para seguir agregando o
+// quitando jugadores del propio lineup (armar_lineup_cw), 30 minutos
+// antes de la hora del reto por default, o hasta la fecha extendida si
+// el rival (o el dueño) aprobó una extensión. plazo_edicion_lineup_cw()
+// en la base hace exactamente esta misma cuenta antes de aceptar un
+// cambio de lineup.
+const PLAZO_EDICION_LINEUP_MS = 30 * 60 * 1000;
+
+export function plazoEdicionLineup(fechaHoraCetIso: string, plazoExtendidoHastaIso: string | null): Date {
+  if (plazoExtendidoHastaIso) return new Date(plazoExtendidoHastaIso);
+  return new Date(new Date(fechaHoraCetIso).getTime() - PLAZO_EDICION_LINEUP_MS);
+}
+
+export function vencioPlazoEdicionLineup(
+  fechaHoraCetIso: string,
+  plazoExtendidoHastaIso: string | null,
+  ahoraMs: number = Date.now()
+): boolean {
+  return ahoraMs >= plazoEdicionLineup(fechaHoraCetIso, plazoExtendidoHastaIso).getTime();
+}

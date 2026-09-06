@@ -20,7 +20,13 @@ import type {
 import { NICK_REGEX, validarNick } from "../lib/nickValidation";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
-import { datetimeLocalAIso, dentroDeVentanaCheckIn, formatearHoraCet, formatearHoraLocal } from "../lib/clanWars";
+import {
+  datetimeLocalAIso,
+  dentroDeVentanaCheckIn,
+  formatearHoraCet,
+  formatearHoraLocal,
+  vencioPlazoEdicionLineup,
+} from "../lib/clanWars";
 import type { InvestigacionJugador } from "../types/investigacion";
 import Avatar from "../components/Avatar";
 import LigaBadge from "../components/LigaBadge";
@@ -135,6 +141,20 @@ interface ClanWarConNombres {
   // dos equipos) -- la marca se muestra abajo, gateada a esAdmin o a
   // ser dueño/capitán de alguno de los dos equipos.
   intervenidoPorAdmin: boolean;
+  // Migración 066: plazo de edición del lineup extendido más allá del
+  // default (30 minutos antes del inicio) -- null significa que rige
+  // ese default. Se extiende aprobando una solicitud del rival
+  // (solicitar_extension_lineup_cw) o directo por el dueño.
+  lineupPlazoExtendidoHasta: string | null;
+}
+
+// Migración 066: mismo patrón que ReprogramacionPendiente -- solo
+// importa la solicitud de extensión PENDIENTE de cada reto.
+interface ExtensionLineupPendiente {
+  id: string;
+  propuestoPor: string;
+  minutosSolicitados: number;
+  motivo: string | null;
 }
 
 interface MiembroRoster {
@@ -518,6 +538,15 @@ export default function TeamDetailPage() {
   const [solicitandoReprogramacion, setSolicitandoReprogramacion] = useState<string | null>(null);
   const [erroresReprogramacion, setErroresReprogramacion] = useState<Record<string, string>>({});
   const [respondiendoReprogramacion, setRespondiendoReprogramacion] = useState<string | null>(null);
+  // Extensión del plazo de edición del lineup (migración 066), con
+  // aprobación del rival -- mismo patrón que la reprogramación de
+  // arriba.
+  const [extensionPorReto, setExtensionPorReto] = useState<Record<string, ExtensionLineupPendiente | null>>({});
+  const [minutosExtension, setMinutosExtension] = useState<Record<string, string>>({});
+  const [motivoExtension, setMotivoExtension] = useState<Record<string, string>>({});
+  const [solicitandoExtension, setSolicitandoExtension] = useState<string | null>(null);
+  const [erroresExtension, setErroresExtension] = useState<Record<string, string>>({});
+  const [respondiendoExtension, setRespondiendoExtension] = useState<string | null>(null);
   // Se recalcula cada 30 segundos -- así la ventana de check-in
   // aparece sola cuando corresponde, sin que haga falta recargar la
   // página a mano.
@@ -881,6 +910,7 @@ export default function TeamDetailPage() {
         temporadaId: r.temporada_id,
         fondoLineup: r.fondo_lineup,
         intervenidoPorAdmin: r.intervenido_por_admin,
+        lineupPlazoExtendidoHasta: r.lineup_plazo_extendido_hasta,
       }));
 
       setRetosPendientesResponder(
@@ -1188,6 +1218,26 @@ export default function TeamDetailPage() {
           };
         }
         setReprogramacionPorReto(reprogramacionPorRetoTmp);
+
+        // Extensión del plazo de edición del lineup (migración 066):
+        // solo la solicitud pendiente de cada reto -- mismo criterio
+        // que la reprogramación de arriba.
+        const { data: extensionesData } = await supabase
+          .from("clan_war_lineup_extensiones")
+          .select("id, clan_war_id, propuesto_por, minutos_solicitados, motivo")
+          .in("clan_war_id", retoIds)
+          .eq("status", "pendiente");
+
+        const extensionPorRetoTmp: Record<string, ExtensionLineupPendiente | null> = {};
+        for (const ext of extensionesData ?? []) {
+          extensionPorRetoTmp[ext.clan_war_id] = {
+            id: ext.id,
+            propuestoPor: ext.propuesto_por,
+            minutosSolicitados: ext.minutos_solicitados,
+            motivo: ext.motivo,
+          };
+        }
+        setExtensionPorReto(extensionPorRetoTmp);
       } else {
         setRosterPorTeamId({});
         setLineupPorReto({});
@@ -1195,6 +1245,7 @@ export default function TeamDetailPage() {
         setPartidasPorReto({});
         setWtlSetsPorReto({});
         setReprogramacionPorReto({});
+        setExtensionPorReto({});
       }
 
       // Títulos Padre/Hijo entre clanes: propuestas pendientes de
@@ -2012,6 +2063,55 @@ export default function TeamDetailPage() {
 
     if (error) {
       setErroresReprogramacion((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  // Extensión del plazo de edición del lineup (migración 066), con
+  // aprobación del rival.
+  const handleSolicitarExtension = async (retoId: string) => {
+    const minutos = Number(minutosExtension[retoId]);
+    if (!minutos || minutos <= 0) {
+      setErroresExtension((prev) => ({ ...prev, [retoId]: "Indica cuántos minutos querés pedir de más." }));
+      return;
+    }
+
+    setSolicitandoExtension(retoId);
+    setErroresExtension((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("solicitar_extension_lineup_cw", {
+      p_clan_war_id: retoId,
+      p_minutos_solicitados: minutos,
+      p_motivo: motivoExtension[retoId]?.trim() || null,
+    });
+
+    setSolicitandoExtension(null);
+
+    if (error) {
+      setErroresExtension((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    setMinutosExtension((prev) => ({ ...prev, [retoId]: "" }));
+    setMotivoExtension((prev) => ({ ...prev, [retoId]: "" }));
+    await cargar();
+  };
+
+  const handleResponderExtension = async (retoId: string, extensionId: string, aceptar: boolean) => {
+    setRespondiendoExtension(extensionId);
+    setErroresExtension((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("responder_extension_lineup_cw", {
+      p_extension_id: extensionId,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoExtension(null);
+
+    if (error) {
+      setErroresExtension((prev) => ({ ...prev, [retoId]: error.message }));
       return;
     }
 
@@ -3523,6 +3623,24 @@ export default function TeamDetailPage() {
                     const vistoBuenoLineupRival = soyChallenger
                       ? r.lineupVistoBuenoChallenged
                       : r.lineupVistoBuenoChallenger;
+                    // Plazo de edición del lineup (migración 066): 30
+                    // minutos antes del inicio, o hasta la extensión
+                    // aprobada -- una vez vencido, armar_lineup_cw() ya
+                    // lo rechaza en la base, esto de acá solo oculta el
+                    // formulario y ofrece pedir una extensión. El
+                    // lineup del rival se revela con el mismo criterio
+                    // que revelado_lineup_cw() en la base: ambos vistos
+                    // buenos, o plazo vencido -- así la sección de abajo
+                    // puede distinguir "está oculto" de "está vacío de
+                    // verdad".
+                    const vencioPlazoLineup = vencioPlazoEdicionLineup(
+                      r.fechaHoraCet,
+                      r.lineupPlazoExtendidoHasta,
+                      ahora
+                    );
+                    const lineupRevelado = lineupAprobado || vencioPlazoLineup;
+                    const extension = extensionPorReto[r.id] ?? null;
+                    const yoPropuseExtension = extension?.propuestoPor === equipo.id;
                     const lineupDeReto = lineupPorReto[r.id] ?? { propio: [], rival: [] };
                     const temporalesPropiosDisponibles = jugadoresTemporales.filter((t) => !t.reemplazadoPorId);
                     const roster = rosterPorTeamId[rivalTeamId] ?? [];
@@ -3663,6 +3781,94 @@ export default function TeamDetailPage() {
                           </>
                         )}
 
+                        {/* Extensión del plazo de edición del lineup
+                            (migración 066): solo tiene sentido con la
+                            CW 'aceptada' y una vez vencido el plazo --
+                            antes de eso todavía se puede editar sin
+                            pedir nada. */}
+                        {r.status === "aceptada" && vencioPlazoLineup && !lineupAprobado && (
+                          <>
+                            <h5 className="detail-subtitle">Extensión del plazo de lineup</h5>
+                            <p className="tournament-card-meta">
+                              El plazo para editar el lineup (30 minutos antes del inicio) ya venció. Podés
+                              pedirle al equipo rival que apruebe más tiempo, o pedírselo al staff.
+                            </p>
+                            {erroresExtension[r.id] && <div className="form-error">{erroresExtension[r.id]}</div>}
+
+                            {extension ? (
+                              yoPropuseExtension ? (
+                                <p className="tournament-card-meta">
+                                  Pediste {extension.minutosSolicitados} minutos más
+                                  {extension.motivo && <> -- Motivo: {extension.motivo}</>}. Esperando la respuesta
+                                  de {rivalNombre}.
+                                </p>
+                              ) : (
+                                <>
+                                  <p className="tournament-card-meta">
+                                    {rivalNombre} pidió {extension.minutosSolicitados} minutos más
+                                    {extension.motivo && <> -- Motivo: {extension.motivo}</>}.
+                                  </p>
+                                  <div className="bracket-report">
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      disabled={respondiendoExtension === extension.id}
+                                      onClick={() => handleResponderExtension(r.id, extension.id, true)}
+                                    >
+                                      {respondiendoExtension === extension.id ? "Guardando..." : "Aceptar"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      disabled={respondiendoExtension === extension.id}
+                                      onClick={() => handleResponderExtension(r.id, extension.id, false)}
+                                    >
+                                      {respondiendoExtension === extension.id ? "Guardando..." : "Rechazar"}
+                                    </button>
+                                  </div>
+                                </>
+                              )
+                            ) : (
+                              <div className="form-group">
+                                <label className="form-label" htmlFor={`extension-minutos-${r.id}`}>
+                                  Minutos que pedís de más
+                                </label>
+                                <input
+                                  id={`extension-minutos-${r.id}`}
+                                  className="form-input"
+                                  type="number"
+                                  min={1}
+                                  max={240}
+                                  value={minutosExtension[r.id] ?? ""}
+                                  onChange={(e) =>
+                                    setMinutosExtension((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                  }
+                                />
+                                <label className="form-label" htmlFor={`extension-motivo-${r.id}`}>
+                                  Motivo (opcional)
+                                </label>
+                                <input
+                                  id={`extension-motivo-${r.id}`}
+                                  className="form-input"
+                                  type="text"
+                                  value={motivoExtension[r.id] ?? ""}
+                                  onChange={(e) =>
+                                    setMotivoExtension((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  disabled={solicitandoExtension === r.id}
+                                  onClick={() => handleSolicitarExtension(r.id)}
+                                >
+                                  {solicitandoExtension === r.id ? "Solicitando..." : "Solicitar extensión"}
+                                </button>
+                              </div>
+                            )}
+                          </>
+                        )}
+
                         {/* Fondo de la sala de lineup (migración 051): envuelve tanto
                             el armado del lineup como el check-in posterior, para que
                             la decoración se mantenga durante toda esa etapa del reto. */}
@@ -3701,110 +3907,126 @@ export default function TeamDetailPage() {
                                         Verificación
                                       </a>
                                     )}
-                                    <button
-                                      type="button"
-                                      className="btn btn-ghost"
-                                      disabled={quitandoLineup === entry.id}
-                                      onClick={() => handleQuitarLineup(r.id, entry.id)}
-                                    >
-                                      {quitandoLineup === entry.id ? "Quitando..." : "Quitar"}
-                                    </button>
+                                    {!vencioPlazoLineup && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-ghost"
+                                        disabled={quitandoLineup === entry.id}
+                                        onClick={() => handleQuitarLineup(r.id, entry.id)}
+                                      >
+                                        {quitandoLineup === entry.id ? "Quitando..." : "Quitar"}
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>
                             )}
 
-                            <div className="form-group">
-                              <label className="form-label" htmlFor={`lineup-jugador-${r.id}`}>
-                                Agregar jugador
-                              </label>
-                              <select
-                                id={`lineup-jugador-${r.id}`}
-                                className="form-select"
-                                value={jugadorLineupNuevo[r.id] ?? ""}
-                                onChange={(e) =>
-                                  setJugadorLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                }
-                              >
-                                <option value="">Selecciona un jugador</option>
-                                {/* Migración 047: con una temporada asignada
-                                    a este reto, se ofrece el roster
-                                    elegible completo (miembros + mercenario
-                                    propio + roster del equipo aliado si hay
-                                    alianza aprobada), no solo `miembros` --
-                                    sin temporada, comportamiento idéntico a
-                                    siempre. */}
-                                {(elegiblesPorReto[r.id] ??
-                                  miembros.map((m) => ({
-                                    jugadorId: m.userId,
-                                    nombre: m.nick ? `${m.nick}${m.uniqueId ? `#${m.uniqueId}` : ""}` : "Jugador de RemorApp",
-                                    esMercenario: false,
-                                    esAliado: false,
-                                  }))
-                                ).map((op) => (
-                                  <option key={`real:${op.jugadorId}`} value={`real:${op.jugadorId}`}>
-                                    {op.nombre}
-                                    {op.esMercenario ? " (Mercenario)" : ""}
-                                    {op.esAliado ? " (Aliado)" : ""}
-                                  </option>
-                                ))}
-                                {/* Formato WTL: solo jugadores reales, sin
-                                    temporales -- ver el comentario en
-                                    armar_lineup_cw() en la base. */}
-                                {r.formato !== "wtl" &&
-                                  temporalesPropiosDisponibles.map((t) => (
-                                    <option key={`temp:${t.id}`} value={`temp:${t.id}`}>
-                                      {t.nickTemporal} (Temporal)
-                                    </option>
-                                  ))}
-                              </select>
-                            </div>
-                            {r.formato === "wtl" && (
-                              <div className="form-group">
-                                <label className="form-label" htmlFor={`lineup-posicion-${r.id}`}>
-                                  Posición (1, 2 o 3)
-                                </label>
-                                <select
-                                  id={`lineup-posicion-${r.id}`}
-                                  className="form-select"
-                                  value={posicionLineupNuevo[r.id] ?? ""}
-                                  onChange={(e) =>
-                                    setPosicionLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                  }
+                            {vencioPlazoLineup ? (
+                              <p className="form-hint">
+                                El plazo para seguir editando tu lineup ya venció -- ver "Extensión del plazo de
+                                lineup" más arriba para pedir más tiempo.
+                              </p>
+                            ) : (
+                              <>
+                                <div className="form-group">
+                                  <label className="form-label" htmlFor={`lineup-jugador-${r.id}`}>
+                                    Agregar jugador
+                                  </label>
+                                  <select
+                                    id={`lineup-jugador-${r.id}`}
+                                    className="form-select"
+                                    value={jugadorLineupNuevo[r.id] ?? ""}
+                                    onChange={(e) =>
+                                      setJugadorLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                    }
+                                  >
+                                    <option value="">Selecciona un jugador</option>
+                                    {/* Migración 047: con una temporada asignada
+                                        a este reto, se ofrece el roster
+                                        elegible completo (miembros + mercenario
+                                        propio + roster del equipo aliado si hay
+                                        alianza aprobada), no solo `miembros` --
+                                        sin temporada, comportamiento idéntico a
+                                        siempre. */}
+                                    {(elegiblesPorReto[r.id] ??
+                                      miembros.map((m) => ({
+                                        jugadorId: m.userId,
+                                        nombre: m.nick ? `${m.nick}${m.uniqueId ? `#${m.uniqueId}` : ""}` : "Jugador de RemorApp",
+                                        esMercenario: false,
+                                        esAliado: false,
+                                      }))
+                                    ).map((op) => (
+                                      <option key={`real:${op.jugadorId}`} value={`real:${op.jugadorId}`}>
+                                        {op.nombre}
+                                        {op.esMercenario ? " (Mercenario)" : ""}
+                                        {op.esAliado ? " (Aliado)" : ""}
+                                      </option>
+                                    ))}
+                                    {/* Formato WTL: solo jugadores reales, sin
+                                        temporales -- ver el comentario en
+                                        armar_lineup_cw() en la base. */}
+                                    {r.formato !== "wtl" &&
+                                      temporalesPropiosDisponibles.map((t) => (
+                                        <option key={`temp:${t.id}`} value={`temp:${t.id}`}>
+                                          {t.nickTemporal} (Temporal)
+                                        </option>
+                                      ))}
+                                  </select>
+                                </div>
+                                {r.formato === "wtl" && (
+                                  <div className="form-group">
+                                    <label className="form-label" htmlFor={`lineup-posicion-${r.id}`}>
+                                      Posición (1, 2 o 3)
+                                    </label>
+                                    <select
+                                      id={`lineup-posicion-${r.id}`}
+                                      className="form-select"
+                                      value={posicionLineupNuevo[r.id] ?? ""}
+                                      onChange={(e) =>
+                                        setPosicionLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                      }
+                                    >
+                                      <option value="">Selecciona la posición</option>
+                                      <option value="1">Posición 1</option>
+                                      <option value="2">Posición 2</option>
+                                      <option value="3">Posición 3</option>
+                                    </select>
+                                  </div>
+                                )}
+                                <div className="form-group">
+                                  <label className="form-label" htmlFor={`lineup-link-${r.id}`}>
+                                    Link de verificación (opcional)
+                                  </label>
+                                  <input
+                                    id={`lineup-link-${r.id}`}
+                                    className="form-input"
+                                    type="text"
+                                    placeholder="https://sc2pulse.nephest.com/..."
+                                    value={linkLineupNuevo[r.id] ?? ""}
+                                    onChange={(e) =>
+                                      setLinkLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
+                                    }
+                                  />
+                                </div>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  disabled={agregandoLineup === r.id}
+                                  onClick={() => handleAgregarLineup(r.id)}
                                 >
-                                  <option value="">Selecciona la posición</option>
-                                  <option value="1">Posición 1</option>
-                                  <option value="2">Posición 2</option>
-                                  <option value="3">Posición 3</option>
-                                </select>
-                              </div>
+                                  {agregandoLineup === r.id ? "Agregando..." : "Agregar al lineup"}
+                                </button>
+                              </>
                             )}
-                            <div className="form-group">
-                              <label className="form-label" htmlFor={`lineup-link-${r.id}`}>
-                                Link de verificación (opcional)
-                              </label>
-                              <input
-                                id={`lineup-link-${r.id}`}
-                                className="form-input"
-                                type="text"
-                                placeholder="https://sc2pulse.nephest.com/..."
-                                value={linkLineupNuevo[r.id] ?? ""}
-                                onChange={(e) =>
-                                  setLinkLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                }
-                              />
-                            </div>
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={agregandoLineup === r.id}
-                              onClick={() => handleAgregarLineup(r.id)}
-                            >
-                              {agregandoLineup === r.id ? "Agregando..." : "Agregar al lineup"}
-                            </button>
 
                             <h5 className="detail-subtitle">Lineup de {rivalNombre}</h5>
-                            {lineupDeReto.rival.length === 0 ? (
+                            {!lineupRevelado ? (
+                              <p className="detail-empty">
+                                Todavía no se reveló -- se revela cuando ambos equipos den el visto bueno, o
+                                cuando venza el plazo de edición.
+                              </p>
+                            ) : lineupDeReto.rival.length === 0 ? (
                               <p className="detail-empty">{rivalNombre} todavía no armó su lineup.</p>
                             ) : (
                               <div className="detail-participant-list">

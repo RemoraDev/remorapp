@@ -16,6 +16,10 @@ function esMismoDiaLocal(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
+function yaComenzo(cw: ClanWarProxima, ahora: Date): boolean {
+  return cw.status === "en_curso" || new Date(cw.fecha_hora_cet).getTime() <= ahora.getTime();
+}
+
 // Se actualiza sola cada minuto -- alcanza para un contador en "Xh
 // Ymin" (no hace falta granularidad de segundos), sin depender de
 // tiempo real por websockets, tal como se pidió.
@@ -45,19 +49,21 @@ function LogoEquipo({ nombre, tag, logoUrl }: { nombre: string; tag: string; log
   );
 }
 
-// No es un <Link>: una Clan War no tiene una página de detalle
-// pública (el detalle real, con lineup y resultado, es privado del
-// equipo -- ver clan_wars_select_propio) -- esta tarjeta es solo un
-// aviso de horario, no un acceso a más contenido. Mismo lenguaje
-// visual que el "Torneo destacado" (.featured*), adaptado a tarjeta de
-// grilla en vez de héroe único.
+// Mismo lenguaje visual que el "Torneo destacado" (.featured*), en
+// tarjeta de grilla en vez de héroe único. Clickeable únicamente
+// cuando lineup_revelado es true (ambos equipos ya armaron y
+// aprobaron su lineup, o venció el plazo de edición) -- ahí lleva a la
+// vista pública con el lineup y los casters declarados. Antes de eso
+// se ve pero no lleva a ningún lado.
 function TarjetaClanWar({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
-  const categoria = [cw.liga_nombre, cw.division_nombre].filter(Boolean).join(" · ");
-  return (
-    <div className="clan-war-card">
+  const categoria = cw.division_nombre ? `${cw.liga_nombre} · ${cw.division_nombre}` : cw.liga_nombre;
+  const enVivo = yaComenzo(cw, ahora);
+
+  const contenido = (
+    <div className={`clan-war-card ${cw.lineup_revelado ? "clan-war-card-clickeable" : ""}`}>
       <div className="clan-war-card-glow" />
       <div className="clan-war-card-body">
-        {categoria && <span className="clan-war-card-badge">{categoria}</span>}
+        <span className="clan-war-card-badge">{categoria ?? "Clan War amistosa"}</span>
         <div className="clan-war-card-equipos">
           <div className="clan-war-card-equipo">
             <LogoEquipo nombre={cw.challenger_nombre} tag={cw.challenger_tag} logoUrl={cw.challenger_logo_url} />
@@ -71,26 +77,43 @@ function TarjetaClanWar({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
         </div>
         <div className="clan-war-card-footer">
           <span className="clan-war-card-hora">{formatoHora.format(new Date(cw.fecha_hora_cet))}</span>
-          <span className="clan-war-card-cuenta-regresiva">
-            {formatearCuentaRegresiva(new Date(cw.fecha_hora_cet), ahora)}
-          </span>
+          {enVivo ? (
+            <span className="clan-war-card-en-vivo">EN VIVO</span>
+          ) : (
+            <span className="clan-war-card-cuenta-regresiva">
+              {formatearCuentaRegresiva(new Date(cw.fecha_hora_cet), ahora)}
+            </span>
+          )}
         </div>
+        {!cw.lineup_revelado && (
+          <p className="clan-war-card-espera">Esperando alineación de ambos equipos</p>
+        )}
       </div>
     </div>
+  );
+
+  return cw.lineup_revelado ? (
+    <Link to={`/clan-war/${cw.id}`} className="clan-war-card-link">
+      {contenido}
+    </Link>
+  ) : (
+    contenido
   );
 }
 
 // Clan Wars programadas para hoy y mañana, en la hora local de quien
 // mira -- fecha_hora_cet ya viene como timestamptz (un instante
 // absoluto), así que new Date(...) + Intl.DateTimeFormat sin
-// "timeZone" explícito alcanza para mostrarla convertida sola. Si no
-// hay ninguna en esas dos fechas, se muestran los próximos torneos por
+// "timeZone" explícito alcanza para mostrarla convertida sola. Las que
+// ya comenzaron (EN VIVO) o quedaron vencidas sin haber hecho check-in
+// se agrupan aparte, primero, en vez de perderse entre "Hoy"/"Mañana".
+// Si no hay ninguna Clan War, se muestran los próximos torneos por
 // fecha de inicio como respaldo.
 export default function ProximasClanWars() {
   const [clanWars, setClanWars] = useState<ClanWarProxima[] | null>(null);
   const [torneosRespaldo, setTorneosRespaldo] = useState<TorneoRespaldo[]>([]);
 
-  useEffect(() => {
+  const cargarClanWars = () => {
     supabase.rpc("clan_wars_proximas").then(({ data, error }) => {
       if (error) {
         console.error("Error cargando las próximas Clan Wars:", error);
@@ -99,19 +122,30 @@ export default function ProximasClanWars() {
       }
       setClanWars((data ?? []) as ClanWarProxima[]);
     });
-  }, []);
+  };
+
+  useEffect(cargarClanWars, []);
 
   // Se recalcula sola cada minuto -- así el contador de cada Clan War
-  // avanza en vivo sin recargar la página, y "Hoy"/"Mañana" también se
+  // avanza en vivo sin recargar la página, "Hoy"/"Mañana" también se
   // reclasifica solo si alguien deja la pestaña abierta hasta pasar la
-  // medianoche.
+  // medianoche, y la lista entera se vuelve a pedir para que una
+  // reprogramación (u otro cambio) hecha por los equipos se refleje
+  // sola, sin quedar mostrando datos viejos.
   const ahora = useAhora(60000);
+  useEffect(() => {
+    cargarClanWars();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ahora]);
+
   const manana = new Date(ahora);
   manana.setDate(ahora.getDate() + 1);
 
-  const deHoy = (clanWars ?? []).filter((cw) => esMismoDiaLocal(new Date(cw.fecha_hora_cet), ahora));
-  const deManana = (clanWars ?? []).filter((cw) => esMismoDiaLocal(new Date(cw.fecha_hora_cet), manana));
-  const sinNadaProgramado = clanWars !== null && deHoy.length === 0 && deManana.length === 0;
+  const enVivo = (clanWars ?? []).filter((cw) => yaComenzo(cw, ahora));
+  const resto = (clanWars ?? []).filter((cw) => !yaComenzo(cw, ahora));
+  const deHoy = resto.filter((cw) => esMismoDiaLocal(new Date(cw.fecha_hora_cet), ahora));
+  const deManana = resto.filter((cw) => esMismoDiaLocal(new Date(cw.fecha_hora_cet), manana));
+  const sinNadaProgramado = clanWars !== null && enVivo.length === 0 && deHoy.length === 0 && deManana.length === 0;
 
   useEffect(() => {
     if (!sinNadaProgramado) return;
@@ -144,6 +178,16 @@ export default function ProximasClanWars() {
 
       {!sinNadaProgramado ? (
         <>
+          {enVivo.length > 0 && (
+            <div className="proxima-clan-war-grupo">
+              <h3 className="proxima-clan-war-grupo-titulo">En vivo</h3>
+              <div className="clan-war-cards-grid">
+                {enVivo.map((cw) => (
+                  <TarjetaClanWar key={cw.id} cw={cw} ahora={ahora} />
+                ))}
+              </div>
+            </div>
+          )}
           {deHoy.length > 0 && (
             <div className="proxima-clan-war-grupo">
               <h3 className="proxima-clan-war-grupo-titulo">Hoy</h3>

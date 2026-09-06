@@ -24,6 +24,7 @@ import VoicePage from "./pages/VoicePage";
 import AyudaPage from "./pages/AyudaPage";
 import RankingPage from "./pages/RankingPage";
 import ClanWarsSchedulePage from "./pages/ClanWarsSchedulePage";
+import ClanWarLineupPublicoPage from "./pages/ClanWarLineupPublicoPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -80,6 +81,7 @@ function AppContent() {
           <Route path="/ayuda" element={<AyudaPage />} />
           <Route path="/ranking" element={<RankingPage />} />
           <Route path="/calendario" element={<ClanWarsSchedulePage />} />
+          <Route path="/clan-war/:id" element={<ClanWarLineupPublicoPage />} />
           {/* La Tienda se descartó por completo -- la ruta se mantiene
               únicamente para redirigir a Inicio a quien tenga un
               enlace o marcador viejo, en vez de mostrar una página
