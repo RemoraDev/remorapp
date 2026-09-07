@@ -139,7 +139,16 @@ export default function VoicePage() {
     setEnviando(false);
 
     if (error) {
-      setErrorEnvio("No se pudo enviar el mensaje. Intenta de nuevo.");
+      // Migración 072: el mismo filtro también está reforzado en la
+      // base (check constraint) -- si por lo que sea el chequeo del
+      // cliente de arriba lo dejó pasar, el mensaje sigue sin poder
+      // guardarse, y esto le da al usuario el mismo aviso claro en
+      // vez del error crudo de Postgres.
+      if (error.message.includes("mensajes_equipo_contenido_sin_lenguaje_inapropiado")) {
+        setErrorEnvio("Ese mensaje contiene lenguaje que no está permitido. Por favor, reformúlalo.");
+      } else {
+        setErrorEnvio("No se pudo enviar el mensaje. Intenta de nuevo.");
+      }
       return;
     }
 

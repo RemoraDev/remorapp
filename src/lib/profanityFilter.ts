@@ -1,6 +1,13 @@
 // Lista básica de palabras a bloquear en nicks (español e inglés). No es
 // exhaustiva -- es un filtro de primera línea pensado para ampliarse más
 // adelante, no un sistema de moderación completo.
+//
+// Migración 072: esta misma lista y esta misma normalización (acá
+// abajo) están replicadas a mano en SQL, como public.contiene_lenguaje_inapropiado()
+// -- un check constraint sobre mensajes_equipo.contenido, para que el
+// filtro no dependa solo del cliente en el chat de Delfin Mode. Si se
+// amplía esta lista, hay que ampliar también la de la migración 072 --
+// no hay una fuente única compartida entre TypeScript y SQL.
 const PALABRAS_BLOQUEADAS = [
   // Español
   "puta",
