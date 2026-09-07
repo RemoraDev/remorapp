@@ -981,24 +981,161 @@ input[type="radio"] {
   50% { opacity: 1; }
 }
 
-/* Estrella de los marcos de prestigio (migración 068): asoma en la
-   esquina inferior derecha, por FUERA del anillo -- fondo oscuro
-   propio para que se lea igual sobre cualquier avatar. */
-.avatar-skin-estrella {
+/* ---------- Marcos de prestigio (migración 068, rediseñados) ----------
+   A diferencia de las 8 skins "Electric" de arriba (ruido/turbulencia
+   animada por filtro SVG), Diamante/Master/Gran Master usan una
+   técnica totalmente distinta -- un anillo de conic-gradient rotando
+   en limpio, sin distorsión -- para que se lean como una categoría
+   aparte (gema/metal pulido) y no como una simple variante de color de
+   las skins eléctricas. Ver AvatarSkin.tsx (CONFIG_PRESTIGIO). */
+.avatar-skin-prestigio-clip {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.avatar-skin-prestigio-anillo {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--marco-grosor, 3px);
+  background: conic-gradient(
+    from 0deg,
+    var(--marco-c1),
+    var(--marco-c2),
+    var(--marco-c3),
+    var(--marco-c4),
+    var(--marco-c1)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: skin-prestigio-girar var(--marco-giro-dur, 8s) linear infinite;
+}
+@keyframes skin-prestigio-girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .avatar-skin-prestigio-anillo,
+  .avatar-skin-prestigio-destello,
+  .avatar-skin-prestigio-chispa {
+    animation: none !important;
+  }
+}
+
+/* Variante "doble" (Master): un segundo anillo interno, fino y
+   semiestático, para una lectura más "de banda real" que un anillo
+   único. */
+.avatar-skin-prestigio-anillo-interno {
+  position: absolute;
+  inset: 0.3rem;
+  border-radius: inherit;
+  border: 1px solid currentColor;
+  opacity: 0.55;
+}
+
+/* Variante "faceta" (Diamante): 4 destellos fijos en los puntos
+   cardinales, como luz reflejando en los cortes de un diamante. */
+.avatar-skin-prestigio-destello {
+  position: absolute;
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 1px;
+  transform: rotate(45deg);
+  animation: skin-prestigio-destello-brillo 3s ease-in-out infinite;
+}
+.avatar-skin-prestigio-destello-0 {
+  top: 0.1rem;
+  left: 50%;
+  margin-left: -0.15rem;
+  animation-delay: 0s;
+}
+.avatar-skin-prestigio-destello-1 {
+  right: 0.1rem;
+  top: 50%;
+  margin-top: -0.15rem;
+  animation-delay: 0.75s;
+}
+.avatar-skin-prestigio-destello-2 {
+  bottom: 0.1rem;
+  left: 50%;
+  margin-left: -0.15rem;
+  animation-delay: 1.5s;
+}
+.avatar-skin-prestigio-destello-3 {
+  left: 0.1rem;
+  top: 50%;
+  margin-top: -0.15rem;
+  animation-delay: 2.25s;
+}
+@keyframes skin-prestigio-destello-brillo {
+  0%, 100% {
+    opacity: 0.35;
+    transform: rotate(45deg) scale(0.7);
+  }
+  50% {
+    opacity: 1;
+    transform: rotate(45deg) scale(1.25);
+  }
+}
+
+/* Variante "radiante" (Gran Master): chispas que suben desde el
+   anillo y se apagan -- el rango más alto, con más energía visible. */
+.avatar-skin-prestigio-chispa {
+  position: absolute;
+  width: 0.22rem;
+  height: 0.22rem;
+  border-radius: 50%;
+  animation: skin-prestigio-chispa-vuelo 2.2s ease-out infinite;
+}
+.avatar-skin-prestigio-chispa-0 {
+  bottom: 0.4rem;
+  left: 30%;
+  animation-delay: 0s;
+}
+.avatar-skin-prestigio-chispa-1 {
+  bottom: 0.3rem;
+  left: 65%;
+  animation-delay: 0.7s;
+}
+.avatar-skin-prestigio-chispa-2 {
+  bottom: 0.5rem;
+  left: 50%;
+  animation-delay: 1.4s;
+}
+@keyframes skin-prestigio-chispa-vuelo {
+  0% {
+    opacity: 0;
+    transform: scale(0.4) translateY(0);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1) translateY(-0.7rem);
+  }
+}
+
+/* Insignia con forma de gema (reemplaza el glifo "★" plano de antes):
+   un rombo con relieve y degradé propio del marco, apenas asomando
+   por fuera del anillo en la esquina inferior derecha -- por FUERA
+   del clip de arriba a propósito, igual que la estrella que
+   reemplaza. */
+.avatar-skin-gema {
   position: absolute;
   z-index: 4;
-  right: -0.35rem;
-  bottom: -0.35rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 50%;
-  background: #0b0d12;
-  border: 1px solid currentColor;
-  font-size: 0.85rem;
-  line-height: 1;
+  right: -0.3rem;
+  bottom: -0.3rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 2px;
+  transform: rotate(45deg);
 }
 
 /* Borde básico de avatar (migración 055): color liso, sin filtro ni
@@ -2763,6 +2900,60 @@ input[type="radio"] {
 .page-placeholder p {
   margin-top: 0.5rem;
   color: var(--color-text-muted);
+}
+
+/* ---------- Delfin Mode: chat de texto por equipo (migración 071) ---------- */
+
+.team-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 48rem;
+  margin: 0 auto;
+}
+
+.team-chat-mensajes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  height: 26rem;
+  overflow-y: auto;
+  padding: 1rem;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.team-chat-mensaje-cabecera {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.team-chat-autor {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  color: var(--color-accent);
+}
+
+.team-chat-hora {
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+}
+
+.team-chat-texto {
+  margin-top: 0.15rem;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.team-chat-form {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.team-chat-form .form-input {
+  flex: 1;
 }
 
 /* ---------- Navegación inferior ---------- */

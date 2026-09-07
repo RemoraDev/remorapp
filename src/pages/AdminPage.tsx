@@ -1000,8 +1000,9 @@ export default function AdminPage() {
     event.preventDefault();
     if (!user || !archivoNuevoFondo) return;
 
-    if (!nombreNuevoFondo.trim()) {
-      setErrorFondosLineup("Ponle un nombre al fondo.");
+    const nombreFondo = nombreNuevoFondo.trim();
+    if (nombreFondo.length < 2 || nombreFondo.length > 40) {
+      setErrorFondosLineup("El nombre del fondo debe tener entre 2 y 40 caracteres.");
       return;
     }
 
@@ -1025,7 +1026,7 @@ export default function AdminPage() {
 
     const { error: insertError } = await supabase
       .from("catalogo_fondos_lineup")
-      .insert({ nombre: nombreNuevoFondo.trim(), image_url: imageUrl, creado_por: user.id });
+      .insert({ nombre: nombreFondo, image_url: imageUrl, creado_por: user.id });
 
     setSubiendoFondo(false);
 
@@ -1997,6 +1998,7 @@ export default function AdminPage() {
                 id="admin-fondo-nombre"
                 className="form-input"
                 type="text"
+                maxLength={40}
                 value={nombreNuevoFondo}
                 onChange={(e) => setNombreNuevoFondo(e.target.value)}
               />

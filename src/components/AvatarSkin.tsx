@@ -1,5 +1,5 @@
 import { useId } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import type { SkinAvatarClave } from "../types/skins";
 import type { AvatarForma } from "../types/profile";
 
@@ -25,10 +25,6 @@ interface ConfigElectrico {
   colorNucleo: string;
   opacidadBase?: number;
   conMatrizHielo?: boolean;
-  // Migración 068: marcos de prestigio (Diamante/Master/Gran Master) --
-  // una estrella en la esquina inferior, del mismo color que el borde,
-  // es lo que los distingue de una skin de efectos común.
-  estrella?: boolean;
 }
 
 // Catálogo "Electric" (migración 054): las 8 skins comparten
@@ -50,7 +46,9 @@ interface ConfigElectrico {
 // - opacidadBase: para Niebla, que necesita verse tenue.
 // - conMatrizHielo: para Frost, un feColorMatrix extra que aclara y
 //   satura el azul para una sensación cristalina.
-const CONFIG_ELECTRICO: Record<SkinAvatarClave, ConfigElectrico> = {
+type ClaveElectrico = Exclude<SkinAvatarClave, ClavePrestigio>;
+
+const CONFIG_ELECTRICO: Record<ClaveElectrico, ConfigElectrico> = {
   electric: {
     baseFrequency: 0.09,
     dur: "6s",
@@ -120,37 +118,66 @@ const CONFIG_ELECTRICO: Record<SkinAvatarClave, ConfigElectrico> = {
     colorBorde: "#ffd700",
     colorNucleo: "rgba(255, 240, 180, 0.95)",
   },
-  // Migración 068: marcos de prestigio -- misma técnica "Electric",
-  // colores que evocan la liga real de StarCraft II de cada rango, con
-  // la estrella en la esquina como marca distintiva.
+};
+
+// Migración 068 (rediseñado): los 3 marcos de prestigio -- Diamante,
+// Master y Gran Master -- ya NO comparten la técnica "Electric" de
+// arriba. El pedido original los hacía ver como una simple variante de
+// color de las 8 skins eléctricas, cuando tienen que leerse como una
+// categoría totalmente aparte (más "gema/metal pulido" que "energía
+// líquida"): un anillo de conic-gradient rotando en limpio, sin ruido
+// ni distorsión, más una insignia con forma de gema en vez del glifo
+// "★" plano. Ver ClavePrestigio y FiltroPrestigio más abajo.
+export type ClavePrestigio = "diamante" | "master" | "gran_master";
+
+interface ConfigPrestigio {
+  // 4 paradas de color del conic-gradient del anillo (vuelve a la
+  // primera al cerrar el círculo).
+  colores: [string, string, string, string];
+  // Grosor del anillo.
+  grosor: string;
+  // Duración de la vuelta completa del anillo -- más rápido en los
+  // rangos más altos, para que se sientan más "cargados" de energía.
+  duracionGiro: string;
+  // Variante visual que distingue a cada uno de los otros dos, más
+  // allá de la paleta:
+  // - "faceta": 4 destellos fijos en los puntos cardinales, como luz
+  //   reflejando en los cortes de un diamante.
+  // - "doble": un segundo anillo interno, fino y semiestático, para
+  //   una lectura más "de banda real".
+  // - "radiante": brillo exterior pulsante más intenso, con chispas
+  //   que suben y se apagan -- el rango más alto de todos.
+  variante: "faceta" | "doble" | "radiante";
+  colorAcento: string;
+}
+
+const CONFIG_PRESTIGIO: Record<ClavePrestigio, ConfigPrestigio> = {
   diamante: {
-    baseFrequency: 0.07,
-    dur: "7s",
-    scale: 6,
-    modoBlend: "color-dodge",
-    colorBorde: "#38bdf8",
-    colorNucleo: "rgba(224, 242, 254, 0.95)",
-    estrella: true,
+    colores: ["#e0f2fe", "#7dd3fc", "#ffffff", "#38bdf8"],
+    grosor: "3px",
+    duracionGiro: "10s",
+    variante: "faceta",
+    colorAcento: "#38bdf8",
   },
   master: {
-    baseFrequency: 0.08,
-    dur: "6s",
-    scale: 7,
-    modoBlend: "color-dodge",
-    colorBorde: "#c026d3",
-    colorNucleo: "rgba(250, 232, 255, 0.95)",
-    estrella: true,
+    colores: ["#f5d0fe", "#c026d3", "#e9d5ff", "#86198f"],
+    grosor: "3px",
+    duracionGiro: "7s",
+    variante: "doble",
+    colorAcento: "#c026d3",
   },
   gran_master: {
-    baseFrequency: 0.14,
-    dur: "4s",
-    scale: 8,
-    modoBlend: "screen",
-    colorBorde: "#f97316",
-    colorNucleo: "rgba(254, 226, 226, 0.95)",
-    estrella: true,
+    colores: ["#fef08a", "#f97316", "#ef4444", "#fde047"],
+    grosor: "4px",
+    duracionGiro: "4s",
+    variante: "radiante",
+    colorAcento: "#f97316",
   },
 };
+
+function esClavePrestigio(clave: SkinAvatarClave): clave is ClavePrestigio {
+  return clave === "diamante" || clave === "master" || clave === "gran_master";
+}
 
 function FiltroElectrico({ id, config }: { id: string; config: ConfigElectrico }) {
   const { baseFrequency, dur, scale, modoBlend, conMatrizHielo } = config;
@@ -212,18 +239,17 @@ export default function AvatarSkin({
 }: AvatarSkinProps) {
   const idBase = useId().replace(/:/g, "");
   const claseForma = forma === "cuadrado" ? "avatar-shape-cuadrado" : "avatar-shape-redondo";
-  const config = clave ? CONFIG_ELECTRICO[clave] : undefined;
 
   // Sin skin de efectos ni borde básico: el avatar se muestra tal
   // cual, sin ningún envoltorio.
-  if ((!clave || !config) && !bordeColor) {
+  if ((!clave || (!esClavePrestigio(clave) && !CONFIG_ELECTRICO[clave])) && !bordeColor) {
     return <>{children}</>;
   }
 
   // Regla dura (pedida explícitamente): si hay una skin de efectos
   // activa, esa tiene prioridad visual -- el borde básico ni se
   // renderiza, nunca se mezclan los dos a la vez.
-  if (!clave || !config) {
+  if (!clave || (!esClavePrestigio(clave) && !CONFIG_ELECTRICO[clave])) {
     return (
       <span className="avatar-skin" data-borde-basico="">
         <span className="avatar-skin-inner">{children}</span>
@@ -235,6 +261,64 @@ export default function AvatarSkin({
       </span>
     );
   }
+
+  if (esClavePrestigio(clave)) {
+    const config = CONFIG_PRESTIGIO[clave];
+    const [c1, c2, c3, c4] = config.colores;
+    const estiloAnillo = {
+      "--marco-c1": c1,
+      "--marco-c2": c2,
+      "--marco-c3": c3,
+      "--marco-c4": c4,
+      "--marco-grosor": config.grosor,
+      "--marco-giro-dur": config.duracionGiro,
+    } as CSSProperties;
+
+    return (
+      <span className="avatar-skin avatar-skin-prestigio" data-marco-prestigio={clave}>
+        <span className="avatar-skin-inner">{children}</span>
+        <span className={`avatar-skin-prestigio-clip ${claseForma}`} aria-hidden="true">
+          <span
+            className="avatar-skin-prestigio-anillo"
+            style={{ ...estiloAnillo, boxShadow: `0 0 6px ${config.colorAcento}` }}
+          />
+          {config.variante === "doble" && (
+            <span className="avatar-skin-prestigio-anillo-interno" style={{ borderColor: config.colorAcento }} />
+          )}
+          {config.variante === "faceta" &&
+            [0, 1, 2, 3].map((i) => (
+              <span
+                key={i}
+                className={`avatar-skin-prestigio-destello avatar-skin-prestigio-destello-${i}`}
+                style={{ background: config.colorAcento, boxShadow: `0 0 4px ${config.colorAcento}` }}
+              />
+            ))}
+          {config.variante === "radiante" &&
+            [0, 1, 2].map((i) => (
+              <span
+                key={i}
+                className={`avatar-skin-prestigio-chispa avatar-skin-prestigio-chispa-${i}`}
+                style={{ background: config.colorAcento }}
+              />
+            ))}
+        </span>
+        {/* La insignia con forma de gema queda FUERA del clip de
+            arriba a propósito -- ese contenedor recorta todo lo que
+            sobresalga del avatar, y la insignia tiene que asomar por
+            fuera del anillo, no quedar contenida en él. */}
+        <span
+          className="avatar-skin-gema"
+          style={{
+            background: `linear-gradient(135deg, ${c1}, ${config.colorAcento})`,
+            boxShadow: `0 1px 4px rgba(0, 0, 0, 0.5), 0 0 6px ${config.colorAcento}`,
+          }}
+          aria-hidden="true"
+        />
+      </span>
+    );
+  }
+
+  const config = CONFIG_ELECTRICO[clave];
 
   return (
     <span className="avatar-skin" data-skin={clave}>
@@ -258,15 +342,6 @@ export default function AvatarSkin({
           }}
         />
       </span>
-      {/* Migración 068: la estrella de los marcos de prestigio queda
-          FUERA del clip de arriba a propósito -- ese contenedor recorta
-          todo lo que sobresalga del avatar, y la estrella tiene que
-          asomar por fuera del borde, no quedar contenida en el anillo. */}
-      {config.estrella && (
-        <span className="avatar-skin-estrella" style={{ color: config.colorBorde }} aria-hidden="true">
-          ★
-        </span>
-      )}
     </span>
   );
 }
