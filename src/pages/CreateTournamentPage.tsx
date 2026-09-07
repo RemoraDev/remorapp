@@ -55,6 +55,23 @@ export default function CreateTournamentPage() {
   const [mapasIncluidos, setMapasIncluidos] = useState<Record<string, boolean>>({});
   const [mapasVeteables, setMapasVeteables] = useState<Record<string, boolean>>({});
 
+  // Suizo (migración 069): en blanco = generar_torneo_suizo() calcula
+  // sola la cantidad de rondas (techo de log2 de los inscritos).
+  const [swissRondas, setSwissRondas] = useState("");
+
+  // Modo simple/avanzado (migración 069): el modo avanzado revela las
+  // opciones de las pestañas Bracket/Permissions/Misc del formulario
+  // de referencia -- el resto (Notifications, adjuntos, avance rápido,
+  // compartir acceso de admin) queda para un pedido aparte.
+  const [modoAvanzado, setModoAvanzado] = useState(false);
+  const [mostrarNombresRonda, setMostrarNombresRonda] = useState(false);
+  const [ocultarNumerosSemilla, setOcultarNumerosSemilla] = useState(false);
+  const [ocultarBracketPublico, setOcultarBracketPublico] = useState(false);
+  const [reglasSemillas, setReglasSemillas] = useState<"aleatorio" | "tradicional">("aleatorio");
+  const [permiteAutoreporte, setPermiteAutoreporte] = useState(true);
+  const [excluidoDeBusqueda, setExcluidoDeBusqueda] = useState(false);
+  const [mostrarPosiciones, setMostrarPosiciones] = useState(true);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -164,6 +181,14 @@ export default function CreateTournamentPage() {
         puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
         liga_id: ligaId || null,
         division_id: divisionId || null,
+        swiss_rondas_totales: modo === "suizo" && swissRondas ? Number(swissRondas) : null,
+        mostrar_nombres_ronda_personalizados: modoAvanzado && mostrarNombresRonda,
+        ocultar_numeros_semilla: modoAvanzado && ocultarNumerosSemilla,
+        ocultar_bracket_publico: modoAvanzado && ocultarBracketPublico,
+        reglas_semillas: modoAvanzado ? reglasSemillas : "aleatorio",
+        permite_autoreporte: modoAvanzado ? permiteAutoreporte : true,
+        excluido_de_busqueda: modoAvanzado && excluidoDeBusqueda,
+        mostrar_posiciones: modoAvanzado ? mostrarPosiciones : true,
       })
       .select()
       .single();
@@ -272,6 +297,27 @@ export default function CreateTournamentPage() {
             ))}
           </div>
         </div>
+
+        {/* Suizo (migración 069): en blanco, generar_torneo_suizo() la
+            calcula sola (techo de log2 de los inscritos) recién al
+            iniciar el torneo -- acá es solo para fijarla a mano si el
+            organizador prefiere una cantidad puntual. */}
+        {modo === "suizo" && (
+          <div className="form-group">
+            <label className="form-label" htmlFor="torneo-swiss-rondas">
+              Cantidad de rondas (opcional)
+            </label>
+            <input
+              id="torneo-swiss-rondas"
+              className="form-input"
+              type="number"
+              min={1}
+              placeholder="Se calcula sola si la dejas en blanco"
+              value={swissRondas}
+              onChange={(e) => setSwissRondas(e.target.value)}
+            />
+          </div>
+        )}
 
         {/* Liga para el ranking de clanes (migración 059): opcional,
             sin relación con el formato de liga "First Stand" de más
@@ -534,6 +580,102 @@ export default function CreateTournamentPage() {
               value={pozoPremio}
               onChange={(e) => setPozoPremio(e.target.value)}
             />
+          </div>
+        )}
+
+        {/* Modo simple/avanzado (migración 069): equivalente a las
+            pestañas Bracket/Permissions/Misc del formulario de
+            referencia -- Notifications, adjuntos en partidos, avance
+            rápido y compartir acceso de admin quedan para un pedido
+            aparte, todavía no tienen la infraestructura detrás (no
+            hay sistema de notificaciones ni de adjuntos en RemorApp). */}
+        <div className="form-group">
+          <button
+            type="button"
+            className="btn btn-ghost btn-block"
+            onClick={() => setModoAvanzado((v) => !v)}
+          >
+            {modoAvanzado ? "Ocultar opciones avanzadas" : "Mostrar opciones avanzadas"}
+          </button>
+        </div>
+
+        {modoAvanzado && (
+          <div className="form-group advanced-options-panel">
+            <h3 className="detail-subtitle">Bracket</h3>
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={mostrarNombresRonda}
+                onChange={(e) => setMostrarNombresRonda(e.target.checked)}
+              />
+              Mostrar nombres de ronda personalizados (Octavos, Cuartos, Semifinal, Final)
+            </label>
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={ocultarNumerosSemilla}
+                onChange={(e) => setOcultarNumerosSemilla(e.target.checked)}
+              />
+              Ocultar los números de las semillas
+            </label>
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={ocultarBracketPublico}
+                onChange={(e) => setOcultarBracketPublico(e.target.checked)}
+              />
+              Ocultar la vista previa del cuadro al público (solo la ven los inscritos)
+            </label>
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-reglas-semillas">
+                Ubicar a los participantes en el cuadro usando
+              </label>
+              <select
+                id="torneo-reglas-semillas"
+                className="form-select"
+                value={reglasSemillas}
+                onChange={(e) => setReglasSemillas(e.target.value as "aleatorio" | "tradicional")}
+              >
+                <option value="aleatorio">Sorteo al azar</option>
+                <option value="tradicional">Semillas tradicionales (por MMR)</option>
+              </select>
+              <p className="form-hint">
+                Con semillas tradicionales, el mejor MMR ocupa la semilla 1, el segundo mejor la 2,
+                etc. -- así los mejores puestos no se cruzan entre sí en las primeras rondas.
+              </p>
+            </div>
+
+            <h3 className="detail-subtitle">Permissions</h3>
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={permiteAutoreporte}
+                onChange={(e) => setPermiteAutoreporte(e.target.checked)}
+              />
+              Permitir que los participantes reporten su propio resultado
+            </label>
+            <p className="form-hint">
+              Desactivado, solo vos como organizador vas a poder cargar los resultados de cada
+              partida.
+            </p>
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={excluidoDeBusqueda}
+                onChange={(e) => setExcluidoDeBusqueda(e.target.checked)}
+              />
+              Excluir este torneo del buscador público
+            </label>
+
+            <h3 className="detail-subtitle">Misc</h3>
+            <label className="form-checkbox-label">
+              <input
+                type="checkbox"
+                checked={mostrarPosiciones}
+                onChange={(e) => setMostrarPosiciones(e.target.checked)}
+              />
+              Mostrar la pestaña de posiciones
+            </label>
           </div>
         )}
 

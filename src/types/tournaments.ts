@@ -8,7 +8,10 @@ export type TorneoModo =
   | "eliminacion_simple"
   | "eliminacion_doble"
   | "todos_contra_todos"
-  | "rey_de_la_colina";
+  | "rey_de_la_colina"
+  // Migración 069.
+  | "suizo"
+  | "tabla_posiciones";
 
 export type TorneoEstado = "abierto" | "en_curso" | "finalizado";
 
@@ -81,6 +84,17 @@ export interface TournamentRow {
   // liga_id (validado en la base por un trigger).
   liga_id: string | null;
   division_id: string | null;
+  // Migración 069: Suizo -- si el organizador no la fija a mano al
+  // crear el torneo, generar_torneo_suizo() la calcula sola.
+  swiss_rondas_totales: number | null;
+  // Migración 069: opciones avanzadas del formulario de creación.
+  mostrar_nombres_ronda_personalizados: boolean;
+  ocultar_numeros_semilla: boolean;
+  ocultar_bracket_publico: boolean;
+  reglas_semillas: "aleatorio" | "tradicional";
+  permite_autoreporte: boolean;
+  excluido_de_busqueda: boolean;
+  mostrar_posiciones: boolean;
 }
 
 // Migración 041: etapa de grupos.
@@ -145,6 +159,9 @@ export interface TournamentParticipantRow {
   inscrito_en: string;
   checked_in: boolean;
   checked_in_at: string | null;
+  // Migración 069: solo tiene sentido en un torneo modo "tabla_posiciones"
+  // -- el organizador lo carga directo, sin partidos de por medio.
+  puntos_leaderboard: number;
 }
 
 export interface TournamentResultRow {

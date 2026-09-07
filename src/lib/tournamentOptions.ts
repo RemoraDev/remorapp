@@ -25,6 +25,18 @@ export const MODOS: { value: TorneoModo; label: string; descripcion: string }[] 
     descripcion:
       "Un jugador defiende el trono partida a partida contra retadores; se acumulan puntos por cada victoria.",
   },
+  {
+    value: "suizo",
+    label: "Suizo",
+    descripcion:
+      "Sin eliminación: cada ronda empareja a quienes llevan puntaje parecido, sin repetir un cruce ya jugado. Gana quien termine primero en la tabla.",
+  },
+  {
+    value: "tabla_posiciones",
+    label: "Tabla de posiciones",
+    descripcion:
+      "Sin cuadro ni emparejamientos automáticos: el organizador carga el puntaje de cada inscrito con el criterio que prefiera, y se ordenan solos.",
+  },
 ];
 
 export function getModoLabel(modo: TorneoModo): string {

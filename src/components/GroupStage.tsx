@@ -16,6 +16,16 @@ interface GroupStageProps {
   // torneo de grupos "clásico" (varios grupos) sigue reportando con un
   // solo clic, sin jornadas.
   esFirstStand?: boolean;
+  // Migración 069 (Suizo): agrupa los partidos por jornada igual que
+  // First Stand, pero sin su selector de resultado 2-0/2-1 -- Suizo
+  // reporta con un solo clic (ganó/perdió), como la etapa de grupos
+  // "clásica".
+  agruparPorJornada?: boolean;
+  // Migración 069: en false, solo el organizador puede reportar.
+  permiteAutoreporte?: boolean;
+  // Migración 069 (opciones avanzadas, pestaña Misc): en false, oculta
+  // la tabla de posiciones -- los partidos se siguen mostrando igual.
+  mostrarPosiciones?: boolean;
 }
 
 // Etapa de grupos (migración 041): tabla de posiciones + partidos de
@@ -33,6 +43,9 @@ export default function GroupStage({
   organizadorId,
   onCambio,
   esFirstStand = false,
+  agruparPorJornada = false,
+  permiteAutoreporte = true,
+  mostrarPosiciones = true,
 }: GroupStageProps) {
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -42,6 +55,7 @@ export default function GroupStage({
   const puedeReportar = (match: TournamentGroupMatchRow) => {
     if (!userId) return false;
     if (userId === organizadorId) return true;
+    if (!permiteAutoreporte) return false;
     return !!puedeReportarPorParticipante[match.participant1_id] || !!puedeReportarPorParticipante[match.participant2_id];
   };
 
@@ -75,48 +89,53 @@ export default function GroupStage({
           <div key={grupo.id} className="group-stage-block">
             <h3 className="detail-subtitle">{grupo.nombre}</h3>
 
-            <table className="group-standings-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Participante</th>
-                  <th>G</th>
-                  <th>J</th>
-                  {esFirstStand && (
-                    <>
-                      <th>Pts</th>
-                      <th>Dif</th>
-                    </>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {posicionesGrupo.map((p, indice) => (
-                  <tr key={p.participant_id}>
-                    <td>{indice + 1}</td>
-                    <td>{nombreDe(p.participant_id)}</td>
-                    <td>{p.ganados}</td>
-                    <td>{p.jugados}</td>
-                    {esFirstStand && (
+            {mostrarPosiciones && (
+              <table className="group-standings-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Participante</th>
+                    <th>G</th>
+                    <th>J</th>
+                    {(esFirstStand || agruparPorJornada) && (
                       <>
-                        <td>{p.puntos}</td>
-                        <td>{p.dif_mapas > 0 ? `+${p.dif_mapas}` : p.dif_mapas}</td>
+                        <th>Pts</th>
+                        <th>Dif</th>
                       </>
                     )}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {posicionesGrupo.map((p, indice) => (
+                    <tr key={p.participant_id}>
+                      <td>{indice + 1}</td>
+                      <td>{nombreDe(p.participant_id)}</td>
+                      <td>{p.ganados}</td>
+                      <td>{p.jugados}</td>
+                      {(esFirstStand || agruparPorJornada) && (
+                        <>
+                          <td>{p.puntos}</td>
+                          <td>{p.dif_mapas > 0 ? `+${p.dif_mapas}` : p.dif_mapas}</td>
+                        </>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
 
-            {/* First Stand organiza el fixture en 7 jornadas -- se
+            {/* First Stand organiza el fixture en 7 jornadas fijas, y
+                Suizo en rondas que se generan de a una -- las dos se
                 muestran agrupadas; la etapa de grupos "clásica" (varios
                 grupos chicos) sigue sin jornadas, todo junto. */}
-            {(esFirstStand
+            {(esFirstStand || agruparPorJornada
               ? [...new Set(partidasGrupo.map((m) => m.jornada ?? 0))].sort((a, b) => a - b)
               : [null]
             ).map((jornada) => (
               <div key={jornada ?? "unica"} className="group-stage-matches">
-                {esFirstStand && <h4 className="detail-subtitle">Jornada {jornada}</h4>}
+                {(esFirstStand || agruparPorJornada) && (
+                  <h4 className="detail-subtitle">{agruparPorJornada ? `Ronda ${jornada}` : `Jornada ${jornada}`}</h4>
+                )}
                 {partidasGrupo
                   .filter((m) => !esFirstStand || m.jornada === jornada)
                   .map((match) => (

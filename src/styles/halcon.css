@@ -981,6 +981,26 @@ input[type="radio"] {
   50% { opacity: 1; }
 }
 
+/* Estrella de los marcos de prestigio (migración 068): asoma en la
+   esquina inferior derecha, por FUERA del anillo -- fondo oscuro
+   propio para que se lea igual sobre cualquier avatar. */
+.avatar-skin-estrella {
+  position: absolute;
+  z-index: 4;
+  right: -0.35rem;
+  bottom: -0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: #0b0d12;
+  border: 1px solid currentColor;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
 /* Borde básico de avatar (migración 055): color liso, sin filtro ni
    animación -- el nivel gratuito de personalización, disponible para
    cualquier cuenta. Se pinta con inset:0 igual que el resto de los
@@ -2013,6 +2033,223 @@ input[type="radio"] {
 
 .lineup-fondo-preview[data-fondo-lineup]:not([data-fondo-lineup="ninguno"]) {
   background-color: #06070a;
+}
+
+/* Mini-render de un fondo de IMAGEN del catálogo (migración 067) --
+   misma caja que .lineup-fondo-preview, pero con foto de fondo en vez
+   de un data-fondo-lineup clásico. */
+.lineup-fondo-preview-imagen {
+  width: 4rem;
+  height: 3rem;
+  border-radius: 0.4rem;
+  border: 1px solid var(--color-border);
+  background-size: cover;
+  background-position: center;
+}
+
+/* ---------- Tarjeta de lineup (migración 067) ----------
+   Mismo espíritu que un marcador de esports para transmisión: fija su
+   propio tema oscuro (no depende de si quien mira tiene el sitio en
+   modo claro), naranja para el equipo challenger y celeste para el
+   challenged -- convención de "lado izquierdo / lado derecho" común en
+   este tipo de gráfica, no ligada al accent dinámico del resto del
+   sitio. Se usa tanto en la vista pública del lineup como en el
+   overlay para OBS. */
+.lineup-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+  background-color: #06080c;
+  background-size: cover;
+  background-position: center;
+  color: #f5f5f4;
+  font-family: var(--font-display);
+}
+
+.lineup-card-overlay {
+  position: relative;
+  background: linear-gradient(180deg, rgba(4, 6, 10, 0.78) 0%, rgba(4, 6, 10, 0.62) 40%, rgba(4, 6, 10, 0.82) 100%);
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.lineup-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.lineup-card-equipo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.lineup-card-equipo-challenged {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.lineup-card-logo {
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.lineup-card-equipo-nombre {
+  font-weight: 700;
+  font-size: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lineup-card-equipo-generico {
+  font-weight: 800;
+  font-size: 1.35rem;
+  letter-spacing: 0.06em;
+  color: #e2e8f0;
+}
+
+.lineup-card-brand {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(245, 245, 244, 0.6);
+}
+
+.lineup-card-filas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.lineup-card-fila {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto 1fr;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(8, 10, 15, 0.65);
+  border: 1px solid rgba(245, 245, 244, 0.12);
+  border-radius: 0.6rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.lineup-card-jugador {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.lineup-card-jugador-challenger {
+  justify-content: flex-start;
+}
+
+.lineup-card-jugador-challenged {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.lineup-card-jugador-nombre {
+  font-weight: 700;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* El ícono de raza ya trae su propio color oficial (Zerg violeta,
+   Protoss dorado, Terran naranja) -- la insignia solo le suma un
+   anillo del color de cada lado (challenger/challenged), sin taparlo
+   con un relleno sólido. */
+.lineup-card-raza-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  background: rgba(6, 8, 12, 0.7);
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.2rem;
+}
+
+.lineup-card-raza-icono {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.lineup-card-raza-badge-challenger {
+  border: 2px solid #fb923c;
+  color: #fb923c;
+}
+
+.lineup-card-raza-badge-challenged {
+  border: 2px solid #22d3ee;
+  color: #22d3ee;
+}
+
+.lineup-card-marcador {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 0.35rem;
+  background: rgba(245, 245, 244, 0.1);
+  border: 1px solid rgba(245, 245, 244, 0.18);
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.lineup-card-vs {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: rgba(245, 245, 244, 0.55);
+}
+
+.lineup-card-caster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  font-family: var(--font-body, inherit);
+  font-size: 0.75rem;
+  color: rgba(245, 245, 244, 0.7);
+  border-top: 1px solid rgba(245, 245, 244, 0.12);
+  padding-top: 0.65rem;
+}
+
+.lineup-card-caster a {
+  color: #22d3ee;
+}
+
+@media (min-width: 640px) {
+  .lineup-card-overlay {
+    padding: 2rem 1.75rem;
+  }
+  .lineup-card-equipo-nombre {
+    font-size: 1.15rem;
+  }
+  .lineup-card-jugador-nombre {
+    font-size: 1rem;
+  }
 }
 
 /* ---------- Etapa de grupos (migración 041) ---------- */
@@ -3503,6 +3740,15 @@ body.overlay-obs {
   text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
 }
 
+/* Overlay de lineup (migración 067): la tarjeta necesita su propio
+   ancho máximo -- a diferencia del marcador angosto de arriba, es una
+   tarjeta completa (equipos + 3 filas + caster). */
+.overlay-page-lineup .lineup-card {
+  width: 100%;
+  max-width: 40rem;
+  text-shadow: none;
+}
+
 .overlay-error {
   font-size: 1.5rem;
   font-weight: 700;
@@ -4026,6 +4272,19 @@ body.overlay-obs {
   font-size: 0.875rem;
   color: var(--color-text-muted);
   cursor: pointer;
+}
+
+/* Opciones avanzadas del formulario de creación de torneo (migración
+   069) -- un panel propio para separarlas del resto del formulario,
+   con un poco de espacio entre cada checkbox. */
+.advanced-options-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.25rem;
+  background: var(--color-panel);
 }
 
 .form-checkbox-label:has(input:checked) {

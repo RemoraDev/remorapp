@@ -56,6 +56,8 @@ interface ParticipanteConNombre {
   suspendido: boolean;
   // Check-in antes de generar la llave (migración 010).
   checkedIn: boolean;
+  // Migración 069: solo tiene sentido en un torneo modo "tabla_posiciones".
+  puntosLeaderboard: number;
 }
 
 // PostgREST embebe una relación "to-one" a veces como objeto y a veces
@@ -93,6 +95,18 @@ export default function TournamentDetailPage() {
 
   const [generandoLlave, setGenerandoLlave] = useState(false);
   const [errorLlave, setErrorLlave] = useState<string | null>(null);
+
+  // Suizo (migración 069).
+  const [iniciandoSuizo, setIniciandoSuizo] = useState(false);
+  const [errorSuizo, setErrorSuizo] = useState<string | null>(null);
+  const [generandoRondaSuiza, setGenerandoRondaSuiza] = useState(false);
+
+  // Tabla de posiciones / Leaderboard (migración 069).
+  const [puntosEditados, setPuntosEditados] = useState<Record<string, string>>({});
+  const [guardandoPuntosId, setGuardandoPuntosId] = useState<string | null>(null);
+  const [errorLeaderboard, setErrorLeaderboard] = useState<string | null>(null);
+  const [campeonElegido, setCampeonElegido] = useState("");
+  const [finalizandoLeaderboard, setFinalizandoLeaderboard] = useState(false);
   const [generandoGrupos, setGenerandoGrupos] = useState(false);
   const [errorGrupos, setErrorGrupos] = useState<string | null>(null);
   // Migración 057: fixture de First Stand (todos contra todos en 7
@@ -168,7 +182,7 @@ export default function TournamentDetailPage() {
 
     const { data: participantesData } = await supabase
       .from("tournament_participants")
-      .select("id, user_id, team_id, inscrito_en, checked_in")
+      .select("id, user_id, team_id, inscrito_en, checked_in, puntos_leaderboard")
       .eq("tournament_id", id)
       .order("inscrito_en", { ascending: true });
 
@@ -210,6 +224,7 @@ export default function TournamentDetailPage() {
         bancaRota: p.team_id ? bancaRotaPorTeamId[p.team_id] ?? false : false,
         suspendido: false,
         checkedIn: p.checked_in,
+        puntosLeaderboard: p.puntos_leaderboard,
       }));
     } else {
       const userIds = (participantesData ?? []).map((p) => p.user_id).filter((u): u is string => u !== null);
@@ -254,6 +269,7 @@ export default function TournamentDetailPage() {
         bancaRota: p.user_id ? bancaRotaPorId[p.user_id] ?? false : false,
         suspendido: p.user_id ? suspendidoPorId[p.user_id] ?? false : false,
         checkedIn: p.checked_in,
+        puntosLeaderboard: p.puntos_leaderboard,
       }));
     }
 
@@ -287,8 +303,13 @@ export default function TournamentDetailPage() {
 
     // Migración 041: mientras la etapa de grupos está en curso, se
     // trae grupos + sus partidos + la tabla de posiciones -- la llave
-    // todavía no existe (fase_actual sigue en "grupos").
-    if (torneoData.modo === "eliminacion_simple" && torneoData.fase_actual === "grupos") {
+    // todavía no existe (fase_actual sigue en "grupos"). Migración 069:
+    // un torneo Suizo reutiliza exactamente este mismo trío de tablas
+    // (un solo grupo, "Suizo"), así que se trae con el mismo criterio.
+    if (
+      (torneoData.modo === "eliminacion_simple" && torneoData.fase_actual === "grupos") ||
+      torneoData.modo === "suizo"
+    ) {
       const { data: gruposData } = await supabase
         .from("tournament_groups")
         .select("id, tournament_id, nombre, created_at")
@@ -603,6 +624,95 @@ export default function TournamentDetailPage() {
 
     if (error) {
       setErrorLlave(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  // Suizo (migración 069): arranca el torneo (arma el grupo único y la
+  // ronda 1, al azar) -- de ahí en más se avanza con
+  // handleSiguienteRondaSuiza.
+  const handleIniciarSuizo = async () => {
+    if (!torneo) return;
+
+    setIniciandoSuizo(true);
+    setErrorSuizo(null);
+
+    const { error } = await supabase.rpc("generar_torneo_suizo", { p_tournament_id: torneo.id });
+
+    setIniciandoSuizo(false);
+
+    if (error) {
+      setErrorSuizo(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  const handleSiguienteRondaSuiza = async () => {
+    if (!torneo) return;
+
+    setGenerandoRondaSuiza(true);
+    setErrorSuizo(null);
+
+    const { error } = await supabase.rpc("generar_siguiente_ronda_suiza", { p_tournament_id: torneo.id });
+
+    setGenerandoRondaSuiza(false);
+
+    if (error) {
+      setErrorSuizo(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  // Tabla de posiciones / Leaderboard (migración 069): el organizador
+  // carga el puntaje de cada inscrito directo, sin partidos de por
+  // medio -- "por el criterio que corresponda", como pide el pedido.
+  const handleGuardarPuntosLeaderboard = async (participantId: string) => {
+    const puntos = Number(puntosEditados[participantId]);
+    if (!Number.isFinite(puntos)) {
+      setErrorLeaderboard("El puntaje tiene que ser un número.");
+      return;
+    }
+
+    setGuardandoPuntosId(participantId);
+    setErrorLeaderboard(null);
+
+    const { error } = await supabase.rpc("actualizar_puntos_leaderboard", {
+      p_participant_id: participantId,
+      p_puntos: puntos,
+    });
+
+    setGuardandoPuntosId(null);
+
+    if (error) {
+      setErrorLeaderboard(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  const handleFinalizarLeaderboard = async () => {
+    if (!torneo || !campeonElegido) return;
+    if (!window.confirm("¿Confirmas finalizar el torneo con este campeón? No se puede deshacer.")) return;
+
+    setFinalizandoLeaderboard(true);
+    setErrorLeaderboard(null);
+
+    const { error } = await supabase.rpc("finalizar_leaderboard", {
+      p_tournament_id: torneo.id,
+      p_campeon_participant_id: campeonElegido,
+    });
+
+    setFinalizandoLeaderboard(false);
+
+    if (error) {
+      setErrorLeaderboard(error.message);
       return;
     }
 
@@ -1192,6 +1302,8 @@ export default function TournamentDetailPage() {
                 userId={user?.id ?? null}
                 organizadorId={torneo.creador_id}
                 onCambio={cargarTorneo}
+                permiteAutoreporte={torneo.permite_autoreporte}
+                mostrarPosiciones={torneo.mostrar_posiciones}
                 esFirstStand={torneo.formato_liga === "first_stand"}
               />
 
@@ -1224,58 +1336,246 @@ export default function TournamentDetailPage() {
           {torneo.estado !== "abierto" && torneo.fase_actual === "eliminacion" && (
             <>
               <h2 className="detail-subtitle">Llave</h2>
-              {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-                <p className="form-success">
-                  🏆 Campeón:{" "}
-                  {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                    "Jugador de RemorApp"}
-                </p>
-              )}
-              {torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id && (
+              {torneo.ocultar_bracket_publico &&
+              !esOrganizador &&
+              !Object.values(puedeReportarPorParticipante).some(Boolean) ? (
                 <p className="tournament-card-meta">
-                  🥉 Tercer lugar:{" "}
-                  {participantes.find((p) => p.id === torneo.tercer_lugar_participant_id)?.nombre ??
-                    "Jugador de RemorApp"}
+                  El organizador configuró este cuadro como privado -- solo lo ven los inscritos.
                 </p>
-              )}
-
-              {/* Estilo y fondo: visibles y editables solo para el
-                  organizador, en cualquier momento, incluso con el
-                  torneo en curso -- migración 040. */}
-              {esOrganizador && (
-                <BracketStylePicker
-                  tournamentId={torneo.id}
-                  estilo={torneo.estilo_bracket}
-                  fondo={torneo.fondo_bracket}
-                  onCambio={cargarTorneo}
-                />
-              )}
-
-              {partidas.length === 0 ? (
-                <p className="detail-empty">Cargando la llave...</p>
               ) : (
-                <div className="tournament-bracket-wrap" data-fondo-bracket={torneo.fondo_bracket}>
-                  <BracketView
-                    matches={partidas}
-                    nombresPorParticipante={Object.fromEntries(
-                      participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
-                    )}
-                    logosPorParticipante={
-                      esPorEquipos
-                        ? Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))
-                        : undefined
-                    }
-                    avatarsPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))}
-                    estilo={torneo.estilo_bracket}
-                    nombreTorneo={torneo.nombre}
-                    puedeReportarPorParticipante={puedeReportarPorParticipante}
-                    userId={user?.id ?? null}
-                    organizadorId={torneo.creador_id}
-                    onCambio={cargarTorneo}
-                  />
+                <>
+                  {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
+                    <p className="form-success">
+                      🏆 Campeón:{" "}
+                      {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                        "Jugador de RemorApp"}
+                    </p>
+                  )}
+                  {torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id && (
+                    <p className="tournament-card-meta">
+                      🥉 Tercer lugar:{" "}
+                      {participantes.find((p) => p.id === torneo.tercer_lugar_participant_id)?.nombre ??
+                        "Jugador de RemorApp"}
+                    </p>
+                  )}
+
+                  {/* Estilo y fondo: visibles y editables solo para el
+                      organizador, en cualquier momento, incluso con el
+                      torneo en curso -- migración 040. */}
+                  {esOrganizador && (
+                    <BracketStylePicker
+                      tournamentId={torneo.id}
+                      estilo={torneo.estilo_bracket}
+                      fondo={torneo.fondo_bracket}
+                      onCambio={cargarTorneo}
+                    />
+                  )}
+
+                  {partidas.length === 0 ? (
+                    <p className="detail-empty">Cargando la llave...</p>
+                  ) : (
+                    <div className="tournament-bracket-wrap" data-fondo-bracket={torneo.fondo_bracket}>
+                      <BracketView
+                        matches={partidas}
+                        nombresPorParticipante={Object.fromEntries(
+                          participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
+                        )}
+                        logosPorParticipante={
+                          esPorEquipos
+                            ? Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))
+                            : undefined
+                        }
+                        avatarsPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))}
+                        estilo={torneo.estilo_bracket}
+                        nombreTorneo={torneo.nombre}
+                        nombresRondaPersonalizados={torneo.mostrar_nombres_ronda_personalizados}
+                        permiteAutoreporte={torneo.permite_autoreporte}
+                        puedeReportarPorParticipante={puedeReportarPorParticipante}
+                        userId={user?.id ?? null}
+                        organizadorId={torneo.creador_id}
+                        onCambio={cargarTorneo}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* Suizo (migración 069): reutiliza GroupStage tal cual --
+          un torneo Suizo es, en los hechos, un solo grupo ("Suizo")
+          cuyas rondas se generan de a una. */}
+      {torneo.modo === "suizo" && (
+        <>
+          <h2 className="detail-subtitle">Suizo</h2>
+          {errorSuizo && <div className="form-error">{errorSuizo}</div>}
+
+          {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
+            <p className="form-success">
+              🏆 Campeón:{" "}
+              {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                "Jugador de RemorApp"}
+            </p>
+          )}
+
+          {torneo.estado === "abierto" ? (
+            esOrganizador && (
+              <div className="detail-register-box">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-block"
+                  disabled={iniciandoSuizo}
+                  onClick={handleIniciarSuizo}
+                >
+                  {iniciandoSuizo ? "Iniciando..." : "Cerrar inscripciones e iniciar torneo Suizo"}
+                </button>
+              </div>
+            )
+          ) : (
+            <>
+              <GroupStage
+                grupos={grupos}
+                partidas={partidasGrupo}
+                posiciones={posiciones}
+                nombresPorParticipante={Object.fromEntries(
+                  participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
+                )}
+                puedeReportarPorParticipante={puedeReportarPorParticipante}
+                userId={user?.id ?? null}
+                organizadorId={torneo.creador_id}
+                onCambio={cargarTorneo}
+                permiteAutoreporte={torneo.permite_autoreporte}
+                mostrarPosiciones={torneo.mostrar_posiciones}
+                agruparPorJornada
+              />
+
+              {esOrganizador && torneo.estado === "en_curso" && (
+                <div className="detail-register-box">
+                  {(() => {
+                    const ultimaJornada = Math.max(0, ...partidasGrupo.map((m) => m.jornada ?? 0));
+                    const partidosUltimaJornada = partidasGrupo.filter((m) => (m.jornada ?? 0) === ultimaJornada);
+                    const faltan = partidosUltimaJornada.some((m) => m.status !== "jugado");
+                    return faltan ? (
+                      <p className="tournament-card-meta">
+                        Todavía faltan partidos de la ronda {ultimaJornada} por jugarse.
+                      </p>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-block"
+                        disabled={generandoRondaSuiza}
+                        onClick={handleSiguienteRondaSuiza}
+                      >
+                        {generandoRondaSuiza
+                          ? "Generando..."
+                          : ultimaJornada >= (torneo.swiss_rondas_totales ?? ultimaJornada)
+                          ? "Cerrar torneo"
+                          : "Generar siguiente ronda"}
+                      </button>
+                    );
+                  })()}
                 </div>
               )}
             </>
+          )}
+        </>
+      )}
+
+      {/* Tabla de posiciones / Leaderboard (migración 069): sin
+          cuadro ni partidos -- el organizador carga el puntaje de
+          cada inscrito directo. */}
+      {torneo.modo === "tabla_posiciones" && (
+        <>
+          <h2 className="detail-subtitle">Tabla de posiciones</h2>
+          {errorLeaderboard && <div className="form-error">{errorLeaderboard}</div>}
+
+          {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
+            <p className="form-success">
+              🏆 Campeón:{" "}
+              {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                "Jugador de RemorApp"}
+            </p>
+          )}
+
+          <table className="group-standings-table ranking-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Participante</th>
+                <th>Puntos</th>
+                {esOrganizador && torneo.estado !== "finalizado" && <th></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {[...participantes]
+                .sort((a, b) => (b.puntosLeaderboard ?? 0) - (a.puntosLeaderboard ?? 0))
+                .map((p, indice) => (
+                  <tr key={p.id}>
+                    <td>{indice + 1}</td>
+                    <td>{p.nombre ?? "Jugador de RemorApp"}</td>
+                    <td>
+                      {esOrganizador && torneo.estado !== "finalizado" ? (
+                        <input
+                          className="form-input"
+                          type="number"
+                          style={{ width: "6rem" }}
+                          value={puntosEditados[p.id] ?? String(p.puntosLeaderboard ?? 0)}
+                          onChange={(e) =>
+                            setPuntosEditados((prev) => ({ ...prev, [p.id]: e.target.value }))
+                          }
+                        />
+                      ) : (
+                        p.puntosLeaderboard ?? 0
+                      )}
+                    </td>
+                    {esOrganizador && torneo.estado !== "finalizado" && (
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={guardandoPuntosId === p.id}
+                          onClick={() => handleGuardarPuntosLeaderboard(p.id)}
+                        >
+                          {guardandoPuntosId === p.id ? "Guardando..." : "Guardar"}
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+
+          {esOrganizador && torneo.estado !== "finalizado" && participantes.length > 0 && (
+            <div className="detail-register-box">
+              <div className="form-group">
+                <label className="form-label" htmlFor="leaderboard-campeon">
+                  Finalizar torneo -- elegir campeón
+                </label>
+                <select
+                  id="leaderboard-campeon"
+                  className="form-select"
+                  value={campeonElegido}
+                  onChange={(e) => setCampeonElegido(e.target.value)}
+                >
+                  <option value="">Selecciona un participante</option>
+                  {participantes.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.nombre ?? "Jugador de RemorApp"}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                disabled={finalizandoLeaderboard || !campeonElegido}
+                onClick={handleFinalizarLeaderboard}
+              >
+                {finalizandoLeaderboard ? "Finalizando..." : "Finalizar torneo"}
+              </button>
+            </div>
           )}
         </>
       )}

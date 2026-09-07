@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
 import OverlayClanWarPage from "./pages/OverlayClanWarPage";
+import OverlayLineupClanWarPage from "./pages/OverlayLineupClanWarPage";
 import OverlayTorneoPage from "./pages/OverlayTorneoPage";
 import HomePage from "./pages/HomePage";
 import TournamentsPage from "./pages/TournamentsPage";
@@ -45,6 +46,7 @@ function AppContent() {
     return (
       <Routes>
         <Route path="/overlay/cw/:id" element={<OverlayClanWarPage />} />
+        <Route path="/overlay/lineup/:id" element={<OverlayLineupClanWarPage />} />
         <Route path="/overlay/torneo/:id" element={<OverlayTorneoPage />} />
       </Routes>
     );

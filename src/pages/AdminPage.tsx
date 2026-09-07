@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import type { FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -9,6 +10,9 @@ import type { PerfilTipo } from "../types/profile";
 import type { AdminUserRow } from "../types/admin";
 import type { TournamentRow } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
+import type { FondoLineupImagen } from "../types/clanWars";
+import type { BordeBasico } from "../types/bordes";
+import type { SkinAvatar } from "../types/skins";
 
 type Tab =
   | "torneos"
@@ -17,6 +21,8 @@ type Tab =
   | "noticias"
   | "clanwars"
   | "movimientos"
+  | "fondoslineup"
+  | "marcosavatar"
   | "disputas"
   | "reportes"
   | "alianzas"
@@ -178,6 +184,29 @@ export default function AdminPage() {
   const [cargandoNoticias, setCargandoNoticias] = useState(true);
   const [errorNoticias, setErrorNoticias] = useState<string | null>(null);
   const [eliminandoNoticiaId, setEliminandoNoticiaId] = useState<string | null>(null);
+
+  // --- Fondos de lineup: catálogo de imágenes administrable
+  // (migración 067) -- el capitán o el dueño de cada equipo elige
+  // entre estas (o los 4 fondos clásicos en CSS) desde la sala de
+  // lineup de su Clan War. ---
+  const [fondosLineup, setFondosLineup] = useState<FondoLineupImagen[]>([]);
+  const [cargandoFondosLineup, setCargandoFondosLineup] = useState(true);
+  const [errorFondosLineup, setErrorFondosLineup] = useState<string | null>(null);
+  const [nombreNuevoFondo, setNombreNuevoFondo] = useState("");
+  const [archivoNuevoFondo, setArchivoNuevoFondo] = useState<File | null>(null);
+  const [subiendoFondo, setSubiendoFondo] = useState(false);
+  const [eliminandoFondoId, setEliminandoFondoId] = useState<string | null>(null);
+
+  // --- Marcos de avatar: renombrar bordes básicos y skins de efectos
+  // (migración 068) -- las skins solo aparecen acá si quien mira es,
+  // además, el dueño de la plataforma (select_dueno ya las esconde del
+  // todo para cualquier otro admin). ---
+  const [bordesBasicos, setBordesBasicos] = useState<BordeBasico[]>([]);
+  const [skinsAvatar, setSkinsAvatar] = useState<SkinAvatar[]>([]);
+  const [cargandoMarcos, setCargandoMarcos] = useState(true);
+  const [errorMarcos, setErrorMarcos] = useState<string | null>(null);
+  const [nombresEditadosMarco, setNombresEditadosMarco] = useState<Record<string, string>>({});
+  const [guardandoMarcoId, setGuardandoMarcoId] = useState<string | null>(null);
 
   // --- Usuarios: dar de baja cuenta (migración 062) ---
   const [motivosBaja, setMotivosBaja] = useState<Record<string, string>>({});
@@ -351,6 +380,49 @@ export default function AdminPage() {
   }, [esDuenoPlataforma]);
 
   const esAdmin = !!profile?.es_admin;
+
+  // Fondos de lineup (migración 067): función aparte, no un const
+  // dentro del useEffect grande de abajo, porque también hace falta
+  // volver a llamarla después de subir o borrar un fondo.
+  const cargarFondosLineup = async () => {
+    const { data, error } = await supabase
+      .from("catalogo_fondos_lineup")
+      .select("id, nombre, image_url, created_at")
+      .order("nombre");
+
+    if (error) {
+      setErrorFondosLineup(error.message);
+      setCargandoFondosLineup(false);
+      return;
+    }
+
+    setFondosLineup((data ?? []) as FondoLineupImagen[]);
+    setCargandoFondosLineup(false);
+  };
+
+  // Marcos de avatar (migración 068): función aparte, mismo motivo que
+  // cargarFondosLineup -- hace falta volver a llamarla después de
+  // guardar un nombre nuevo.
+  const cargarMarcosAvatar = async () => {
+    const [{ data: bordesData, error: bordesError }, { data: skinsData, error: skinsError }] = await Promise.all([
+      supabase.from("catalogo_bordes_basicos").select("id, nombre, color_hex").order("nombre"),
+      supabase.from("catalogo_skins_avatar").select("id, clave, nombre, descripcion").order("nombre"),
+    ]);
+
+    if (bordesError) {
+      setErrorMarcos(bordesError.message);
+    } else {
+      setBordesBasicos((bordesData ?? []) as BordeBasico[]);
+    }
+
+    // skinsError no se trata como error real: para un admin que no es
+    // dueño de la plataforma, la RLS simplemente devuelve una lista
+    // vacía -- es el comportamiento esperado, no una falla.
+    setSkinsAvatar((skinsData ?? []) as SkinAvatar[]);
+    if (skinsError) console.error("Error cargando skins de avatar:", skinsError);
+
+    setCargandoMarcos(false);
+  };
 
   useEffect(() => {
     if (!esAdmin) return;
@@ -641,6 +713,10 @@ export default function AdminPage() {
 
     cargarNoticias();
 
+    cargarFondosLineup();
+
+    cargarMarcosAvatar();
+
     const cargarClanWarsAdmin = async () => {
       // Gracias a la RLS extendida (migración 062), un admin ve
       // cualquier Clan War, no solo las de equipos propios.
@@ -914,6 +990,109 @@ export default function AdminPage() {
     }
 
     setNoticias((prev) => prev.filter((n) => n.id !== noticia.id));
+  };
+
+  // Fondos de lineup (migración 067): sube la imagen al bucket
+  // "fondos-lineup" (con nombre de archivo único, no hay carpeta
+  // "propia" -- es un catálogo curado, no algo que cada cuenta suba
+  // para sí misma) y recién después inserta la fila del catálogo.
+  const handleSubirFondoLineup = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user || !archivoNuevoFondo) return;
+
+    if (!nombreNuevoFondo.trim()) {
+      setErrorFondosLineup("Ponle un nombre al fondo.");
+      return;
+    }
+
+    setSubiendoFondo(true);
+    setErrorFondosLineup(null);
+
+    const extension = archivoNuevoFondo.name.split(".").pop() ?? "webp";
+    const ruta = `${crypto.randomUUID()}.${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("fondos-lineup")
+      .upload(ruta, archivoNuevoFondo, { contentType: archivoNuevoFondo.type });
+
+    if (uploadError) {
+      setSubiendoFondo(false);
+      setErrorFondosLineup("No se pudo subir la imagen: " + uploadError.message);
+      return;
+    }
+
+    const imageUrl = supabase.storage.from("fondos-lineup").getPublicUrl(ruta).data.publicUrl;
+
+    const { error: insertError } = await supabase
+      .from("catalogo_fondos_lineup")
+      .insert({ nombre: nombreNuevoFondo.trim(), image_url: imageUrl, creado_por: user.id });
+
+    setSubiendoFondo(false);
+
+    if (insertError) {
+      setErrorFondosLineup(insertError.message);
+      return;
+    }
+
+    setNombreNuevoFondo("");
+    setArchivoNuevoFondo(null);
+    await cargarFondosLineup();
+  };
+
+  const handleEliminarFondoLineup = async (fondo: FondoLineupImagen) => {
+    if (!window.confirm(`¿Confirmas que quieres eliminar el fondo "${fondo.nombre}"? Las Clan Wars que lo tengan elegido vuelven al fondo clásico.`)) {
+      return;
+    }
+
+    setEliminandoFondoId(fondo.id);
+    setErrorFondosLineup(null);
+
+    const { error: deleteRowError } = await supabase.from("catalogo_fondos_lineup").delete().eq("id", fondo.id);
+
+    if (deleteRowError) {
+      setEliminandoFondoId(null);
+      setErrorFondosLineup(deleteRowError.message);
+      return;
+    }
+
+    // Borra también el archivo del bucket -- la ruta es lo que sigue
+    // después de "/fondos-lineup/" en la URL pública.
+    const ruta = fondo.image_url.split("/fondos-lineup/")[1];
+    if (ruta) {
+      await supabase.storage.from("fondos-lineup").remove([ruta]);
+    }
+
+    setEliminandoFondoId(null);
+    setFondosLineup((prev) => prev.filter((f) => f.id !== fondo.id));
+  };
+
+  // Marcos de avatar (migración 068): renombra un borde básico o una
+  // skin de efectos -- misma lógica para los dos catálogos, solo
+  // cambia la tabla.
+  const handleGuardarNombreMarco = async (tabla: "catalogo_bordes_basicos" | "catalogo_skins_avatar", id: string) => {
+    const nuevoNombre = nombresEditadosMarco[id]?.trim();
+    if (!nuevoNombre) {
+      setErrorMarcos("El nombre no puede quedar vacío.");
+      return;
+    }
+
+    setGuardandoMarcoId(id);
+    setErrorMarcos(null);
+
+    const { error } = await supabase.from(tabla).update({ nombre: nuevoNombre }).eq("id", id);
+
+    setGuardandoMarcoId(null);
+
+    if (error) {
+      setErrorMarcos(error.message);
+      return;
+    }
+
+    if (tabla === "catalogo_bordes_basicos") {
+      setBordesBasicos((prev) => prev.map((b) => (b.id === id ? { ...b, nombre: nuevoNombre } : b)));
+    } else {
+      setSkinsAvatar((prev) => prev.map((s) => (s.id === id ? { ...s, nombre: nuevoNombre } : s)));
+    }
   };
 
   // --- Gestión de Clan War (migración 062) ---
@@ -1197,6 +1376,20 @@ export default function AdminPage() {
         >
           Alianzas
           {alianzas.length > 0 && ` (${alianzas.length})`}
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${tab === "fondoslineup" ? "active" : ""}`}
+          onClick={() => setTab("fondoslineup")}
+        >
+          Fondos de lineup
+        </button>
+        <button
+          type="button"
+          className={`admin-tab ${tab === "marcosavatar" ? "active" : ""}`}
+          onClick={() => setTab("marcosavatar")}
+        >
+          Marcos de avatar
         </button>
         {/* Movimientos entre equipos (migración 066) y Pruebas
             (migración 053): exclusivas del dueño de la plataforma --
@@ -1783,6 +1976,145 @@ export default function AdminPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {tab === "fondoslineup" && (
+        <div className="admin-panel">
+          <p className="tournament-card-meta">
+            Imágenes que cualquier capitán o dueño de equipo puede elegir como fondo de su sala de
+            lineup, junto a los 4 fondos clásicos que ya existían. Subilas en webp -- también se
+            aceptan png y jpeg.
+          </p>
+
+          <form className="auth-form" onSubmit={handleSubirFondoLineup}>
+            {errorFondosLineup && <div className="form-error">{errorFondosLineup}</div>}
+            <div className="form-group">
+              <label className="form-label" htmlFor="admin-fondo-nombre">
+                Nombre del fondo
+              </label>
+              <input
+                id="admin-fondo-nombre"
+                className="form-input"
+                type="text"
+                value={nombreNuevoFondo}
+                onChange={(e) => setNombreNuevoFondo(e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="admin-fondo-archivo">
+                Imagen (webp, png o jpeg)
+              </label>
+              <input
+                id="admin-fondo-archivo"
+                className="form-input"
+                type="file"
+                accept="image/webp,image/png,image/jpeg"
+                onChange={(e) => setArchivoNuevoFondo(e.target.files?.[0] ?? null)}
+              />
+            </div>
+            <button type="submit" className="btn btn-primary btn-block" disabled={subiendoFondo || !archivoNuevoFondo}>
+              {subiendoFondo ? "Subiendo..." : "Agregar fondo"}
+            </button>
+          </form>
+
+          {cargandoFondosLineup && <p className="tournament-card-meta">Cargando fondos...</p>}
+          {!cargandoFondosLineup && fondosLineup.length === 0 && (
+            <p className="tournament-card-meta">Todavía no hay ningún fondo de imagen cargado.</p>
+          )}
+
+          <div className="admin-list">
+            {fondosLineup.map((f) => (
+              <div key={f.id} className="admin-row">
+                <div className="admin-row-info">
+                  <div
+                    className="lineup-fondo-preview-imagen"
+                    style={{ backgroundImage: `url(${f.image_url})` }}
+                  />
+                  <p className="admin-row-title">{f.nombre}</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={eliminandoFondoId === f.id}
+                  onClick={() => handleEliminarFondoLineup(f)}
+                >
+                  {eliminandoFondoId === f.id ? "Eliminando..." : "Eliminar"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === "marcosavatar" && (
+        <div className="admin-panel">
+          <p className="tournament-card-meta">
+            Renombra cualquier borde básico o skin de efectos del catálogo -- el color y el efecto
+            visual no se editan desde acá, solo el nombre que ve cada cuenta al elegirlo.
+          </p>
+          {errorMarcos && <div className="form-error">{errorMarcos}</div>}
+          {cargandoMarcos && <p className="tournament-card-meta">Cargando marcos...</p>}
+
+          <h3 className="detail-subtitle">Bordes básicos</h3>
+          <div className="admin-list">
+            {bordesBasicos.map((b) => (
+              <div key={b.id} className="admin-row">
+                <div className="admin-row-info">
+                  <span
+                    className="borde-basico-swatch"
+                    style={{ backgroundColor: b.color_hex, pointerEvents: "none" }}
+                  />
+                  <input
+                    className="form-input"
+                    type="text"
+                    value={nombresEditadosMarco[b.id] ?? b.nombre}
+                    onChange={(e) => setNombresEditadosMarco((prev) => ({ ...prev, [b.id]: e.target.value }))}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={guardandoMarcoId === b.id}
+                  onClick={() => handleGuardarNombreMarco("catalogo_bordes_basicos", b.id)}
+                >
+                  {guardandoMarcoId === b.id ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <h3 className="detail-subtitle">Skins de efectos</h3>
+          {skinsAvatar.length === 0 ? (
+            <p className="tournament-card-meta">
+              Solo el dueño de la plataforma ve este catálogo -- si no aparece nada acá, es porque tu
+              cuenta es admin pero no es la del dueño.
+            </p>
+          ) : (
+            <div className="admin-list">
+              {skinsAvatar.map((s) => (
+                <div key={s.id} className="admin-row">
+                  <div className="admin-row-info">
+                    <p className="admin-row-meta">{s.clave}</p>
+                    <input
+                      className="form-input"
+                      type="text"
+                      value={nombresEditadosMarco[s.id] ?? s.nombre}
+                      onChange={(e) => setNombresEditadosMarco((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={guardandoMarcoId === s.id}
+                    onClick={() => handleGuardarNombreMarco("catalogo_skins_avatar", s.id)}
+                  >
+                    {guardandoMarcoId === s.id ? "Guardando..." : "Guardar"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

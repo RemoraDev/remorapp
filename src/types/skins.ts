@@ -9,7 +9,9 @@
 
 // Las 8 claves técnicas -- coinciden 1 a 1 con las filas insertadas en
 // la migración 054 y con las claves de CONFIG_ELECTRICO en
-// AvatarSkin.tsx.
+// AvatarSkin.tsx. Migración 068: se suman 3 marcos de prestigio
+// (Diamante/Master/Gran Master), misma técnica "Electric", con una
+// estrella en la esquina que las distingue del resto del catálogo.
 export type SkinAvatarClave =
   | "electric"
   | "violet_electric"
@@ -18,7 +20,10 @@ export type SkinAvatarClave =
   | "blue_fire"
   | "niebla"
   | "frost"
-  | "solar";
+  | "solar"
+  | "diamante"
+  | "master"
+  | "gran_master";
 
 export interface SkinAvatar {
   id: string;

@@ -136,6 +136,9 @@ interface ClanWarConNombres {
   // Fondo de la sala de lineup (migración 051): catálogo propio,
   // distinto del fondo de bracket de torneos.
   fondoLineup: FondoLineup;
+  // Migración 067: mutuamente excluyente con fondoLineup -- cuando no
+  // es null, tiene prioridad (fondo de imagen del catálogo admin).
+  fondoLineupImagenId: string | null;
   // Migración 062: true cuando el dueño de la plataforma intervino el
   // lineup de este reto (armó o confirmó en nombre de alguno de los
   // dos equipos) -- la marca se muestra abajo, gateada a esAdmin o a
@@ -529,6 +532,7 @@ export default function TeamDetailPage() {
   // Overlay para OBS (migración 044): un "copiado" por reto, no uno
   // global.
   const [urlObsCopiadaPorReto, setUrlObsCopiadaPorReto] = useState<Record<string, boolean>>({});
+  const [urlObsLineupCopiadaPorReto, setUrlObsLineupCopiadaPorReto] = useState<Record<string, boolean>>({});
   // Reprogramar una Clan War (migración 045).
   const [reprogramacionPorReto, setReprogramacionPorReto] = useState<Record<string, ReprogramacionPendiente | null>>(
     {}
@@ -547,6 +551,18 @@ export default function TeamDetailPage() {
   const [solicitandoExtension, setSolicitandoExtension] = useState<string | null>(null);
   const [erroresExtension, setErroresExtension] = useState<Record<string, string>>({});
   const [respondiendoExtension, setRespondiendoExtension] = useState<string | null>(null);
+  // Catálogo de fondos de imagen (migración 067): solo hace falta la
+  // URL para pintar el fondo de la sala -- se carga una sola vez, el
+  // admin lo cambia desde /admin, no desde acá.
+  const [fondosImagenPorId, setFondosImagenPorId] = useState<Record<string, string>>({});
+  useEffect(() => {
+    supabase
+      .from("catalogo_fondos_lineup")
+      .select("id, image_url")
+      .then(({ data }) => {
+        setFondosImagenPorId(Object.fromEntries((data ?? []).map((f) => [f.id, f.image_url])));
+      });
+  }, []);
   // Se recalcula cada 30 segundos -- así la ventana de check-in
   // aparece sola cuando corresponde, sin que haga falta recargar la
   // página a mano.
@@ -909,6 +925,7 @@ export default function TeamDetailPage() {
         reprogramacionesUsadas: r.reprogramaciones_usadas,
         temporadaId: r.temporada_id,
         fondoLineup: r.fondo_lineup,
+        fondoLineupImagenId: r.fondo_lineup_imagen_id,
         intervenidoPorAdmin: r.intervenido_por_admin,
         lineupPlazoExtendidoHasta: r.lineup_plazo_extendido_hasta,
       }));
@@ -2019,6 +2036,15 @@ export default function TeamDetailPage() {
     await navigator.clipboard.writeText(`${window.location.origin}/overlay/cw/${retoId}`);
     setUrlObsCopiadaPorReto((prev) => ({ ...prev, [retoId]: true }));
     setTimeout(() => setUrlObsCopiadaPorReto((prev) => ({ ...prev, [retoId]: false })), 2000);
+  };
+
+  // Overlay de lineup para OBS (migración 067) -- distinto del de
+  // arriba, este muestra la tarjeta de enfrentamientos antes de que
+  // arranque el reto.
+  const handleCopiarUrlObsLineup = async (retoId: string) => {
+    await navigator.clipboard.writeText(`${window.location.origin}/overlay/lineup/${retoId}`);
+    setUrlObsLineupCopiadaPorReto((prev) => ({ ...prev, [retoId]: true }));
+    setTimeout(() => setUrlObsLineupCopiadaPorReto((prev) => ({ ...prev, [retoId]: false })), 2000);
   };
 
   // Reprogramar una Clan War (migración 045).
@@ -3687,6 +3713,24 @@ export default function TeamDetailPage() {
                           </p>
                         </div>
 
+                        {/* Overlay de lineup para OBS (migración 067): tarjeta de
+                            enfrentamientos con el fondo elegido, para pegar ANTES de
+                            que arranque el reto -- solo tiene datos una vez que el
+                            lineup se revela (ver lineup_publico_clan_war()). */}
+                        <div className="overlay-obs-copy">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            onClick={() => handleCopiarUrlObsLineup(r.id)}
+                          >
+                            {urlObsLineupCopiadaPorReto[r.id] ? "¡Copiado!" : "Copiar URL de lineup para OBS"}
+                          </button>
+                          <p className="form-hint">
+                            Pégala en OBS antes de que arranque la Clan War para mostrar la tarjeta de
+                            enfrentamientos -- solo se ve una vez que el lineup se revela.
+                          </p>
+                        </div>
+
                         {/* Reprogramar (migración 045): solo tiene
                             sentido con la CW 'aceptada' -- una vez que
                             llega a 'en_curso' ya no aplica. */}
@@ -3869,10 +3913,25 @@ export default function TeamDetailPage() {
                           </>
                         )}
 
-                        {/* Fondo de la sala de lineup (migración 051): envuelve tanto
-                            el armado del lineup como el check-in posterior, para que
-                            la decoración se mantenga durante toda esa etapa del reto. */}
-                        <div className="clan-war-lineup-room" data-fondo-lineup={r.fondoLineup}>
+                        {/* Fondo de la sala de lineup (migración 051, con imágenes del
+                            catálogo admin desde la 067): envuelve tanto el armado del
+                            lineup como el check-in posterior, para que la decoración se
+                            mantenga durante toda esa etapa del reto. Una imagen del
+                            catálogo tiene prioridad sobre el fondo clásico -- son
+                            mutuamente excluyentes. */}
+                        <div
+                          className="clan-war-lineup-room"
+                          data-fondo-lineup={r.fondoLineupImagenId ? undefined : r.fondoLineup}
+                          style={
+                            r.fondoLineupImagenId && fondosImagenPorId[r.fondoLineupImagenId]
+                              ? {
+                                  backgroundImage: `url(${fondosImagenPorId[r.fondoLineupImagenId]})`,
+                                  backgroundSize: "cover",
+                                  backgroundPosition: "center",
+                                }
+                              : undefined
+                          }
+                        >
                         {/* Migración 062: visible para es_admin y para
                             dueño/capitán de cualquiera de los dos equipos
                             (que es exactamente quien puede ver esta fila,
@@ -3883,10 +3942,20 @@ export default function TeamDetailPage() {
                             Intervenido por administración de la plataforma
                           </p>
                         )}
+                        {/* El fondo se puede elegir en cualquier momento mientras la
+                            Clan War siga aceptada o en curso -- no hace falta esperar a
+                            terminar de armar el lineup, y sigue disponible después de
+                            aprobarlo (así el caster puede elegirlo recién cuando ya
+                            están definidos los jugadores). */}
+                        <LineupFondoPicker
+                          clanWarId={r.id}
+                          fondo={r.fondoLineup}
+                          fondoImagenId={r.fondoLineupImagenId}
+                          onCambio={cargar}
+                        />
                         {!lineupAprobado ? (
                           <>
                             <h5 className="detail-subtitle">Lineup: tu equipo</h5>
-                            <LineupFondoPicker clanWarId={r.id} fondo={r.fondoLineup} onCambio={cargar} />
                             {erroresLineup[r.id] && <div className="form-error">{erroresLineup[r.id]}</div>}
                             {lineupDeReto.propio.length === 0 ? (
                               <p className="detail-empty">Todavía no agregaste jugadores al lineup.</p>

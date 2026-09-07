@@ -18,6 +18,10 @@ export default function TournamentsPage() {
       .select("*")
       .eq("publico", true)
       .eq("estado", "abierto")
+      // Migración 069: el organizador puede excluir su torneo del
+      // buscador público -- sigue existiendo y siendo accesible por
+      // link directo (RLS ya lo permite), solo no aparece listado acá.
+      .eq("excluido_de_busqueda", false)
       .order("fecha_inicio", { ascending: true })
       .then(({ data, error }) => {
         if (error) {

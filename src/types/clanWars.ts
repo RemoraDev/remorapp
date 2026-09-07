@@ -26,8 +26,19 @@ export interface ClanWarProxima {
   lineup_revelado: boolean;
 }
 
-// Devuelto por lineup_publico_clan_war() -- la vista a la que lleva la
-// tarjeta de Inicio, una vez que el lineup ya se reveló.
+// Un jugador dentro del lineup revelado -- raza null cuando no la
+// cargó en su perfil de StarCraft II, o cuando es un jugador temporal
+// (sin cuenta real, ver profile.ts/PerfilJuegoSc2).
+export interface LineupPublicoJugador {
+  nombre: string;
+  posicion: 1 | 2 | 3 | null;
+  es_temporal: boolean;
+  raza: "Terran" | "Zerg" | "Protoss" | null;
+}
+
+// Devuelto por lineup_publico_clan_war() (migración 066, extendida en
+// la 067 con raza y fondo) -- la vista a la que lleva la tarjeta de
+// Inicio, una vez que el lineup ya se reveló.
 export interface LineupPublicoClanWar {
   revelado: boolean;
   formato: "simple" | "wtl";
@@ -37,6 +48,20 @@ export interface LineupPublicoClanWar {
   challenged: { nombre: string; tag: string; logo_url: string | null };
   caster_nombre: string | null;
   caster_link: string | null;
-  lineup_challenger: { nombre: string; posicion: 1 | 2 | 3 | null; es_temporal: boolean }[] | null;
-  lineup_challenged: { nombre: string; posicion: 1 | 2 | 3 | null; es_temporal: boolean }[] | null;
+  // Migración 067: fondo de imagen (catalogo_fondos_lineup) tiene
+  // prioridad sobre el clásico cuando está presente -- son mutuamente
+  // excluyentes, ver cambiar_fondo_lineup_cw()/cambiar_fondo_lineup_imagen_cw().
+  fondo_clasico: "ninguno" | "campo_estrellas" | "nebulosa" | "constelacion" | "vortice";
+  fondo_imagen_url: string | null;
+  lineup_challenger: LineupPublicoJugador[] | null;
+  lineup_challenged: LineupPublicoJugador[] | null;
+}
+
+// Fila del catálogo de fondos de imagen, administrable desde /admin
+// (migración 067).
+export interface FondoLineupImagen {
+  id: string;
+  nombre: string;
+  image_url: string;
+  created_at: string;
 }

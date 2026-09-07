@@ -24,6 +24,13 @@ interface BracketViewProps {
   estilo: EstiloBracket;
   // Nombre del torneo, para la franja superior del estilo "esports".
   nombreTorneo: string;
+  // Migración 069: en vez de "Ronda 1/2/3", muestra el nombre
+  // tradicional (Octavos/Cuartos/Semifinal/Final) según qué tan cerca
+  // esté esa ronda de la final.
+  nombresRondaPersonalizados?: boolean;
+  // Migración 069: en false, el organizador desactivó el autoreporte --
+  // los botones de reportar ni se muestran a los propios participantes.
+  permiteAutoreporte?: boolean;
   // tournament_participants.id -> si el usuario logueado puede
   // reportar por ese participante: ya viene resuelto desde afuera
   // (BracketView no sabe ni le importa si el torneo es 1v1 o por
@@ -44,6 +51,8 @@ export default function BracketView({
   avatarsPorParticipante,
   estilo,
   nombreTorneo,
+  nombresRondaPersonalizados,
+  permiteAutoreporte = true,
   puedeReportarPorParticipante,
   userId,
   organizadorId,
@@ -69,6 +78,36 @@ export default function BracketView({
   // el achicamiento típico de una llave sin tener que calcular a mano
   // en qué posición exacta va cada partida.
   const alturaBracket = (partidosPorRonda[0]?.length ?? 1) * ALTURA_PARTIDO_PX;
+  // Total real de rondas de la llave completa, aunque las rondas
+  // siguientes todavía no se hayan creado en bracket_matches (se van
+  // generando de a una a medida que se resuelve la anterior) -- se
+  // calcula a partir de la cantidad de partidos de la ronda 1, que
+  // siempre es una potencia de 2 y no cambia. Usar rondas.length en
+  // su lugar nombraría mal las rondas mientras la llave está en curso
+  // (por ejemplo, "Semifinal" para lo que en realidad son Cuartos).
+  const totalRondasReal = partidosPorRonda[0]
+    ? Math.round(Math.log2(partidosPorRonda[0].length)) + 1
+    : rondas.length;
+
+  // Migración 069: nombre tradicional según la distancia a la final --
+  // "distancia 0" es la final, 1 semifinal, 2 cuartos, 3 octavos; más
+  // lejos que eso, se queda en "Ronda N" (no hay nombre tradicional
+  // para dieciseisavos en adelante que valga la pena mostrar).
+  const nombreDeRonda = (indiceRonda: number, totalRondas: number, cantidadPartidos: number) => {
+    if (cantidadPartidos === 1) return "Final";
+    if (!nombresRondaPersonalizados) return `Ronda ${rondas[indiceRonda]}`;
+    const distanciaDeLaFinal = totalRondas - 1 - indiceRonda;
+    switch (distanciaDeLaFinal) {
+      case 1:
+        return "Semifinal";
+      case 2:
+        return "Cuartos de Final";
+      case 3:
+        return "Octavos de Final";
+      default:
+        return `Ronda ${rondas[indiceRonda]}`;
+    }
+  };
 
   const nombreDe = (participantId: string | null) =>
     participantId ? nombresPorParticipante[participantId] ?? "Jugador de RemorApp" : "BYE";
@@ -85,6 +124,7 @@ export default function BracketView({
   const puedeReportar = (match: BracketMatchRow) => {
     if (!userId) return false;
     if (userId === organizadorId) return true;
+    if (!permiteAutoreporte) return false;
     if (match.participant1_id && puedeReportarPorParticipante[match.participant1_id]) return true;
     if (match.participant2_id && puedeReportarPorParticipante[match.participant2_id]) return true;
     return false;
@@ -183,7 +223,7 @@ export default function BracketView({
       {partidosPorRonda.map((partidos, indiceRonda) => (
         <div key={rondas[indiceRonda]} className="bracket-round">
           <div className="bracket-round-title">
-            {partidos.length === 1 ? "Final" : `Ronda ${rondas[indiceRonda]}`}
+            {nombreDeRonda(indiceRonda, totalRondasReal, partidos.length)}
           </div>
 
           {partidos.map(renderPartido)}

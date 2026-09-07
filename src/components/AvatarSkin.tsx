@@ -25,6 +25,10 @@ interface ConfigElectrico {
   colorNucleo: string;
   opacidadBase?: number;
   conMatrizHielo?: boolean;
+  // Migración 068: marcos de prestigio (Diamante/Master/Gran Master) --
+  // una estrella en la esquina inferior, del mismo color que el borde,
+  // es lo que los distingue de una skin de efectos común.
+  estrella?: boolean;
 }
 
 // Catálogo "Electric" (migración 054): las 8 skins comparten
@@ -115,6 +119,36 @@ const CONFIG_ELECTRICO: Record<SkinAvatarClave, ConfigElectrico> = {
     modoBlend: "screen",
     colorBorde: "#ffd700",
     colorNucleo: "rgba(255, 240, 180, 0.95)",
+  },
+  // Migración 068: marcos de prestigio -- misma técnica "Electric",
+  // colores que evocan la liga real de StarCraft II de cada rango, con
+  // la estrella en la esquina como marca distintiva.
+  diamante: {
+    baseFrequency: 0.07,
+    dur: "7s",
+    scale: 6,
+    modoBlend: "color-dodge",
+    colorBorde: "#38bdf8",
+    colorNucleo: "rgba(224, 242, 254, 0.95)",
+    estrella: true,
+  },
+  master: {
+    baseFrequency: 0.08,
+    dur: "6s",
+    scale: 7,
+    modoBlend: "color-dodge",
+    colorBorde: "#c026d3",
+    colorNucleo: "rgba(250, 232, 255, 0.95)",
+    estrella: true,
+  },
+  gran_master: {
+    baseFrequency: 0.14,
+    dur: "4s",
+    scale: 8,
+    modoBlend: "screen",
+    colorBorde: "#f97316",
+    colorNucleo: "rgba(254, 226, 226, 0.95)",
+    estrella: true,
   },
 };
 
@@ -224,6 +258,15 @@ export default function AvatarSkin({
           }}
         />
       </span>
+      {/* Migración 068: la estrella de los marcos de prestigio queda
+          FUERA del clip de arriba a propósito -- ese contenedor recorta
+          todo lo que sobresalga del avatar, y la estrella tiene que
+          asomar por fuera del borde, no quedar contenida en el anillo. */}
+      {config.estrella && (
+        <span className="avatar-skin-estrella" style={{ color: config.colorBorde }} aria-hidden="true">
+          ★
+        </span>
+      )}
     </span>
   );
 }
