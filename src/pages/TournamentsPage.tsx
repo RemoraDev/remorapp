@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import TournamentListCard from "../components/TournamentListCard";
-import CommissionInfo from "../components/CommissionInfo";
 import type { TournamentRow } from "../types/tournaments";
 
 export default function TournamentsPage() {
@@ -51,10 +50,6 @@ export default function TournamentsPage() {
           Ver torneos históricos (pre-RemorApp)
         </Link>
       </p>
-
-      {/* Se movió acá desde Inicio, tal cual estaba -- quien busca
-          torneos ve esta info antes de empezar a explorar la grilla. */}
-      <CommissionInfo />
 
       {loading && <p className="tournament-card-meta">Cargando torneos...</p>}
 

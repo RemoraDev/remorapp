@@ -296,6 +296,38 @@ export interface ClanWarLineupRow {
   posicion: 1 | 2 | 3 | null;
 }
 
+// Amistad entre equipos (migración 073): una solicitud que un equipo
+// le manda a otro, aceptable/rechazable solo por el equipo que la
+// recibió. Una vez aceptada, habilita "invitar equipos amigos al
+// evento" al crear/gestionar un torneo por equipos.
+export type TeamAmistadStatus = "pendiente" | "aceptada" | "rechazada";
+
+export interface TeamAmistadRow {
+  id: string;
+  equipo_solicitante_id: string;
+  equipo_destinatario_id: string;
+  status: TeamAmistadStatus;
+  created_at: string;
+  respondida_en: string | null;
+}
+
+// Invitación de un equipo amigo a un torneo por equipos (migración
+// 073): distinta de organizador_inscribir_equipo() (inscripción
+// directa, sin aceptación, para cualquier equipo) -- esta requiere que
+// el equipo invitado la acepte desde su Panel de control, y solo
+// puede mandarse a un equipo que ya sea amigo del organizador.
+export type TorneoInvitacionEquipoStatus = "pendiente" | "aceptada" | "rechazada";
+
+export interface TorneoInvitacionEquipoRow {
+  id: string;
+  tournament_id: string;
+  equipo_id: string;
+  invitado_por: string;
+  status: TorneoInvitacionEquipoStatus;
+  created_at: string;
+  respondida_en: string | null;
+}
+
 export type ClanWarWtlSetStatus = "pendiente" | "jugado";
 
 // Formato WTL/chino (migración 042): 3 sets Bo2 en posiciones fijas,

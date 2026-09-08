@@ -124,6 +124,19 @@ export default function TournamentDetailPage() {
   const [invitandoEquipos, setInvitandoEquipos] = useState(false);
   const [errorInvitarEquipos, setErrorInvitarEquipos] = useState<string | null>(null);
 
+  // Invitar equipos amigos al evento (migración 073): a diferencia del
+  // bloque de arriba (inscripción directa, sin pedirle nada al
+  // equipo), esto manda una invitación real que el equipo amigo tiene
+  // que aceptar desde su Panel de control -- y solo se le puede
+  // ofrecer al organizador si su propio equipo tiene amigos.
+  const [amigosAbierto, setAmigosAbierto] = useState(false);
+  const [equiposAmigosDisponibles, setEquiposAmigosDisponibles] = useState<{ id: string; name: string; tag: string }[]>([]);
+  const [cargandoEquiposAmigos, setCargandoEquiposAmigos] = useState(false);
+  const [equiposAmigosSeleccionados, setEquiposAmigosSeleccionados] = useState<Record<string, boolean>>({});
+  const [invitandoAmigos, setInvitandoAmigos] = useState(false);
+  const [errorInvitarAmigos, setErrorInvitarAmigos] = useState<string | null>(null);
+  const [amigosInvitados, setAmigosInvitados] = useState(false);
+
   const [abriendoCheckIn, setAbriendoCheckIn] = useState(false);
   const [errorCheckIn, setErrorCheckIn] = useState<string | null>(null);
   const [confirmando, setConfirmando] = useState(false);
@@ -828,6 +841,99 @@ export default function TournamentDetailPage() {
     await cargarTorneo();
   };
 
+  // Invitar equipos amigos al evento (migración 073): a diferencia de
+  // arriba, esto no inscribe directo -- manda una invitación real que
+  // el equipo amigo tiene que aceptar desde su Panel de control
+  // (responder_invitacion_torneo_equipo). Solo se le ofrecen los
+  // amigos de MI PROPIO equipo (miEquipo, ya resuelto más arriba),
+  // que todavía no estén inscritos ni tengan una invitación pendiente.
+  const handleAbrirInvitarAmigos = async () => {
+    if (amigosAbierto) {
+      setAmigosAbierto(false);
+      return;
+    }
+    if (!torneo || !miEquipo) return;
+
+    setAmigosAbierto(true);
+    setCargandoEquiposAmigos(true);
+    setErrorInvitarAmigos(null);
+    setAmigosInvitados(false);
+
+    const { data: amistadesData } = await supabase
+      .from("team_amistades")
+      .select("equipo_solicitante_id, equipo_destinatario_id")
+      .eq("status", "aceptada")
+      .or(`equipo_solicitante_id.eq.${miEquipo.team_id},equipo_destinatario_id.eq.${miEquipo.team_id}`);
+
+    const idsAmigos = (amistadesData ?? []).map((a) =>
+      a.equipo_solicitante_id === miEquipo.team_id ? a.equipo_destinatario_id : a.equipo_solicitante_id
+    );
+
+    if (idsAmigos.length === 0) {
+      setEquiposAmigosDisponibles([]);
+      setCargandoEquiposAmigos(false);
+      return;
+    }
+
+    const idsYaInscritos = new Set(participantes.map((p) => p.teamId).filter((t): t is string => t !== null));
+
+    const { data: invitacionesPendientesData } = await supabase
+      .from("torneo_invitaciones_equipo")
+      .select("equipo_id")
+      .eq("tournament_id", torneo.id)
+      .eq("status", "pendiente");
+    const idsYaInvitados = new Set((invitacionesPendientesData ?? []).map((i) => i.equipo_id));
+
+    const { data: equiposData } = await supabase
+      .from("teams")
+      .select("id, name, tag")
+      .in("id", idsAmigos)
+      .eq("disuelto", false)
+      .order("name");
+
+    setEquiposAmigosDisponibles(
+      (equiposData ?? []).filter((t) => !idsYaInscritos.has(t.id) && !idsYaInvitados.has(t.id))
+    );
+    setEquiposAmigosSeleccionados({});
+    setCargandoEquiposAmigos(false);
+  };
+
+  const handleSeleccionarTodosLosAmigos = () => {
+    const todosMarcados = equiposAmigosDisponibles.every((t) => equiposAmigosSeleccionados[t.id]);
+    setEquiposAmigosSeleccionados(
+      Object.fromEntries(equiposAmigosDisponibles.map((t) => [t.id, !todosMarcados]))
+    );
+  };
+
+  const handleInvitarAmigosMarcados = async () => {
+    if (!torneo) return;
+
+    const idsMarcados = equiposAmigosDisponibles.filter((t) => equiposAmigosSeleccionados[t.id]).map((t) => t.id);
+    if (idsMarcados.length === 0) return;
+
+    setInvitandoAmigos(true);
+    setErrorInvitarAmigos(null);
+
+    const errores: string[] = [];
+    for (const teamId of idsMarcados) {
+      const { error } = await supabase.rpc("invitar_equipo_amigo_torneo", {
+        p_tournament_id: torneo.id,
+        p_equipo_id: teamId,
+      });
+      if (error) errores.push(error.message);
+    }
+
+    setInvitandoAmigos(false);
+
+    if (errores.length > 0) {
+      setErrorInvitarAmigos(errores.join(" · "));
+    } else {
+      setAmigosInvitados(true);
+      setEquiposAmigosDisponibles((prev) => prev.filter((t) => !idsMarcados.includes(t.id)));
+      setEquiposAmigosSeleccionados({});
+    }
+  };
+
   // Overlay para OBS (migración 044): copia el link completo, no una
   // ruta relativa -- OBS necesita una URL absoluta para poder abrirla
   // como "Fuente de navegador".
@@ -1195,6 +1301,70 @@ export default function TournamentDetailPage() {
                     onClick={handleInvitarEquiposMarcados}
                   >
                     {invitandoEquipos ? "Inscribiendo..." : "Inscribir a los clanes marcados"}
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Invitar equipos amigos al evento (migración 073): a
+          diferencia del bloque de arriba, esto manda una invitación
+          real que el equipo amigo tiene que aceptar desde su propio
+          Panel de control -- solo aparece si el organizador tiene un
+          equipo propio con amigos. */}
+      {esOrganizador && esPorEquipos && torneo.estado === "abierto" && miEquipo && (
+        <div className="detail-register-box">
+          <button type="button" className="btn btn-ghost btn-block" onClick={handleAbrirInvitarAmigos}>
+            {amigosAbierto ? "Cerrar" : "Invitar equipos amigos al evento"}
+          </button>
+
+          {amigosAbierto && (
+            <>
+              {errorInvitarAmigos && <div className="form-error">{errorInvitarAmigos}</div>}
+              {amigosInvitados && (
+                <div className="form-success">
+                  Invitación enviada -- queda pendiente de que el equipo la acepte desde su Panel de
+                  control.
+                </div>
+              )}
+              {cargandoEquiposAmigos ? (
+                <p className="tournament-card-meta">Cargando equipos amigos...</p>
+              ) : equiposAmigosDisponibles.length === 0 ? (
+                <p className="tournament-card-meta">
+                  No hay equipos amigos disponibles para invitar (todavía no tienes ninguno, ya están
+                  todos inscritos, o ya tienen una invitación pendiente). Podés hacerte amigo de otro
+                  equipo desde el Panel de control de tu clan, en "Equipos amigos".
+                </p>
+              ) : (
+                <>
+                  <button type="button" className="btn btn-ghost" onClick={handleSeleccionarTodosLosAmigos}>
+                    {equiposAmigosDisponibles.every((t) => equiposAmigosSeleccionados[t.id])
+                      ? "Desmarcar todos"
+                      : "Seleccionar todos"}
+                  </button>
+                  <div className="detail-participant-list">
+                    {equiposAmigosDisponibles.map((equipo) => (
+                      <label key={equipo.id} className="form-checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={!!equiposAmigosSeleccionados[equipo.id]}
+                          onChange={(e) =>
+                            setEquiposAmigosSeleccionados((prev) => ({ ...prev, [equipo.id]: e.target.checked }))
+                          }
+                        />
+                        {equipo.name} [{equipo.tag}]
+                      </label>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={invitandoAmigos || equiposAmigosDisponibles.every((t) => !equiposAmigosSeleccionados[t.id])}
+                    onClick={handleInvitarAmigosMarcados}
+                  >
+                    {invitandoAmigos ? "Invitando..." : "Invitar a los equipos marcados"}
                   </button>
                 </>
               )}

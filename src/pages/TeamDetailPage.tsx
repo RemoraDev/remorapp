@@ -13,9 +13,11 @@ import type {
   ClanWarReporteMotivo,
   ClanWarStatus,
   FondoLineup,
+  TeamAmistadStatus,
   TeamRow,
   TemaEquipo,
   TemporadaRow,
+  TorneoInvitacionEquipoStatus,
 } from "../types/teams";
 import { NICK_REGEX, validarNick } from "../lib/nickValidation";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
@@ -208,6 +210,28 @@ interface AlianzaConNombres {
   aprobadoPorEquipoB: boolean;
 }
 
+// Amistad entre equipos (migración 073), con el nombre del equipo
+// contrario ya resuelto -- mismo patrón que AlianzaConNombres.
+interface AmistadEquipoConNombre {
+  id: string;
+  otroEquipoId: string;
+  otroEquipoNombre: string;
+  status: TeamAmistadStatus;
+  // La solicitud la mandó ESTE equipo (no el otro) -- distingue
+  // "esperando que el otro responda" de "tengo que responder yo".
+  propuestaPorMi: boolean;
+}
+
+// Invitación a un torneo por equipos (migración 073), con el nombre
+// del torneo ya resuelto.
+interface InvitacionTorneoEquipoConNombre {
+  id: string;
+  tournamentId: string;
+  torneoNombre: string;
+  status: TorneoInvitacionEquipoStatus;
+  createdAt: string;
+}
+
 interface LineupEntry {
   id: string;
   nombre: string;
@@ -305,7 +329,8 @@ type SeccionPanel =
   | "reportar"
   | "temporada"
   | "ranking"
-  | "estadisticas";
+  | "estadisticas"
+  | "amistades";
 
 // Migración 047: una temporada es "la actual" cuando hoy cae dentro
 // de su fecha_inicio/fecha_fin -- sin esto, "de la temporada actual"
@@ -490,6 +515,18 @@ export default function TeamDetailPage() {
   const [alianzaEnviada, setAlianzaEnviada] = useState(false);
   const [confirmandoAlianza, setConfirmandoAlianza] = useState<string | null>(null);
   const [erroresConfirmarAlianza, setErroresConfirmarAlianza] = useState<Record<string, string>>({});
+
+  // --- Amistad entre equipos + invitaciones a torneos (migración 073) ---
+  const [amistadesPropias, setAmistadesPropias] = useState<AmistadEquipoConNombre[]>([]);
+  const [invitacionesTorneoPropias, setInvitacionesTorneoPropias] = useState<InvitacionTorneoEquipoConNombre[]>([]);
+  const [tagAmistad, setTagAmistad] = useState("");
+  const [enviandoAmistad, setEnviandoAmistad] = useState(false);
+  const [errorAmistad, setErrorAmistad] = useState<string | null>(null);
+  const [amistadEnviada, setAmistadEnviada] = useState(false);
+  const [respondiendoAmistadId, setRespondiendoAmistadId] = useState<string | null>(null);
+  const [erroresResponderAmistad, setErroresResponderAmistad] = useState<Record<string, string>>({});
+  const [respondiendoInvitacionId, setRespondiendoInvitacionId] = useState<string | null>(null);
+  const [erroresResponderInvitacion, setErroresResponderInvitacion] = useState<Record<string, string>>({});
 
   const [respondiendoReto, setRespondiendoReto] = useState<string | null>(null);
   const [erroresResponderReto, setErroresResponderReto] = useState<Record<string, string>>({});
@@ -760,6 +797,70 @@ export default function TeamDetailPage() {
           status: a.status as "pendiente" | "aprobada" | "rechazada",
           propuestaPorMi: a.team_a_id === equipoData.id,
           aprobadoPorEquipoB: a.aprobado_por_equipo_b,
+        };
+      })
+    );
+
+    // Amistades entre equipos (migración 073), en cualquier estado --
+    // mismo criterio que las alianzas de arriba: el propio equipo
+    // necesita ver sus solicitudes pendientes/rechazadas, no solo las
+    // aceptadas.
+    const { data: amistadesData } = await supabase
+      .from("team_amistades")
+      .select("id, equipo_solicitante_id, equipo_destinatario_id, status")
+      .or(`equipo_solicitante_id.eq.${equipoData.id},equipo_destinatario_id.eq.${equipoData.id}`)
+      .order("created_at", { ascending: false });
+
+    const idsEquiposAmigos = [
+      ...new Set(
+        (amistadesData ?? []).map((a) =>
+          a.equipo_solicitante_id === equipoData.id ? a.equipo_destinatario_id : a.equipo_solicitante_id
+        )
+      ),
+    ];
+    let nombrePorEquipoAmigo: Record<string, string> = {};
+    if (idsEquiposAmigos.length > 0) {
+      const { data: equiposAmigosData } = await supabase
+        .from("teams")
+        .select("id, name, tag")
+        .in("id", idsEquiposAmigos);
+      nombrePorEquipoAmigo = Object.fromEntries(
+        (equiposAmigosData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+      );
+    }
+
+    setAmistadesPropias(
+      (amistadesData ?? []).map((a) => {
+        const otroEquipoId =
+          a.equipo_solicitante_id === equipoData.id ? a.equipo_destinatario_id : a.equipo_solicitante_id;
+        return {
+          id: a.id,
+          otroEquipoId,
+          otroEquipoNombre: nombrePorEquipoAmigo[otroEquipoId] ?? "Equipo",
+          status: a.status as TeamAmistadStatus,
+          propuestaPorMi: a.equipo_solicitante_id === equipoData.id,
+        };
+      })
+    );
+
+    // Invitaciones a torneos que le llegaron a este equipo (migración
+    // 073) -- se muestran todas, no solo 'pendiente', para que quede
+    // el historial de lo que ya se aceptó/rechazó.
+    const { data: invitacionesTorneoData } = await supabase
+      .from("torneo_invitaciones_equipo")
+      .select("id, tournament_id, status, created_at, tournaments(nombre)")
+      .eq("equipo_id", equipoData.id)
+      .order("created_at", { ascending: false });
+
+    setInvitacionesTorneoPropias(
+      (invitacionesTorneoData ?? []).map((inv) => {
+        const torneo = Array.isArray(inv.tournaments) ? inv.tournaments[0] : inv.tournaments;
+        return {
+          id: inv.id,
+          tournamentId: inv.tournament_id,
+          torneoNombre: (torneo as { nombre?: string } | null)?.nombre ?? "Torneo",
+          status: inv.status as TorneoInvitacionEquipoStatus,
+          createdAt: inv.created_at,
         };
       })
     );
@@ -2669,6 +2770,90 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
+  // --- Amistad entre equipos + invitaciones a torneos (migración 073) ---
+  const handleSolicitarAmistad = async (event: FormEvent) => {
+    event.preventDefault();
+    setErrorAmistad(null);
+    setAmistadEnviada(false);
+
+    const tag = tagAmistad.trim().toUpperCase();
+    if (!tag) {
+      setErrorAmistad("Escribe el tag del equipo.");
+      return;
+    }
+
+    setEnviandoAmistad(true);
+
+    const { data: equipoDestino, error: buscarError } = await supabase
+      .from("teams")
+      .select("id")
+      .eq("tag", tag)
+      .maybeSingle();
+
+    if (buscarError || !equipoDestino) {
+      setErrorAmistad("No encontré ningún equipo con ese tag.");
+      setEnviandoAmistad(false);
+      return;
+    }
+
+    // solicitar_amistad_equipo() (en la base) es la que de verdad
+    // chequea que seas dueño/capitán y que no haya ya una solicitud o
+    // amistad entre los dos equipos -- esto de acá es solo el
+    // formulario.
+    const { error } = await supabase.rpc("solicitar_amistad_equipo", {
+      p_equipo_destinatario_id: equipoDestino.id,
+    });
+
+    setEnviandoAmistad(false);
+
+    if (error) {
+      setErrorAmistad(error.message);
+      return;
+    }
+
+    setAmistadEnviada(true);
+    setTagAmistad("");
+    await cargar();
+  };
+
+  const handleResponderAmistad = async (amistadId: string, aceptar: boolean) => {
+    setRespondiendoAmistadId(amistadId);
+    setErroresResponderAmistad((prev) => ({ ...prev, [amistadId]: "" }));
+
+    const { error } = await supabase.rpc("responder_amistad_equipo", {
+      p_amistad_id: amistadId,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoAmistadId(null);
+
+    if (error) {
+      setErroresResponderAmistad((prev) => ({ ...prev, [amistadId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleResponderInvitacionTorneo = async (invitacionId: string, aceptar: boolean) => {
+    setRespondiendoInvitacionId(invitacionId);
+    setErroresResponderInvitacion((prev) => ({ ...prev, [invitacionId]: "" }));
+
+    const { error } = await supabase.rpc("responder_invitacion_torneo_equipo", {
+      p_invitacion_id: invitacionId,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoInvitacionId(null);
+
+    if (error) {
+      setErroresResponderInvitacion((prev) => ({ ...prev, [invitacionId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
   const handleCrearTemporal = async (event: FormEvent) => {
     event.preventDefault();
     if (!equipo) return;
@@ -3113,6 +3298,16 @@ export default function TeamDetailPage() {
                     <span className="team-panel-menu-item-title">Mercenarios y Alianzas</span>
                     <span className="team-panel-menu-item-desc">
                       Fichar un mercenario y proponer una alianza con otro equipo
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="team-panel-menu-item"
+                    onClick={() => setSeccionPanel("amistades")}
+                  >
+                    <span className="team-panel-menu-item-title">Equipos amigos</span>
+                    <span className="team-panel-menu-item-desc">
+                      Enviar y responder solicitudes de amistad, e invitaciones a torneos
                     </span>
                   </button>
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("logros")}>
@@ -5049,6 +5244,141 @@ export default function TeamDetailPage() {
                         })}
                       </div>
                     </>
+                  )}
+                </>
+              )}
+
+              {/* Amistad entre equipos + invitaciones a torneos
+                  (migración 073). */}
+              {seccionPanel === "amistades" && (
+                <>
+                  <h3 className="detail-subtitle">Enviar solicitud de amistad</h3>
+                  {puedeGestionar ? (
+                    <form className="auth-form" onSubmit={handleSolicitarAmistad}>
+                      {errorAmistad && <div className="form-error">{errorAmistad}</div>}
+                      {amistadEnviada && (
+                        <div className="form-success">Solicitud de amistad enviada.</div>
+                      )}
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="amistad-tag">
+                          Tag del equipo
+                        </label>
+                        <input
+                          id="amistad-tag"
+                          className="form-input"
+                          type="text"
+                          placeholder="QSQD"
+                          value={tagAmistad}
+                          onChange={(e) => setTagAmistad(e.target.value.toUpperCase())}
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-ghost btn-block" disabled={enviandoAmistad}>
+                        {enviandoAmistad ? "Enviando..." : "Enviar solicitud de amistad"}
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="detail-empty">Solo el dueño o un capitán puede enviar solicitudes de amistad.</p>
+                  )}
+
+                  <h3 className="detail-subtitle">Equipos amigos</h3>
+                  {amistadesPropias.length === 0 ? (
+                    <p className="detail-empty">Todavía no hay solicitudes de amistad con otros equipos.</p>
+                  ) : (
+                    <div className="detail-participant-list">
+                      {amistadesPropias.map((a) => {
+                        const estadoTexto =
+                          a.status === "aceptada"
+                            ? "Amigos"
+                            : a.status === "rechazada"
+                              ? "Rechazada"
+                              : a.propuestaPorMi
+                                ? "Esperando respuesta del otro equipo"
+                                : "Te mandaron una solicitud";
+                        const puedeResponder = puedeGestionar && a.status === "pendiente" && !a.propuestaPorMi;
+
+                        return (
+                          <div key={a.id} className="detail-participant-item">
+                            {a.otroEquipoNombre}
+                            <span className="reto-status">{estadoTexto}</span>
+                            {puedeResponder && (
+                              <div className="invitation-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={respondiendoAmistadId === a.id}
+                                  onClick={() => handleResponderAmistad(a.id, true)}
+                                >
+                                  Aceptar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  disabled={respondiendoAmistadId === a.id}
+                                  onClick={() => handleResponderAmistad(a.id, false)}
+                                >
+                                  Rechazar
+                                </button>
+                              </div>
+                            )}
+                            {erroresResponderAmistad[a.id] && (
+                              <div className="form-error">{erroresResponderAmistad[a.id]}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <h3 className="detail-subtitle">Invitaciones a torneos</h3>
+                  <p className="detail-empty">
+                    Cuando un equipo amigo organiza un torneo por equipos, puede invitar directo a tu
+                    clan desde acá -- aceptar te inscribe al toque, sin tener que buscar el torneo vos
+                    mismo.
+                  </p>
+                  {invitacionesTorneoPropias.length === 0 ? (
+                    <p className="detail-empty">Todavía no llegó ninguna invitación a un torneo.</p>
+                  ) : (
+                    <div className="detail-participant-list">
+                      {invitacionesTorneoPropias.map((inv) => {
+                        const estadoTexto =
+                          inv.status === "aceptada"
+                            ? "Aceptada -- ya estás inscrito"
+                            : inv.status === "rechazada"
+                              ? "Rechazada"
+                              : "Pendiente";
+                        const puedeResponder = puedeGestionar && inv.status === "pendiente";
+
+                        return (
+                          <div key={inv.id} className="detail-participant-item">
+                            <Link to={`/tournaments/${inv.tournamentId}`}>{inv.torneoNombre}</Link>
+                            <span className="reto-status">{estadoTexto}</span>
+                            {puedeResponder && (
+                              <div className="invitation-actions">
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={respondiendoInvitacionId === inv.id}
+                                  onClick={() => handleResponderInvitacionTorneo(inv.id, true)}
+                                >
+                                  Aceptar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  disabled={respondiendoInvitacionId === inv.id}
+                                  onClick={() => handleResponderInvitacionTorneo(inv.id, false)}
+                                >
+                                  Rechazar
+                                </button>
+                              </div>
+                            )}
+                            {erroresResponderInvitacion[inv.id] && (
+                              <div className="form-error">{erroresResponderInvitacion[inv.id]}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   )}
                 </>
               )}

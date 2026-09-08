@@ -236,98 +236,146 @@ export default function CreateTournamentPage() {
   }
 
   return (
-    <section className="auth-page">
-      <h1 className="auth-title">Crear torneo</h1>
-      <p className="auth-sub">Configura tu torneo de StarCraft II.</p>
+    <section className="create-tournament-page">
+      <div className="section-head">
+        <h1 className="section-title">Crear torneo</h1>
+      </div>
+      <p className="auth-sub" style={{ textAlign: "left", marginTop: 0, marginBottom: "1.5rem" }}>
+        Configura tu torneo de StarCraft II paso a paso.
+      </p>
 
-      <form className="auth-form" onSubmit={handleSubmit}>
+      <form className="create-tournament-form" onSubmit={handleSubmit}>
         {error && <div className="form-error">{error}</div>}
 
-        <div className="form-group">
-          <label className="form-label" htmlFor="torneo-nombre">
-            Nombre del torneo
-          </label>
-          <input
-            id="torneo-nombre"
-            className="form-input"
-            type="text"
-            required
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-          />
-        </div>
+        <div className="form-section">
+          <h2 className="form-section-title">
+            <span className="form-section-title-numero">1</span>
+            Información básica
+          </h2>
 
-        <div className="form-group">
-          <span className="form-label">Formato</span>
-          <div className="pill-radio-group">
-            {FORMATOS.map((f) => (
-              <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
-                <input
-                  type="radio"
-                  className="sr-only"
-                  name="formato"
-                  checked={formato === f}
-                  onChange={() => setFormato(f)}
-                />
-                {f}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <div className="form-group">
-          <span className="form-label">Modo de juego</span>
-          <div className="form-radio-group">
-            {MODOS.map((m) => (
-              <div
-                key={m.value}
-                className={`form-radio-option ${modo === m.value ? "selected" : ""}`}
-              >
-                <label className="form-radio-label">
-                  <input
-                    type="radio"
-                    name="modo"
-                    checked={modo === m.value}
-                    onChange={() => setModo(m.value)}
-                  />
-                  {m.label}
-                </label>
-                <InfoTooltip texto={m.descripcion} />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Suizo (migración 069): en blanco, generar_torneo_suizo() la
-            calcula sola (techo de log2 de los inscritos) recién al
-            iniciar el torneo -- acá es solo para fijarla a mano si el
-            organizador prefiere una cantidad puntual. */}
-        {modo === "suizo" && (
           <div className="form-group">
-            <label className="form-label" htmlFor="torneo-swiss-rondas">
-              Cantidad de rondas (opcional)
+            <label className="form-label" htmlFor="torneo-nombre">
+              Nombre del torneo
             </label>
             <input
-              id="torneo-swiss-rondas"
+              id="torneo-nombre"
               className="form-input"
-              type="number"
-              min={1}
-              placeholder="Se calcula sola si la dejas en blanco"
-              value={swissRondas}
-              onChange={(e) => setSwissRondas(e.target.value)}
+              type="text"
+              required
+              value={nombre}
+              onChange={(e) => setNombre(e.target.value)}
             />
           </div>
-        )}
 
-        {/* Liga para el ranking de clanes (migración 059): opcional,
-            sin relación con el formato de liga "First Stand" de más
-            abajo. Solo afecta el ranking en un torneo por equipos --
-            en 1v1 el campeón nunca es un clan, así que elegirla acá no
-            tiene efecto, pero no hace falta ocultarla por eso. */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="torneo-liga-ranking">
-            Liga (para el ranking de clanes)
-          </label>
+          <div className="form-group">
+            <span className="form-label">Formato</span>
+            <div className="pill-radio-group">
+              {FORMATOS.map((f) => (
+                <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="formato"
+                    checked={formato === f}
+                    onChange={() => setFormato(f)}
+                  />
+                  {f}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="form-group">
+            <span className="form-label">Modo de juego</span>
+            <div className="form-radio-group">
+              {MODOS.map((m) => (
+                <div
+                  key={m.value}
+                  className={`form-radio-option ${modo === m.value ? "selected" : ""}`}
+                >
+                  <label className="form-radio-label">
+                    <input
+                      type="radio"
+                      name="modo"
+                      checked={modo === m.value}
+                      onChange={() => setModo(m.value)}
+                    />
+                    {m.label}
+                  </label>
+                  <InfoTooltip texto={m.descripcion} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Suizo (migración 069): en blanco, generar_torneo_suizo() la
+              calcula sola (techo de log2 de los inscritos) recién al
+              iniciar el torneo -- acá es solo para fijarla a mano si el
+              organizador prefiere una cantidad puntual. */}
+          {modo === "suizo" && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-swiss-rondas">
+                Cantidad de rondas (opcional)
+              </label>
+              <input
+                id="torneo-swiss-rondas"
+                className="form-input"
+                type="number"
+                min={1}
+                placeholder="Se calcula sola si la dejas en blanco"
+                value={swissRondas}
+                onChange={(e) => setSwissRondas(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="torneo-fecha">
+              Fecha de inicio
+            </label>
+            <input
+              id="torneo-fecha"
+              className="form-input"
+              type="datetime-local"
+              required
+              value={fechaInicio}
+              onChange={(e) => setFechaInicio(e.target.value)}
+            />
+          </div>
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="torneo-cupos">
+              Cupos totales
+            </label>
+            <input
+              id="torneo-cupos"
+              className="form-input"
+              type="number"
+              min={2}
+              required
+              disabled={formatoLiga}
+              value={cuposTotales}
+              onChange={(e) => setCuposTotales(e.target.value)}
+            />
+            {formatoLiga && <p className="form-hint">First Stand es siempre para 7 clanes.</p>}
+          </div>
+        </div>
+
+        <div className="form-section">
+          <h2 className="form-section-title">
+            <span className="form-section-title-numero">2</span>
+            Formato de competencia
+          </h2>
+
+          {/* Liga para el ranking de clanes (migración 059): opcional,
+              sin relación con el formato de liga "First Stand" de más
+              abajo. Solo afecta el ranking en un torneo por equipos --
+              en 1v1 el campeón nunca es un clan, así que elegirla acá
+              no tiene efecto, pero no hace falta ocultarla por eso. */}
+          <div className="form-group">
+            <label className="form-label" htmlFor="torneo-liga-ranking">
+              Liga (para el ranking de clanes)
+            </label>
           <select
             id="torneo-liga-ranking"
             className="form-select"
@@ -488,9 +536,13 @@ export default function CreateTournamentPage() {
             </p>
           </div>
         )}
+        </div>
 
-        <div className="form-group">
-          <span className="form-label">Mapas</span>
+        <div className="form-section">
+          <h2 className="form-section-title">
+            <span className="form-section-title-numero">3</span>
+            Mapas
+          </h2>
           <div className="map-picker">
             {mapas.map((mapa) => {
               const incluido = !!mapasIncluidos[mapa.id];
@@ -516,72 +568,47 @@ export default function CreateTournamentPage() {
           </div>
         </div>
 
-        <div className="form-group">
-          <span className="form-label">Visibilidad</span>
-          <div className="form-radio-group">
-            <label className={`form-radio-option ${publico ? "selected" : ""}`}>
-              <input type="radio" name="publico" checked={publico} onChange={() => setPublico(true)} />
-              Público
-            </label>
-            <label className={`form-radio-option ${!publico ? "selected" : ""}`}>
-              <input
-                type="radio"
-                name="publico"
-                checked={!publico}
-                onChange={() => setPublico(false)}
-              />
-              Privado
-            </label>
-          </div>
-          {!publico && <p className="form-hint">Sin comisión — solo por invitación</p>}
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="torneo-cupos">
-            Cupos totales
-          </label>
-          <input
-            id="torneo-cupos"
-            className="form-input"
-            type="number"
-            min={2}
-            required
-            disabled={formatoLiga}
-            value={cuposTotales}
-            onChange={(e) => setCuposTotales(e.target.value)}
-          />
-          {formatoLiga && <p className="form-hint">First Stand es siempre para 7 clanes.</p>}
-        </div>
-
-        <div className="form-group">
-          <label className="form-label" htmlFor="torneo-fecha">
-            Fecha de inicio
-          </label>
-          <input
-            id="torneo-fecha"
-            className="form-input"
-            type="datetime-local"
-            required
-            value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-          />
-        </div>
-
-        {publico && (
+        <div className="form-section">
+          <h2 className="form-section-title">
+            <span className="form-section-title-numero">4</span>
+            Visibilidad y premios
+          </h2>
           <div className="form-group">
-            <label className="form-label" htmlFor="torneo-pozo">
-              Pozo de premios en CLP (opcional)
-            </label>
-            <input
-              id="torneo-pozo"
-              className="form-input"
-              type="number"
-              min={0}
-              value={pozoPremio}
-              onChange={(e) => setPozoPremio(e.target.value)}
-            />
+            <span className="form-label">Visibilidad</span>
+            <div className="form-radio-group">
+              <label className={`form-radio-option ${publico ? "selected" : ""}`}>
+                <input type="radio" name="publico" checked={publico} onChange={() => setPublico(true)} />
+                Público
+              </label>
+              <label className={`form-radio-option ${!publico ? "selected" : ""}`}>
+                <input
+                  type="radio"
+                  name="publico"
+                  checked={!publico}
+                  onChange={() => setPublico(false)}
+                />
+                Privado
+              </label>
+            </div>
+            {!publico && <p className="form-hint">Solo por invitación.</p>}
           </div>
-        )}
+
+          {publico && (
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-pozo">
+                Pozo de premios en CLP (opcional)
+              </label>
+              <input
+                id="torneo-pozo"
+                className="form-input"
+                type="number"
+                min={0}
+                value={pozoPremio}
+                onChange={(e) => setPozoPremio(e.target.value)}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Modo simple/avanzado (migración 069): equivalente a las
             pestañas Bracket/Permissions/Misc del formulario de
@@ -589,7 +616,11 @@ export default function CreateTournamentPage() {
             rápido y compartir acceso de admin quedan para un pedido
             aparte, todavía no tienen la infraestructura detrás (no
             hay sistema de notificaciones ni de adjuntos en RemorApp). */}
-        <div className="form-group">
+        <div className="form-section">
+          <h2 className="form-section-title">
+            <span className="form-section-title-numero">5</span>
+            Opciones avanzadas
+          </h2>
           <button
             type="button"
             className="btn btn-ghost btn-block"
@@ -597,10 +628,9 @@ export default function CreateTournamentPage() {
           >
             {modoAvanzado ? "Ocultar opciones avanzadas" : "Mostrar opciones avanzadas"}
           </button>
-        </div>
 
         {modoAvanzado && (
-          <div className="form-group advanced-options-panel">
+          <div className="advanced-options-panel">
             <h3 className="detail-subtitle">Bracket</h3>
             <label className="form-checkbox-label">
               <input
@@ -678,6 +708,7 @@ export default function CreateTournamentPage() {
             </label>
           </div>
         )}
+        </div>
 
         <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
           {loading ? "Creando torneo..." : "Crear torneo"}
