@@ -1504,6 +1504,26 @@ input[type="radio"] {
   margin-bottom: 1rem;
 }
 
+/* Botón "Enviar solicitud de amistad" en la ficha de OTRO equipo --
+   empujado al extremo derecho del header (nombre/tag a la izquierda),
+   se apila arriba del nombre en pantallas angostas. */
+.team-friend-request-box {
+  margin-left: auto;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .team-detail-header {
+    flex-wrap: wrap;
+  }
+
+  .team-friend-request-box {
+    margin-left: 0;
+    text-align: left;
+    width: 100%;
+  }
+}
+
 .team-detail-logo,
 .player-detail-avatar {
   width: 7rem;
@@ -1704,8 +1724,11 @@ input[type="radio"] {
   color: #f87171;
 }
 
-/* Barra de progreso de MMR hacia la siguiente liga (migración 020),
-   en /perfil y /equipos/:tag. */
+/* Barra de porcentaje horizontal genérica (PercentBar.tsx, modo no
+   vertical) -- se sigue usando en las tarjetas de estadísticas de
+   /jugador/:nick/:uniqueId y /equipos/:tag. El nombre de las clases
+   quedó de una barra de MMR hacia la siguiente liga que ya no existe;
+   no se renombró porque no vale la pena el churn solo por el nombre. */
 .mmr-progress {
   margin: 0.75rem 0;
 }
@@ -1725,19 +1748,10 @@ input[type="radio"] {
   transition: width 0.3s ease;
 }
 
-.mmr-progress-fill-banca-rota {
-  background: #f87171;
-}
-
 .mmr-progress-texto {
   margin: 0.4rem 0 0;
   font-size: 0.8rem;
   color: var(--color-text-muted);
-}
-
-.mmr-progress-texto-banca-rota {
-  color: #f87171;
-  font-weight: 600;
 }
 
 /* Liga del jugador, junto al Nick#ID en listas de miembros. */
@@ -1983,8 +1997,7 @@ input[type="radio"] {
 /* Campo de estrellas: un único elemto, varias capas de radial-gradient
    de 1-1.5px tileadas -- la técnica liviana estándar de "starfield",
    sin imágenes ni múltiples nodos DOM. Estático: no hay animación. */
-.tournament-bracket-wrap[data-fondo-bracket="campo_estrellas"],
-.bracket-fondo-preview[data-fondo-bracket="campo_estrellas"] {
+.tournament-bracket-wrap[data-fondo-bracket="campo_estrellas"] {
   background-image:
     radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
     radial-gradient(1px 1px at 40% 72%, rgba(255, 255, 255, 0.65), transparent 60%),
@@ -1998,8 +2011,7 @@ input[type="radio"] {
 
 /* Nebulosa: 3 manchas grandes de gradiente radial, opacidad baja,
    estáticas -- ningún movimiento. */
-.tournament-bracket-wrap[data-fondo-bracket="nebulosa"],
-.bracket-fondo-preview[data-fondo-bracket="nebulosa"] {
+.tournament-bracket-wrap[data-fondo-bracket="nebulosa"] {
   background-image:
     radial-gradient(45% 35% at 20% 25%, rgba(34, 211, 238, 0.16), transparent 70%),
     radial-gradient(40% 30% at 82% 68%, rgba(168, 85, 247, 0.14), transparent 70%),
@@ -2009,8 +2021,7 @@ input[type="radio"] {
 /* Constelación: mismo criterio que el patrón de rombos de la Sala de
    la Fama (data URI, SVG puro, sin librerías) -- acá puntos finos
    conectados por líneas, a muy baja opacidad. */
-.tournament-bracket-wrap[data-fondo-bracket="constelacion"],
-.bracket-fondo-preview[data-fondo-bracket="constelacion"] {
+.tournament-bracket-wrap[data-fondo-bracket="constelacion"] {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='%2322d3ee' fill-opacity='0.45' stroke='%2322d3ee' stroke-opacity='0.16' stroke-width='1'%3E%3Ccircle cx='20' cy='30' r='1.6'/%3E%3Ccircle cx='90' cy='15' r='1.6'/%3E%3Ccircle cx='150' cy='60' r='1.6'/%3E%3Ccircle cx='60' cy='100' r='1.6'/%3E%3Ccircle cx='170' cy='150' r='1.6'/%3E%3Ccircle cx='30' cy='170' r='1.6'/%3E%3Cpath d='M20 30 L90 15 M90 15 L150 60 M60 100 L20 30 M60 100 L150 60 M60 100 L170 150 M170 150 L30 170'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 200px 200px;
 }
@@ -2018,8 +2029,7 @@ input[type="radio"] {
 /* Vórtice: un solo conic-gradient -- el remolino sale de la FORMA del
    gradiente (franjas que giran alrededor de un centro), no de
    animarlo. Sin rotación, sin @keyframes. */
-.tournament-bracket-wrap[data-fondo-bracket="vortice"],
-.bracket-fondo-preview[data-fondo-bracket="vortice"] {
+.tournament-bracket-wrap[data-fondo-bracket="vortice"] {
   background-image: conic-gradient(
     from 0deg at 50% 50%,
     rgba(34, 211, 238, 0.18),
@@ -2030,20 +2040,84 @@ input[type="radio"] {
   );
 }
 
+/* Miniaturas del selector de fondo (ver .bracket-fondo-preview más
+   abajo): NO comparten regla con el fondo real de arriba a propósito.
+   El fondo real está calibrado para verse sutil detrás de una llave
+   entera (no puede competir con el contenido); a ese mismo tamaño de
+   patrón, en una caja de unos 90px, casi no entra ni un tile completo
+   -- por eso antes se veían como cuadrados negros. Acá el patrón se
+   comprime y se sube la opacidad para que cada miniatura se lea de
+   un vistazo, sin tocar en nada el fondo real de la llave. */
+.bracket-fondo-preview[data-fondo-bracket="campo_estrellas"] {
+  background-image:
+    radial-gradient(1.2px 1.2px at 15% 25%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(1.2px 1.2px at 42% 70%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(1.6px 1.6px at 68% 20%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(1.2px 1.2px at 82% 78%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(1.6px 1.6px at 28% 85%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(1.2px 1.2px at 58% 45%, rgba(255, 255, 255, 0.65), transparent 60%),
+    radial-gradient(1.2px 1.2px at 92% 50%, rgba(255, 255, 255, 0.75), transparent 60%);
+  background-size: 46px 46px;
+}
+
+.bracket-fondo-preview[data-fondo-bracket="nebulosa"] {
+  background-image:
+    radial-gradient(55% 45% at 22% 28%, rgba(34, 211, 238, 0.4), transparent 70%),
+    radial-gradient(50% 40% at 80% 65%, rgba(168, 85, 247, 0.35), transparent 70%),
+    radial-gradient(45% 40% at 50% 100%, rgba(236, 72, 153, 0.28), transparent 70%);
+}
+
+.bracket-fondo-preview[data-fondo-bracket="constelacion"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='%2322d3ee' fill-opacity='0.9' stroke='%2322d3ee' stroke-opacity='0.45' stroke-width='1.5'%3E%3Ccircle cx='20' cy='30' r='2.2'/%3E%3Ccircle cx='90' cy='15' r='2.2'/%3E%3Ccircle cx='150' cy='60' r='2.2'/%3E%3Ccircle cx='60' cy='100' r='2.2'/%3E%3Ccircle cx='170' cy='150' r='2.2'/%3E%3Ccircle cx='30' cy='170' r='2.2'/%3E%3Cpath d='M20 30 L90 15 M90 15 L150 60 M60 100 L20 30 M60 100 L150 60 M60 100 L170 150 M170 150 L30 170'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 90px 90px;
+}
+
+.bracket-fondo-preview[data-fondo-bracket="vortice"] {
+  background-image: conic-gradient(
+    from 0deg at 50% 50%,
+    rgba(34, 211, 238, 0.4),
+    rgba(6, 7, 10, 0) 25%,
+    rgba(168, 85, 247, 0.36) 50%,
+    rgba(6, 7, 10, 0) 75%,
+    rgba(34, 211, 238, 0.4)
+  );
+}
+
 /* ----- Estilo "esports": logo/avatar más grande, franja con el
    nombre del torneo, líneas de conexión gruesas color de acento. ----- */
 
+/* Franja del nombre del torneo: cortada en diagonal en las dos puntas
+   (clip-path, look de gráfica de transmisión/scoreboard) en vez de una
+   píldora lisa, con degradé + brillo de la marca y un filo inferior
+   más oscuro que le da grosor/profundidad en vez de quedar plana. */
 .bracket-esports-banner {
-  background: var(--color-accent);
+  position: relative;
+  background: linear-gradient(100deg, var(--h-accent-hover) 0%, var(--h-accent) 55%, var(--color-accent-soft) 100%);
   color: #04141a;
   font-family: var(--font-display);
   font-weight: 800;
+  font-size: 1.05rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-align: center;
-  padding: 0.55rem 1rem;
-  border-radius: var(--radius-md);
-  margin-bottom: 0.75rem;
+  padding: 0.7rem 2rem;
+  margin-bottom: 1rem;
+  clip-path: polygon(1.1rem 0, 100% 0, calc(100% - 1.1rem) 100%, 0 100%);
+  box-shadow: var(--shadow-accent-lg), 0 6px 0 rgba(4, 20, 26, 0.35);
+}
+
+/* Filete fino debajo del borde recortado, mismo ángulo que el
+   clip-path -- refuerzo de "placa metálica" sin agregar otro nodo. */
+.bracket-esports-banner::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -0.3rem;
+  height: 2px;
+  background: var(--h-accent);
+  clip-path: polygon(1.6rem 0, 100% 0, calc(100% - 1.6rem) 100%, 0 100%);
+  opacity: 0.55;
 }
 
 [data-estilo-bracket="esports"] .bracket-match {
@@ -2161,15 +2235,21 @@ input[type="radio"] {
 /* Mini-render real del fondo: mismo fondo que .tournament-bracket-wrap,
    en una caja chica. */
 .bracket-fondo-preview {
-  width: 4rem;
-  height: 3rem;
-  border-radius: 0.4rem;
+  width: 5.5rem;
+  height: 3.75rem;
+  border-radius: 0.5rem;
   border: 1px solid var(--color-border);
   background-color: var(--color-bg);
+  transition: border-color 0.15s ease;
 }
 
 .bracket-fondo-preview[data-fondo-bracket]:not([data-fondo-bracket="ninguno"]) {
   background-color: #06070a;
+}
+
+.bracket-picker-option:hover .bracket-fondo-preview,
+.bracket-picker-option.selected .bracket-fondo-preview {
+  border-color: var(--color-accent-soft);
 }
 
 /* Dos columnas lado a lado (challenger/challenged) -- usado en la sala

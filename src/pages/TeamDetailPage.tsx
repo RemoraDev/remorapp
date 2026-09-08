@@ -3,7 +3,8 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import { recortarImagenCuadrada, recortarImagenConProporcion } from "../lib/teams";
+import { obtenerEquipoDelUsuario, recortarImagenCuadrada, recortarImagenConProporcion } from "../lib/teams";
+import type { EquipoDelUsuario } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
 import { SC2_REGION_OPTIONS } from "../types/profile";
 import type { AvatarForma } from "../types/profile";
@@ -32,7 +33,6 @@ import {
 import type { InvestigacionJugador } from "../types/investigacion";
 import Avatar from "../components/Avatar";
 import LigaBadge from "../components/LigaBadge";
-import MmrProgressBar from "../components/MmrProgressBar";
 import PercentBar from "../components/PercentBar";
 import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
 import TitulosActivosList from "../components/TitulosActivosList";
@@ -528,6 +528,15 @@ export default function TeamDetailPage() {
   const [respondiendoInvitacionId, setRespondiendoInvitacionId] = useState<string | null>(null);
   const [erroresResponderInvitacion, setErroresResponderInvitacion] = useState<Record<string, string>>({});
 
+  // Equipo propio del visitante (si tiene uno), para el botón "Enviar
+  // solicitud de amistad" directo en la ficha de OTRO equipo -- sin
+  // esto solo se podía mandar una solicitud tipeando el tag a mano
+  // desde el Panel de control del equipo propio.
+  const [miEquipoPropio, setMiEquipoPropio] = useState<EquipoDelUsuario | null>(null);
+  const [enviandoAmistadDirecta, setEnviandoAmistadDirecta] = useState(false);
+  const [errorAmistadDirecta, setErrorAmistadDirecta] = useState<string | null>(null);
+  const [amistadDirectaEnviada, setAmistadDirectaEnviada] = useState(false);
+
   const [respondiendoReto, setRespondiendoReto] = useState<string | null>(null);
   const [erroresResponderReto, setErroresResponderReto] = useState<Record<string, string>>({});
   const [motivoRechazoPorReto, setMotivoRechazoPorReto] = useState<Record<string, ClanWarMotivoRechazo | "">>({});
@@ -600,6 +609,13 @@ export default function TeamDetailPage() {
         setFondosImagenPorId(Object.fromEntries((data ?? []).map((f) => [f.id, f.image_url])));
       });
   }, []);
+  useEffect(() => {
+    if (!user) {
+      setMiEquipoPropio(null);
+      return;
+    }
+    obtenerEquipoDelUsuario(user.id).then(setMiEquipoPropio);
+  }, [user]);
   // Se recalcula cada 30 segundos -- así la ventana de check-in
   // aparece sola cuando corresponde, sin que haga falta recargar la
   // página a mano.
@@ -2816,6 +2832,30 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
+  // Botón "Enviar solicitud de amistad" en la ficha pública de OTRO
+  // equipo (no el propio) -- ya se sabe el id del destinatario (es
+  // `equipo`, el que se está viendo), así que no hace falta pedir el
+  // tag a mano como en el formulario del Panel de control.
+  const handleSolicitarAmistadDirecta = async () => {
+    if (!equipo) return;
+    setErrorAmistadDirecta(null);
+    setEnviandoAmistadDirecta(true);
+
+    const { error } = await supabase.rpc("solicitar_amistad_equipo", {
+      p_equipo_destinatario_id: equipo.id,
+    });
+
+    setEnviandoAmistadDirecta(false);
+
+    if (error) {
+      setErrorAmistadDirecta(error.message);
+      return;
+    }
+
+    setAmistadDirectaEnviada(true);
+    await cargar();
+  };
+
   const handleResponderAmistad = async (amistadId: string, aceptar: boolean) => {
     setRespondiendoAmistadId(amistadId);
     setErroresResponderAmistad((prev) => ({ ...prev, [amistadId]: "" }));
@@ -3052,10 +3092,59 @@ export default function TeamDetailPage() {
             [{equipo.tag}] · {miembros.length} {miembros.length === 1 ? "miembro" : "miembros"}
           </p>
         </div>
-      </div>
 
-      <h2 className="detail-subtitle">Estadísticas</h2>
-      <MmrProgressBar mmr={equipo.mmr} liga={equipo.liga} bancaRota={equipo.banca_rota} />
+        {/* Botón directo para mandarle una solicitud de amistad a ESTE
+            equipo, visible en la ficha pública de cualquier clan que no
+            sea el propio -- antes solo se podía mandar tipeando el tag a
+            mano desde el Panel de control del equipo propio. Exclusivo
+            del dueño del equipo propio (el "fundador"), igual que
+            enviarla o responderla desde el propio panel. */}
+        {miEquipoPropio && miEquipoPropio.team_id !== equipo.id && miEquipoPropio.roles.includes("owner") && (
+          <div className="team-friend-request-box">
+            {(() => {
+              // `amistadesPropias` se carga siempre relativo a `equipo`
+              // (la ficha que se está viendo, ver cargar()): el
+              // "otroEquipoId" de cada fila es el equipo que NO es
+              // `equipo` -- viendo la ficha de OTRO clan, esa fila (si
+              // existe) es justamente la mía, así que hay que buscarla
+              // por miEquipoPropio.team_id, no por equipo.id.
+              const amistadConEsteEquipo = amistadesPropias.find((a) => a.otroEquipoId === miEquipoPropio.team_id);
+
+              if (amistadDirectaEnviada || (amistadConEsteEquipo?.status === "pendiente" && amistadConEsteEquipo.propuestaPorMi)) {
+                return <p className="tournament-card-meta">Solicitud de amistad enviada -- esperando respuesta.</p>;
+              }
+              if (amistadConEsteEquipo?.status === "pendiente" && !amistadConEsteEquipo.propuestaPorMi) {
+                return (
+                  <p className="tournament-card-meta">
+                    Este equipo ya te envió una solicitud de amistad -- respondé desde tu Panel de
+                    control &gt; Equipos amigos.
+                  </p>
+                );
+              }
+              if (amistadConEsteEquipo?.status === "aceptada") {
+                return <p className="form-success">Equipos amigos</p>;
+              }
+
+              return (
+                <>
+                  {errorAmistadDirecta && <div className="form-error">{errorAmistadDirecta}</div>}
+                  {amistadConEsteEquipo?.status === "rechazada" && (
+                    <p className="tournament-card-meta">La solicitud anterior fue rechazada.</p>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={enviandoAmistadDirecta}
+                    onClick={handleSolicitarAmistadDirecta}
+                  >
+                    {enviandoAmistadDirecta ? "Enviando..." : "Enviar solicitud de amistad"}
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        )}
+      </div>
 
       {/* El código de invitación queda a mano en la página principal,
           fuera del Panel de control -- no hace falta abrir ningún
@@ -5253,7 +5342,7 @@ export default function TeamDetailPage() {
               {seccionPanel === "amistades" && (
                 <>
                   <h3 className="detail-subtitle">Enviar solicitud de amistad</h3>
-                  {puedeGestionar ? (
+                  {esDueño ? (
                     <form className="auth-form" onSubmit={handleSolicitarAmistad}>
                       {errorAmistad && <div className="form-error">{errorAmistad}</div>}
                       {amistadEnviada && (
@@ -5277,7 +5366,7 @@ export default function TeamDetailPage() {
                       </button>
                     </form>
                   ) : (
-                    <p className="detail-empty">Solo el dueño o un capitán puede enviar solicitudes de amistad.</p>
+                    <p className="detail-empty">Solo el dueño del equipo puede enviar solicitudes de amistad.</p>
                   )}
 
                   <h3 className="detail-subtitle">Equipos amigos</h3>
@@ -5294,7 +5383,7 @@ export default function TeamDetailPage() {
                               : a.propuestaPorMi
                                 ? "Esperando respuesta del otro equipo"
                                 : "Te mandaron una solicitud";
-                        const puedeResponder = puedeGestionar && a.status === "pendiente" && !a.propuestaPorMi;
+                        const puedeResponder = esDueño && a.status === "pendiente" && !a.propuestaPorMi;
 
                         return (
                           <div key={a.id} className="detail-participant-item">

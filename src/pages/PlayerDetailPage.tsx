@@ -4,7 +4,6 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
-import MmrProgressBar from "../components/MmrProgressBar";
 import { COUNTRY_OPTIONS } from "../types/profile";
 import type { Country, LinkTransmision } from "../types/profile";
 import type { SkinAvatarClave } from "../types/skins";
@@ -273,9 +272,6 @@ export default function PlayerDetailPage() {
       {/* La bio va acá, inmediatamente debajo del Nick#ID y antes de
           Estadísticas -- no al final de la página. */}
       {perfil.bio && <p className="team-detail-description">{perfil.bio}</p>}
-
-      <h2 className="detail-subtitle">Estadísticas</h2>
-      <MmrProgressBar mmr={perfil.mmr} liga={perfil.liga} bancaRota={perfil.bancaRota} />
 
       {/* Dos columnas: a la izquierda, país + Equipo actual (+
           Transmisión si es caster); a la derecha, la tarjeta agrupada
