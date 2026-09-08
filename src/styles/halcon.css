@@ -2464,6 +2464,119 @@ input[type="radio"] {
   background: var(--color-panel);
 }
 
+/* Todos contra todos (migración 078): un solo grupo, mostrado a todo
+   el ancho en vez del recuadro angosto que usan los grupos clásicos
+   (donde suele haber varios uno al lado del otro). */
+.group-stage-block-ancho {
+  flex: 1 1 100%;
+  min-width: 100%;
+}
+
+/* Tabla de posiciones en franjas por puesto (Todos contra todos) --
+   variante de .group-standings-table, misma paleta de la app (nunca
+   los colores naranja/rojo típicos de estas tablas en otros sitios). */
+.ranking-strip-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.ranking-strip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--h-surface-2);
+  border: 1px solid var(--color-border);
+}
+
+.ranking-strip-row.top {
+  background: linear-gradient(90deg, rgba(34, 211, 238, 0.18), rgba(34, 211, 238, 0.03));
+  border-color: var(--color-accent);
+}
+
+.ranking-strip-puesto {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--color-text-faint);
+  width: 2rem;
+  flex-shrink: 0;
+}
+
+.ranking-strip-row.top .ranking-strip-puesto {
+  color: var(--color-accent);
+}
+
+.ranking-strip-nombre {
+  flex: 1;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Historial de resultados (migración 078): tira de victorias/derrotas
+   en orden de ronda, para ver la racha de un participante de un
+   vistazo -- mismo espíritu que el "historial del partido" de otras
+   plataformas de torneos, con la paleta de RemorApp. */
+.ranking-strip-historial {
+  display: flex;
+  gap: 0.2rem;
+  flex-shrink: 0;
+}
+
+.ranking-strip-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 0.3rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+.ranking-strip-badge.win {
+  background: rgba(34, 211, 238, 0.18);
+  color: var(--color-accent-soft);
+}
+
+.ranking-strip-badge.loss {
+  background: rgba(251, 113, 133, 0.16);
+  color: #fb7185;
+}
+
+.ranking-strip-stats {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.ranking-strip-stats b {
+  color: var(--color-text);
+  font-weight: 700;
+  margin-left: 0.25rem;
+}
+
+@media (max-width: 480px) {
+  .ranking-strip-row {
+    flex-wrap: wrap;
+  }
+  .ranking-strip-stats {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 0.35rem;
+  }
+  .ranking-strip-historial {
+    width: 100%;
+    margin-top: 0.35rem;
+    flex-wrap: wrap;
+  }
+}
+
 .group-standings-table {
   width: 100%;
   border-collapse: collapse;
@@ -2782,6 +2895,22 @@ input[type="radio"] {
 
 .group-stage-match {
   width: 100%;
+}
+
+/* Fixture en columnas por ronda (Todos contra todos, migración 078):
+   todas las rondas se conocen de entrada (a diferencia de Suizo, que
+   las genera de a una), así que tiene sentido mostrarlas lado a lado
+   como columnas en vez de apiladas una debajo de otra. */
+.group-stage-rondas-columnas {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.group-stage-rondas-columnas .group-stage-matches {
+  flex: 0 0 14rem;
+  min-width: 14rem;
 }
 
 /* ---------- Historial ---------- */

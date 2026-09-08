@@ -26,6 +26,13 @@ interface GroupStageProps {
   // Migración 069 (opciones avanzadas, pestaña Misc): en false, oculta
   // la tabla de posiciones -- los partidos se siguen mostrando igual.
   mostrarPosiciones?: boolean;
+  // Migración 078: presentación "de liga" para Todos contra todos --
+  // tabla de posiciones en franjas por puesto (en vez de la tabla
+  // simple) y el fixture en columnas por ronda (en vez de secciones
+  // apiladas una debajo de otra). Ningún otro modo pasa esto: Suizo,
+  // First Stand y la etapa de grupos clásica se ven exactamente igual
+  // que siempre.
+  estiloRanking?: boolean;
 }
 
 // Etapa de grupos (migración 041): tabla de posiciones + partidos de
@@ -46,11 +53,26 @@ export default function GroupStage({
   agruparPorJornada = false,
   permiteAutoreporte = true,
   mostrarPosiciones = true,
+  estiloRanking = false,
 }: GroupStageProps) {
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
+  // Pestañas Posiciones/Partidos (migración 078): solo tiene sentido
+  // con estiloRanking -- los demás modos siguen mostrando todo
+  // apilado en una sola vista, como siempre.
+  const [tabActiva, setTabActiva] = useState<"posiciones" | "partidos">("posiciones");
 
   const nombreDe = (participantId: string) => nombresPorParticipante[participantId] ?? "Jugador de RemorApp";
+
+  // Historial de un participante en orden de ronda: una tira de W/L
+  // de sus partidos ya jugados, para ver de un vistazo cómo viene.
+  const historialDe = (partidasGrupo: TournamentGroupMatchRow[], participantId: string) =>
+    partidasGrupo
+      .filter(
+        (m) => m.status === "jugado" && (m.participant1_id === participantId || m.participant2_id === participantId)
+      )
+      .sort((a, b) => (a.jornada ?? 0) - (b.jornada ?? 0))
+      .map((m) => (m.ganador_id === participantId ? "W" : "L"));
 
   const puedeReportar = (match: TournamentGroupMatchRow) => {
     if (!userId) return false;
@@ -86,10 +108,61 @@ export default function GroupStage({
         const partidasGrupo = partidas.filter((m) => m.group_id === grupo.id);
 
         return (
-          <div key={grupo.id} className="group-stage-block">
+          <div key={grupo.id} className={`group-stage-block ${estiloRanking ? "group-stage-block-ancho" : ""}`}>
             <h3 className="detail-subtitle">{grupo.nombre}</h3>
 
-            {mostrarPosiciones && (
+            {estiloRanking && (
+              <div className="admin-tabs">
+                <button
+                  type="button"
+                  className={`admin-tab ${tabActiva === "posiciones" ? "active" : ""}`}
+                  onClick={() => setTabActiva("posiciones")}
+                >
+                  Posiciones
+                </button>
+                <button
+                  type="button"
+                  className={`admin-tab ${tabActiva === "partidos" ? "active" : ""}`}
+                  onClick={() => setTabActiva("partidos")}
+                >
+                  Partidos
+                </button>
+              </div>
+            )}
+
+            {mostrarPosiciones && estiloRanking && tabActiva === "posiciones" && (
+              <div className="ranking-strip-table">
+                {posicionesGrupo.map((p, indice) => (
+                  <div key={p.participant_id} className={`ranking-strip-row ${indice === 0 ? "top" : ""}`}>
+                    <span className="ranking-strip-puesto">#{indice + 1}</span>
+                    <span className="ranking-strip-nombre">{nombreDe(p.participant_id)}</span>
+                    <span className="ranking-strip-historial">
+                      {historialDe(partidasGrupo, p.participant_id).map((resultado, i) => (
+                        <span key={i} className={`ranking-strip-badge ${resultado === "W" ? "win" : "loss"}`}>
+                          {resultado}
+                        </span>
+                      ))}
+                    </span>
+                    <span className="ranking-strip-stats">
+                      <span>
+                        PJ <b>{p.jugados}</b>
+                      </span>
+                      <span>
+                        G <b>{p.ganados}</b>
+                      </span>
+                      <span>
+                        L <b>{p.jugados - p.ganados}</b>
+                      </span>
+                      <span>
+                        Pts <b>{p.puntos}</b>
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {mostrarPosiciones && !estiloRanking && (
               <table className="group-standings-table">
                 <thead>
                   <tr>
@@ -127,17 +200,25 @@ export default function GroupStage({
             {/* First Stand organiza el fixture en 7 jornadas fijas, y
                 Suizo en rondas que se generan de a una -- las dos se
                 muestran agrupadas; la etapa de grupos "clásica" (varios
-                grupos chicos) sigue sin jornadas, todo junto. */}
-            {(esFirstStand || agruparPorJornada
-              ? [...new Set(partidasGrupo.map((m) => m.jornada ?? 0))].sort((a, b) => a - b)
-              : [null]
-            ).map((jornada) => (
+                grupos chicos) sigue sin jornadas, todo junto. Todos
+                contra todos (estiloRanking) también se agrupa por
+                ronda, pero en columnas lado a lado en vez de
+                secciones apiladas -- tiene sentido porque ahí SÍ se
+                conocen todas las rondas de entrada, no se van
+                generando de a una como en Suizo. Con estiloRanking,
+                además, esto vive detrás de la pestaña "Partidos". */}
+            {(!estiloRanking || tabActiva === "partidos") && (
+            <div className={estiloRanking ? "group-stage-rondas-columnas" : undefined}>
+              {(esFirstStand || agruparPorJornada
+                ? [...new Set(partidasGrupo.map((m) => m.jornada ?? 0))].sort((a, b) => a - b)
+                : [null]
+              ).map((jornada) => (
               <div key={jornada ?? "unica"} className="group-stage-matches">
                 {(esFirstStand || agruparPorJornada) && (
                   <h4 className="detail-subtitle">{agruparPorJornada ? `Ronda ${jornada}` : `Jornada ${jornada}`}</h4>
                 )}
                 {partidasGrupo
-                  .filter((m) => !esFirstStand || m.jornada === jornada)
+                  .filter((m) => (!esFirstStand && !agruparPorJornada) || m.jornada === jornada)
                   .map((match) => (
                     <div key={match.id} className="bracket-match group-stage-match">
                       <div
@@ -226,7 +307,9 @@ export default function GroupStage({
                     </div>
                   ))}
               </div>
-            ))}
+              ))}
+            </div>
+            )}
           </div>
         );
       })}

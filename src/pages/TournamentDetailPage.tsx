@@ -1768,6 +1768,8 @@ export default function TournamentDetailPage() {
                 onCambio={cargarTorneo}
                 permiteAutoreporte={torneo.permite_autoreporte}
                 mostrarPosiciones={torneo.mostrar_posiciones}
+                agruparPorJornada
+                estiloRanking
               />
 
               {esOrganizador && torneo.estado === "en_curso" && (
