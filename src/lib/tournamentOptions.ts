@@ -12,18 +12,18 @@ export const MODOS: { value: TorneoModo; label: string; descripcion: string }[] 
     value: "eliminacion_doble",
     label: "Eliminación doble",
     descripcion:
-      "Cada participante puede perder una vez sin quedar eliminado: pasa a la llave de perdedores antes de quedar fuera.",
+      "Cada participante puede perder una vez sin quedar eliminado: pasa a la llave de perdedores antes de quedar fuera. Todavía no tiene motor propio -- por ahora no vas a poder iniciar un torneo en este modo.",
   },
   {
     value: "todos_contra_todos",
     label: "Todos contra todos",
-    descripcion: "Cada participante juega contra todos los demás; gana quien sume más victorias.",
+    descripcion: "Cada participante juega contra todos los demás una vez; gana quien sume más puntos.",
   },
   {
     value: "rey_de_la_colina",
     label: "Rey de la Colina",
     descripcion:
-      "Un jugador defiende el trono partida a partida contra retadores; se acumulan puntos por cada victoria.",
+      "Un jugador defiende el trono partida a partida contra retadores; se acumulan puntos por cada victoria. Todavía no tiene motor propio -- por ahora no vas a poder iniciar un torneo en este modo.",
   },
   {
     value: "suizo",

@@ -32,12 +32,18 @@ export async function obtenerNombresDeParticipantes(
   let suspendidoPorUserId: Record<string, boolean> = {};
   let avatarPorUserId: Record<string, string | null> = {};
   if (userIds.length > 0) {
+    // Corrección: acá se pedía profiles.nombre (el nombre real) en vez
+    // de nick#unique_id -- la identidad pública que usa el resto de la
+    // app en todos lados, y que además no expone el nombre real de la
+    // cuenta.
     const { data: perfilesData } = await supabase
       .from("profiles")
-      .select("id, nombre, suspendido, avatar_url")
+      .select("id, nick, unique_id, suspendido, avatar_url")
       .in("id", userIds);
 
-    nombrePorUserId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nombre]));
+    nombrePorUserId = Object.fromEntries(
+      (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : null])
+    );
     suspendidoPorUserId = Object.fromEntries(
       (perfilesData ?? []).map((p) => [p.id, p.suspendido])
     );
@@ -89,10 +95,11 @@ export async function obtenerNombreDeParticipante(
   if (participante.user_id) {
     const { data: perfil } = await supabase
       .from("profiles")
-      .select("nombre, avatar_url")
+      .select("nick, unique_id, avatar_url")
       .eq("id", participante.user_id)
       .maybeSingle();
-    return { nombre: perfil?.nombre ?? "Jugador de RemorApp", logoUrl: perfil?.avatar_url ?? null };
+    const nombre = perfil?.nick ? `${perfil.nick}#${perfil.unique_id}` : "Jugador de RemorApp";
+    return { nombre, logoUrl: perfil?.avatar_url ?? null };
   }
 
   return null;

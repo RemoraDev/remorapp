@@ -85,6 +85,13 @@ export default function TournamentDetailPage() {
   const [errorSuizo, setErrorSuizo] = useState<string | null>(null);
   const [generandoRondaSuiza, setGenerandoRondaSuiza] = useState(false);
 
+  // Todos contra todos (migración 077) -- a diferencia de Suizo, sí
+  // usa check-in (puedeAbrirCheckIn, más abajo) antes de armar el
+  // fixture completo de una sola vez.
+  const [iniciandoTodosContraTodos, setIniciandoTodosContraTodos] = useState(false);
+  const [errorTodosContraTodos, setErrorTodosContraTodos] = useState<string | null>(null);
+  const [finalizandoTodosContraTodos, setFinalizandoTodosContraTodos] = useState(false);
+
   // Tabla de posiciones / Leaderboard (migración 069).
   const [puntosEditados, setPuntosEditados] = useState<Record<string, string>>({});
   const [guardandoPuntosId, setGuardandoPuntosId] = useState<string | null>(null);
@@ -224,14 +231,22 @@ export default function TournamentDetailPage() {
 
       // tournament_participants.user_id apunta a auth.users, no a
       // profiles, así que no hay join automático: se resuelven los
-      // nombres en una segunda consulta aparte.
+      // nombres en una segunda consulta aparte. Corrección: acá se
+      // pedía profiles.nombre (el nombre real, cuando existe) en vez
+      // de nick#unique_id -- la convención de identidad pública que
+      // usa el resto de la app (Sala de la Fama, Panel de
+      // Administración, listas de miembros, etc.) en todos lados
+      // menos acá. Además de la inconsistencia visual, exponía el
+      // nombre real de la cuenta en un lugar público (la llave).
       if (userIds.length > 0) {
         const { data: perfilesData } = await supabase
           .from("profiles")
-          .select("id, nombre, suspendido, avatar_url, avatar_forma, mmr_1v1, liga_1v1, nivel_1v1, banca_rota")
+          .select("id, nick, unique_id, suspendido, avatar_url, avatar_forma, mmr_1v1, liga_1v1, nivel_1v1, banca_rota")
           .in("id", userIds);
 
-        nombresPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nombre]));
+        nombresPorId = Object.fromEntries(
+          (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : null])
+        );
         suspendidoPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.suspendido]));
         avatarPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.avatar_url]));
         avatarFormaPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.avatar_forma]));
@@ -291,9 +306,13 @@ export default function TournamentDetailPage() {
     // todavía no existe (fase_actual sigue en "grupos"). Migración 069:
     // un torneo Suizo reutiliza exactamente este mismo trío de tablas
     // (un solo grupo, "Suizo"), así que se trae con el mismo criterio.
+    // Migración 077: Todos contra todos hace exactamente lo mismo (un
+    // solo grupo, "Todos contra todos", sin fase de eliminación
+    // después).
     if (
       (torneoData.modo === "eliminacion_simple" && torneoData.fase_actual === "grupos") ||
-      torneoData.modo === "suizo"
+      torneoData.modo === "suizo" ||
+      torneoData.modo === "todos_contra_todos"
     ) {
       const { data: gruposData } = await supabase
         .from("tournament_groups")
@@ -452,7 +471,7 @@ export default function TournamentDetailPage() {
   // llave" en vez de este botón.
   const puedeAbrirCheckIn =
     esOrganizador &&
-    torneo?.modo === "eliminacion_simple" &&
+    (torneo?.modo === "eliminacion_simple" || torneo?.modo === "todos_contra_todos") &&
     torneo?.estado === "abierto" &&
     !torneo?.check_in_abierto &&
     torneo.cupos_ocupados >= 2;
@@ -648,6 +667,42 @@ export default function TournamentDetailPage() {
 
     if (error) {
       setErrorSuizo(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  const handleIniciarTodosContraTodos = async () => {
+    if (!torneo) return;
+
+    setIniciandoTodosContraTodos(true);
+    setErrorTodosContraTodos(null);
+
+    const { error } = await supabase.rpc("generar_todos_contra_todos", { p_tournament_id: torneo.id });
+
+    setIniciandoTodosContraTodos(false);
+
+    if (error) {
+      setErrorTodosContraTodos(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  const handleFinalizarTodosContraTodos = async () => {
+    if (!torneo) return;
+
+    setFinalizandoTodosContraTodos(true);
+    setErrorTodosContraTodos(null);
+
+    const { error } = await supabase.rpc("finalizar_todos_contra_todos", { p_tournament_id: torneo.id });
+
+    setFinalizandoTodosContraTodos(false);
+
+    if (error) {
+      setErrorTodosContraTodos(error.message);
       return;
     }
 
@@ -1604,6 +1659,120 @@ export default function TournamentDetailPage() {
                       </button>
                     );
                   })()}
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+
+      {/* Todos contra todos (migración 077): reutiliza el mismo trío
+          de tablas que Suizo (un solo grupo), pero arma TODOS los
+          partidos de una sola vez apenas se cierra el check-in, en
+          vez de ronda por ronda -- no hay "siguiente ronda" acá, cada
+          inscrito juega contra todos los demás exactamente una vez.
+          A diferencia de Suizo, si usa check-in (mismo mecanismo que
+          eliminación simple, ver puedeAbrirCheckIn más arriba). */}
+      {torneo.modo === "todos_contra_todos" && (
+        <>
+          <h2 className="detail-subtitle">Todos contra todos</h2>
+          {errorTodosContraTodos && <div className="form-error">{errorTodosContraTodos}</div>}
+
+          {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
+            <p className="form-success">
+              🏆 Campeón:{" "}
+              {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                "Jugador de RemorApp"}
+            </p>
+          )}
+
+          {torneo.estado === "abierto" && (
+            <>
+              {puedeAbrirCheckIn && (
+                <div className="detail-register-box">
+                  {errorCheckIn && <div className="form-error">{errorCheckIn}</div>}
+                  <p className="tournament-card-meta">
+                    Antes de armar los partidos, pedile a los inscritos que confirmen que van a
+                    jugar -- así el fixture sale solo con quienes de verdad van a participar.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-block"
+                    disabled={abriendoCheckIn}
+                    onClick={handleAbrirCheckIn}
+                  >
+                    {abriendoCheckIn ? "Abriendo..." : "Abrir check-in"}
+                  </button>
+                </div>
+              )}
+
+              {torneo.check_in_abierto && (
+                <div className="detail-register-box">
+                  {errorConfirmar && <div className="form-error">{errorConfirmar}</div>}
+                  <p className="tournament-card-meta">
+                    {confirmados} de {participantesVisibles.length} confirmados
+                  </p>
+
+                  {miParticipante && !miParticipante.checkedIn && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-block"
+                      disabled={confirmando}
+                      onClick={() => handleConfirmarAsistencia(miParticipante.id)}
+                    >
+                      {confirmando ? "Confirmando..." : "Confirmar que voy a jugar"}
+                    </button>
+                  )}
+                  {miParticipante && miParticipante.checkedIn && (
+                    <p className="form-success">Ya confirmaste tu asistencia.</p>
+                  )}
+
+                  {esOrganizador && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block"
+                      disabled={iniciandoTodosContraTodos}
+                      onClick={handleIniciarTodosContraTodos}
+                    >
+                      {iniciandoTodosContraTodos ? "Generando..." : "Cerrar check-in y armar los partidos"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {torneo.estado !== "abierto" && (
+            <>
+              <GroupStage
+                grupos={grupos}
+                partidas={partidasGrupo}
+                posiciones={posiciones}
+                nombresPorParticipante={Object.fromEntries(
+                  participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
+                )}
+                puedeReportarPorParticipante={puedeReportarPorParticipante}
+                userId={user?.id ?? null}
+                organizadorId={torneo.creador_id}
+                onCambio={cargarTorneo}
+                permiteAutoreporte={torneo.permite_autoreporte}
+                mostrarPosiciones={torneo.mostrar_posiciones}
+              />
+
+              {esOrganizador && torneo.estado === "en_curso" && (
+                <div className="detail-register-box">
+                  {partidasGrupo.some((m) => m.status !== "jugado") ? (
+                    <p className="tournament-card-meta">Todavía faltan partidos por jugarse.</p>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block"
+                      disabled={finalizandoTodosContraTodos}
+                      onClick={handleFinalizarTodosContraTodos}
+                    >
+                      {finalizandoTodosContraTodos ? "Finalizando..." : "Finalizar torneo"}
+                    </button>
+                  )}
                 </div>
               )}
             </>

@@ -501,8 +501,10 @@ export default function AdminPage() {
       );
       const userIds = [...new Set(Object.values(userIdPorParticipante))];
 
-      const { data: perfilesData } = await supabase.from("profiles").select("id, nombre").in("id", userIds);
-      const nombrePorUserId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nombre]));
+      const { data: perfilesData } = await supabase.from("profiles").select("id, nick, unique_id").in("id", userIds);
+      const nombrePorUserId = Object.fromEntries(
+        (perfilesData ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : null])
+      );
 
       const nombreDeParticipante = (participantId: string | null) => {
         if (!participantId) return null;

@@ -1,0 +1,30 @@
+{
+  "torneoId": "de7132fb-a704-4d6f-b51b-516431e4cb50",
+  "cuentas": [
+    {
+      "email": "remorapp.qa.todos1.1788832426433@mailinator.com",
+      "userId": "8a357ef3-c7f7-4866-a307-01bd95ec14d4",
+      "nick": "Todos1"
+    },
+    {
+      "email": "remorapp.qa.todos2.1788832426433@mailinator.com",
+      "userId": "ddc0ff4f-9a45-49bb-accb-a1aa070cb185",
+      "nick": "Todos2"
+    },
+    {
+      "email": "remorapp.qa.todos3.1788832426433@mailinator.com",
+      "userId": "272033c2-5d41-4ab9-887d-dbcd1f64d1b1",
+      "nick": "Todos3"
+    },
+    {
+      "email": "remorapp.qa.todos4.1788832426433@mailinator.com",
+      "userId": "11a466df-0d31-4bc3-97a1-7f0d2786470a",
+      "nick": "Todos4"
+    },
+    {
+      "email": "remorapp.qa.todos5.1788832426433@mailinator.com",
+      "userId": "f3771e05-884b-4f74-bf22-a527e2734d80",
+      "nick": "Todos5"
+    }
+  ]
+}

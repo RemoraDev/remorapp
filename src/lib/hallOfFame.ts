@@ -84,8 +84,12 @@ async function eventosTorneosFinalizados(): Promise<EventoGaleria[]> {
   }
   let nombrePorUserId: Record<string, string> = {};
   if (userIds.length > 0) {
-    const { data: perfiles } = await supabase.from("profiles").select("id, nombre").in("id", userIds);
-    nombrePorUserId = Object.fromEntries((perfiles ?? []).map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"]));
+    // Corrección: mismo caso que en otras vistas -- acá se pedía
+    // profiles.nombre (el nombre real) en vez de nick#unique_id.
+    const { data: perfiles } = await supabase.from("profiles").select("id, nick, unique_id").in("id", userIds);
+    nombrePorUserId = Object.fromEntries(
+      (perfiles ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : "Jugador de RemorApp"])
+    );
   }
 
   return filas.map((t) => {
