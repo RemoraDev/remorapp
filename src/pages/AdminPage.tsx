@@ -9,7 +9,8 @@ import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import { COUNTRY_OPTIONS, PERFIL_TIPO_OPTIONS } from "../types/profile";
 import type { PerfilTipo } from "../types/profile";
 import type { AdminUserRow } from "../types/admin";
-import type { TournamentRow } from "../types/tournaments";
+import { MODOS } from "../lib/tournamentOptions";
+import type { TournamentRow, TorneoFormato, TorneoModo } from "../types/tournaments";
 import type { BracketMatchRow } from "../types/bracket";
 import type { FondoLineupImagen } from "../types/clanWars";
 import type { BordeBasico } from "../types/bordes";
@@ -42,6 +43,7 @@ interface ResultadoLimpieza {
   equipos: number;
   retos: number;
   cuentas: number;
+  torneos: number;
 }
 
 interface ReporteConNombre {
@@ -272,6 +274,19 @@ export default function AdminPage() {
   const [limpiando, setLimpiando] = useState(false);
   const [errorLimpieza, setErrorLimpieza] = useState<string | null>(null);
   const [resultadoLimpieza, setResultadoLimpieza] = useState<ResultadoLimpieza | null>(null);
+
+  // --- Torneos de prueba (migración 082): mismo criterio que las
+  // salas de lineup de arriba -- genera un torneo real con N
+  // jugadores o clanes ficticios ya inscritos y confirmados. ---
+  const [nombreTorneoPrueba, setNombreTorneoPrueba] = useState("");
+  const [formatoTorneoPrueba, setFormatoTorneoPrueba] = useState<TorneoFormato>("1v1");
+  const [modoTorneoPrueba, setModoTorneoPrueba] = useState<TorneoModo>("eliminacion_simple");
+  const [cantidadTorneoPrueba, setCantidadTorneoPrueba] = useState("8");
+  const [generandoTorneoPrueba, setGenerandoTorneoPrueba] = useState(false);
+  const [errorTorneoPrueba, setErrorTorneoPrueba] = useState<string | null>(null);
+  const [torneoPruebaGenerado, setTorneoPruebaGenerado] = useState<{ tournament_id: string; nombre: string } | null>(
+    null
+  );
 
   // --- Movimientos entre equipos (migración 066): exclusivo del
   // dueño -- reprogramaciones y extensiones de plazo de lineup de
@@ -811,6 +826,30 @@ export default function AdminPage() {
 
     setResultadoLimpieza(data as ResultadoLimpieza);
     setEscenarioGenerado(null);
+    setTorneoPruebaGenerado(null);
+  };
+
+  const handleGenerarTorneoPrueba = async () => {
+    setGenerandoTorneoPrueba(true);
+    setErrorTorneoPrueba(null);
+    setTorneoPruebaGenerado(null);
+
+    const { data, error } = await supabase.rpc("generar_torneo_prueba", {
+      p_nombre: nombreTorneoPrueba.trim(),
+      p_formato: formatoTorneoPrueba,
+      p_modo: modoTorneoPrueba,
+      p_cantidad: Number(cantidadTorneoPrueba),
+    });
+
+    setGenerandoTorneoPrueba(false);
+
+    if (error) {
+      setErrorTorneoPrueba(error.message);
+      return;
+    }
+
+    setTorneoPruebaGenerado(data as { tournament_id: string; nombre: string });
+    setNombreTorneoPrueba("");
   };
 
   const handleConfirmar = async (torneoId: string) => {
@@ -2243,6 +2282,108 @@ export default function AdminPage() {
 
       {tab === "pruebas" && esDuenoPlataforma && (
         <div className="admin-panel">
+          <h3 className="detail-subtitle">Torneos</h3>
+          <p className="tournament-card-meta">
+            Crea un torneo real, ya abierto, con la cantidad elegida de jugadores (1v1) o clanes
+            (2v2/3v3/4v4) ficticios -- cada clan ya arranca con el mínimo de integrantes que exige el
+            formato. Todos quedan inscritos y con el check-in confirmado de una: solo falta generar la
+            llave o el fixture desde la ficha del torneo.
+          </p>
+
+          {errorTorneoPrueba && <div className="form-error">{errorTorneoPrueba}</div>}
+
+          <div className="form-group">
+            <label className="form-label" htmlFor="torneo-prueba-nombre">
+              Nombre (opcional)
+            </label>
+            <input
+              id="torneo-prueba-nombre"
+              className="form-input"
+              type="text"
+              placeholder="Se genera solo si lo dejas en blanco"
+              value={nombreTorneoPrueba}
+              onChange={(e) => setNombreTorneoPrueba(e.target.value)}
+            />
+          </div>
+
+          <div className="admin-row-actions">
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-prueba-formato">
+                Formato
+              </label>
+              <select
+                id="torneo-prueba-formato"
+                className="form-select"
+                value={formatoTorneoPrueba}
+                onChange={(e) => setFormatoTorneoPrueba(e.target.value as TorneoFormato)}
+              >
+                <option value="1v1">1v1 -- jugadores ficticios</option>
+                <option value="2v2">2v2 -- clanes ficticios de 2</option>
+                <option value="3v3">3v3 -- clanes ficticios de 3</option>
+                <option value="4v4">4v4 -- clanes ficticios de 4</option>
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-prueba-modo">
+                Modo
+              </label>
+              <select
+                id="torneo-prueba-modo"
+                className="form-select"
+                value={modoTorneoPrueba}
+                onChange={(e) => setModoTorneoPrueba(e.target.value as TorneoModo)}
+              >
+                {MODOS.map((m) => (
+                  <option key={m.value} value={m.value}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-prueba-cantidad">
+                {formatoTorneoPrueba === "1v1" ? "Cantidad de jugadores" : "Cantidad de clanes"}
+              </label>
+              <input
+                id="torneo-prueba-cantidad"
+                className="form-input"
+                type="number"
+                min={2}
+                max={64}
+                value={cantidadTorneoPrueba}
+                onChange={(e) => setCantidadTorneoPrueba(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="admin-row-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={generandoTorneoPrueba}
+              onClick={handleGenerarTorneoPrueba}
+            >
+              {generandoTorneoPrueba ? "Generando..." : "Generar torneo de prueba"}
+            </button>
+          </div>
+
+          {torneoPruebaGenerado && (
+            <div className="admin-row">
+              <div className="admin-row-info">
+                <p className="admin-row-title">{torneoPruebaGenerado.nombre}</p>
+                <p className="admin-row-meta">
+                  {cantidadTorneoPrueba} {formatoTorneoPrueba === "1v1" ? "jugadores" : "clanes"} inscritos
+                  y confirmados.
+                </p>
+                <Link className="btn-link" to={`/tournaments/${torneoPruebaGenerado.tournament_id}`}>
+                  Ver torneo
+                </Link>
+              </div>
+            </div>
+          )}
+
           <h3 className="detail-subtitle">Salas de lineup</h3>
           <p className="tournament-card-meta">
             Genera un escenario de Clan War de prueba (2 equipos ficticios, 4 jugadores cada uno) para
@@ -2268,9 +2409,13 @@ export default function AdminPage() {
               disabled={limpiando}
               onClick={handleLimpiarEscenarios}
             >
-              {limpiando ? "Limpiando..." : "Limpiar escenarios de prueba"}
+              {limpiando ? "Limpiando..." : "Limpiar todo lo de prueba"}
             </button>
           </div>
+          <p className="form-hint">
+            Un solo botón para las dos herramientas de esta pestaña: borra los torneos de prueba de
+            arriba Y los escenarios de Clan War de abajo, con todas sus cuentas ficticias.
+          </p>
 
           {escenarioGenerado && (
             <div className="admin-row">
@@ -2295,9 +2440,9 @@ export default function AdminPage() {
 
           {resultadoLimpieza && (
             <p className="tournament-card-meta">
-              Se borraron {resultadoLimpieza.equipos} equipo(s), {resultadoLimpieza.retos} reto(s) de
-              Clan War y {resultadoLimpieza.cuentas} cuenta(s) ficticia(s). No queda ningún rastro del
-              escenario de prueba.
+              Se borraron {resultadoLimpieza.torneos} torneo(s) de prueba, {resultadoLimpieza.equipos}{" "}
+              equipo(s), {resultadoLimpieza.retos} reto(s) de Clan War y {resultadoLimpieza.cuentas}{" "}
+              cuenta(s) ficticia(s). No queda ningún rastro.
             </p>
           )}
         </div>
