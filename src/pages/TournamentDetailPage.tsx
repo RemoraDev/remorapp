@@ -22,11 +22,6 @@ import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
 import type { TemporadaRow } from "../types/teams";
 
-interface MapaSeleccionado {
-  nombre: string;
-  esVeteable: boolean;
-}
-
 // Representa un participante de la llave sea cual sea el formato del
 // torneo: en 1v1 es un jugador (userId, nombre y avatar de su perfil);
 // en 2v2/3v3/4v4 es un equipo completo (teamId, nombre y logo del
@@ -60,22 +55,11 @@ interface ParticipanteConNombre {
   puntosLeaderboard: number;
 }
 
-// PostgREST embebe una relación "to-one" a veces como objeto y a veces
-// como array de un elemento; sin tipos generados de la base no hay forma
-// de saberlo en tiempo de compilación, así que se contemplan las dos.
-function extraerNombreDeMapa(maps: unknown): string {
-  if (Array.isArray(maps)) {
-    return (maps[0] as { nombre?: string } | undefined)?.nombre ?? "Mapa";
-  }
-  return (maps as { nombre?: string } | null)?.nombre ?? "Mapa";
-}
-
 export default function TournamentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, profile } = useAuth();
 
   const [torneo, setTorneo] = useState<TournamentRow | null>(null);
-  const [mapas, setMapas] = useState<MapaSeleccionado[]>([]);
   const [participantes, setParticipantes] = useState<ParticipanteConNombre[]>([]);
   const [partidas, setPartidas] = useState<BracketMatchRow[]>([]);
   // Migración 041: etapa de grupos, previa a la llave -- solo se
@@ -180,18 +164,6 @@ export default function TournamentDetailPage() {
 
     setTorneo(torneoData);
     const esPorEquipos = esFormatoPorEquipo(torneoData.formato);
-
-    const { data: mapasData } = await supabase
-      .from("tournament_maps")
-      .select("es_veteable, maps(nombre)")
-      .eq("tournament_id", id);
-
-    setMapas(
-      (mapasData ?? []).map((m) => ({
-        nombre: extraerNombreDeMapa(m.maps),
-        esVeteable: m.es_veteable,
-      }))
-    );
 
     const { data: participantesData } = await supabase
       .from("tournament_participants")
@@ -1089,20 +1061,6 @@ export default function TournamentDetailPage() {
           <p className="featured-stat-value">{formatFecha(torneo.fecha_inicio)}</p>
         </div>
       </div>
-
-      <h2 className="detail-subtitle">Mapas</h2>
-      {mapas.length === 0 ? (
-        <p className="detail-empty">El organizador todavía no eligió mapas.</p>
-      ) : (
-        <div className="detail-map-list">
-          {mapas.map((mapa, i) => (
-            <span key={i} className="detail-map-chip">
-              {mapa.nombre}
-              {mapa.esVeteable && <span className="veto-tag">· vetable</span>}
-            </span>
-          ))}
-        </div>
-      )}
 
       {/* Temporadas (migración 047): solo el organizador las
           administra -- contenedor mínimo para que "fichado para toda

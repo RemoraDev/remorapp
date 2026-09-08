@@ -3412,6 +3412,60 @@ input[type="radio"] {
   cursor: pointer;
 }
 
+/* ---------- Selector de modo de juego (tarjetas con ícono) ----------
+   Reemplaza la lista de radios de texto plano -- cada modo se elige
+   con una tarjeta que combina un ícono SVG propio (ver ModoIcono.tsx)
+   con el nombre, más el tooltip de siempre en la esquina. */
+.modo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.75rem;
+}
+
+.modo-card {
+  position: relative;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: 0.9rem 0.6rem 0.7rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.modo-card.selected {
+  border-color: var(--color-accent);
+  background: rgba(34, 211, 238, 0.08);
+}
+
+.modo-card-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.modo-card-label svg {
+  color: var(--color-text-faint);
+  transition: color 0.15s ease;
+}
+
+.modo-card.selected .modo-card-label {
+  color: var(--color-text);
+}
+
+.modo-card.selected .modo-card-label svg {
+  color: var(--color-accent);
+}
+
+.modo-card .info-tooltip {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+}
+
 /* ---------- Selector de formato (pills) ---------- */
 
 .pill-radio-group {

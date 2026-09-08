@@ -1,0 +1,80 @@
+{
+  "torneoId": "e0da05b9-d416-4e83-b3b5-b8c985cf05e9",
+  "cuentas": [
+    {
+      "email": "remorapp.qa.ficticio1.1788827835173@mailinator.com",
+      "userId": "fa15ae3d-6c3f-40ee-b86e-2775ede52583",
+      "nick": "JugadorFicticio1"
+    },
+    {
+      "email": "remorapp.qa.ficticio2.1788827835173@mailinator.com",
+      "userId": "49d02e46-a7fa-4a3a-bc85-2875c24f2c0d",
+      "nick": "JugadorFicticio2"
+    },
+    {
+      "email": "remorapp.qa.ficticio3.1788827835173@mailinator.com",
+      "userId": "d1b8f771-0396-48d2-ab38-4eab228ca9a7",
+      "nick": "JugadorFicticio3"
+    },
+    {
+      "email": "remorapp.qa.ficticio4.1788827835173@mailinator.com",
+      "userId": "961be013-7062-43ba-8862-cde8224ba445",
+      "nick": "JugadorFicticio4"
+    },
+    {
+      "email": "remorapp.qa.ficticio5.1788827835173@mailinator.com",
+      "userId": "a0c85cb9-44f1-4dfa-9139-7acb7295c56b",
+      "nick": "JugadorFicticio5"
+    },
+    {
+      "email": "remorapp.qa.ficticio6.1788827835173@mailinator.com",
+      "userId": "fcf723e4-b17a-4fb4-9a8d-3da2026e21fb",
+      "nick": "JugadorFicticio6"
+    },
+    {
+      "email": "remorapp.qa.ficticio7.1788827835173@mailinator.com",
+      "userId": "1f5e7875-dbb2-4b09-a3f9-14d0d5ccc0a0",
+      "nick": "JugadorFicticio7"
+    },
+    {
+      "email": "remorapp.qa.ficticio8.1788827835173@mailinator.com",
+      "userId": "92d6ba29-5349-4f42-a7e9-ee0b54d123fa",
+      "nick": "JugadorFicticio8"
+    },
+    {
+      "email": "remorapp.qa.ficticio9.1788827835173@mailinator.com",
+      "userId": "ce94b7b8-1049-4309-a1a2-a8ad2898d0f8",
+      "nick": "JugadorFicticio9"
+    },
+    {
+      "email": "remorapp.qa.ficticio10.1788827835173@mailinator.com",
+      "userId": "29dee1bd-5b30-4e5f-b68c-297529807004",
+      "nick": "JugadorFicticio10"
+    },
+    {
+      "email": "remorapp.qa.ficticio11.1788827835173@mailinator.com",
+      "userId": "3051a5d4-a541-4711-b110-408415e1accf",
+      "nick": "JugadorFicticio11"
+    },
+    {
+      "email": "remorapp.qa.ficticio12.1788827835173@mailinator.com",
+      "userId": "d971cf5c-0fb9-4b66-b5f4-f8e3f3a2414d",
+      "nick": "JugadorFicticio12"
+    },
+    {
+      "email": "remorapp.qa.ficticio13.1788827835173@mailinator.com",
+      "userId": "882a3a1f-1752-425e-add1-01751f2a3390",
+      "nick": "JugadorFicticio13"
+    },
+    {
+      "email": "remorapp.qa.ficticio14.1788827835173@mailinator.com",
+      "userId": "99931626-3829-4bb0-b41a-cb32766cec10",
+      "nick": "JugadorFicticio14"
+    },
+    {
+      "email": "remorapp.qa.ficticio15.1788827835173@mailinator.com",
+      "userId": "0dc0d07a-1a8f-445a-b90e-f37802ffb9f4",
+      "nick": "JugadorFicticio15"
+    }
+  ]
+}
