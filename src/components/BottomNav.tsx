@@ -19,11 +19,11 @@ function HomeIcon() {
   );
 }
 
-function VoiceIcon() {
+function NewsIcon() {
   return (
     <svg viewBox="0 0 24 24" {...strokeProps}>
-      <rect x="9" y="3" width="6" height="11" rx="3" />
-      <path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 9h8M8 13h8M8 17h4" />
     </svg>
   );
 }
@@ -71,12 +71,12 @@ export default function BottomNav() {
           <span>Inicio</span>
         </NavLink>
 
-        {/* Noticias salió de acá -- su contenido ahora vive dentro de
-            Inicio (ver HomePage.tsx). La ruta /news sigue existiendo
-            aparte, sin ícono propio en la barra. */}
-        <NavLink to="/voice" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <VoiceIcon />
-          <span>Delfin Mode</span>
+        {/* Delfin Mode se eliminó por completo (chat de equipo y la
+            estructura de voz con LiveKit) -- Noticias vuelve a tener
+            ícono propio en la barra, en el lugar que dejó. */}
+        <NavLink to="/news" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <NewsIcon />
+          <span>Noticias</span>
         </NavLink>
 
         <div className="bottom-nav-center">

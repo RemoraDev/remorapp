@@ -21,7 +21,6 @@ import TeamsPage from "./pages/TeamsPage";
 import CreateTeamPage from "./pages/CreateTeamPage";
 import TeamDetailPage from "./pages/TeamDetailPage";
 import NewsPage from "./pages/NewsPage";
-import VoicePage from "./pages/VoicePage";
 import AyudaPage from "./pages/AyudaPage";
 import RankingPage from "./pages/RankingPage";
 import ClanWarsSchedulePage from "./pages/ClanWarsSchedulePage";
@@ -79,7 +78,6 @@ function AppContent() {
           <Route path="/equipos/crear" element={<CreateTeamPage />} />
           <Route path="/equipos/:tag" element={<TeamDetailPage />} />
           <Route path="/news" element={<NewsPage />} />
-          <Route path="/voice" element={<VoicePage />} />
           <Route path="/ayuda" element={<AyudaPage />} />
           <Route path="/ranking" element={<RankingPage />} />
           <Route path="/calendario" element={<ClanWarsSchedulePage />} />

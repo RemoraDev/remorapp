@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
 import { datetimeLocalAIso } from "../lib/clanWars";
+import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import { COUNTRY_OPTIONS, PERFIL_TIPO_OPTIONS } from "../types/profile";
 import type { PerfilTipo } from "../types/profile";
 import type { AdminUserRow } from "../types/admin";
@@ -177,13 +178,18 @@ export default function AdminPage() {
   const [filtroTorneos, setFiltroTorneos] = useState("");
   const [eliminandoTorneoId, setEliminandoTorneoId] = useState<string | null>(null);
 
-  // --- Noticias: lista completa y eliminación permanente (migración
-  // 065) -- todavía no existe ninguna pantalla para publicar, solo la
-  // tabla y esta facultad de eliminar. ---
+  // --- Noticias: lista completa, publicar y eliminación permanente.
+  // La tabla y su RLS son de la migración 065 (la política de insert
+  // para is_admin() ya existía) -- el formulario de publicar se agregó
+  // recién ahora, sin migración nueva, para que la pestaña "Noticias"
+  // de la barra inferior tenga contenido real que mostrar. ---
   const [noticias, setNoticias] = useState<NoticiaAdminRow[]>([]);
   const [cargandoNoticias, setCargandoNoticias] = useState(true);
   const [errorNoticias, setErrorNoticias] = useState<string | null>(null);
   const [eliminandoNoticiaId, setEliminandoNoticiaId] = useState<string | null>(null);
+  const [tituloNuevaNoticia, setTituloNuevaNoticia] = useState("");
+  const [contenidoNuevaNoticia, setContenidoNuevaNoticia] = useState("");
+  const [publicandoNoticia, setPublicandoNoticia] = useState(false);
 
   // --- Fondos de lineup: catálogo de imágenes administrable
   // (migración 067) -- el capitán o el dueño de cada equipo elige
@@ -971,6 +977,51 @@ export default function AdminPage() {
     setTorneos((prev) => prev.filter((t) => t.id !== torneo.id));
   };
 
+  // Publicar noticia: noticias_insert_admin (RLS que ya existía desde
+  // la migración 065) ya exige is_admin() -- no hace falta ninguna
+  // migración nueva, esto de acá es solo el formulario.
+  const handlePublicarNoticia = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user) return;
+
+    const titulo = tituloNuevaNoticia.trim();
+    const contenido = contenidoNuevaNoticia.trim();
+
+    if (contieneLenguajeInapropiado(titulo) || contieneLenguajeInapropiado(contenido)) {
+      setErrorNoticias("Ese título o contenido contiene lenguaje que no está permitido.");
+      return;
+    }
+
+    setPublicandoNoticia(true);
+    setErrorNoticias(null);
+
+    const { data, error } = await supabase
+      .from("noticias")
+      .insert({ titulo, contenido, publicado_por: user.id })
+      .select("id, created_at")
+      .single();
+
+    setPublicandoNoticia(false);
+
+    if (error || !data) {
+      setErrorNoticias(error?.message ?? "No se pudo publicar la noticia.");
+      return;
+    }
+
+    setNoticias((prev) => [
+      {
+        id: data.id,
+        titulo,
+        contenido,
+        createdAt: data.created_at,
+        publicadoPorNombre: profile?.nick ? `${profile.nick}#${profile.unique_id}` : "Jugador de RemorApp",
+      },
+      ...prev,
+    ]);
+    setTituloNuevaNoticia("");
+    setContenidoNuevaNoticia("");
+  };
+
   // Facultad (c): elimina una noticia de forma permanente.
   const handleEliminarNoticia = async (noticia: NoticiaAdminRow) => {
     if (!window.confirm(`¿Confirmas que quieres eliminar la noticia "${noticia.titulo}"? Esta acción no se puede deshacer.`)) {
@@ -1655,10 +1706,45 @@ export default function AdminPage() {
 
       {tab === "noticias" && (
         <div className="admin-panel">
-          {/* Facultad (c): lista completa de noticias publicadas, con
-              eliminación permanente para cualquiera -- todavía no existe
-              ninguna pantalla para publicar una noticia nueva, esto es
-              solo la facultad de eliminar. */}
+          {/* Publicar noticia -- antes de esto no había forma de
+              publicar una noticia nueva, solo de eliminar las ya
+              existentes. */}
+          <h3 className="detail-subtitle">Publicar noticia</h3>
+          <form className="auth-form" onSubmit={handlePublicarNoticia}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="noticia-titulo">
+                Título
+              </label>
+              <input
+                id="noticia-titulo"
+                className="form-input"
+                type="text"
+                required
+                minLength={3}
+                maxLength={120}
+                value={tituloNuevaNoticia}
+                onChange={(e) => setTituloNuevaNoticia(e.target.value)}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="noticia-contenido">
+                Contenido
+              </label>
+              <textarea
+                id="noticia-contenido"
+                className="form-textarea"
+                required
+                maxLength={4000}
+                value={contenidoNuevaNoticia}
+                onChange={(e) => setContenidoNuevaNoticia(e.target.value)}
+              />
+            </div>
+            <button type="submit" className="btn btn-primary btn-block" disabled={publicandoNoticia}>
+              {publicandoNoticia ? "Publicando..." : "Publicar noticia"}
+            </button>
+          </form>
+
+          <h3 className="detail-subtitle">Noticias publicadas</h3>
           {errorNoticias && <div className="form-error">{errorNoticias}</div>}
           {cargandoNoticias && <p className="tournament-card-meta">Cargando noticias...</p>}
           {!cargandoNoticias && noticias.length === 0 && (
