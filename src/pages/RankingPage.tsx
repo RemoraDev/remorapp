@@ -131,35 +131,37 @@ export default function RankingPage() {
           Todavía no hay ningún torneo finalizado en esta categoría con un clan campeón.
         </p>
       ) : (
-        <table className="group-standings-table ranking-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Clan</th>
-              <th>Torneos ganados</th>
-            </tr>
-          </thead>
-          <tbody>
-            {ranking.map((fila, indice) => (
-              <tr key={fila.team_id}>
-                <td>{indice + 1}</td>
-                <td>
-                  <Link to={`/equipos/${fila.team_tag}`} className="ranking-clan-link">
-                    {fila.logo_url ? (
-                      <img src={fila.logo_url} alt="" className="ranking-clan-logo" />
-                    ) : (
-                      <span className="ranking-clan-logo ranking-clan-logo-placeholder">
-                        {fila.team_tag.charAt(0)}
-                      </span>
-                    )}
-                    {fila.team_name} [{fila.team_tag}]
-                  </Link>
-                </td>
-                <td>{fila.torneos_ganados}</td>
+        <div className="table-scroll">
+          <table className="group-standings-table ranking-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Clan</th>
+                <th>Torneos ganados</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {ranking.map((fila, indice) => (
+                <tr key={fila.team_id}>
+                  <td>{indice + 1}</td>
+                  <td>
+                    <Link to={`/equipos/${fila.team_tag}`} className="ranking-clan-link">
+                      {fila.logo_url ? (
+                        <img src={fila.logo_url} alt="" className="ranking-clan-logo" />
+                      ) : (
+                        <span className="ranking-clan-logo ranking-clan-logo-placeholder">
+                          {fila.team_tag.charAt(0)}
+                        </span>
+                      )}
+                      {fila.team_name} [{fila.team_tag}]
+                    </Link>
+                  </td>
+                  <td>{fila.torneos_ganados}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Ranking de jugadores (migración 063): independiente de liga,
@@ -176,56 +178,58 @@ export default function RankingPage() {
       ) : rankingJugadores.length === 0 ? (
         <p className="detail-empty">Todavía nadie tiene ninguna partida ganada registrada.</p>
       ) : (
-        <table className="group-standings-table ranking-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Jugador</th>
-              <th>Liga</th>
-              <th>Raza</th>
-              <th>Equipo</th>
-              <th>Victorias</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rankingJugadores.map((fila, indice) => (
-              <tr key={fila.jugador_id}>
-                <td>{indice + 1}</td>
-                <td>
-                  {fila.nick ?? "Jugador de RemorApp"}
-                  {fila.nick && <span className="profile-nick-id">#{fila.unique_id}</span>}
-                </td>
-                <td>{fila.liga ?? "--"}</td>
-                <td>{fila.raza_principal ?? "--"}</td>
-                <td>
-                  {fila.team_id ? (
-                    <span className="ranking-clan-link">
-                      {fila.team_logo_url ? (
-                        <img src={fila.team_logo_url} alt="" className="player-detail-equipo-actual-logo" />
-                      ) : (
-                        <span className="player-detail-equipo-actual-logo player-detail-equipo-actual-logo-placeholder">
-                          {fila.team_tag?.charAt(0)}
-                        </span>
-                      )}
-                      {fila.team_tag}
-                    </span>
-                  ) : (
-                    "NO"
-                  )}
-                </td>
-                <td>{fila.victorias}</td>
-                <td>
-                  {fila.nick ? (
-                    <Link to={`/jugador/${fila.nick}/${fila.unique_id}`} className="btn btn-ghost">
-                      Inspeccionar
-                    </Link>
-                  ) : null}
-                </td>
+        <div className="table-scroll">
+          <table className="group-standings-table ranking-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Jugador</th>
+                <th>Liga</th>
+                <th>Raza</th>
+                <th>Equipo</th>
+                <th>Victorias</th>
+                <th></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rankingJugadores.map((fila, indice) => (
+                <tr key={fila.jugador_id}>
+                  <td>{indice + 1}</td>
+                  <td>
+                    {fila.nick ?? "Jugador de RemorApp"}
+                    {fila.nick && <span className="profile-nick-id">#{fila.unique_id}</span>}
+                  </td>
+                  <td>{fila.liga ?? "--"}</td>
+                  <td>{fila.raza_principal ?? "--"}</td>
+                  <td>
+                    {fila.team_id ? (
+                      <span className="ranking-clan-link">
+                        {fila.team_logo_url ? (
+                          <img src={fila.team_logo_url} alt="" className="player-detail-equipo-actual-logo" />
+                        ) : (
+                          <span className="player-detail-equipo-actual-logo player-detail-equipo-actual-logo-placeholder">
+                            {fila.team_tag?.charAt(0)}
+                          </span>
+                        )}
+                        {fila.team_tag}
+                      </span>
+                    ) : (
+                      "NO"
+                    )}
+                  </td>
+                  <td>{fila.victorias}</td>
+                  <td>
+                    {fila.nick ? (
+                      <Link to={`/jugador/${fila.nick}/${fila.unique_id}`} className="btn btn-ghost">
+                        Inspeccionar
+                      </Link>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

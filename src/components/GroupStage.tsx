@@ -163,38 +163,40 @@ export default function GroupStage({
             )}
 
             {mostrarPosiciones && !estiloRanking && (
-              <table className="group-standings-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Participante</th>
-                    <th>G</th>
-                    <th>J</th>
-                    {(esFirstStand || agruparPorJornada) && (
-                      <>
-                        <th>Pts</th>
-                        <th>Dif</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {posicionesGrupo.map((p, indice) => (
-                    <tr key={p.participant_id}>
-                      <td>{indice + 1}</td>
-                      <td>{nombreDe(p.participant_id)}</td>
-                      <td>{p.ganados}</td>
-                      <td>{p.jugados}</td>
+              <div className="table-scroll">
+                <table className="group-standings-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Participante</th>
+                      <th>G</th>
+                      <th>J</th>
                       {(esFirstStand || agruparPorJornada) && (
                         <>
-                          <td>{p.puntos}</td>
-                          <td>{p.dif_mapas > 0 ? `+${p.dif_mapas}` : p.dif_mapas}</td>
+                          <th>Pts</th>
+                          <th>Dif</th>
                         </>
                       )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {posicionesGrupo.map((p, indice) => (
+                      <tr key={p.participant_id}>
+                        <td>{indice + 1}</td>
+                        <td>{nombreDe(p.participant_id)}</td>
+                        <td>{p.ganados}</td>
+                        <td>{p.jugados}</td>
+                        {(esFirstStand || agruparPorJornada) && (
+                          <>
+                            <td>{p.puntos}</td>
+                            <td>{p.dif_mapas > 0 ? `+${p.dif_mapas}` : p.dif_mapas}</td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
 
             {/* First Stand organiza el fixture en 7 jornadas fijas, y

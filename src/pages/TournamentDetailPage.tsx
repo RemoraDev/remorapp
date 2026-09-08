@@ -55,6 +55,16 @@ interface ParticipanteConNombre {
   puntosLeaderboard: number;
 }
 
+// Convierte una fecha ISO (como llega de la base) al formato que
+// entiende el atributo value/min de un <input type="datetime-local">
+// ("YYYY-MM-DDTHH:mm", en hora local) -- para poder usar la fecha de
+// inicio del torneo como piso del selector de fecha de fin.
+function fechaInicioComoInputLocal(fechaIso: string): string {
+  const d = new Date(fechaIso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function TournamentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, profile } = useAuth();
@@ -670,6 +680,10 @@ export default function TournamentDetailPage() {
     }
     if (!fechaFinTemporada) {
       setErrorTemporada("Elige la fecha de fin de la temporada.");
+      return;
+    }
+    if (new Date(fechaFinTemporada) <= new Date(torneo.fecha_inicio)) {
+      setErrorTemporada("La fecha de fin debe ser posterior a la fecha de inicio del torneo.");
       return;
     }
 
@@ -1384,6 +1398,7 @@ export default function TournamentDetailPage() {
                 id="temporada-fin"
                 className="form-input"
                 type="datetime-local"
+                min={fechaInicioComoInputLocal(torneo.fecha_inicio)}
                 value={fechaFinTemporada}
                 onChange={(e) => setFechaFinTemporada(e.target.value)}
               />
@@ -2199,6 +2214,11 @@ export default function TournamentDetailPage() {
         </>
       )}
 
+      {/* El organizador ya tiene su propio panel de control más abajo
+          (check-in, generar llave, etc.) -- mostrarle además la caja de
+          autoinscripción confundía: parecía que la app no lo reconocía
+          como organizador de su propio torneo. */}
+      {!esOrganizador && (
       <div className="detail-register-box">
         {inscripcionError && <div className="form-error">{inscripcionError}</div>}
 
@@ -2358,6 +2378,7 @@ export default function TournamentDetailPage() {
           </>
         )}
       </div>
+      )}
 
       {/* Solicitudes de ingreso recibidas (migración 079): exclusivo
           del organizador, solo en torneos de liga. */}

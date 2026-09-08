@@ -18,7 +18,12 @@ type TipoEvento = "privado" | "liga" | "amistosa";
 const TIPOS_EVENTO: { value: TipoEvento; label: string; descripcion: string }[] = [
   {
     value: "amistosa",
-    label: "Clan War amistosa",
+    // Antes se llamaba "Clan War amistosa", un nombre engañoso: esto
+    // NO es un reto directo 1 clan vs 1 clan (eso ya existe aparte,
+    // como Clan War, desde el Panel de control del equipo) -- es el
+    // torneo público genérico, con cupos y bracket/liga, sin
+    // pertenecer a una liga oficial.
+    label: "Torneo amistoso",
     descripcion: "Evento público, sin liga -- el caso general para un torneo entre la comunidad.",
   },
   {
@@ -76,6 +81,12 @@ export default function CreateTournamentPage() {
 
   const [fechaInicio, setFechaInicio] = useState("");
   const [cuposTotales, setCuposTotales] = useState("16");
+  // cupos_totales es la cantidad de participantes del bracket (jugadores
+  // en 1v1, clanes en 2v2/3v3/4v4) -- no se multiplica por el tamaño del
+  // formato. 16 es un default razonable para 1v1; en equipos rara vez
+  // se junta esa cantidad de clanes, así que ahí el default baja a 8 --
+  // sin pisar nunca un valor que el organizador ya haya tocado a mano.
+  const [cuposTocados, setCuposTocados] = useState(false);
   const [pozoPremio, setPozoPremio] = useState("");
 
   // Liga y divisiones (migración 079): al elegir "Torneo por ligas",
@@ -140,6 +151,14 @@ export default function CreateTournamentPage() {
         setDivisionesSeleccionadas({});
       });
   }, [ligaId]);
+
+  // Default de cupos según el formato -- pero solo mientras el
+  // organizador no haya tocado el campo a mano, para no pisarle un
+  // valor que ya eligió.
+  useEffect(() => {
+    if (cuposTocados) return;
+    setCuposTotales(formato === "1v1" ? "16" : "8");
+  }, [formato, cuposTocados]);
 
   const handleCrearLiga = async () => {
     const nombreLimpio = nuevaLigaNombre.trim();
@@ -233,6 +252,10 @@ export default function CreateTournamentPage() {
     }
     if (esLiga && !temporadaFechaFin) {
       setError("Elige la fecha de fin de la temporada.");
+      return;
+    }
+    if (esLiga && temporadaFechaFin && new Date(temporadaFechaFin) <= new Date(fechaInicio)) {
+      setError("La fecha de fin de la temporada debe ser posterior a la fecha de inicio del torneo.");
       return;
     }
 
@@ -596,7 +619,10 @@ export default function CreateTournamentPage() {
                 min={2}
                 required
                 value={cuposTotales}
-                onChange={(e) => setCuposTotales(e.target.value)}
+                onChange={(e) => {
+                  setCuposTocados(true);
+                  setCuposTotales(e.target.value);
+                }}
               />
             </div>
 
@@ -788,6 +814,7 @@ export default function CreateTournamentPage() {
                 className="form-input"
                 type="datetime-local"
                 required
+                min={fechaInicio || undefined}
                 value={temporadaFechaFin}
                 onChange={(e) => setTemporadaFechaFin(e.target.value)}
               />

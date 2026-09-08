@@ -2577,6 +2577,19 @@ input[type="radio"] {
   }
 }
 
+/* Envoltorio con scroll horizontal propio para cualquier tabla ancha
+   (ej. el ranking de jugadores, con 7 columnas): sin esto, en celulares
+   angostos la tabla fuerza a toda la página a ser más ancha que la
+   pantalla, y como .bottom-nav es position:fixed, ese overflow
+   horizontal de la página la corre para el costado al hacer scroll --
+   se ve como si la barra de navegación "se desarmara". Conteniendo el
+   scroll acá adentro, la página en sí nunca se pasa del ancho de la
+   pantalla y la barra de abajo queda siempre centrada. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .group-standings-table {
   width: 100%;
   border-collapse: collapse;
