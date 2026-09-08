@@ -4678,19 +4678,6 @@ body.overlay-obs {
   cursor: pointer;
 }
 
-/* Opciones avanzadas del formulario de creación de torneo (migración
-   069) -- un panel propio para separarlas del resto del formulario,
-   con un poco de espacio entre cada checkbox. */
-.advanced-options-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: 1.25rem;
-  background: var(--color-panel);
-}
-
 .form-checkbox-label:has(input:checked) {
   border-color: var(--color-accent);
   color: var(--color-text);
@@ -4700,6 +4687,240 @@ body.overlay-obs {
   width: 1.1rem;
   height: 1.1rem;
   accent-color: var(--color-accent);
+}
+
+/* ---------- Panel de organizador (ficha de torneo) ---------- */
+/* Reemplaza la vieja "Opciones avanzadas" (lista plana de checkboxes
+   de navegador) por un panel de control real: botón de apertura con
+   ícono y subtítulo, tarjetas por tema (Formato/Cuadro/Permisos/
+   Visualización) y switches interactivos en vez de <input
+   type="checkbox"> pelados -- misma lógica de guardado de siempre
+   (handleActualizarOpcionAvanzada), solo cambia la presentación. */
+
+.organizer-panel {
+  margin-bottom: 1.5rem;
+}
+
+.organizer-panel-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 0.9rem 1.1rem;
+  background: linear-gradient(135deg, var(--h-surface) 0%, var(--h-surface-2) 100%);
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.organizer-panel-toggle:hover {
+  border-color: var(--color-accent-dim);
+}
+
+.organizer-panel-toggle.is-open {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.organizer-panel-toggle-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(34, 211, 238, 0.12);
+  color: var(--color-accent);
+}
+
+.organizer-panel-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.organizer-panel-toggle-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.organizer-panel-toggle-sub {
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+}
+
+.organizer-panel-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+  transition: transform 0.2s ease;
+}
+
+.organizer-panel-toggle.is-open .organizer-panel-chevron {
+  transform: rotate(180deg);
+  color: var(--color-accent);
+}
+
+.organizer-panel-body {
+  border: 1px solid var(--color-accent);
+  border-top: none;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: 1.1rem;
+  background: var(--color-panel);
+}
+
+.organizer-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 0.9rem;
+}
+
+.organizer-panel-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  overflow: hidden;
+}
+
+.organizer-panel-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.organizer-panel-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  flex-shrink: 0;
+  border-radius: 0.55rem;
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--color-accent);
+}
+
+.organizer-panel-card-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+}
+
+.organizer-panel-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.75rem 0.9rem 0.9rem;
+}
+
+.organizer-panel-subfields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+  padding: 0.15rem 0 0.15rem 0.2rem;
+  border-left: 2px solid var(--color-accent);
+  margin-left: 0.4rem;
+}
+
+.organizer-panel-subfields .form-group {
+  margin: 0;
+}
+
+.organizer-panel-select-group {
+  margin: 0;
+}
+
+/* Fila individual de una opción on/off, con el switch a la derecha. */
+.organizer-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.organizer-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.organizer-toggle-label {
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.organizer-toggle-hint {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--color-text-faint);
+}
+
+.organizer-toggle-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 2.5rem;
+  height: 1.4rem;
+}
+
+.organizer-toggle-input {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.organizer-toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--h-border);
+  border: 1px solid var(--color-border);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.organizer-toggle-thumb {
+  position: absolute;
+  top: 50%;
+  left: 0.2rem;
+  transform: translateY(-50%);
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+  transition: transform 0.18s ease, background 0.15s ease;
+}
+
+.organizer-toggle-input:checked + .organizer-toggle-track {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.organizer-toggle-input:checked + .organizer-toggle-track .organizer-toggle-thumb {
+  transform: translateY(-50%) translateX(1.1rem);
+  background: var(--color-bg);
+}
+
+.organizer-toggle-input:focus-visible + .organizer-toggle-track {
+  box-shadow: var(--shadow-accent);
 }
 
 /* ---------- Modal (sugerencias / cuenta express) ---------- */

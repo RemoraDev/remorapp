@@ -65,6 +65,113 @@ function fechaInicioComoInputLocal(fechaIso: string): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Íconos de las tarjetas del panel de organizador -- mismo estilo
+// lineal (viewBox 24x24, stroke currentColor) que ModoIcono.tsx, para
+// que la ficha del torneo se sienta parte de la misma app.
+const iconoComun = {
+  width: 20,
+  height: 20,
+  viewBox: "0 0 24 24",
+  fill: "none" as const,
+  stroke: "currentColor",
+  strokeWidth: 1.6,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+  "aria-hidden": true as const,
+};
+
+function IconoEngranaje() {
+  return (
+    <svg {...iconoComun} width={18} height={18}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V19.5a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.04-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.04H4.5a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.04 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10.5a1.7 1.7 0 0 0 1.04-1.56V4.5a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10.5a1.7 1.7 0 0 0 1.56 1.04H19.5a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.04" />
+    </svg>
+  );
+}
+
+function IconoFormato() {
+  return (
+    <svg {...iconoComun}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.3" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.3" />
+      <rect x="8.5" y="13.5" width="7" height="7" rx="1.3" />
+      <path d="M7 10.5v3M17 10.5v3M7 13.5h5M17 13.5h-5" />
+    </svg>
+  );
+}
+
+function IconoCuadro() {
+  return (
+    <svg {...iconoComun}>
+      <path d="M4 5h5M4 10h5M9 5v5M9 7.5h5" />
+      <path d="M4 15h5M4 20h5M9 15v5M9 17.5h5" />
+      <path d="M14 7.5v10" strokeDasharray="1.5 2.5" />
+    </svg>
+  );
+}
+
+function IconoPermisos() {
+  return (
+    <svg {...iconoComun}>
+      <path d="M12 3.5 5 6v5.5c0 4.4 2.9 7.6 7 9 4.1-1.4 7-4.6 7-9V6z" />
+      <path d="M9.3 12l1.9 1.9 3.6-3.8" />
+    </svg>
+  );
+}
+
+function IconoVisualizacion() {
+  return (
+    <svg {...iconoComun}>
+      <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="2.6" />
+    </svg>
+  );
+}
+
+function IconoChevron() {
+  return (
+    <svg {...iconoComun} width={16} height={16}>
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+// Fila de una sola opción on/off del panel de organizador -- reemplaza
+// el <label><input type="checkbox">...</label> plano por un switch
+// interactivo, sin cambiar en nada la lógica de guardado (sigue siendo
+// handleActualizarOpcionAvanzada por debajo).
+function OpcionToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (valor: boolean) => void;
+}) {
+  return (
+    <label className="organizer-toggle-row">
+      <span className="organizer-toggle-text">
+        <span className="organizer-toggle-label">{label}</span>
+        {hint && <span className="organizer-toggle-hint">{hint}</span>}
+      </span>
+      <span className="organizer-toggle-switch">
+        <input
+          type="checkbox"
+          className="organizer-toggle-input"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span className="organizer-toggle-track">
+          <span className="organizer-toggle-thumb" />
+        </span>
+      </span>
+    </label>
+  );
+}
+
 export default function TournamentDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user, profile } = useAuth();
@@ -1410,160 +1517,189 @@ export default function TournamentDetailPage() {
         </>
       )}
 
-      {/* Opciones avanzadas (migración 079): ya no se eligen al crear
-          el torneo -- se ajustan acá, en cualquier momento, exclusivo
-          del organizador. */}
+      {/* Panel de organizador (migración 079, rediseñado): ya no se
+          eligen al crear el torneo -- se ajustan acá, en cualquier
+          momento, exclusivo del organizador. Misma lógica de guardado
+          de siempre (handleActualizarOpcionAvanzada), solo cambia la
+          presentación: tarjetas por tema en vez de una lista plana de
+          checkboxes. */}
       {esOrganizador && (
-        <div className="detail-register-box">
+        <div className="organizer-panel">
           <button
             type="button"
-            className="btn btn-ghost btn-block"
+            className={`organizer-panel-toggle ${mostrarOpcionesAvanzadas ? "is-open" : ""}`}
             onClick={() => setMostrarOpcionesAvanzadas((v) => !v)}
           >
-            {mostrarOpcionesAvanzadas ? "Ocultar opciones avanzadas" : "Opciones avanzadas"}
+            <span className="organizer-panel-toggle-icon">
+              <IconoEngranaje />
+            </span>
+            <span className="organizer-panel-toggle-text">
+              <span className="organizer-panel-toggle-title">Panel de organizador</span>
+              <span className="organizer-panel-toggle-sub">Formato, cuadro, permisos y visualización</span>
+            </span>
+            <span className="organizer-panel-chevron">
+              <IconoChevron />
+            </span>
           </button>
 
           {mostrarOpcionesAvanzadas && (
-            <div className="advanced-options-panel">
+            <div className="organizer-panel-body">
               {errorOpcionesAvanzadas && <div className="form-error">{errorOpcionesAvanzadas}</div>}
 
-              {/* Etapa de grupos y tercer lugar: solo tienen sentido
-                  ANTES de generar la llave -- una vez que el torneo
-                  arrancó, cambiarlas no tendría ningún efecto real. */}
-              {torneo.modo === "eliminacion_simple" && !torneo.formato_liga && torneo.estado === "abierto" && (
-                <>
-                  <h3 className="detail-subtitle">Formato</h3>
-                  <label className="form-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={torneo.tiene_fase_grupos}
-                      onChange={(e) => {
-                        handleActualizarOpcionAvanzada("tiene_fase_grupos", e.target.checked);
-                        if (!e.target.checked) {
-                          handleActualizarOpcionAvanzada("cantidad_grupos", null);
-                          handleActualizarOpcionAvanzada("avanzan_por_grupo", null);
-                        }
-                      }}
-                    />
-                    Con etapa de grupos
-                  </label>
-                  <p className="form-hint">
-                    Los inscritos se reparten en grupos y juegan todos contra todos dentro de su
-                    grupo; los mejores de cada uno avanzan a la llave eliminatoria.
-                  </p>
-
-                  {torneo.tiene_fase_grupos && (
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="torneo-cantidad-grupos-editar">
-                        Cantidad de grupos
-                      </label>
-                      <input
-                        id="torneo-cantidad-grupos-editar"
-                        className="form-input"
-                        type="number"
-                        min={2}
-                        defaultValue={torneo.cantidad_grupos ?? 2}
-                        onBlur={(e) => handleActualizarOpcionAvanzada("cantidad_grupos", Number(e.target.value))}
+              <div className="organizer-panel-grid">
+                {/* Etapa de grupos y tercer lugar: solo tienen sentido
+                    ANTES de generar la llave -- una vez que el torneo
+                    arrancó, cambiarlas no tendría ningún efecto real. */}
+                {torneo.modo === "eliminacion_simple" && !torneo.formato_liga && torneo.estado === "abierto" && (
+                  <div className="organizer-panel-card">
+                    <div className="organizer-panel-card-header">
+                      <span className="organizer-panel-card-icon">
+                        <IconoFormato />
+                      </span>
+                      <h3 className="organizer-panel-card-title">Formato</h3>
+                    </div>
+                    <div className="organizer-panel-card-body">
+                      <OpcionToggle
+                        label="Con etapa de grupos"
+                        hint="Los inscritos se reparten en grupos y juegan todos contra todos dentro de su grupo; los mejores de cada uno avanzan a la llave eliminatoria."
+                        checked={torneo.tiene_fase_grupos}
+                        onChange={(checked) => {
+                          handleActualizarOpcionAvanzada("tiene_fase_grupos", checked);
+                          if (!checked) {
+                            handleActualizarOpcionAvanzada("cantidad_grupos", null);
+                            handleActualizarOpcionAvanzada("avanzan_por_grupo", null);
+                          }
+                        }}
                       />
-                      <label className="form-label" htmlFor="torneo-avanzan-por-grupo-editar">
-                        Cuántos avanzan por grupo
-                      </label>
-                      <input
-                        id="torneo-avanzan-por-grupo-editar"
-                        className="form-input"
-                        type="number"
-                        min={1}
-                        defaultValue={torneo.avanzan_por_grupo ?? 2}
-                        onBlur={(e) => handleActualizarOpcionAvanzada("avanzan_por_grupo", Number(e.target.value))}
+
+                      {torneo.tiene_fase_grupos && (
+                        <div className="organizer-panel-subfields">
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="torneo-cantidad-grupos-editar">
+                              Cantidad de grupos
+                            </label>
+                            <input
+                              id="torneo-cantidad-grupos-editar"
+                              className="form-input"
+                              type="number"
+                              min={2}
+                              defaultValue={torneo.cantidad_grupos ?? 2}
+                              onBlur={(e) =>
+                                handleActualizarOpcionAvanzada("cantidad_grupos", Number(e.target.value))
+                              }
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="torneo-avanzan-por-grupo-editar">
+                              Cuántos avanzan por grupo
+                            </label>
+                            <input
+                              id="torneo-avanzan-por-grupo-editar"
+                              className="form-input"
+                              type="number"
+                              min={1}
+                              defaultValue={torneo.avanzan_por_grupo ?? 2}
+                              onBlur={(e) =>
+                                handleActualizarOpcionAvanzada("avanzan_por_grupo", Number(e.target.value))
+                              }
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      <OpcionToggle
+                        label="Con partido por el tercer lugar"
+                        hint="Los dos perdedores de semifinal juegan aparte por el tercer puesto, en paralelo a la final."
+                        checked={torneo.tiene_tercer_lugar}
+                        onChange={(checked) => handleActualizarOpcionAvanzada("tiene_tercer_lugar", checked)}
                       />
                     </div>
-                  )}
+                  </div>
+                )}
 
-                  <label className="form-checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={torneo.tiene_tercer_lugar}
-                      onChange={(e) => handleActualizarOpcionAvanzada("tiene_tercer_lugar", e.target.checked)}
+                <div className="organizer-panel-card">
+                  <div className="organizer-panel-card-header">
+                    <span className="organizer-panel-card-icon">
+                      <IconoCuadro />
+                    </span>
+                    <h3 className="organizer-panel-card-title">Cuadro</h3>
+                  </div>
+                  <div className="organizer-panel-card-body">
+                    <OpcionToggle
+                      label="Nombres de ronda personalizados"
+                      hint="Octavos, Cuartos, Semifinal, Final -- en vez de Ronda 1, Ronda 2..."
+                      checked={torneo.mostrar_nombres_ronda_personalizados}
+                      onChange={(checked) =>
+                        handleActualizarOpcionAvanzada("mostrar_nombres_ronda_personalizados", checked)
+                      }
                     />
-                    Con partido por el tercer lugar
-                  </label>
-                  <p className="form-hint">
-                    Los dos perdedores de semifinal juegan aparte por el tercer puesto, en paralelo a
-                    la final.
-                  </p>
-                </>
-              )}
+                    <OpcionToggle
+                      label="Ocultar números de semilla"
+                      checked={torneo.ocultar_numeros_semilla}
+                      onChange={(checked) => handleActualizarOpcionAvanzada("ocultar_numeros_semilla", checked)}
+                    />
+                    <OpcionToggle
+                      label="Ocultar el cuadro al público"
+                      hint="Solo lo ven los inscritos, hasta que empiece el torneo."
+                      checked={torneo.ocultar_bracket_publico}
+                      onChange={(checked) => handleActualizarOpcionAvanzada("ocultar_bracket_publico", checked)}
+                    />
+                    <div className="form-group organizer-panel-select-group">
+                      <label className="form-label" htmlFor="torneo-reglas-semillas-editar">
+                        Ubicar a los participantes usando
+                      </label>
+                      <select
+                        id="torneo-reglas-semillas-editar"
+                        className="form-select"
+                        value={torneo.reglas_semillas}
+                        onChange={(e) => handleActualizarOpcionAvanzada("reglas_semillas", e.target.value)}
+                      >
+                        <option value="aleatorio">Sorteo al azar</option>
+                        <option value="tradicional">Semillas tradicionales (por MMR)</option>
+                      </select>
+                      <p className="form-hint">Solo tiene efecto la próxima vez que generes la llave.</p>
+                    </div>
+                  </div>
+                </div>
 
-              <h3 className="detail-subtitle">Bracket</h3>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={torneo.mostrar_nombres_ronda_personalizados}
-                  onChange={(e) =>
-                    handleActualizarOpcionAvanzada("mostrar_nombres_ronda_personalizados", e.target.checked)
-                  }
-                />
-                Mostrar nombres de ronda personalizados (Octavos, Cuartos, Semifinal, Final)
-              </label>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={torneo.ocultar_numeros_semilla}
-                  onChange={(e) => handleActualizarOpcionAvanzada("ocultar_numeros_semilla", e.target.checked)}
-                />
-                Ocultar los números de las semillas
-              </label>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={torneo.ocultar_bracket_publico}
-                  onChange={(e) => handleActualizarOpcionAvanzada("ocultar_bracket_publico", e.target.checked)}
-                />
-                Ocultar la vista previa del cuadro al público (solo la ven los inscritos)
-              </label>
-              <div className="form-group">
-                <label className="form-label" htmlFor="torneo-reglas-semillas-editar">
-                  Ubicar a los participantes en el cuadro usando
-                </label>
-                <select
-                  id="torneo-reglas-semillas-editar"
-                  className="form-select"
-                  value={torneo.reglas_semillas}
-                  onChange={(e) => handleActualizarOpcionAvanzada("reglas_semillas", e.target.value)}
-                >
-                  <option value="aleatorio">Sorteo al azar</option>
-                  <option value="tradicional">Semillas tradicionales (por MMR)</option>
-                </select>
-                <p className="form-hint">Solo tiene efecto la próxima vez que generes la llave.</p>
+                <div className="organizer-panel-card">
+                  <div className="organizer-panel-card-header">
+                    <span className="organizer-panel-card-icon">
+                      <IconoPermisos />
+                    </span>
+                    <h3 className="organizer-panel-card-title">Permisos</h3>
+                  </div>
+                  <div className="organizer-panel-card-body">
+                    <OpcionToggle
+                      label="Autoreporte de resultados"
+                      hint="Los participantes pueden reportar su propio resultado."
+                      checked={torneo.permite_autoreporte}
+                      onChange={(checked) => handleActualizarOpcionAvanzada("permite_autoreporte", checked)}
+                    />
+                    <OpcionToggle
+                      label="Excluir del buscador público"
+                      checked={torneo.excluido_de_busqueda}
+                      onChange={(checked) => handleActualizarOpcionAvanzada("excluido_de_busqueda", checked)}
+                    />
+                  </div>
+                </div>
+
+                <div className="organizer-panel-card">
+                  <div className="organizer-panel-card-header">
+                    <span className="organizer-panel-card-icon">
+                      <IconoVisualizacion />
+                    </span>
+                    <h3 className="organizer-panel-card-title">Visualización</h3>
+                  </div>
+                  <div className="organizer-panel-card-body">
+                    <OpcionToggle
+                      label="Mostrar la pestaña de posiciones"
+                      checked={torneo.mostrar_posiciones}
+                      onChange={(checked) => handleActualizarOpcionAvanzada("mostrar_posiciones", checked)}
+                    />
+                  </div>
+                </div>
               </div>
-
-              <h3 className="detail-subtitle">Permissions</h3>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={torneo.permite_autoreporte}
-                  onChange={(e) => handleActualizarOpcionAvanzada("permite_autoreporte", e.target.checked)}
-                />
-                Permitir que los participantes reporten su propio resultado
-              </label>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={torneo.excluido_de_busqueda}
-                  onChange={(e) => handleActualizarOpcionAvanzada("excluido_de_busqueda", e.target.checked)}
-                />
-                Excluir este torneo del buscador público
-              </label>
-
-              <h3 className="detail-subtitle">Misc</h3>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={torneo.mostrar_posiciones}
-                  onChange={(e) => handleActualizarOpcionAvanzada("mostrar_posiciones", e.target.checked)}
-                />
-                Mostrar la pestaña de posiciones
-              </label>
             </div>
           )}
         </div>
