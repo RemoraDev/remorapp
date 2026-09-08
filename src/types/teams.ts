@@ -328,6 +328,23 @@ export interface TorneoInvitacionEquipoRow {
   respondida_en: string | null;
 }
 
+// Solicitud de ingreso a un torneo por equipos (migración 079):
+// tercera vía de entrada, junto a la inscripción libre y la
+// invitación -- el equipo pide entrar y el organizador acepta o
+// rechaza. Pensada para torneos de liga, donde la inscripción libre
+// queda deshabilitada del lado del cliente.
+export type TorneoSolicitudEquipoStatus = "pendiente" | "aceptada" | "rechazada";
+
+export interface TorneoSolicitudEquipoRow {
+  id: string;
+  tournament_id: string;
+  equipo_id: string;
+  solicitado_por: string;
+  status: TorneoSolicitudEquipoStatus;
+  created_at: string;
+  respondida_en: string | null;
+}
+
 export type ClanWarWtlSetStatus = "pendiente" | "jugado";
 
 // Formato WTL/chino (migración 042): 3 sets Bo2 en posiciones fijas,

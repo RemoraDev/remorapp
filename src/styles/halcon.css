@@ -3413,6 +3413,17 @@ input[type="radio"] {
   gap: 1.25rem;
 }
 
+/* Navegación del asistente (migración 079): Atrás/Siguiente entre
+   pasos, Crear torneo solo en el último. */
+.create-tournament-nav {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.create-tournament-nav .btn-primary:not(.btn-block) {
+  flex: 1;
+}
+
 .form-section {
   display: flex;
   flex-direction: column;

@@ -20,7 +20,7 @@ import LigaBadge from "../components/LigaBadge";
 import type { PosicionGrupo, TournamentGroupMatchRow, TournamentGroupRow, TournamentRow } from "../types/tournaments";
 import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
-import type { TemporadaRow } from "../types/teams";
+import type { TemporadaRow, TorneoSolicitudEquipoRow } from "../types/teams";
 
 // Representa un participante de la llave sea cual sea el formato del
 // torneo: en 1v1 es un jugador (userId, nombre y avatar de su perfil);
@@ -141,6 +141,18 @@ export default function TournamentDetailPage() {
   const [miEquipoMiembros, setMiEquipoMiembros] = useState(0);
   const [cargandoMiEquipo, setCargandoMiEquipo] = useState(true);
 
+  // Solicitud de ingreso a torneo de liga (migración 079): tercera vía
+  // de entrada, junto a la inscripción libre (que queda deshabilitada
+  // para torneos de liga) y la invitación del organizador.
+  const [miSolicitud, setMiSolicitud] = useState<TorneoSolicitudEquipoRow | null>(null);
+  const [enviandoSolicitud, setEnviandoSolicitud] = useState(false);
+  const [errorSolicitud, setErrorSolicitud] = useState<string | null>(null);
+  const [solicitudesRecibidas, setSolicitudesRecibidas] = useState<
+    { id: string; equipoNombre: string; status: string }[]
+  >([]);
+  const [respondiendoSolicitudId, setRespondiendoSolicitudId] = useState<string | null>(null);
+  const [erroresResponderSolicitud, setErroresResponderSolicitud] = useState<Record<string, string>>({});
+
   // --- Temporadas (migración 047): solo el organizador las administra ---
   const [temporadas, setTemporadas] = useState<TemporadaRow[]>([]);
   const [nombreTemporada, setNombreTemporada] = useState("");
@@ -148,6 +160,13 @@ export default function TournamentDetailPage() {
   const [fechaFinTemporada, setFechaFinTemporada] = useState("");
   const [creandoTemporada, setCreandoTemporada] = useState(false);
   const [errorTemporada, setErrorTemporada] = useState<string | null>(null);
+
+  // Opciones avanzadas (migración 079): antes se elegían al crear el
+  // torneo, ahora se ajustan en cualquier momento después, desde acá
+  // -- exclusivo del organizador. tournaments_update_organizador (RLS
+  // que ya existe) alcanza para un update directo, sin RPC nueva.
+  const [mostrarOpcionesAvanzadas, setMostrarOpcionesAvanzadas] = useState(false);
+  const [errorOpcionesAvanzadas, setErrorOpcionesAvanzadas] = useState<string | null>(null);
   const [guardandoInscripciones, setGuardandoInscripciones] = useState<string | null>(null);
   const [temporadaRangosAbierta, setTemporadaRangosAbierta] = useState<string | null>(null);
   const [rangosMmrForm, setRangosMmrForm] = useState<Record<string, string>>({});
@@ -394,6 +413,115 @@ export default function TournamentDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, torneo?.formato]);
 
+  // Solicitud de ingreso (migración 079): la propia -- si mi equipo ya
+  // pidió entrar a este torneo de liga, en cualquier estado (pendiente,
+  // aceptada o rechazada).
+  useEffect(() => {
+    if (!torneo?.liga_id || !miEquipo) {
+      setMiSolicitud(null);
+      return;
+    }
+    let cancelado = false;
+    supabase
+      .from("torneo_solicitudes_equipo")
+      .select("id, tournament_id, equipo_id, solicitado_por, status, created_at, respondida_en")
+      .eq("tournament_id", torneo.id)
+      .eq("equipo_id", miEquipo.team_id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelado) setMiSolicitud((data as TorneoSolicitudEquipoRow | null) ?? null);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [torneo?.id, torneo?.liga_id, miEquipo]);
+
+  // Solicitudes de ingreso recibidas (migración 079): solo para el
+  // organizador de un torneo de liga -- las pendientes, para
+  // aceptar/rechazar.
+  useEffect(() => {
+    if (!torneo?.liga_id || !user || user.id !== torneo.creador_id) {
+      setSolicitudesRecibidas([]);
+      return;
+    }
+    let cancelado = false;
+    supabase
+      .from("torneo_solicitudes_equipo")
+      .select("id, equipo_id, status")
+      .eq("tournament_id", torneo.id)
+      .eq("status", "pendiente")
+      .then(async ({ data }) => {
+        if (cancelado || !data || data.length === 0) {
+          if (!cancelado) setSolicitudesRecibidas([]);
+          return;
+        }
+        const { data: equiposData } = await supabase
+          .from("teams")
+          .select("id, name, tag")
+          .in(
+            "id",
+            data.map((s) => s.equipo_id)
+          );
+        const nombrePorEquipoId = Object.fromEntries(
+          (equiposData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        );
+        if (!cancelado) {
+          setSolicitudesRecibidas(
+            data.map((s) => ({ id: s.id, equipoNombre: nombrePorEquipoId[s.equipo_id] ?? "Equipo", status: s.status }))
+          );
+        }
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [torneo?.id, torneo?.liga_id, torneo?.creador_id, user]);
+
+  const handleSolicitarIngreso = async () => {
+    if (!torneo || !miEquipo) return;
+    setEnviandoSolicitud(true);
+    setErrorSolicitud(null);
+
+    const { error } = await supabase.rpc("solicitar_ingreso_torneo", {
+      p_tournament_id: torneo.id,
+      p_equipo_id: miEquipo.team_id,
+    });
+
+    setEnviandoSolicitud(false);
+
+    if (error) {
+      setErrorSolicitud(error.message);
+      return;
+    }
+
+    const { data } = await supabase
+      .from("torneo_solicitudes_equipo")
+      .select("id, tournament_id, equipo_id, solicitado_por, status, created_at, respondida_en")
+      .eq("tournament_id", torneo.id)
+      .eq("equipo_id", miEquipo.team_id)
+      .maybeSingle();
+    setMiSolicitud((data as TorneoSolicitudEquipoRow | null) ?? null);
+  };
+
+  const handleResponderSolicitud = async (solicitudId: string, aceptar: boolean) => {
+    setRespondiendoSolicitudId(solicitudId);
+    setErroresResponderSolicitud((prev) => ({ ...prev, [solicitudId]: "" }));
+
+    const { error } = await supabase.rpc("responder_solicitud_torneo", {
+      p_solicitud_id: solicitudId,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoSolicitudId(null);
+
+    if (error) {
+      setErroresResponderSolicitud((prev) => ({ ...prev, [solicitudId]: error.message }));
+      return;
+    }
+
+    setSolicitudesRecibidas((prev) => prev.filter((s) => s.id !== solicitudId));
+    await cargarTorneo();
+  };
+
   const esPorEquipos = torneo ? esFormatoPorEquipo(torneo.formato) : false;
 
   const yaInscrito = !torneo
@@ -475,6 +603,33 @@ export default function TournamentDetailPage() {
     torneo?.estado === "abierto" &&
     !torneo?.check_in_abierto &&
     torneo.cupos_ocupados >= 2;
+
+  const handleActualizarOpcionAvanzada = async (
+    campo:
+      | "mostrar_nombres_ronda_personalizados"
+      | "ocultar_numeros_semilla"
+      | "ocultar_bracket_publico"
+      | "reglas_semillas"
+      | "permite_autoreporte"
+      | "excluido_de_busqueda"
+      | "mostrar_posiciones",
+    valor: boolean | string
+  ) => {
+    if (!torneo) return;
+    setErrorOpcionesAvanzadas(null);
+
+    const { error } = await supabase
+      .from("tournaments")
+      .update({ [campo]: valor })
+      .eq("id", torneo.id);
+
+    if (error) {
+      setErrorOpcionesAvanzadas(error.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
 
   const handleAbrirCheckIn = async () => {
     if (!torneo) return;
@@ -1245,6 +1400,98 @@ export default function TournamentDetailPage() {
         </>
       )}
 
+      {/* Opciones avanzadas (migración 079): ya no se eligen al crear
+          el torneo -- se ajustan acá, en cualquier momento, exclusivo
+          del organizador. */}
+      {esOrganizador && (
+        <div className="detail-register-box">
+          <button
+            type="button"
+            className="btn btn-ghost btn-block"
+            onClick={() => setMostrarOpcionesAvanzadas((v) => !v)}
+          >
+            {mostrarOpcionesAvanzadas ? "Ocultar opciones avanzadas" : "Opciones avanzadas"}
+          </button>
+
+          {mostrarOpcionesAvanzadas && (
+            <div className="advanced-options-panel">
+              {errorOpcionesAvanzadas && <div className="form-error">{errorOpcionesAvanzadas}</div>}
+
+              <h3 className="detail-subtitle">Bracket</h3>
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={torneo.mostrar_nombres_ronda_personalizados}
+                  onChange={(e) =>
+                    handleActualizarOpcionAvanzada("mostrar_nombres_ronda_personalizados", e.target.checked)
+                  }
+                />
+                Mostrar nombres de ronda personalizados (Octavos, Cuartos, Semifinal, Final)
+              </label>
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={torneo.ocultar_numeros_semilla}
+                  onChange={(e) => handleActualizarOpcionAvanzada("ocultar_numeros_semilla", e.target.checked)}
+                />
+                Ocultar los números de las semillas
+              </label>
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={torneo.ocultar_bracket_publico}
+                  onChange={(e) => handleActualizarOpcionAvanzada("ocultar_bracket_publico", e.target.checked)}
+                />
+                Ocultar la vista previa del cuadro al público (solo la ven los inscritos)
+              </label>
+              <div className="form-group">
+                <label className="form-label" htmlFor="torneo-reglas-semillas-editar">
+                  Ubicar a los participantes en el cuadro usando
+                </label>
+                <select
+                  id="torneo-reglas-semillas-editar"
+                  className="form-select"
+                  value={torneo.reglas_semillas}
+                  onChange={(e) => handleActualizarOpcionAvanzada("reglas_semillas", e.target.value)}
+                >
+                  <option value="aleatorio">Sorteo al azar</option>
+                  <option value="tradicional">Semillas tradicionales (por MMR)</option>
+                </select>
+                <p className="form-hint">Solo tiene efecto la próxima vez que generes la llave.</p>
+              </div>
+
+              <h3 className="detail-subtitle">Permissions</h3>
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={torneo.permite_autoreporte}
+                  onChange={(e) => handleActualizarOpcionAvanzada("permite_autoreporte", e.target.checked)}
+                />
+                Permitir que los participantes reporten su propio resultado
+              </label>
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={torneo.excluido_de_busqueda}
+                  onChange={(e) => handleActualizarOpcionAvanzada("excluido_de_busqueda", e.target.checked)}
+                />
+                Excluir este torneo del buscador público
+              </label>
+
+              <h3 className="detail-subtitle">Misc</h3>
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={torneo.mostrar_posiciones}
+                  onChange={(e) => handleActualizarOpcionAvanzada("mostrar_posiciones", e.target.checked)}
+                />
+                Mostrar la pestaña de posiciones
+              </label>
+            </div>
+          )}
+        </div>
+      )}
+
       <h2 className="detail-subtitle">
         {esPorEquipos ? "Equipos inscritos" : "Participantes"} ({participantesVisibles.length})
       </h2>
@@ -1991,6 +2238,10 @@ export default function TournamentDetailPage() {
               torneo.estado === "abierto" &&
               cuposDisponibles <= 0 && <p className="tournament-card-meta">Sin cupos disponibles.</p>}
 
+            {/* Torneo de liga (migración 079): la inscripción libre
+                queda deshabilitada -- solo se entra por invitación del
+                organizador o pidiendo el ingreso (que el organizador
+                aprueba o rechaza). */}
             {!cargandoMiEquipo &&
               !yaInscrito &&
               !profile?.suspendido &&
@@ -1998,7 +2249,41 @@ export default function TournamentDetailPage() {
               soyOwnerDeMiEquipo &&
               miEquipoMiembros >= minimoMiembros &&
               torneo.estado === "abierto" &&
-              cuposDisponibles > 0 && (
+              cuposDisponibles > 0 &&
+              torneo.liga_id && (
+                <>
+                  {errorSolicitud && <div className="form-error">{errorSolicitud}</div>}
+                  {!miSolicitud && (
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-block"
+                      disabled={enviandoSolicitud}
+                      onClick={handleSolicitarIngreso}
+                    >
+                      {enviandoSolicitud ? "Enviando..." : `Solicitar ingreso de ${miEquipo.teamTag}`}
+                    </button>
+                  )}
+                  {miSolicitud?.status === "pendiente" && (
+                    <p className="tournament-card-meta">
+                      Ya pediste el ingreso de {miEquipo.teamTag} -- esperando que el organizador
+                      responda.
+                    </p>
+                  )}
+                  {miSolicitud?.status === "rechazada" && (
+                    <p className="tournament-card-meta">El organizador rechazó tu solicitud de ingreso.</p>
+                  )}
+                </>
+              )}
+
+            {!cargandoMiEquipo &&
+              !yaInscrito &&
+              !profile?.suspendido &&
+              miEquipo &&
+              soyOwnerDeMiEquipo &&
+              miEquipoMiembros >= minimoMiembros &&
+              torneo.estado === "abierto" &&
+              cuposDisponibles > 0 &&
+              !torneo.liga_id && (
                 <button
                   type="button"
                   className="btn btn-primary btn-block"
@@ -2011,6 +2296,42 @@ export default function TournamentDetailPage() {
           </>
         )}
       </div>
+
+      {/* Solicitudes de ingreso recibidas (migración 079): exclusivo
+          del organizador, solo en torneos de liga. */}
+      {esOrganizador && torneo.liga_id && solicitudesRecibidas.length > 0 && (
+        <div className="detail-register-box">
+          <h3 className="detail-subtitle">Solicitudes de ingreso</h3>
+          <div className="detail-participant-list">
+            {solicitudesRecibidas.map((s) => (
+              <div key={s.id} className="detail-participant-item">
+                {s.equipoNombre}
+                <div className="invitation-actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={respondiendoSolicitudId === s.id}
+                    onClick={() => handleResponderSolicitud(s.id, true)}
+                  >
+                    Aceptar
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={respondiendoSolicitudId === s.id}
+                    onClick={() => handleResponderSolicitud(s.id, false)}
+                  >
+                    Rechazar
+                  </button>
+                </div>
+                {erroresResponderSolicitud[s.id] && (
+                  <div className="form-error">{erroresResponderSolicitud[s.id]}</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {puedoAbandonar && (
         <div className="detail-register-box">

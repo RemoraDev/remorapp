@@ -5,12 +5,35 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import InfoTooltip from "../components/InfoTooltip";
 import ModoIcono from "../components/ModoIcono";
+import TipoEventoIcono from "../components/TipoEventoIcono";
 import { MODOS } from "../lib/tournamentOptions";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import type { TorneoFormato, TorneoModo } from "../types/tournaments";
 import type { DivisionLiga, Liga } from "../types/ranking";
 
 const FORMATOS: TorneoFormato[] = ["1v1", "2v2", "3v3", "4v4"];
+const FORMATOS_POR_EQUIPO: TorneoFormato[] = ["2v2", "3v3", "4v4"];
+
+type TipoEvento = "privado" | "liga" | "amistosa";
+
+const TIPOS_EVENTO: { value: TipoEvento; label: string; descripcion: string }[] = [
+  {
+    value: "amistosa",
+    label: "Clan War amistosa",
+    descripcion: "Evento público, sin liga -- el caso general para un torneo entre la comunidad.",
+  },
+  {
+    value: "liga",
+    label: "Torneo por ligas",
+    descripcion:
+      "Parte de una competencia oficial con ranking (StarLeague Latam, BTL, etc.). Solo por equipos -- no admite jugadores individuales.",
+  },
+  {
+    value: "privado",
+    label: "Evento privado",
+    descripcion: "Solo por invitación -- no aparece en el buscador público.",
+  },
+];
 
 // Tolerancia de reloj/tiempo de carga del formulario -- mismo margen
 // que usa el trigger validar_fecha_inicio_torneo() en la base
@@ -22,13 +45,16 @@ export default function CreateTournamentPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
+  // Paso del asistente (migración 079): 1 = info básica, 2 = fecha y
+  // cupos, 3 = liga y divisiones (solo si tipoEvento === "liga"), 4 =
+  // temporada (solo si tipoEvento === "liga"). Los eventos que no son
+  // de liga terminan en el paso 2.
+  const [paso, setPaso] = useState(1);
+
   const [nombre, setNombre] = useState("");
+  const [tipoEvento, setTipoEvento] = useState<TipoEvento>("amistosa");
   const [formato, setFormato] = useState<TorneoFormato>("1v1");
   const [modo, setModo] = useState<TorneoModo>("eliminacion_simple");
-  const [publico, setPublico] = useState(true);
-  const [pozoPremio, setPozoPremio] = useState("");
-  const [cuposTotales, setCuposTotales] = useState("16");
-  const [fechaInicio, setFechaInicio] = useState("");
 
   // Etapa de grupos (migración 041) -- solo aplica con eliminación
   // simple, ver el gate en el JSX.
@@ -37,95 +63,90 @@ export default function CreateTournamentPage() {
   const [avanzanPorGrupo, setAvanzanPorGrupo] = useState("2");
 
   // Partido por el tercer lugar (migración 046) -- mismo gate que la
-  // etapa de grupos: solo tiene sentido con eliminación simple, único
-  // modo que tiene llave.
+  // etapa de grupos.
   const [tieneTercerLugar, setTieneTercerLugar] = useState(false);
 
-  // Formato de liga "First Stand" (migración 057) -- 7 clanes, fixture
-  // round-robin completo y playoffs top 4. Reemplaza la configuración
-  // manual de etapa de grupos/tercer lugar (las oculta en el JSX): ya
-  // trae su propia etapa de grupos de un solo grupo de 7 y su propia
-  // llave de 4, sin partido por el tercer lugar.
+  // Formato de liga "First Stand" (migración 057).
   const [formatoLiga, setFormatoLiga] = useState(false);
   const [puntosVictoria21, setPuntosVictoria21] = useState("3");
 
-  // Liga y división para el ranking de clanes (migración 060, rediseño
-  // en la migración 074): apagado por defecto -- son la minoría de
-  // los torneos (los que son parte de una competencia oficial con
-  // ranking), no el caso general de un evento amistoso entre amigos.
-  const [usarLiga, setUsarLiga] = useState(false);
+  // Suizo (migración 069): en blanco = generar_torneo_suizo() calcula
+  // sola la cantidad de rondas.
+  const [swissRondas, setSwissRondas] = useState("");
+
+  const [fechaInicio, setFechaInicio] = useState("");
+  const [cuposTotales, setCuposTotales] = useState("16");
+  const [pozoPremio, setPozoPremio] = useState("");
+
+  // Liga y divisiones (migración 079): al elegir "Torneo por ligas",
+  // el organizador marca UNA o VARIAS divisiones -- se crea un torneo
+  // por cada división marcada, todos con el mismo organizador, mismo
+  // formato/modo/fecha/cupos. Si la liga no tiene divisiones cargadas
+  // (o no se marca ninguna), se crea un solo torneo sin división.
   const [ligas, setLigas] = useState<Liga[]>([]);
-  const [divisiones, setDivisiones] = useState<DivisionLiga[]>([]);
   const [ligaId, setLigaId] = useState("");
-  const [divisionId, setDivisionId] = useState("");
+  const [divisiones, setDivisiones] = useState<DivisionLiga[]>([]);
+  const [divisionesSeleccionadas, setDivisionesSeleccionadas] = useState<Record<string, boolean>>({});
   const [mostrarFormNuevaLiga, setMostrarFormNuevaLiga] = useState(false);
   const [nuevaLigaNombre, setNuevaLigaNombre] = useState("");
   const [creandoLiga, setCreandoLiga] = useState(false);
   const [errorLiga, setErrorLiga] = useState<string | null>(null);
 
-  // Suizo (migración 069): en blanco = generar_torneo_suizo() calcula
-  // sola la cantidad de rondas (techo de log2 de los inscritos).
-  const [swissRondas, setSwissRondas] = useState("");
-
-  // Modo simple/avanzado (migración 069): el modo avanzado revela las
-  // opciones de las pestañas Bracket/Permissions/Misc del formulario
-  // de referencia -- el resto (Notifications, adjuntos, avance rápido,
-  // compartir acceso de admin) queda para un pedido aparte.
-  const [modoAvanzado, setModoAvanzado] = useState(false);
-  const [mostrarNombresRonda, setMostrarNombresRonda] = useState(false);
-  const [ocultarNumerosSemilla, setOcultarNumerosSemilla] = useState(false);
-  const [ocultarBracketPublico, setOcultarBracketPublico] = useState(false);
-  const [reglasSemillas, setReglasSemillas] = useState<"aleatorio" | "tradicional">("aleatorio");
-  const [permiteAutoreporte, setPermiteAutoreporte] = useState(true);
-  const [excluidoDeBusqueda, setExcluidoDeBusqueda] = useState(false);
-  const [mostrarPosiciones, setMostrarPosiciones] = useState(true);
+  // Temporada (migración 079): se crea junto con el/los torneo(s) de
+  // liga, en vez de tener que volver después a /tournaments/:id a
+  // crearla a mano.
+  const [temporadaModo, setTemporadaModo] = useState<"numerada" | "manual">("numerada");
+  const [temporadaNumero, setTemporadaNumero] = useState("1");
+  const [temporadaNombreManual, setTemporadaNombreManual] = useState("");
+  const [temporadaFechaFin, setTemporadaFechaFin] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Catálogo de ligas y divisiones (migración 060): se cargan las dos
-  // tablas enteras de una vez -- son chicas -- y se filtra por liga
-  // elegida en el cliente.
+  const esLiga = tipoEvento === "liga";
+  const totalPasos = esLiga ? 4 : 2;
+
+  // Al elegir "Torneo por ligas", un torneo 1v1 no tiene sentido --
+  // solo entran equipos. Si ya estaba en 1v1, se cambia solo a 2v2.
   useEffect(() => {
-    Promise.all([
-      supabase.from("ligas").select("id, nombre").order("nombre"),
-      supabase.from("divisiones_liga").select("id, liga_id, nombre, mmr_limite").order("nombre"),
-    ]).then(([ligasRes, divisionesRes]) => {
-      if (ligasRes.error) {
-        console.error("Error cargando ligas:", ligasRes.error);
-      } else {
-        setLigas(ligasRes.data ?? []);
-      }
-      if (divisionesRes.error) {
-        console.error("Error cargando divisiones:", divisionesRes.error);
-      } else {
-        setDivisiones(divisionesRes.data ?? []);
-      }
-    });
+    if (esLiga && formato === "1v1") setFormato("2v2");
+  }, [esLiga, formato]);
+
+  // Catálogo de ligas: se carga siempre (aunque tipoEvento no sea
+  // "liga" todavía) para que el paso 3 no tenga que esperar.
+  useEffect(() => {
+    supabase
+      .from("ligas")
+      .select("id, nombre")
+      .order("nombre")
+      .then(({ data, error: ligasError }) => {
+        if (ligasError) console.error("Error cargando ligas:", ligasError);
+        else setLigas(data ?? []);
+      });
   }, []);
 
-  // Al cambiar de liga, la división elegida (si era de otra liga) deja
-  // de tener sentido -- se limpia para no mandar una combinación
-  // inválida (el trigger de la base la rechazaría igual, pero es mejor
-  // no dejar que el usuario llegue a ese error).
-  const divisionesDeLaLiga = divisiones.filter((d) => d.liga_id === ligaId);
-  const handleCambiarLiga = (nuevaLigaId: string) => {
-    setLigaId(nuevaLigaId);
-    setDivisionId("");
-  };
-
-  const handleToggleUsarLiga = (activo: boolean) => {
-    setUsarLiga(activo);
-    if (!activo) {
-      setLigaId("");
-      setDivisionId("");
-      setMostrarFormNuevaLiga(false);
+  // Divisiones de la liga elegida.
+  useEffect(() => {
+    if (!ligaId) {
+      setDivisiones([]);
+      setDivisionesSeleccionadas({});
+      return;
     }
-  };
+    supabase
+      .from("divisiones_liga")
+      .select("id, liga_id, nombre, mmr_limite")
+      .eq("liga_id", ligaId)
+      .order("nombre")
+      .then(({ data, error: divisionesError }) => {
+        if (divisionesError) {
+          console.error("Error cargando divisiones:", divisionesError);
+          return;
+        }
+        setDivisiones(data ?? []);
+        setDivisionesSeleccionadas({});
+      });
+  }, [ligaId]);
 
-  // crear_liga() (en la base) es la que de verdad valida el nombre y
-  // que no exista ya una liga igual -- disponible para cualquier
-  // cuenta, no solo administradores (pedido explícito).
   const handleCrearLiga = async () => {
     const nombreLimpio = nuevaLigaNombre.trim();
     if (!nombreLimpio) return;
@@ -154,6 +175,36 @@ export default function CreateTournamentPage() {
     setMostrarFormNuevaLiga(false);
   };
 
+  const toggleDivision = (id: string) => {
+    setDivisionesSeleccionadas((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const puedeAvanzarDesdePaso1 = nombre.trim().length > 0;
+  const puedeAvanzarDesdePaso2 = fechaInicio.length > 0 && Number(cuposTotales) >= 2;
+  const puedeAvanzarDesdePaso3 = !esLiga || !!ligaId;
+
+  const handleSiguiente = () => {
+    setError(null);
+    if (paso === 1 && !puedeAvanzarDesdePaso1) {
+      setError("Ponle un nombre al torneo antes de seguir.");
+      return;
+    }
+    if (paso === 2 && !puedeAvanzarDesdePaso2) {
+      setError("Elige la fecha de inicio y una cantidad de cupos válida.");
+      return;
+    }
+    if (paso === 3 && !puedeAvanzarDesdePaso3) {
+      setError("Elige una liga antes de seguir.");
+      return;
+    }
+    setPaso((p) => Math.min(p + 1, totalPasos));
+  };
+
+  const handleAtras = () => {
+    setError(null);
+    setPaso((p) => Math.max(p - 1, 1));
+  };
+
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
@@ -174,60 +225,96 @@ export default function CreateTournamentPage() {
     }
 
     // Migración 074: mismo margen de tolerancia que el trigger de la
-    // base -- esto solo evita mandar el formulario y esperar el viaje
-    // al servidor para enterarse, no es la única barrera real.
+    // base.
     if (new Date(fechaInicio).getTime() < Date.now() - TOLERANCIA_FECHA_MS) {
       setError("La fecha de inicio no puede ser en el pasado.");
+      return;
+    }
+
+    const divisionesElegidas = esLiga ? divisiones.filter((d) => divisionesSeleccionadas[d.id]) : [];
+
+    if (esLiga && temporadaModo === "manual" && !temporadaNombreManual.trim()) {
+      setError("Escribe el nombre de la temporada, o cambia a numerada.");
+      return;
+    }
+    if (esLiga && !temporadaFechaFin) {
+      setError("Elige la fecha de fin de la temporada.");
       return;
     }
 
     setLoading(true);
     setError(null);
 
-    const { data: torneo, error: torneoError } = await supabase
-      .from("tournaments")
-      .insert({
-        nombre,
-        formato,
-        modo,
-        publico,
-        // Por ahora solo guardamos el monto del pozo, sin cobro real:
-        // no hay pasarela de pago conectada todavía ni comisión de
-        // ningún tipo.
-        pozo_premio: publico && pozoPremio ? Number(pozoPremio) : null,
-        cupos_totales: Number(cuposTotales),
-        fecha_inicio: new Date(fechaInicio).toISOString(),
-        creador_id: user.id,
-        tiene_fase_grupos: modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos,
-        cantidad_grupos:
-          modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(cantidadGrupos) : null,
-        avanzan_por_grupo:
-          modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(avanzanPorGrupo) : null,
-        tiene_tercer_lugar: modo === "eliminacion_simple" && !formatoLiga && tieneTercerLugar,
-        formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
-        puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
-        liga_id: usarLiga && ligaId ? ligaId : null,
-        division_id: usarLiga && divisionId ? divisionId : null,
-        swiss_rondas_totales: modo === "suizo" && swissRondas ? Number(swissRondas) : null,
-        mostrar_nombres_ronda_personalizados: modoAvanzado && mostrarNombresRonda,
-        ocultar_numeros_semilla: modoAvanzado && ocultarNumerosSemilla,
-        ocultar_bracket_publico: modoAvanzado && ocultarBracketPublico,
-        reglas_semillas: modoAvanzado ? reglasSemillas : "aleatorio",
-        permite_autoreporte: modoAvanzado ? permiteAutoreporte : true,
-        excluido_de_busqueda: modoAvanzado && excluidoDeBusqueda,
-        mostrar_posiciones: modoAvanzado ? mostrarPosiciones : true,
-      })
-      .select()
-      .single();
+    // Opciones avanzadas (Bracket/Permissions/Misc) ya NO se
+    // configuran acá -- quedan en su valor por defecto al crear, y se
+    // ajustan después desde la propia ficha del torneo (solo el
+    // organizador las ve).
+    const payloadBase = {
+      formato,
+      modo,
+      publico: tipoEvento !== "privado",
+      pozo_premio: tipoEvento !== "privado" && pozoPremio ? Number(pozoPremio) : null,
+      cupos_totales: formatoLiga ? 7 : Number(cuposTotales),
+      fecha_inicio: new Date(fechaInicio).toISOString(),
+      creador_id: user.id,
+      tiene_fase_grupos: modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos,
+      cantidad_grupos:
+        modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(cantidadGrupos) : null,
+      avanzan_por_grupo:
+        modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(avanzanPorGrupo) : null,
+      tiene_tercer_lugar: modo === "eliminacion_simple" && !formatoLiga && tieneTercerLugar,
+      formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
+      puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
+      liga_id: esLiga ? ligaId || null : null,
+      swiss_rondas_totales: modo === "suizo" && swissRondas ? Number(swissRondas) : null,
+    };
 
-    setLoading(false);
+    // Un torneo por división marcada (o uno solo, sin división, si no
+    // es de liga o la liga no tiene divisiones marcadas).
+    const tandas = divisionesElegidas.length > 0 ? divisionesElegidas : [null];
 
-    if (torneoError || !torneo) {
-      setError(torneoError?.message ?? "No se pudo crear el torneo.");
-      return;
+    const idsCreados: string[] = [];
+    for (const division of tandas) {
+      const { data: torneo, error: torneoError } = await supabase
+        .from("tournaments")
+        .insert({
+          ...payloadBase,
+          nombre: tandas.length > 1 ? `${nombre} - ${division!.nombre}` : nombre,
+          division_id: division ? division.id : null,
+        })
+        .select()
+        .single();
+
+      if (torneoError || !torneo) {
+        setLoading(false);
+        setError(
+          idsCreados.length > 0
+            ? `Se crearon ${idsCreados.length} de ${tandas.length} torneos antes de este error: ${
+                torneoError?.message ?? "No se pudo crear el torneo."
+              }`
+            : torneoError?.message ?? "No se pudo crear el torneo."
+        );
+        return;
+      }
+
+      idsCreados.push(torneo.id);
+
+      if (esLiga) {
+        const nombreTemporada = temporadaModo === "numerada" ? `Temporada ${temporadaNumero}` : temporadaNombreManual.trim();
+        const { error: temporadaError } = await supabase.from("temporadas").insert({
+          torneo_id: torneo.id,
+          nombre: nombreTemporada,
+          fecha_inicio: new Date(fechaInicio).toISOString(),
+          fecha_fin: new Date(temporadaFechaFin).toISOString(),
+        });
+        // No bloquea la creación del torneo si falla la temporada --
+        // el torneo ya existe, solo faltaría crearla a mano después.
+        if (temporadaError) console.error("Error creando la temporada:", temporadaError);
+      }
     }
 
-    navigate("/tournaments");
+    setLoading(false);
+    navigate(idsCreados.length === 1 ? `/tournaments/${idsCreados[0]}` : "/tournaments");
   };
 
   if (!authLoading && !user) {
@@ -249,519 +336,468 @@ export default function CreateTournamentPage() {
       <div className="section-head">
         <h1 className="section-title">Crear torneo</h1>
       </div>
-      <p className="auth-sub" style={{ textAlign: "left", marginTop: 0 }}>
-        Configura tu torneo de StarCraft II paso a paso.
+      <p className="auth-sub" style={{ textAlign: "left", marginTop: 0, marginBottom: "0.5rem" }}>
+        Paso {paso} de {totalPasos}
       </p>
-      {/* Aclaración explícita: "torneo" y "Clan War" son dos cosas
-          distintas en RemorApp, con creación separada -- este
-          formulario es solo para torneos (con llave o tabla propia,
-          para cualquier cantidad de inscritos). Un enfrentamiento
-          puntual entre dos clanes se organiza como Clan War, desde el
-          Panel de control del equipo, no acá. */}
       <p className="form-hint" style={{ marginBottom: "1.5rem" }}>
         Esto crea un <strong>torneo</strong>: con llave o tabla propia, para cualquier cantidad de
         inscritos. Si buscas un enfrentamiento directo entre dos clanes, eso es una{" "}
         <strong>Clan War</strong> -- se organiza aparte, desde el Panel de control de tu equipo.
-        Marca "Privado" en Visibilidad si es solo para vos y tus amigos; activa la Liga solo si
-        este torneo es parte de una competencia oficial con ranking.
       </p>
 
       <form className="create-tournament-form" onSubmit={handleSubmit}>
         {error && <div className="form-error">{error}</div>}
 
-        <div className="form-section">
-          <h2 className="form-section-title">
-            <span className="form-section-title-numero">1</span>
-            Información básica
-          </h2>
+        {paso === 1 && (
+          <div className="form-section">
+            <h2 className="form-section-title">
+              <span className="form-section-title-numero">1</span>
+              Información básica
+            </h2>
 
-          <div className="form-group">
-            <label className="form-label" htmlFor="torneo-nombre">
-              Nombre del torneo
-            </label>
-            <input
-              id="torneo-nombre"
-              className="form-input"
-              type="text"
-              required
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <span className="form-label">Formato</span>
-            <div className="pill-radio-group">
-              {FORMATOS.map((f) => (
-                <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
-                  <input
-                    type="radio"
-                    className="sr-only"
-                    name="formato"
-                    checked={formato === f}
-                    onChange={() => setFormato(f)}
-                  />
-                  {f}
-                </label>
-              ))}
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-nombre">
+                Nombre del torneo
+              </label>
+              <input
+                id="torneo-nombre"
+                className="form-input"
+                type="text"
+                required
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+              />
             </div>
-          </div>
 
-          <div className="form-group">
-            <span className="form-label">Modo de juego</span>
-            <div className="modo-grid">
-              {MODOS.map((m) => (
-                <div key={m.value} className={`modo-card ${modo === m.value ? "selected" : ""}`}>
-                  <label className="modo-card-label">
+            <div className="form-group">
+              <span className="form-label">Tipo de evento</span>
+              <div className="modo-grid">
+                {TIPOS_EVENTO.map((t) => (
+                  <div key={t.value} className={`modo-card ${tipoEvento === t.value ? "selected" : ""}`}>
+                    <label className="modo-card-label">
+                      <input
+                        type="radio"
+                        className="sr-only"
+                        name="tipoEvento"
+                        checked={tipoEvento === t.value}
+                        onChange={() => setTipoEvento(t.value)}
+                      />
+                      <TipoEventoIcono tipo={t.value} />
+                      <span>{t.label}</span>
+                    </label>
+                    <InfoTooltip texto={t.descripcion} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <span className="form-label">Formato</span>
+              <div className="pill-radio-group">
+                {(esLiga ? FORMATOS_POR_EQUIPO : FORMATOS).map((f) => (
+                  <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
                     <input
                       type="radio"
                       className="sr-only"
-                      name="modo"
-                      checked={modo === m.value}
-                      onChange={() => setModo(m.value)}
+                      name="formato"
+                      checked={formato === f}
+                      onChange={() => setFormato(f)}
                     />
-                    <ModoIcono modo={m.value} />
-                    <span>{m.label}</span>
+                    {f}
                   </label>
-                  <InfoTooltip texto={m.descripcion} />
-                </div>
-              ))}
+                ))}
+              </div>
+              {esLiga && <p className="form-hint">Un torneo de liga es siempre por equipos.</p>}
             </div>
-          </div>
 
-          {/* Suizo (migración 069): en blanco, generar_torneo_suizo() la
-              calcula sola (techo de log2 de los inscritos) recién al
-              iniciar el torneo -- acá es solo para fijarla a mano si el
-              organizador prefiere una cantidad puntual. */}
-          {modo === "suizo" && (
             <div className="form-group">
-              <label className="form-label" htmlFor="torneo-swiss-rondas">
-                Cantidad de rondas (opcional)
-              </label>
-              <input
-                id="torneo-swiss-rondas"
-                className="form-input"
-                type="number"
-                min={1}
-                placeholder="Se calcula sola si la dejas en blanco"
-                value={swissRondas}
-                onChange={(e) => setSwissRondas(e.target.value)}
-              />
-            </div>
-          )}
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="torneo-fecha">
-              Fecha de inicio
-            </label>
-            <input
-              id="torneo-fecha"
-              className="form-input"
-              type="datetime-local"
-              required
-              value={fechaInicio}
-              onChange={(e) => setFechaInicio(e.target.value)}
-            />
-          </div>
-
-          <div className="form-group">
-            <label className="form-label" htmlFor="torneo-cupos">
-              Cupos totales
-            </label>
-            <input
-              id="torneo-cupos"
-              className="form-input"
-              type="number"
-              min={2}
-              required
-              disabled={formatoLiga}
-              value={cuposTotales}
-              onChange={(e) => setCuposTotales(e.target.value)}
-            />
-            {formatoLiga && <p className="form-hint">First Stand es siempre para 7 clanes.</p>}
-          </div>
-        </div>
-
-        <div className="form-section">
-          <h2 className="form-section-title">
-            <span className="form-section-title-numero">2</span>
-            Formato de competencia
-          </h2>
-
-          {/* Liga para el ranking de clanes (migración 059, rediseño en
-              la 074): apagada por defecto -- sin relación con el
-              formato de liga "First Stand" de más abajo. Solo afecta
-              el ranking en un torneo por equipos -- en 1v1 el campeón
-              nunca es un clan, así que activarla acá no tiene efecto,
-              pero no hace falta ocultarla por eso. */}
-          <div className="form-group">
-            <label className="form-checkbox-label">
-              <input
-                type="checkbox"
-                checked={usarLiga}
-                onChange={(e) => handleToggleUsarLiga(e.target.checked)}
-              />
-              Este torneo cuenta para el ranking de una liga
-            </label>
-            <p className="form-hint">
-              Activalo solo si es parte de una competencia oficial (StarLeague Latam, BTL, etc.) --
-              un evento amistoso no lo necesita. Si el torneo es por equipos, el campeón suma un
-              torneo ganado en el ranking de la liga elegida (y en "General").
-            </p>
-
-            {usarLiga && (
-              <div className="form-group">
-                <label className="form-label" htmlFor="torneo-liga-ranking">
-                  Liga
-                </label>
-                <select
-                  id="torneo-liga-ranking"
-                  className="form-select"
-                  value={ligaId}
-                  onChange={(e) => handleCambiarLiga(e.target.value)}
-                >
-                  <option value="">Elige una liga</option>
-                  {ligas.map((liga) => (
-                    <option key={liga.id} value={liga.id}>
-                      {liga.nombre}
-                    </option>
-                  ))}
-                </select>
-
-                {!mostrarFormNuevaLiga ? (
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => setMostrarFormNuevaLiga(true)}
-                  >
-                    + Agregar nueva liga
-                  </button>
-                ) : (
-                  <div className="form-group">
-                    {errorLiga && <div className="form-error">{errorLiga}</div>}
-                    <input
-                      className="form-input"
-                      type="text"
-                      placeholder="Nombre de la nueva liga"
-                      value={nuevaLigaNombre}
-                      onChange={(e) => setNuevaLigaNombre(e.target.value)}
-                    />
-                    <div className="invitation-actions">
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={creandoLiga || !nuevaLigaNombre.trim()}
-                        onClick={handleCrearLiga}
-                      >
-                        {creandoLiga ? "Creando..." : "Crear liga"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        onClick={() => {
-                          setMostrarFormNuevaLiga(false);
-                          setNuevaLigaNombre("");
-                          setErrorLiga(null);
-                        }}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
+              <span className="form-label">Modo de juego</span>
+              <div className="modo-grid">
+                {MODOS.map((m) => (
+                  <div key={m.value} className={`modo-card ${modo === m.value ? "selected" : ""}`}>
+                    <label className="modo-card-label">
+                      <input
+                        type="radio"
+                        className="sr-only"
+                        name="modo"
+                        checked={modo === m.value}
+                        onChange={() => setModo(m.value)}
+                      />
+                      <ModoIcono modo={m.value} />
+                      <span>{m.label}</span>
+                    </label>
+                    <InfoTooltip texto={m.descripcion} />
                   </div>
-                )}
+                ))}
+              </div>
+            </div>
 
-                {ligaId && (
-                  <>
-                    <label className="form-label" htmlFor="torneo-division-ranking">
-                      División
+            {modo === "suizo" && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="torneo-swiss-rondas">
+                  Cantidad de rondas (opcional)
+                </label>
+                <input
+                  id="torneo-swiss-rondas"
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  placeholder="Se calcula sola si la dejas en blanco"
+                  value={swissRondas}
+                  onChange={(e) => setSwissRondas(e.target.value)}
+                />
+              </div>
+            )}
+
+            {modo === "eliminacion_simple" && formato !== "1v1" && (
+              <div className="form-group">
+                <label className="form-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={formatoLiga}
+                    onChange={(e) => setFormatoLiga(e.target.checked)}
+                  />
+                  Formato de liga "First Stand"
+                </label>
+                <p className="form-hint">
+                  Pensado para 7 clanes: fixture de todos contra todos completo (21 partidos en 7
+                  jornadas, nadie repite rival) y playoffs entre los 4 mejores, con la final al mejor
+                  de 5. Fija los cupos en 7.
+                </p>
+
+                {formatoLiga && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="torneo-puntos-2-1">
+                      Puntos por una victoria 2-1
                     </label>
                     <select
-                      id="torneo-division-ranking"
+                      id="torneo-puntos-2-1"
                       className="form-select"
-                      value={divisionId}
-                      onChange={(e) => setDivisionId(e.target.value)}
+                      value={puntosVictoria21}
+                      onChange={(e) => setPuntosVictoria21(e.target.value)}
                     >
-                      <option value="">Ninguna</option>
-                      {divisionesDeLaLiga.map((division) => (
-                        <option key={division.id} value={division.id}>
-                          {division.nombre}
-                        </option>
-                      ))}
+                      <option value="3">3 puntos (igual que una victoria 2-0)</option>
+                      <option value="2">2 puntos (sistema alternativo)</option>
                     </select>
+                    <p className="form-hint">Una victoria 2-0 siempre vale 3 puntos.</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {modo === "eliminacion_simple" && !formatoLiga && (
+              <div className="form-group">
+                <label className="form-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={tieneFaseGrupos}
+                    onChange={(e) => setTieneFaseGrupos(e.target.checked)}
+                  />
+                  Con etapa de grupos
+                </label>
+                <p className="form-hint">
+                  Los inscritos se reparten en grupos y juegan todos contra todos dentro de su grupo;
+                  los mejores de cada uno avanzan a la llave eliminatoria.
+                </p>
+
+                {tieneFaseGrupos && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="torneo-cantidad-grupos">
+                      Cantidad de grupos
+                    </label>
+                    <input
+                      id="torneo-cantidad-grupos"
+                      className="form-input"
+                      type="number"
+                      min={2}
+                      value={cantidadGrupos}
+                      onChange={(e) => setCantidadGrupos(e.target.value)}
+                    />
+
+                    <label className="form-label" htmlFor="torneo-avanzan-por-grupo">
+                      Cuántos avanzan por grupo
+                    </label>
+                    <input
+                      id="torneo-avanzan-por-grupo"
+                      className="form-input"
+                      type="number"
+                      min={1}
+                      value={avanzanPorGrupo}
+                      onChange={(e) => setAvanzanPorGrupo(e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {modo === "eliminacion_simple" && !formatoLiga && (
+              <div className="form-group">
+                <label className="form-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={tieneTercerLugar}
+                    onChange={(e) => setTieneTercerLugar(e.target.checked)}
+                  />
+                  Con partido por el tercer lugar
+                </label>
+                <p className="form-hint">
+                  Los dos perdedores de semifinal juegan aparte por el tercer puesto, en paralelo a la
+                  final.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {paso === 2 && (
+          <div className="form-section">
+            <h2 className="form-section-title">
+              <span className="form-section-title-numero">2</span>
+              Fecha y cupos
+            </h2>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-fecha">
+                Fecha de inicio
+              </label>
+              <input
+                id="torneo-fecha"
+                className="form-input"
+                type="datetime-local"
+                required
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-cupos">
+                Cupos totales
+              </label>
+              <input
+                id="torneo-cupos"
+                className="form-input"
+                type="number"
+                min={2}
+                required
+                disabled={formatoLiga}
+                value={cuposTotales}
+                onChange={(e) => setCuposTotales(e.target.value)}
+              />
+              {formatoLiga && <p className="form-hint">First Stand es siempre para 7 clanes.</p>}
+            </div>
+
+            {tipoEvento !== "privado" && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="torneo-pozo">
+                  Pozo de premios en CLP (opcional)
+                </label>
+                <input
+                  id="torneo-pozo"
+                  className="form-input"
+                  type="number"
+                  min={0}
+                  value={pozoPremio}
+                  onChange={(e) => setPozoPremio(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {paso === 3 && esLiga && (
+          <div className="form-section">
+            <h2 className="form-section-title">
+              <span className="form-section-title-numero">3</span>
+              Liga y divisiones
+            </h2>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="torneo-liga">
+                Liga
+              </label>
+              <select id="torneo-liga" className="form-select" value={ligaId} onChange={(e) => setLigaId(e.target.value)}>
+                <option value="">Elige una liga</option>
+                {ligas.map((liga) => (
+                  <option key={liga.id} value={liga.id}>
+                    {liga.nombre}
+                  </option>
+                ))}
+              </select>
+
+              {!mostrarFormNuevaLiga ? (
+                <button type="button" className="btn btn-ghost" onClick={() => setMostrarFormNuevaLiga(true)}>
+                  + Agregar nueva liga
+                </button>
+              ) : (
+                <div className="form-group">
+                  {errorLiga && <div className="form-error">{errorLiga}</div>}
+                  <input
+                    className="form-input"
+                    type="text"
+                    placeholder="Nombre de la nueva liga"
+                    value={nuevaLigaNombre}
+                    onChange={(e) => setNuevaLigaNombre(e.target.value)}
+                  />
+                  <div className="invitation-actions">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={creandoLiga || !nuevaLigaNombre.trim()}
+                      onClick={handleCrearLiga}
+                    >
+                      {creandoLiga ? "Creando..." : "Crear liga"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      onClick={() => {
+                        setMostrarFormNuevaLiga(false);
+                        setNuevaLigaNombre("");
+                        setErrorLiga(null);
+                      }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {ligaId && (
+              <div className="form-group">
+                <span className="form-label">Divisiones a crear</span>
+                {divisiones.length === 0 ? (
+                  <p className="form-hint">
+                    Esta liga todavía no tiene divisiones cargadas -- se va a crear un solo torneo,
+                    sin división.
+                  </p>
+                ) : (
+                  <>
+                    <p className="form-hint">
+                      Marca una o varias -- se crea un torneo por cada división marcada, con el mismo
+                      formato, modo, fecha y cupos.
+                    </p>
+                    <div className="detail-participant-list">
+                      {divisiones.map((d) => (
+                        <label key={d.id} className="form-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={!!divisionesSeleccionadas[d.id]}
+                            onChange={() => toggleDivision(d.id)}
+                          />
+                          {d.nombre}
+                          {d.mmr_limite !== null && (
+                            <span className="tournament-card-meta"> · hasta {d.mmr_limite} MMR</span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
                   </>
                 )}
               </div>
             )}
+
+            <p className="form-hint">
+              Los equipos entran por invitación tuya, o pidiendo el ingreso para que vos lo apruebes --
+              ambas opciones van a estar disponibles desde la ficha de cada torneo, una vez creado.
+            </p>
           </div>
+        )}
 
-          {/* Formato de liga "First Stand" (migración 057): 7 clanes,
-              todos contra todos completo y playoffs top 4 -- solo
-              tiene sentido con eliminación simple y un formato por
-              equipos (necesita clanes, no jugadores individuales). Al
-              activarlo se ocultan la etapa de grupos y el tercer lugar
-              manuales: First Stand ya trae su propia etapa de grupos
-              (un solo grupo de 7) y su propia llave (top 4, sin
-              tercer lugar). */}
-          {modo === "eliminacion_simple" && formato !== "1v1" && (
+        {paso === 4 && esLiga && (
+          <div className="form-section">
+            <h2 className="form-section-title">
+              <span className="form-section-title-numero">4</span>
+              Temporada
+            </h2>
+
             <div className="form-group">
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={formatoLiga}
-                  onChange={(e) => {
-                    setFormatoLiga(e.target.checked);
-                    if (e.target.checked) setCuposTotales("7");
-                  }}
-                />
-                Formato de liga "First Stand"
-              </label>
-              <p className="form-hint">
-                Pensado para 7 clanes: fixture de todos contra todos completo (21 partidos en 7
-                jornadas, nadie repite rival) y playoffs entre los 4 mejores, con la final al mejor
-                de 5.
-              </p>
-
-              {formatoLiga && (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="torneo-puntos-2-1">
-                    Puntos por una victoria 2-1
-                  </label>
-                  <select
-                    id="torneo-puntos-2-1"
-                    className="form-select"
-                    value={puntosVictoria21}
-                    onChange={(e) => setPuntosVictoria21(e.target.value)}
-                  >
-                    <option value="3">3 puntos (igual que una victoria 2-0)</option>
-                    <option value="2">2 puntos (sistema alternativo)</option>
-                  </select>
-                  <p className="form-hint">Una victoria 2-0 siempre vale 3 puntos.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Etapa de grupos (migración 041): todos contra todos dentro
-              de cada grupo, con los mejores avanzando a la llave. Solo
-              tiene sentido con eliminación simple -- generar_grupos()
-              en la base rechaza cualquier otro modo, así que se oculta
-              acá directamente en vez de dejar armar una configuración
-              que después va a fallar al generarla. Se oculta también
-              con First Stand activo: ese formato arma su propia etapa
-              de grupos automáticamente. */}
-          {modo === "eliminacion_simple" && !formatoLiga && (
-            <div className="form-group">
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={tieneFaseGrupos}
-                  onChange={(e) => setTieneFaseGrupos(e.target.checked)}
-                />
-                Con etapa de grupos
-              </label>
-              <p className="form-hint">
-                Los inscritos se reparten en grupos y juegan todos contra todos dentro de su grupo;
-                los mejores de cada uno avanzan a la llave eliminatoria.
-              </p>
-
-              {tieneFaseGrupos && (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="torneo-cantidad-grupos">
-                    Cantidad de grupos
-                  </label>
+              <div className="form-radio-group">
+                <label className={`form-radio-option ${temporadaModo === "numerada" ? "selected" : ""}`}>
                   <input
-                    id="torneo-cantidad-grupos"
-                    className="form-input"
-                    type="number"
-                    min={2}
-                    value={cantidadGrupos}
-                    onChange={(e) => setCantidadGrupos(e.target.value)}
+                    type="radio"
+                    name="temporadaModo"
+                    checked={temporadaModo === "numerada"}
+                    onChange={() => setTemporadaModo("numerada")}
                   />
-
-                  <label className="form-label" htmlFor="torneo-avanzan-por-grupo">
-                    Cuántos avanzan por grupo
-                  </label>
+                  Numerada
+                </label>
+                <label className={`form-radio-option ${temporadaModo === "manual" ? "selected" : ""}`}>
                   <input
-                    id="torneo-avanzan-por-grupo"
-                    className="form-input"
-                    type="number"
-                    min={1}
-                    value={avanzanPorGrupo}
-                    onChange={(e) => setAvanzanPorGrupo(e.target.value)}
+                    type="radio"
+                    name="temporadaModo"
+                    checked={temporadaModo === "manual"}
+                    onChange={() => setTemporadaModo("manual")}
                   />
-                </div>
-              )}
+                  Nombre personalizado
+                </label>
+              </div>
             </div>
-          )}
 
-          {/* Partido por el tercer lugar (migración 046): entre los
-              perdedores de semifinal, en paralelo a la final -- mismo
-              gate que la etapa de grupos, solo eliminación simple tiene
-              llave. Se oculta con First Stand activo, que no tiene
-              partido por el tercer lugar. */}
-          {modo === "eliminacion_simple" && !formatoLiga && (
-            <div className="form-group">
-              <label className="form-checkbox-label">
+            {temporadaModo === "numerada" ? (
+              <div className="form-group">
+                <label className="form-label" htmlFor="torneo-temporada-numero">
+                  Número de temporada
+                </label>
                 <input
-                  type="checkbox"
-                  checked={tieneTercerLugar}
-                  onChange={(e) => setTieneTercerLugar(e.target.checked)}
+                  id="torneo-temporada-numero"
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  value={temporadaNumero}
+                  onChange={(e) => setTemporadaNumero(e.target.value)}
                 />
-                Con partido por el tercer lugar
-              </label>
-              <p className="form-hint">
-                Los dos perdedores de semifinal juegan aparte por el tercer puesto, en paralelo a la
-                final.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div className="form-section">
-          <h2 className="form-section-title">
-            <span className="form-section-title-numero">3</span>
-            Visibilidad y premios
-          </h2>
-          <div className="form-group">
-            <span className="form-label">Visibilidad</span>
-            <div className="form-radio-group">
-              <label className={`form-radio-option ${publico ? "selected" : ""}`}>
-                <input type="radio" name="publico" checked={publico} onChange={() => setPublico(true)} />
-                Público
-              </label>
-              <label className={`form-radio-option ${!publico ? "selected" : ""}`}>
+                <p className="form-hint">Se va a llamar "Temporada {temporadaNumero || "N"}".</p>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label className="form-label" htmlFor="torneo-temporada-nombre">
+                  Nombre de la temporada
+                </label>
                 <input
-                  type="radio"
-                  name="publico"
-                  checked={!publico}
-                  onChange={() => setPublico(false)}
+                  id="torneo-temporada-nombre"
+                  className="form-input"
+                  type="text"
+                  placeholder="SLL Season 7"
+                  value={temporadaNombreManual}
+                  onChange={(e) => setTemporadaNombreManual(e.target.value)}
                 />
-                Privado
-              </label>
-            </div>
-            {!publico && <p className="form-hint">Solo por invitación.</p>}
-          </div>
+              </div>
+            )}
 
-          {publico && (
             <div className="form-group">
-              <label className="form-label" htmlFor="torneo-pozo">
-                Pozo de premios en CLP (opcional)
+              <label className="form-label" htmlFor="torneo-temporada-fin">
+                Fecha de fin de la temporada
               </label>
               <input
-                id="torneo-pozo"
+                id="torneo-temporada-fin"
                 className="form-input"
-                type="number"
-                min={0}
-                value={pozoPremio}
-                onChange={(e) => setPozoPremio(e.target.value)}
+                type="datetime-local"
+                required
+                value={temporadaFechaFin}
+                onChange={(e) => setTemporadaFechaFin(e.target.value)}
               />
             </div>
+          </div>
+        )}
+
+        <div className="create-tournament-nav">
+          {paso > 1 && (
+            <button type="button" className="btn btn-ghost" onClick={handleAtras}>
+              Atrás
+            </button>
+          )}
+          {paso < totalPasos ? (
+            <button type="button" className="btn btn-primary" onClick={handleSiguiente}>
+              Siguiente
+            </button>
+          ) : (
+            <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
+              {loading ? "Creando torneo..." : "Crear torneo"}
+            </button>
           )}
         </div>
-
-        {/* Modo simple/avanzado (migración 069): equivalente a las
-            pestañas Bracket/Permissions/Misc del formulario de
-            referencia -- Notifications, adjuntos en partidos, avance
-            rápido y compartir acceso de admin quedan para un pedido
-            aparte, todavía no tienen la infraestructura detrás (no
-            hay sistema de notificaciones ni de adjuntos en RemorApp). */}
-        <div className="form-section">
-          <h2 className="form-section-title">
-            <span className="form-section-title-numero">4</span>
-            Opciones avanzadas
-          </h2>
-          <button
-            type="button"
-            className="btn btn-ghost btn-block"
-            onClick={() => setModoAvanzado((v) => !v)}
-          >
-            {modoAvanzado ? "Ocultar opciones avanzadas" : "Mostrar opciones avanzadas"}
-          </button>
-
-          {modoAvanzado && (
-            <div className="advanced-options-panel">
-              <h3 className="detail-subtitle">Bracket</h3>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={mostrarNombresRonda}
-                  onChange={(e) => setMostrarNombresRonda(e.target.checked)}
-                />
-                Mostrar nombres de ronda personalizados (Octavos, Cuartos, Semifinal, Final)
-              </label>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={ocultarNumerosSemilla}
-                  onChange={(e) => setOcultarNumerosSemilla(e.target.checked)}
-                />
-                Ocultar los números de las semillas
-              </label>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={ocultarBracketPublico}
-                  onChange={(e) => setOcultarBracketPublico(e.target.checked)}
-                />
-                Ocultar la vista previa del cuadro al público (solo la ven los inscritos)
-              </label>
-              <div className="form-group">
-                <label className="form-label" htmlFor="torneo-reglas-semillas">
-                  Ubicar a los participantes en el cuadro usando
-                </label>
-                <select
-                  id="torneo-reglas-semillas"
-                  className="form-select"
-                  value={reglasSemillas}
-                  onChange={(e) => setReglasSemillas(e.target.value as "aleatorio" | "tradicional")}
-                >
-                  <option value="aleatorio">Sorteo al azar</option>
-                  <option value="tradicional">Semillas tradicionales (por MMR)</option>
-                </select>
-                <p className="form-hint">
-                  Con semillas tradicionales, el mejor MMR ocupa la semilla 1, el segundo mejor la 2,
-                  etc. -- así los mejores puestos no se cruzan entre sí en las primeras rondas.
-                </p>
-              </div>
-
-              <h3 className="detail-subtitle">Permissions</h3>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={permiteAutoreporte}
-                  onChange={(e) => setPermiteAutoreporte(e.target.checked)}
-                />
-                Permitir que los participantes reporten su propio resultado
-              </label>
-              <p className="form-hint">
-                Desactivado, solo vos como organizador vas a poder cargar los resultados de cada
-                partida.
-              </p>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={excluidoDeBusqueda}
-                  onChange={(e) => setExcluidoDeBusqueda(e.target.checked)}
-                />
-                Excluir este torneo del buscador público
-              </label>
-
-              <h3 className="detail-subtitle">Misc</h3>
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={mostrarPosiciones}
-                  onChange={(e) => setMostrarPosiciones(e.target.checked)}
-                />
-                Mostrar la pestaña de posiciones
-              </label>
-            </div>
-          )}
-        </div>
-
-        <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
-          {loading ? "Creando torneo..." : "Crear torneo"}
-        </button>
       </form>
     </section>
   );
