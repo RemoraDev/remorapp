@@ -12,7 +12,6 @@ import type { TorneoFormato, TorneoModo } from "../types/tournaments";
 import type { DivisionLiga, Liga } from "../types/ranking";
 
 const FORMATOS: TorneoFormato[] = ["1v1", "2v2", "3v3", "4v4"];
-const FORMATOS_POR_EQUIPO: TorneoFormato[] = ["2v2", "3v3", "4v4"];
 
 type TipoEvento = "privado" | "liga" | "amistosa";
 
@@ -26,7 +25,7 @@ const TIPOS_EVENTO: { value: TipoEvento; label: string; descripcion: string }[] 
     value: "liga",
     label: "Torneo por ligas",
     descripcion:
-      "Parte de una competencia oficial con ranking (StarLeague Latam, BTL, etc.). Solo por equipos -- no admite jugadores individuales.",
+      "Parte de una competencia oficial con ranking (StarLeague Latam, BTL, etc.). Cualquier formato -- en 2v2/3v3/4v4, los clanes entran por invitación o solicitud, no por inscripción libre.",
   },
   {
     value: "privado",
@@ -69,6 +68,7 @@ export default function CreateTournamentPage() {
   // Formato de liga "First Stand" (migración 057).
   const [formatoLiga, setFormatoLiga] = useState(false);
   const [puntosVictoria21, setPuntosVictoria21] = useState("3");
+  const [avanzanPlayoffsFirstStand, setAvanzanPlayoffsFirstStand] = useState("4");
 
   // Suizo (migración 069): en blanco = generar_torneo_suizo() calcula
   // sola la cantidad de rondas.
@@ -105,12 +105,6 @@ export default function CreateTournamentPage() {
 
   const esLiga = tipoEvento === "liga";
   const totalPasos = esLiga ? 4 : 2;
-
-  // Al elegir "Torneo por ligas", un torneo 1v1 no tiene sentido --
-  // solo entran equipos. Si ya estaba en 1v1, se cambia solo a 2v2.
-  useEffect(() => {
-    if (esLiga && formato === "1v1") setFormato("2v2");
-  }, [esLiga, formato]);
 
   // Catálogo de ligas: se carga siempre (aunque tipoEvento no sea
   // "liga" todavía) para que el paso 3 no tenga que esperar.
@@ -254,14 +248,18 @@ export default function CreateTournamentPage() {
       modo,
       publico: tipoEvento !== "privado",
       pozo_premio: tipoEvento !== "privado" && pozoPremio ? Number(pozoPremio) : null,
-      cupos_totales: formatoLiga ? 7 : Number(cuposTotales),
+      cupos_totales: Number(cuposTotales),
       fecha_inicio: new Date(fechaInicio).toISOString(),
       creador_id: user.id,
       tiene_fase_grupos: modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos,
       cantidad_grupos:
         modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(cantidadGrupos) : null,
       avanzan_por_grupo:
-        modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(avanzanPorGrupo) : null,
+        modo === "eliminacion_simple" && formatoLiga
+          ? Number(avanzanPlayoffsFirstStand)
+          : modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos
+            ? Number(avanzanPorGrupo)
+            : null,
       tiene_tercer_lugar: modo === "eliminacion_simple" && !formatoLiga && tieneTercerLugar,
       formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
       puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
@@ -394,7 +392,7 @@ export default function CreateTournamentPage() {
             <div className="form-group">
               <span className="form-label">Formato</span>
               <div className="pill-radio-group">
-                {(esLiga ? FORMATOS_POR_EQUIPO : FORMATOS).map((f) => (
+                {FORMATOS.map((f) => (
                   <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
                     <input
                       type="radio"
@@ -407,7 +405,12 @@ export default function CreateTournamentPage() {
                   </label>
                 ))}
               </div>
-              {esLiga && <p className="form-hint">Un torneo de liga es siempre por equipos.</p>}
+              {esLiga && formato !== "1v1" && (
+                <p className="form-hint">
+                  Los clanes entran por invitación tuya o pidiendo el ingreso -- no hay inscripción
+                  libre en un torneo de liga por equipos.
+                </p>
+              )}
             </div>
 
             <div className="form-group">
@@ -460,13 +463,25 @@ export default function CreateTournamentPage() {
                   Formato de liga "First Stand"
                 </label>
                 <p className="form-hint">
-                  Pensado para 7 clanes: fixture de todos contra todos completo (21 partidos en 7
-                  jornadas, nadie repite rival) y playoffs entre los 4 mejores, con la final al mejor
-                  de 5. Fija los cupos en 7.
+                  Fixture de todos contra todos completo (cada clan juega contra todos los demás una
+                  vez, nadie repite rival) y playoffs entre los mejores puestos, con la final al mejor
+                  de 5. Sirve para cualquier cantidad de clanes, no solo 7.
                 </p>
 
                 {formatoLiga && (
                   <div className="form-group">
+                    <label className="form-label" htmlFor="torneo-avanzan-playoffs">
+                      Cuántos avanzan a los playoffs
+                    </label>
+                    <input
+                      id="torneo-avanzan-playoffs"
+                      className="form-input"
+                      type="number"
+                      min={2}
+                      value={avanzanPlayoffsFirstStand}
+                      onChange={(e) => setAvanzanPlayoffsFirstStand(e.target.value)}
+                    />
+
                     <label className="form-label" htmlFor="torneo-puntos-2-1">
                       Puntos por una victoria 2-1
                     </label>
@@ -580,11 +595,9 @@ export default function CreateTournamentPage() {
                 type="number"
                 min={2}
                 required
-                disabled={formatoLiga}
                 value={cuposTotales}
                 onChange={(e) => setCuposTotales(e.target.value)}
               />
-              {formatoLiga && <p className="form-hint">First Stand es siempre para 7 clanes.</p>}
             </div>
 
             {tipoEvento !== "privado" && (

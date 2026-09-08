@@ -156,7 +156,6 @@ export default function TournamentDetailPage() {
   // --- Temporadas (migración 047): solo el organizador las administra ---
   const [temporadas, setTemporadas] = useState<TemporadaRow[]>([]);
   const [nombreTemporada, setNombreTemporada] = useState("");
-  const [fechaInicioTemporada, setFechaInicioTemporada] = useState("");
   const [fechaFinTemporada, setFechaFinTemporada] = useState("");
   const [creandoTemporada, setCreandoTemporada] = useState(false);
   const [errorTemporada, setErrorTemporada] = useState<string | null>(null);
@@ -612,8 +611,12 @@ export default function TournamentDetailPage() {
       | "reglas_semillas"
       | "permite_autoreporte"
       | "excluido_de_busqueda"
-      | "mostrar_posiciones",
-    valor: boolean | string
+      | "mostrar_posiciones"
+      | "tiene_fase_grupos"
+      | "cantidad_grupos"
+      | "avanzan_por_grupo"
+      | "tiene_tercer_lugar",
+    valor: boolean | string | number | null
   ) => {
     if (!torneo) return;
     setErrorOpcionesAvanzadas(null);
@@ -665,8 +668,8 @@ export default function TournamentDetailPage() {
       setErrorTemporada("Escribe un nombre para la temporada.");
       return;
     }
-    if (!fechaInicioTemporada || !fechaFinTemporada) {
-      setErrorTemporada("Elige la fecha de inicio y de fin de la temporada.");
+    if (!fechaFinTemporada) {
+      setErrorTemporada("Elige la fecha de fin de la temporada.");
       return;
     }
 
@@ -676,10 +679,12 @@ export default function TournamentDetailPage() {
     // torneo o un administrador -- no hace falta una función aparte
     // para un insert directo, mismo criterio que el resto de ajustes
     // sueltos del organizador en esta página (abrir check-in, etc.).
+    // La fecha de inicio de la temporada es la misma del torneo -- no
+    // tiene sentido pedirla de nuevo por separado.
     const { error } = await supabase.from("temporadas").insert({
       torneo_id: torneo.id,
       nombre: nombreTemporada.trim(),
-      fecha_inicio: new Date(fechaInicioTemporada).toISOString(),
+      fecha_inicio: torneo.fecha_inicio,
       fecha_fin: new Date(fechaFinTemporada).toISOString(),
     });
 
@@ -691,7 +696,6 @@ export default function TournamentDetailPage() {
     }
 
     setNombreTemporada("");
-    setFechaInicioTemporada("");
     setFechaFinTemporada("");
     await cargarTorneo();
   };
@@ -1370,21 +1374,12 @@ export default function TournamentDetailPage() {
               />
             </div>
             <div className="form-group">
-              <label className="form-label" htmlFor="temporada-inicio">
-                Fecha de inicio
-              </label>
-              <input
-                id="temporada-inicio"
-                className="form-input"
-                type="datetime-local"
-                value={fechaInicioTemporada}
-                onChange={(e) => setFechaInicioTemporada(e.target.value)}
-              />
-            </div>
-            <div className="form-group">
               <label className="form-label" htmlFor="temporada-fin">
                 Fecha de fin
               </label>
+              <p className="form-hint">
+                Arranca el mismo día que el torneo ({formatFecha(torneo.fecha_inicio)}).
+              </p>
               <input
                 id="temporada-fin"
                 className="form-input"
@@ -1416,6 +1411,73 @@ export default function TournamentDetailPage() {
           {mostrarOpcionesAvanzadas && (
             <div className="advanced-options-panel">
               {errorOpcionesAvanzadas && <div className="form-error">{errorOpcionesAvanzadas}</div>}
+
+              {/* Etapa de grupos y tercer lugar: solo tienen sentido
+                  ANTES de generar la llave -- una vez que el torneo
+                  arrancó, cambiarlas no tendría ningún efecto real. */}
+              {torneo.modo === "eliminacion_simple" && !torneo.formato_liga && torneo.estado === "abierto" && (
+                <>
+                  <h3 className="detail-subtitle">Formato</h3>
+                  <label className="form-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={torneo.tiene_fase_grupos}
+                      onChange={(e) => {
+                        handleActualizarOpcionAvanzada("tiene_fase_grupos", e.target.checked);
+                        if (!e.target.checked) {
+                          handleActualizarOpcionAvanzada("cantidad_grupos", null);
+                          handleActualizarOpcionAvanzada("avanzan_por_grupo", null);
+                        }
+                      }}
+                    />
+                    Con etapa de grupos
+                  </label>
+                  <p className="form-hint">
+                    Los inscritos se reparten en grupos y juegan todos contra todos dentro de su
+                    grupo; los mejores de cada uno avanzan a la llave eliminatoria.
+                  </p>
+
+                  {torneo.tiene_fase_grupos && (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="torneo-cantidad-grupos-editar">
+                        Cantidad de grupos
+                      </label>
+                      <input
+                        id="torneo-cantidad-grupos-editar"
+                        className="form-input"
+                        type="number"
+                        min={2}
+                        defaultValue={torneo.cantidad_grupos ?? 2}
+                        onBlur={(e) => handleActualizarOpcionAvanzada("cantidad_grupos", Number(e.target.value))}
+                      />
+                      <label className="form-label" htmlFor="torneo-avanzan-por-grupo-editar">
+                        Cuántos avanzan por grupo
+                      </label>
+                      <input
+                        id="torneo-avanzan-por-grupo-editar"
+                        className="form-input"
+                        type="number"
+                        min={1}
+                        defaultValue={torneo.avanzan_por_grupo ?? 2}
+                        onBlur={(e) => handleActualizarOpcionAvanzada("avanzan_por_grupo", Number(e.target.value))}
+                      />
+                    </div>
+                  )}
+
+                  <label className="form-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={torneo.tiene_tercer_lugar}
+                      onChange={(e) => handleActualizarOpcionAvanzada("tiene_tercer_lugar", e.target.checked)}
+                    />
+                    Con partido por el tercer lugar
+                  </label>
+                  <p className="form-hint">
+                    Los dos perdedores de semifinal juegan aparte por el tercer puesto, en paralelo a
+                    la final.
+                  </p>
+                </>
+              )}
 
               <h3 className="detail-subtitle">Bracket</h3>
               <label className="form-checkbox-label">
