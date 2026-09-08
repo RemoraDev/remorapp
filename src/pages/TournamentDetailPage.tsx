@@ -1706,6 +1706,17 @@ export default function TournamentDetailPage() {
                 </div>
               )}
 
+              {/* Sin esto, un participante (no organizador) no veía
+                  nada acá mientras el check-in seguía cerrado -- un
+                  espacio en blanco sin ninguna pista de qué estaba
+                  esperando. */}
+              {!esOrganizador && !torneo.check_in_abierto && (
+                <p className="tournament-card-meta">
+                  Esperando a que el organizador abra el check-in para poder confirmar tu
+                  asistencia.
+                </p>
+              )}
+
               {torneo.check_in_abierto && (
                 <div className="detail-register-box">
                   {errorConfirmar && <div className="form-error">{errorConfirmar}</div>}
