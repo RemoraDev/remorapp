@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import type { PosicionGrupo, TournamentGroupMatchRow, TournamentGroupRow } from "../types/tournaments";
 
@@ -33,6 +34,19 @@ interface GroupStageProps {
   // First Stand y la etapa de grupos clásica se ven exactamente igual
   // que siempre.
   estiloRanking?: boolean;
+  // Migración 083: tag del equipo propio del usuario que mira la
+  // página (si tiene uno) -- para armar el link "Ir a la Clan War" en
+  // los partidos de liga que ya no se reportan con un click, sino
+  // desde el Gestor de eventos del equipo.
+  miEquipoTag?: string | null;
+  // Migración 085: id de MI participante en ESTE torneo puntual (si
+  // estoy inscrito) -- sin esto, el link "Ir a la Clan War" se ofrecía
+  // a cualquiera que pudiera reportar (incluido el organizador, que
+  // puede no pertenecer a ninguno de los dos clanes de ese partido
+  // puntual), mandando a organizadores ajenos al panel de SU propio
+  // equipo en vez de al de ninguno de los dos equipos reales del
+  // partido.
+  miParticipantId?: string | null;
 }
 
 // Etapa de grupos (migración 041): tabla de posiciones + partidos de
@@ -54,6 +68,8 @@ export default function GroupStage({
   permiteAutoreporte = true,
   mostrarPosiciones = true,
   estiloRanking = false,
+  miEquipoTag = null,
+  miParticipantId = null,
 }: GroupStageProps) {
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -62,23 +78,33 @@ export default function GroupStage({
   // apilado en una sola vista, como siempre.
   const [tabActiva, setTabActiva] = useState<"posiciones" | "partidos">("posiciones");
 
-  const nombreDe = (participantId: string) => nombresPorParticipante[participantId] ?? "Jugador de RemorApp";
+  // Migración 085: participant2_id null es un bye real (Suizo con
+  // cantidad impar de inscritos), no un hueco esperando resultado --
+  // se etiqueta igual que un bye de la llave eliminatoria.
+  const nombreDe = (participantId: string | null) =>
+    participantId ? nombresPorParticipante[participantId] ?? "Jugador de RemorApp" : "BYE";
 
-  // Historial de un participante en orden de ronda: una tira de W/L
+  // Historial de un participante en orden de ronda: una tira de W/E/L
   // de sus partidos ya jugados, para ver de un vistazo cómo viene.
+  // Migración 083: un partido de liga (Clan War vinculada) puede
+  // terminar empatado -- ganador_id null con status 'jugado' ya no es
+  // automáticamente una derrota.
   const historialDe = (partidasGrupo: TournamentGroupMatchRow[], participantId: string) =>
     partidasGrupo
       .filter(
         (m) => m.status === "jugado" && (m.participant1_id === participantId || m.participant2_id === participantId)
       )
       .sort((a, b) => (a.jornada ?? 0) - (b.jornada ?? 0))
-      .map((m) => (m.ganador_id === participantId ? "W" : "L"));
+      .map((m) => (m.ganador_id === null ? "E" : m.ganador_id === participantId ? "W" : "L"));
 
   const puedeReportar = (match: TournamentGroupMatchRow) => {
     if (!userId) return false;
     if (userId === organizadorId) return true;
     if (!permiteAutoreporte) return false;
-    return !!puedeReportarPorParticipante[match.participant1_id] || !!puedeReportarPorParticipante[match.participant2_id];
+    return (
+      !!puedeReportarPorParticipante[match.participant1_id] ||
+      (!!match.participant2_id && !!puedeReportarPorParticipante[match.participant2_id])
+    );
   };
 
   const handleReportar = async (matchId: string, ganadorId: string, resultadoPerdedor: number | null = null) => {
@@ -138,7 +164,12 @@ export default function GroupStage({
                     <span className="ranking-strip-nombre">{nombreDe(p.participant_id)}</span>
                     <span className="ranking-strip-historial">
                       {historialDe(partidasGrupo, p.participant_id).map((resultado, i) => (
-                        <span key={i} className={`ranking-strip-badge ${resultado === "W" ? "win" : "loss"}`}>
+                        <span
+                          key={i}
+                          className={`ranking-strip-badge ${
+                            resultado === "W" ? "win" : resultado === "E" ? "draw" : "loss"
+                          }`}
+                        >
                           {resultado}
                         </span>
                       ))}
@@ -151,7 +182,10 @@ export default function GroupStage({
                         G <b>{p.ganados}</b>
                       </span>
                       <span>
-                        L <b>{p.jugados - p.ganados}</b>
+                        E <b>{p.empatados}</b>
+                      </span>
+                      <span>
+                        L <b>{p.jugados - p.ganados - p.empatados}</b>
                       </span>
                       <span>
                         Pts <b>{p.puntos}</b>
@@ -225,7 +259,13 @@ export default function GroupStage({
                     <div key={match.id} className="bracket-match group-stage-match">
                       <div
                         className={`bracket-slot ${
-                          match.ganador_id === match.participant1_id ? "winner" : match.status === "jugado" ? "loser" : ""
+                          match.status !== "jugado"
+                            ? ""
+                            : match.ganador_id === null
+                              ? "draw"
+                              : match.ganador_id === match.participant1_id
+                                ? "winner"
+                                : "loser"
                         }`}
                       >
                         {nombreDe(match.participant1_id)}
@@ -238,13 +278,46 @@ export default function GroupStage({
                       </div>
                       <div
                         className={`bracket-slot ${
-                          match.ganador_id === match.participant2_id ? "winner" : match.status === "jugado" ? "loser" : ""
+                          match.status !== "jugado"
+                            ? ""
+                            : match.ganador_id === null
+                              ? "draw"
+                              : match.ganador_id === match.participant2_id
+                                ? "winner"
+                                : "loser"
                         }`}
                       >
                         {nombreDe(match.participant2_id)}
                       </div>
 
-                      {match.status === "pendiente" && puedeReportar(match) && !esFirstStand && (
+                      {/* Migración 083: un partido de liga con Clan War
+                          vinculada no se reporta con un click acá --
+                          el resultado sale de cerrar_clan_war() cuando
+                          los dos capitanes cierran la guerra. */}
+                      {match.status === "pendiente" && match.clan_war_id && (
+                        <div className="bracket-report">
+                          {/* El link solo se ofrece si mi propio equipo es
+                              justo uno de los dos de ESTE partido -- antes
+                              se ofrecía a cualquiera que pudiera reportar
+                              (incluido el organizador de un clan ajeno),
+                              con el link apuntando a un equipo sin nada
+                              que ver con este partido. */}
+                          {miEquipoTag &&
+                          (match.participant1_id === miParticipantId || match.participant2_id === miParticipantId) ? (
+                            <Link className="btn btn-ghost" to={`/equipos/${miEquipoTag}?panel=eventos`}>
+                              Ir a la Clan War
+                            </Link>
+                          ) : (
+                            <p className="tournament-card-meta">Se juega como Clan War entre los dos clanes.</p>
+                          )}
+                        </div>
+                      )}
+
+                      {match.status === "pendiente" &&
+                        match.participant2_id &&
+                        puedeReportar(match) &&
+                        !esFirstStand &&
+                        !match.clan_war_id && (
                         <div className="bracket-report">
                           <button
                             type="button"
@@ -258,7 +331,7 @@ export default function GroupStage({
                             type="button"
                             className="btn btn-ghost"
                             disabled={reportando === match.id}
-                            onClick={() => handleReportar(match.id, match.participant2_id)}
+                            onClick={() => handleReportar(match.id, match.participant2_id as string)}
                           >
                             Ganó {nombreDe(match.participant2_id)}
                           </button>
@@ -268,7 +341,7 @@ export default function GroupStage({
                       {/* First Stand es al mejor de 3: hace falta el
                           resultado del que pierde (0 o 1) para el
                           sistema de puntos, además de quién gana. */}
-                      {match.status === "pendiente" && puedeReportar(match) && esFirstStand && (
+                      {match.status === "pendiente" && match.participant2_id && puedeReportar(match) && esFirstStand && (
                         <div className="bracket-report">
                           <button
                             type="button"
@@ -290,7 +363,7 @@ export default function GroupStage({
                             type="button"
                             className="btn btn-ghost"
                             disabled={reportando === match.id}
-                            onClick={() => handleReportar(match.id, match.participant2_id, 1)}
+                            onClick={() => handleReportar(match.id, match.participant2_id as string, 1)}
                           >
                             Ganó {nombreDe(match.participant2_id)} 2-1
                           </button>
@@ -298,7 +371,7 @@ export default function GroupStage({
                             type="button"
                             className="btn btn-ghost"
                             disabled={reportando === match.id}
-                            onClick={() => handleReportar(match.id, match.participant2_id, 0)}
+                            onClick={() => handleReportar(match.id, match.participant2_id as string, 0)}
                           >
                             Ganó {nombreDe(match.participant2_id)} 2-0
                           </button>

@@ -109,7 +109,10 @@ export interface TournamentGroupMatchRow {
   id: string;
   group_id: string;
   participant1_id: string;
-  participant2_id: string;
+  // Migración 085: null es un bye real (Suizo con cantidad impar de
+  // inscritos) -- un partido así ya nace con status "jugado" y
+  // ganador_id = participant1_id, no es un hueco esperando resultado.
+  participant2_id: string | null;
   ganador_id: string | null;
   status: "pendiente" | "jugado";
   // Migración 057: jornada del fixture de First Stand (1 a 7). Queda
@@ -122,6 +125,11 @@ export interface TournamentGroupMatchRow {
   // este detalle.
   resultado_participant1: number | null;
   resultado_participant2: number | null;
+  // Migración 083: en un torneo de liga por equipos, este partido se
+  // juega como una Clan War real (lineup, check-in, aprobación de los
+  // dos capitanes) -- no null significa que el resultado se carga
+  // desde ahí, no con el botón "Ganó X" de siempre.
+  clan_war_id: string | null;
 }
 
 // Resultado de la función posiciones_grupos() -- una fila por
@@ -132,6 +140,10 @@ export interface PosicionGrupo {
   group_nombre: string;
   participant_id: string;
   ganados: number;
+  // Migración 083: solo puede ser mayor a 0 en un torneo de liga por
+  // equipos (Clan War formato simple, que sí admite empate) -- en
+  // cualquier otro modo siempre da 0.
+  empatados: number;
   jugados: number;
   // Migración 057: puntos según puntos_victoria_2_0/puntos_victoria_2_1
   // del torneo, y diferencia de mapas ganados/perdidos como desempate.

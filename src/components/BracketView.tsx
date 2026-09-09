@@ -64,36 +64,26 @@ export default function BracketView({
   // El partido por el tercer lugar (migración 046) comparte la ronda
   // de la final pero se muestra aparte, en su propia cajita -- se
   // excluye acá de la grilla normal de rondas.
-  const partidosLlave = matches.filter((m) => !m.es_tercer_lugar);
   const partidoTercerLugar = matches.find((m) => m.es_tercer_lugar) ?? null;
 
-  const rondas = [...new Set(partidosLlave.map((m) => m.round))].sort((a, b) => a - b);
-  const partidosPorRonda = rondas.map((r) =>
-    partidosLlave.filter((m) => m.round === r).sort((a, b) => a.match_number - b.match_number)
-  );
-  // La ronda 1 siempre tiene la mayor cantidad de partidas: se usa esa
-  // altura para las demás columnas, y "justify-content: space-around"
-  // (ver .bracket-round en halcon.css) hace que las rondas con menos
-  // partidas se centren solas dentro de ese mismo alto -- así se ve
-  // el achicamiento típico de una llave sin tener que calcular a mano
-  // en qué posición exacta va cada partida.
-  const alturaBracket = (partidosPorRonda[0]?.length ?? 1) * ALTURA_PARTIDO_PX;
-  // Total real de rondas de la llave completa, aunque las rondas
-  // siguientes todavía no se hayan creado en bracket_matches (se van
-  // generando de a una a medida que se resuelve la anterior) -- se
-  // calcula a partir de la cantidad de partidos de la ronda 1, que
-  // siempre es una potencia de 2 y no cambia. Usar rondas.length en
-  // su lugar nombraría mal las rondas mientras la llave está en curso
-  // (por ejemplo, "Semifinal" para lo que en realidad son Cuartos).
-  const totalRondasReal = partidosPorRonda[0]
-    ? Math.round(Math.log2(partidosPorRonda[0].length)) + 1
-    : rondas.length;
+  // Migración 084: "Eliminación doble" reparte los partidos en más de
+  // una llave (bracket_tipo). Antes de esta migración TODOS los
+  // partidos tenían bracket_tipo 'ganadores' (el valor por defecto),
+  // así que este chequeo es 100% retrocompatible: si nunca aparece
+  // otro valor, se sigue viendo exactamente como antes (una sola
+  // llave, sin secciones).
+  const esEliminacionDoble = matches.some((m) => m.bracket_tipo !== "ganadores" && !m.es_tercer_lugar);
 
   // Migración 069: nombre tradicional según la distancia a la final --
   // "distancia 0" es la final, 1 semifinal, 2 cuartos, 3 octavos; más
   // lejos que eso, se queda en "Ronda N" (no hay nombre tradicional
   // para dieciseisavos en adelante que valga la pena mostrar).
-  const nombreDeRonda = (indiceRonda: number, totalRondas: number, cantidadPartidos: number) => {
+  const nombreDeRondaTradicional = (
+    rondas: number[],
+    indiceRonda: number,
+    totalRondas: number,
+    cantidadPartidos: number
+  ) => {
     if (cantidadPartidos === 1) return "Final";
     if (!nombresRondaPersonalizados) return `Ronda ${rondas[indiceRonda]}`;
     const distanciaDeLaFinal = totalRondas - 1 - indiceRonda;
@@ -109,8 +99,67 @@ export default function BracketView({
     }
   };
 
+  // Arma la grilla de rondas (columnas) para UN subconjunto de
+  // partidos (una sola llave) -- reutilizado tal cual para "ganadores"
+  // en eliminación simple/First Stand (el caso de siempre, una sola
+  // llave) y, en eliminación doble, una vez para "ganadores" y otra
+  // para "perdedores".
+  const armarGrilla = (partidosDeEstaLlave: BracketMatchRow[], nombresTradicionales: boolean) => {
+    const rondas = [...new Set(partidosDeEstaLlave.map((m) => m.round))].sort((a, b) => a - b);
+    const partidosPorRonda = rondas.map((r) =>
+      partidosDeEstaLlave.filter((m) => m.round === r).sort((a, b) => a.match_number - b.match_number)
+    );
+    // La ronda 1 siempre tiene la mayor cantidad de partidas: se usa
+    // esa altura para las demás columnas, y "justify-content:
+    // space-around" (ver .bracket-round en halcon.css) hace que las
+    // rondas con menos partidas se centren solas dentro de ese mismo
+    // alto -- así se ve el achicamiento típico de una llave sin tener
+    // que calcular a mano en qué posición exacta va cada partida.
+    const alturaBracket = (partidosPorRonda[0]?.length ?? 1) * ALTURA_PARTIDO_PX;
+    // Total real de rondas de la llave completa, aunque las rondas
+    // siguientes todavía no se hayan creado en bracket_matches (se van
+    // generando de a una a medida que se resuelve la anterior) -- se
+    // calcula a partir de la cantidad de partidos de la ronda 1, que
+    // siempre es una potencia de 2 y no cambia. Usar rondas.length en
+    // su lugar nombraría mal las rondas mientras la llave está en
+    // curso (por ejemplo, "Semifinal" para lo que en realidad son
+    // Cuartos).
+    const totalRondasReal = partidosPorRonda[0]
+      ? Math.round(Math.log2(partidosPorRonda[0].length)) + 1
+      : rondas.length;
+
+    return { rondas, partidosPorRonda, alturaBracket, totalRondasReal, nombresTradicionales };
+  };
+
+  const renderGrilla = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => (
+    <div
+      className="bracket"
+      data-estilo-bracket={estilo}
+      style={{ height: `${grilla.alturaBracket}px` } as CSSProperties}
+    >
+      {grilla.partidosPorRonda.map((partidos, indiceRonda) => (
+        <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
+          <div className="bracket-round-title">
+            {grilla.nombresTradicionales
+              ? nombreDeRondaTradicional(grilla.rondas, indiceRonda, grilla.totalRondasReal, partidos.length)
+              : `Ronda ${grilla.rondas[indiceRonda]}`}
+          </div>
+
+          {partidos.map(renderPartido)}
+        </div>
+      ))}
+    </div>
+  );
+
+  // En eliminación doble nunca hay un bye real (generar_llave_doble
+  // exige potencia de 2 exacta) -- un participantId null ahí siempre
+  // es "todavía no cayó el rival de este lado", no un pase directo.
   const nombreDe = (participantId: string | null) =>
-    participantId ? nombresPorParticipante[participantId] ?? "Jugador de RemorApp" : "BYE";
+    participantId
+      ? nombresPorParticipante[participantId] ?? "Jugador de RemorApp"
+      : esEliminacionDoble
+        ? "Esperando rival"
+        : "BYE";
 
   const logoDe = (participantId: string | null) => {
     if (!participantId) return null;
@@ -212,24 +261,53 @@ export default function BracketView({
     );
   };
 
+  if (esEliminacionDoble) {
+    const partidosGanadores = matches.filter((m) => m.bracket_tipo === "ganadores");
+    const partidosPerdedores = matches.filter((m) => m.bracket_tipo === "perdedores");
+    const partidoFinal = matches.find((m) => m.bracket_tipo === "final") ?? null;
+    const partidoReset = matches.find((m) => m.bracket_tipo === "reset") ?? null;
+
+    return (
+      <>
+        {estilo === "esports" && <div className="bracket-esports-banner">{nombreTorneo}</div>}
+
+        <div className="bracket-round-title bracket-seccion-titulo">Llave de ganadores</div>
+        {renderGrilla(armarGrilla(partidosGanadores, !!nombresRondaPersonalizados), "ganadores")}
+
+        {partidosPerdedores.length > 0 && (
+          <>
+            <div className="bracket-round-title bracket-seccion-titulo">Llave de perdedores</div>
+            {renderGrilla(armarGrilla(partidosPerdedores, false), "perdedores")}
+          </>
+        )}
+
+        {partidoFinal && (
+          <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
+            <div className="bracket-round-title">Gran final</div>
+            {renderPartido(partidoFinal)}
+          </div>
+        )}
+
+        {partidoReset && (
+          <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
+            <div className="bracket-round-title">Revancha (bracket reset)</div>
+            {renderPartido(partidoReset)}
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       {estilo === "esports" && <div className="bracket-esports-banner">{nombreTorneo}</div>}
-      <div
-        className="bracket"
-        data-estilo-bracket={estilo}
-        style={{ height: `${alturaBracket}px` } as CSSProperties}
-      >
-      {partidosPorRonda.map((partidos, indiceRonda) => (
-        <div key={rondas[indiceRonda]} className="bracket-round">
-          <div className="bracket-round-title">
-            {nombreDeRonda(indiceRonda, totalRondasReal, partidos.length)}
-          </div>
-
-          {partidos.map(renderPartido)}
-        </div>
-      ))}
-      </div>
+      {renderGrilla(
+        armarGrilla(
+          matches.filter((m) => !m.es_tercer_lugar),
+          !!nombresRondaPersonalizados
+        ),
+        "unica"
+      )}
 
       {/* Migración 046: el partido por el tercer lugar se muestra
           aparte, claramente separado de la llave principal -- no

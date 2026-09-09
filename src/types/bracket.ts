@@ -21,4 +21,9 @@ export interface BracketMatchRow {
   // que la interfaz le indica a los jugadores sobre cómo jugar esa
   // partida puntual. Usada por la final de los playoffs de First Stand.
   formato_partido: "normal" | "bo5";
+  // Migración 084: a qué llave pertenece este partido -- solo tiene
+  // más de un valor posible en un torneo "Eliminación doble"
+  // (ganadores/perdedores/final/reset). En eliminación simple y First
+  // Stand siempre es 'ganadores', el valor por defecto.
+  bracket_tipo: "ganadores" | "perdedores" | "final" | "reset";
 }

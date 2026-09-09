@@ -1238,6 +1238,158 @@ input[type="radio"] {
 
 /* ---------- Panel de administración ---------- */
 
+/* Navegación agrupada (migración 086): reemplaza la fila de 12
+   pestañas sueltas -- una barra lateral con las secciones agrupadas
+   por tema, para que el panel se lea como varios módulos chicos en
+   vez de un solo listado plano. En pantallas angostas la barra pasa a
+   ser una fila horizontal con scroll propio arriba del contenido, en
+   vez de una columna. */
+.admin-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.admin-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  flex-shrink: 0;
+  width: 14rem;
+  position: sticky;
+  top: 1rem;
+}
+
+.admin-sidebar-grupo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.admin-sidebar-grupo-titulo {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-faint);
+  padding: 0 0.75rem;
+  margin-bottom: 0.3rem;
+}
+
+.admin-sidebar-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  padding: 0.55rem 0.75rem;
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.admin-sidebar-item:hover {
+  background: var(--color-panel);
+  color: var(--color-text);
+}
+
+.admin-sidebar-item.active {
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--color-accent);
+}
+
+.admin-sidebar-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.admin-content {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 860px) {
+  .admin-shell {
+    flex-direction: column;
+  }
+
+  .admin-sidebar {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    position: static;
+    gap: 1.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .admin-sidebar-grupo {
+    flex-shrink: 0;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .admin-sidebar-grupo-titulo {
+    padding: 0;
+    margin-bottom: 0;
+    white-space: nowrap;
+  }
+
+  .admin-sidebar-item {
+    white-space: nowrap;
+  }
+}
+
+/* Panel general (migración 086): tarjetas de resumen con acceso
+   rápido a lo que necesita atención -- pensado para cubrir cualquier
+   urgencia sin tener que recorrer el resto del menú. */
+.admin-resumen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.admin-resumen-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  padding: 1.1rem 1.25rem;
+}
+
+.admin-resumen-card-numero {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-accent);
+  line-height: 1;
+}
+
+.admin-resumen-card-label {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
 .admin-tabs {
   display: flex;
   gap: 0.5rem;
@@ -1899,6 +2051,20 @@ input[type="radio"] {
   margin-bottom: 0.5rem;
 }
 
+/* Título de sección de "Eliminación doble" (migración 084): Llave de
+   ganadores/perdedores -- un escalón más grande que el título de cada
+   columna de ronda, con el acento de la marca y su propio margen para
+   separarse claramente del bloque anterior. */
+.bracket-seccion-titulo {
+  text-align: left;
+  font-size: 1.05rem;
+  color: var(--color-accent);
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
 .bracket-match {
   position: relative;
   border-radius: var(--radius-md);
@@ -1938,6 +2104,14 @@ input[type="radio"] {
   text-decoration: line-through;
 }
 
+/* Empate (migración 083: partidos de liga con Clan War formato simple,
+   que puede terminar con la misma cantidad de partidas de cada lado)
+   -- ni .winner ni .loser, un tercer estado neutro propio. */
+.bracket-slot.draw {
+  color: var(--color-text-muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .bracket-report {
   display: flex;
   flex-direction: column;
@@ -1945,9 +2119,33 @@ input[type="radio"] {
   margin-top: 0.5rem;
 }
 
+/* .bracket-report reutiliza .btn-ghost (transparente, sin borde, solo
+   texto de color) -- perfecto para un botón secundario suelto en medio
+   de un formulario, pero acá termina pareciendo texto plano, no un
+   botón, porque son la única acción visible dentro de la tarjeta del
+   partido. Se les da su propio look (borde + fondo + resalte en hover)
+   sin tocar .btn-ghost en general, que sigue igual en cualquier otro
+   lado de la app. */
 .bracket-report .btn {
   font-size: 0.78rem;
-  padding: 0.45rem 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  background: var(--h-surface-2);
+  font-weight: 600;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bracket-report .btn:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+}
+
+.bracket-report .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .bracket-disputa {
@@ -2651,6 +2849,11 @@ input[type="radio"] {
 .ranking-strip-badge.loss {
   background: rgba(251, 113, 133, 0.16);
   color: #fb7185;
+}
+
+.ranking-strip-badge.draw {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--color-text-muted);
 }
 
 .ranking-strip-stats {

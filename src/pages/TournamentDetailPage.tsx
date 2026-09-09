@@ -415,19 +415,20 @@ export default function TournamentDetailPage() {
     setParticipantes(listaParticipantes);
 
     // La llave existe para cualquier formato (1v1, 2v2, 3v3, 4v4)
-    // siempre que el modo sea eliminación simple -- el motor de llave
-    // (generar_llave/avanzar_ganador/reportar_resultado) es el mismo
-    // para todos, ver migración 009. Recién se consulta si ya se
-    // generó (estado distinto de "abierto").
+    // siempre que el modo sea eliminación simple o doble -- el motor
+    // de llave (generar_llave/avanzar_ganador/reportar_resultado, y
+    // generar_llave_doble/avanzar_ganador_doble para el modo doble,
+    // migración 084) es el mismo bracket_matches para los dos. Recién
+    // se consulta si ya se generó (estado distinto de "abierto").
     if (
-      torneoData.modo === "eliminacion_simple" &&
+      (torneoData.modo === "eliminacion_simple" || torneoData.modo === "eliminacion_doble") &&
       torneoData.estado !== "abierto" &&
       torneoData.fase_actual === "eliminacion"
     ) {
       const { data: partidasData } = await supabase
         .from("bracket_matches")
         .select(
-          "id, tournament_id, round, match_number, participant1_id, participant2_id, winner_id, reported_p1_winner, reported_p2_winner, status, es_tercer_lugar, formato_partido"
+          "id, tournament_id, round, match_number, participant1_id, participant2_id, winner_id, reported_p1_winner, reported_p2_winner, status, es_tercer_lugar, formato_partido, bracket_tipo"
         )
         .eq("tournament_id", id);
 
@@ -460,7 +461,7 @@ export default function TournamentDetailPage() {
       const { data: partidasGrupoData } = await supabase
         .from("tournament_group_matches")
         .select(
-          "id, group_id, participant1_id, participant2_id, ganador_id, status, jornada, resultado_participant1, resultado_participant2"
+          "id, group_id, participant1_id, participant2_id, ganador_id, status, jornada, resultado_participant1, resultado_participant2, clan_war_id"
         )
         .in("group_id", idsGrupos.length > 0 ? idsGrupos : ["00000000-0000-0000-0000-000000000000"]);
 
@@ -715,7 +716,9 @@ export default function TournamentDetailPage() {
   // llave" en vez de este botón.
   const puedeAbrirCheckIn =
     esOrganizador &&
-    (torneo?.modo === "eliminacion_simple" || torneo?.modo === "todos_contra_todos") &&
+    (torneo?.modo === "eliminacion_simple" ||
+      torneo?.modo === "eliminacion_doble" ||
+      torneo?.modo === "todos_contra_todos") &&
     torneo?.estado === "abierto" &&
     !torneo?.check_in_abierto &&
     torneo.cupos_ocupados >= 2;
@@ -745,10 +748,11 @@ export default function TournamentDetailPage() {
 
     if (error) {
       setErrorOpcionesAvanzadas(error.message);
-      return;
+      return false;
     }
 
     await cargarTorneo();
+    return true;
   };
 
   const handleAbrirCheckIn = async () => {
@@ -902,7 +906,10 @@ export default function TournamentDetailPage() {
     // insert directo. La propia función cierra el check-in
     // (check_in_abierto = false) si todo sale bien; si falla (por
     // ejemplo, menos de 2 confirmados), no cambia nada del torneo.
-    const { error } = await supabase.rpc("generar_llave", { p_tournament_id: torneo.id });
+    const { error } = await supabase.rpc(
+      torneo.modo === "eliminacion_doble" ? "generar_llave_doble" : "generar_llave",
+      { p_tournament_id: torneo.id }
+    );
 
     setGenerandoLlave(false);
 
@@ -1563,11 +1570,16 @@ export default function TournamentDetailPage() {
                         label="Con etapa de grupos"
                         hint="Los inscritos se reparten en grupos y juegan todos contra todos dentro de su grupo; los mejores de cada uno avanzan a la llave eliminatoria."
                         checked={torneo.tiene_fase_grupos}
-                        onChange={(checked) => {
-                          handleActualizarOpcionAvanzada("tiene_fase_grupos", checked);
-                          if (!checked) {
-                            handleActualizarOpcionAvanzada("cantidad_grupos", null);
-                            handleActualizarOpcionAvanzada("avanzan_por_grupo", null);
+                        onChange={async (checked) => {
+                          // Una a la vez: las tres llamadas actualizan el
+                          // mismo torneo y cada una termina en
+                          // cargarTorneo() -- lanzarlas en paralelo podía
+                          // dejar el estado a medio camino si alguna
+                          // fallaba (o pisarse entre ellas al refrescar).
+                          const ok = await handleActualizarOpcionAvanzada("tiene_fase_grupos", checked);
+                          if (ok && !checked) {
+                            await handleActualizarOpcionAvanzada("cantidad_grupos", null);
+                            await handleActualizarOpcionAvanzada("avanzan_por_grupo", null);
                           }
                         }}
                       />
@@ -1846,7 +1858,7 @@ export default function TournamentDetailPage() {
         </div>
       )}
 
-      {torneo.modo === "eliminacion_simple" && (
+      {(torneo.modo === "eliminacion_simple" || torneo.modo === "eliminacion_doble") && (
         <>
           {puedeAbrirCheckIn && (
             <div className="detail-register-box">
@@ -2230,6 +2242,8 @@ export default function TournamentDetailPage() {
                 mostrarPosiciones={torneo.mostrar_posiciones}
                 agruparPorJornada
                 estiloRanking
+                miEquipoTag={miEquipo?.teamTag ?? null}
+                miParticipantId={participantes.find((p) => p.teamId === miEquipo?.team_id)?.id ?? null}
               />
 
               {esOrganizador && torneo.estado === "en_curso" && (

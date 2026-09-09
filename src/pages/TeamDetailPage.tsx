@@ -1521,6 +1521,13 @@ export default function TeamDetailPage() {
 
   useEffect(() => {
     cargar();
+    // El componente no se remonta al navegar de la ficha de un clan a
+    // la de otro (mismo `tag` como único cambio) -- sin este reset, un
+    // "Solicitud de amistad enviada" de la ficha anterior seguía
+    // pisando la de la ficha nueva hasta que se recargaba la página.
+    setAmistadDirectaEnviada(false);
+    setErrorAmistadDirecta(null);
+    setEnviandoAmistadDirecta(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tag, user?.id]);
 
@@ -3109,11 +3116,16 @@ export default function TeamDetailPage() {
               // existe) es justamente la mía, así que hay que buscarla
               // por miEquipoPropio.team_id, no por equipo.id.
               const amistadConEsteEquipo = amistadesPropias.find((a) => a.otroEquipoId === miEquipoPropio.team_id);
+              // `propuestaPorMi` viene calculado relativo a `equipo` (la
+              // ficha que se está viendo, ver el comentario de arriba) --
+              // acá "yo" soy el otro lado, así que el sentido real es el
+              // opuesto: si NO la propuso `equipo`, la propuse yo.
+              const laPropuseYo = amistadConEsteEquipo ? !amistadConEsteEquipo.propuestaPorMi : false;
 
-              if (amistadDirectaEnviada || (amistadConEsteEquipo?.status === "pendiente" && amistadConEsteEquipo.propuestaPorMi)) {
+              if (amistadDirectaEnviada || (amistadConEsteEquipo?.status === "pendiente" && laPropuseYo)) {
                 return <p className="tournament-card-meta">Solicitud de amistad enviada -- esperando respuesta.</p>;
               }
-              if (amistadConEsteEquipo?.status === "pendiente" && !amistadConEsteEquipo.propuestaPorMi) {
+              if (amistadConEsteEquipo?.status === "pendiente" && !laPropuseYo) {
                 return (
                   <p className="tournament-card-meta">
                     Este equipo ya te envió una solicitud de amistad -- respondé desde tu Panel de

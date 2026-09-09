@@ -17,6 +17,7 @@ import type { BordeBasico } from "../types/bordes";
 import type { SkinAvatar } from "../types/skins";
 
 type Tab =
+  | "resumen"
   | "torneos"
   | "usuarios"
   | "equipos"
@@ -28,7 +29,57 @@ type Tab =
   | "disputas"
   | "reportes"
   | "alianzas"
-  | "pruebas";
+  | "pruebas"
+  | "actividad";
+
+// Navegación agrupada (migración 086): antes eran 12 pestañas sueltas
+// en una sola fila -- acá cada una vive dentro de un grupo temático,
+// para que el panel se lea como varias secciones chicas en vez de un
+// solo listado plano. "soloDueno" son las herramientas más sensibles
+// (intervenir Clan Wars ajenas, generar/borrar datos de prueba, ver el
+// registro de auditoría) -- ya estaban restringidas en el backend,
+// esto solo hace que la restricción también se note en la navegación.
+const GRUPOS_NAV: { titulo: string; tabs: { value: Tab; label: string; soloDueno?: boolean }[] }[] = [
+  { titulo: "Resumen", tabs: [{ value: "resumen", label: "Panel general" }] },
+  {
+    titulo: "Personas",
+    tabs: [
+      { value: "usuarios", label: "Usuarios" },
+      { value: "equipos", label: "Equipos" },
+    ],
+  },
+  {
+    titulo: "Moderación",
+    tabs: [
+      { value: "disputas", label: "Disputas de resultado" },
+      { value: "reportes", label: "Reportes al staff" },
+    ],
+  },
+  {
+    titulo: "Torneos y ligas",
+    tabs: [
+      { value: "torneos", label: "Torneos" },
+      { value: "clanwars", label: "Clan Wars" },
+      { value: "alianzas", label: "Alianzas" },
+    ],
+  },
+  {
+    titulo: "Contenido",
+    tabs: [
+      { value: "noticias", label: "Noticias" },
+      { value: "fondoslineup", label: "Fondos de lineup" },
+      { value: "marcosavatar", label: "Marcos de avatar" },
+    ],
+  },
+  {
+    titulo: "Dueño de la plataforma",
+    tabs: [
+      { value: "movimientos", label: "Movimientos entre equipos", soloDueno: true },
+      { value: "pruebas", label: "Panel de pruebas", soloDueno: true },
+      { value: "actividad", label: "Actividad del dueño", soloDueno: true },
+    ],
+  },
+];
 
 // Resultado de generar_escenario_prueba_lineup() (migración 053).
 interface EscenarioPruebaGenerado {
@@ -52,6 +103,11 @@ interface ReporteConNombre {
   descripcion: string;
   createdAt: string;
   reportadoPorNombre: string;
+  // Migración 086: antes no existía forma de marcar un reporte como
+  // atendido -- quedaba en la lista para siempre.
+  resuelto: boolean;
+  resueltoPorNombre: string | null;
+  resueltoEn: string | null;
 }
 
 // Corrección: lista completa de equipos (no solo el resultado de una
@@ -143,17 +199,19 @@ interface AlianzaPendienteConNombres {
 
 export default function AdminPage() {
   const { user, profile, loading } = useAuth();
-  const [tab, setTab] = useState<Tab>("torneos");
+  const [tab, setTab] = useState<Tab>("resumen");
 
   // --- Torneos por confirmar ---
   const [torneos, setTorneos] = useState<TournamentRow[]>([]);
   const [cargandoTorneos, setCargandoTorneos] = useState(true);
   const [confirmando, setConfirmando] = useState<string | null>(null);
 
-  // --- Usuarios ---
+  // --- Usuarios (migración 086: buscador -- antes traía TODA la
+  // tabla profiles de una, sin límite ni forma de buscar) ---
   const [usuarios, setUsuarios] = useState<AdminUserRow[]>([]);
   const [cargandoUsuarios, setCargandoUsuarios] = useState(true);
   const [errorUsuarios, setErrorUsuarios] = useState<string | null>(null);
+  const [busquedaUsuarios, setBusquedaUsuarios] = useState("");
   const [guardandoUsuario, setGuardandoUsuario] = useState<string | null>(null);
   // Rol elegido en el <select> de cada fila, antes de confirmar "Guardar".
   const [rolesSeleccionados, setRolesSeleccionados] = useState<Record<string, PerfilTipo>>({});
@@ -250,10 +308,15 @@ export default function AdminPage() {
   const [resolviendo, setResolviendo] = useState<string | null>(null);
   const [erroresResolver, setErroresResolver] = useState<Record<string, string>>({});
 
-  // --- Reportes de problemas (migración 033) ---
+  // --- Reportes de problemas (migración 033, resolución agregada en
+  // la 086 -- antes no había ninguna acción posible sobre un reporte,
+  // quedaba en la lista para siempre) ---
   const [reportes, setReportes] = useState<ReporteConNombre[]>([]);
   const [cargandoReportes, setCargandoReportes] = useState(true);
   const [errorReportes, setErrorReportes] = useState<string | null>(null);
+  const [verReportesResueltos, setVerReportesResueltos] = useState(false);
+  const [resolviendoReporte, setResolviendoReporte] = useState<string | null>(null);
+  const [erroresResolverReporte, setErroresResolverReporte] = useState<Record<string, string>>({});
 
   // --- Alianzas pendientes de aprobación (migración 047) ---
   const [alianzas, setAlianzas] = useState<AlianzaPendienteConNombres[]>([]);
@@ -284,9 +347,28 @@ export default function AdminPage() {
   const [cantidadTorneoPrueba, setCantidadTorneoPrueba] = useState("8");
   const [generandoTorneoPrueba, setGenerandoTorneoPrueba] = useState(false);
   const [errorTorneoPrueba, setErrorTorneoPrueba] = useState<string | null>(null);
-  const [torneoPruebaGenerado, setTorneoPruebaGenerado] = useState<{ tournament_id: string; nombre: string } | null>(
-    null
+  // cantidad/formato quedan congelados en el momento de generar (no
+  // son el estado en vivo del formulario) -- si el organizador sigue
+  // tocando el formulario después de generar (para preparar otra
+  // tanda), la tarjeta de resultado no debe mostrar números que ya no
+  // corresponden al torneo recién creado.
+  const [torneoPruebaGenerado, setTorneoPruebaGenerado] = useState<{
+    tournament_id: string;
+    nombre: string;
+    cantidad: string;
+    formato: TorneoFormato;
+  } | null>(null);
+
+  // --- Actividad del dueño (migración 086): dueno_actividad_log ya
+  // existía y se escribía sola desde varias intervenciones (migración
+  // 016 en adelante), pero nunca tuvo una pantalla propia para leerla
+  // -- quedaba escrita pero invisible. Es el registro de auditoría
+  // para revisar "quién hizo qué" ante cualquier urgencia. ---
+  const [actividadDueno, setActividadDueno] = useState<{ id: string; accion: string; detalle: string | null; created_at: string }[]>(
+    []
   );
+  const [cargandoActividad, setCargandoActividad] = useState(true);
+  const [errorActividad, setErrorActividad] = useState<string | null>(null);
 
   // --- Movimientos entre equipos (migración 066): exclusivo del
   // dueño -- reprogramaciones y extensiones de plazo de lineup de
@@ -305,6 +387,27 @@ export default function AdminPage() {
       setCargandoDueno(false);
     });
   }, [user]);
+
+  // dueno_actividad_log ya existía y se escribía sola (migración 016
+  // en adelante), pero nunca tuvo una pantalla propia para leerla --
+  // quedaba escrita pero invisible.
+  useEffect(() => {
+    if (!esDuenoPlataforma) return;
+
+    supabase
+      .from("dueno_actividad_log")
+      .select("id, accion, detalle, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200)
+      .then(({ data, error }) => {
+        if (error) {
+          setErrorActividad(error.message);
+        } else {
+          setActividadDueno(data ?? []);
+        }
+        setCargandoActividad(false);
+      });
+  }, [esDuenoPlataforma]);
 
   useEffect(() => {
     if (!esDuenoPlataforma) return;
@@ -445,6 +548,96 @@ export default function AdminPage() {
     setCargandoMarcos(false);
   };
 
+  // admin_listar_usuarios es una función (no una tabla): el correo no
+  // es público (ver migración 004), así que el listado solo se puede
+  // pedir así, y la propia función revisa de nuevo que quien llama sea
+  // admin antes de devolver algo. Migración 086: acepta una búsqueda
+  // opcional -- sin ella, trae los 30 más recientes (para ver altas
+  // nuevas) en vez de toda la tabla completa.
+  const cargarUsuarios = async (busqueda: string) => {
+    setErrorUsuarios(null);
+    const { data, error } = await supabase.rpc("admin_listar_usuarios", { p_busqueda: busqueda || null });
+    if (error) {
+      setErrorUsuarios(error.message);
+    } else {
+      setUsuarios((data ?? []) as AdminUserRow[]);
+    }
+    setCargandoUsuarios(false);
+  };
+
+  useEffect(() => {
+    if (!esAdmin) return;
+    setCargandoUsuarios(true);
+    // Debounce corto: no dispara una consulta por cada tecla mientras
+    // el admin todavía está escribiendo la búsqueda.
+    const timeoutId = setTimeout(() => cargarUsuarios(busquedaUsuarios), 300);
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esAdmin, busquedaUsuarios]);
+
+  // Migración 086: reportes_staff ahora tiene resuelto/resuelto_por/
+  // resuelto_en -- reportador y resolutor son dos joins distintos a la
+  // misma tabla profiles, así que necesitan alias propios.
+  const cargarReportes = async () => {
+    const { data, error } = await supabase
+      .from("reportes_staff")
+      .select(
+        "id, asunto, descripcion, created_at, resuelto, resuelto_en, reportador:profiles!reportado_por(nombre, nick, unique_id), resolutor:profiles!resuelto_por(nick, unique_id)"
+      )
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setErrorReportes(error.message);
+      setCargandoReportes(false);
+      return;
+    }
+
+    setReportes(
+      (data ?? []).map((r) => {
+        const reportador = Array.isArray(r.reportador) ? r.reportador[0] : r.reportador;
+        const p = reportador as { nombre: string | null; nick: string | null; unique_id: string | null } | null;
+        const resolutor = Array.isArray(r.resolutor) ? r.resolutor[0] : r.resolutor;
+        const rp = resolutor as { nick: string | null; unique_id: string | null } | null;
+        return {
+          id: r.id,
+          asunto: r.asunto,
+          descripcion: r.descripcion,
+          createdAt: r.created_at,
+          reportadoPorNombre: p?.nick ? `${p.nick}#${p.unique_id}` : p?.nombre ?? "Jugador de RemorApp",
+          resuelto: r.resuelto,
+          resueltoPorNombre: rp?.nick ? `${rp.nick}#${rp.unique_id}` : null,
+          resueltoEn: r.resuelto_en,
+        };
+      })
+    );
+    setCargandoReportes(false);
+  };
+
+  const handleResolverReporte = async (reporteId: string) => {
+    setResolviendoReporte(reporteId);
+    setErroresResolverReporte((prev) => ({ ...prev, [reporteId]: "" }));
+
+    const { error } = await supabase
+      .from("reportes_staff")
+      .update({ resuelto: true, resuelto_por: user?.id, resuelto_en: new Date().toISOString() })
+      .eq("id", reporteId);
+
+    setResolviendoReporte(null);
+
+    if (error) {
+      setErroresResolverReporte((prev) => ({ ...prev, [reporteId]: error.message }));
+      return;
+    }
+
+    await cargarReportes();
+  };
+
+  useEffect(() => {
+    if (!esAdmin) return;
+    cargarReportes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esAdmin]);
+
   useEffect(() => {
     if (!esAdmin) return;
 
@@ -460,18 +653,6 @@ export default function AdminPage() {
         setCargandoTorneos(false);
       });
 
-    // admin_listar_usuarios es una función (no una tabla): el correo
-    // no es público (ver migración 004), así que el listado completo
-    // solo se puede pedir así, y la propia función revisa de nuevo
-    // que quien llama sea admin antes de devolver algo.
-    supabase.rpc("admin_listar_usuarios").then(({ data, error }) => {
-      if (error) {
-        setErrorUsuarios(error.message);
-      } else {
-        setUsuarios((data ?? []) as AdminUserRow[]);
-      }
-      setCargandoUsuarios(false);
-    });
 
     const cargarDisputas = async () => {
       const { data: partidas, error } = await supabase
@@ -542,34 +723,6 @@ export default function AdminPage() {
 
     cargarDisputas();
 
-    const cargarReportes = async () => {
-      const { data, error } = await supabase
-        .from("reportes_staff")
-        .select("id, asunto, descripcion, created_at, profiles!reportado_por(nombre, nick, unique_id)")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        setErrorReportes(error.message);
-        setCargandoReportes(false);
-        return;
-      }
-
-      setReportes(
-        (data ?? []).map((r) => {
-          const perfil = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
-          const p = perfil as { nombre: string | null; nick: string | null; unique_id: string | null } | null;
-          return {
-            id: r.id,
-            asunto: r.asunto,
-            descripcion: r.descripcion,
-            createdAt: r.created_at,
-            reportadoPorNombre: p?.nick ? `${p.nick}#${p.unique_id}` : p?.nombre ?? "Jugador de RemorApp",
-          };
-        })
-      );
-      setCargandoReportes(false);
-    };
-
     cargarReportes();
 
     const cargarAlianzas = async () => {
@@ -622,10 +775,14 @@ export default function AdminPage() {
     // tag que tenía antes), acá simplemente se trae todo en vez de un
     // solo resultado.
     const cargarEquiposTodos = async () => {
+      // Tope defensivo (migración 086): el buscador de abajo filtra en
+      // memoria sobre esto, así que no puede crecer sin límite -- 500
+      // alcanza de sobra y evita traer la tabla completa de una.
       const { data, error } = await supabase
         .from("teams")
         .select("id, name, tag, disuelto, owner_id")
-        .order("name");
+        .order("name")
+        .limit(500);
 
       if (error) {
         setErrorEquipos(error.message);
@@ -664,10 +821,13 @@ export default function AdminPage() {
     // ya permite leer cualquier torneo (mismo criterio que el buscador
     // por nombre que tenía antes), acá simplemente se trae todo.
     const cargarTorneosTodos = async () => {
+      // Mismo tope defensivo que equiposTodos -- el buscador filtra en
+      // memoria, no puede seguir creciendo sin límite.
       const { data, error } = await supabase
         .from("tournaments")
         .select("*")
-        .order("creado_en", { ascending: false });
+        .order("creado_en", { ascending: false })
+        .limit(500);
 
       if (error) {
         setErrorTorneosTodos(error.message);
@@ -834,11 +994,14 @@ export default function AdminPage() {
     setErrorTorneoPrueba(null);
     setTorneoPruebaGenerado(null);
 
+    const cantidadUsada = cantidadTorneoPrueba;
+    const formatoUsado = formatoTorneoPrueba;
+
     const { data, error } = await supabase.rpc("generar_torneo_prueba", {
       p_nombre: nombreTorneoPrueba.trim(),
-      p_formato: formatoTorneoPrueba,
+      p_formato: formatoUsado,
       p_modo: modoTorneoPrueba,
-      p_cantidad: Number(cantidadTorneoPrueba),
+      p_cantidad: Number(cantidadUsada),
     });
 
     setGenerandoTorneoPrueba(false);
@@ -848,7 +1011,8 @@ export default function AdminPage() {
       return;
     }
 
-    setTorneoPruebaGenerado(data as { tournament_id: string; nombre: string });
+    const resultado = data as { tournament_id: string; nombre: string };
+    setTorneoPruebaGenerado({ ...resultado, cantidad: cantidadUsada, formato: formatoUsado });
     setNombreTorneoPrueba("");
   };
 
@@ -913,11 +1077,10 @@ export default function AdminPage() {
 
     setMotivosSuspension((prev) => ({ ...prev, [usuarioId]: "" }));
 
-    // Se recarga la lista completa en vez de parchear en memoria: hace
-    // falta traer suspendido_por_nick/motivo/en actualizados, que
-    // solo devuelve admin_listar_usuarios().
-    const { data } = await supabase.rpc("admin_listar_usuarios");
-    setUsuarios((data ?? []) as AdminUserRow[]);
+    // Se recarga la lista (respetando la búsqueda actual) en vez de
+    // parchear en memoria: hace falta traer suspendido_por_nick/motivo/en
+    // actualizados, que solo devuelve admin_listar_usuarios().
+    await cargarUsuarios(busquedaUsuarios);
   };
 
   const handleDarDeBaja = async (usuarioId: string, correo: string | null) => {
@@ -950,8 +1113,7 @@ export default function AdminPage() {
         : "Cuenta dada de baja y correo bloqueado. La cuenta de acceso (auth.users) no se pudo eliminar -- revísala manualmente desde el dashboard de Supabase si hace falta."
     );
 
-    const { data: listaActualizada } = await supabase.rpc("admin_listar_usuarios");
-    setUsuarios((listaActualizada ?? []) as AdminUserRow[]);
+    await cargarUsuarios(busquedaUsuarios);
   };
 
   // Corrección: elimina de la lista completa (equiposTodos), ya
@@ -1406,106 +1568,99 @@ export default function AdminPage() {
     setAlianzas((prev) => prev.filter((a) => a.id !== alianzaId));
   };
 
+  // Números que acompañan cada ítem de la navegación -- todo lo que ya
+  // se cargó de por sí (nada nuevo que consultar), solo para que salte
+  // a la vista qué necesita atención sin tener que entrar a cada
+  // sección una por una.
+  const contadoresNav: Partial<Record<Tab, number>> = {
+    torneos: torneos.length,
+    disputas: disputas.length,
+    reportes: reportes.filter((r) => !r.resuelto).length,
+    alianzas: alianzas.length,
+  };
+
   return (
     <section className="section section-page">
       <h1 className="section-title">Administración</h1>
 
-      <div className="admin-tabs">
-        <button
-          type="button"
-          className={`admin-tab ${tab === "torneos" ? "active" : ""}`}
-          onClick={() => setTab("torneos")}
-        >
-          Torneos por confirmar
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "usuarios" ? "active" : ""}`}
-          onClick={() => setTab("usuarios")}
-        >
-          Usuarios
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "equipos" ? "active" : ""}`}
-          onClick={() => setTab("equipos")}
-        >
-          Equipos
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "noticias" ? "active" : ""}`}
-          onClick={() => setTab("noticias")}
-        >
-          Noticias
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "clanwars" ? "active" : ""}`}
-          onClick={() => setTab("clanwars")}
-        >
-          Clan Wars
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "disputas" ? "active" : ""}`}
-          onClick={() => setTab("disputas")}
-        >
-          Disputas
-          {disputas.length > 0 && ` (${disputas.length})`}
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "reportes" ? "active" : ""}`}
-          onClick={() => setTab("reportes")}
-        >
-          Reportes
-          {reportes.length > 0 && ` (${reportes.length})`}
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "alianzas" ? "active" : ""}`}
-          onClick={() => setTab("alianzas")}
-        >
-          Alianzas
-          {alianzas.length > 0 && ` (${alianzas.length})`}
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "fondoslineup" ? "active" : ""}`}
-          onClick={() => setTab("fondoslineup")}
-        >
-          Fondos de lineup
-        </button>
-        <button
-          type="button"
-          className={`admin-tab ${tab === "marcosavatar" ? "active" : ""}`}
-          onClick={() => setTab("marcosavatar")}
-        >
-          Marcos de avatar
-        </button>
-        {/* Movimientos entre equipos (migración 066) y Pruebas
-            (migración 053): exclusivas del dueño de la plataforma --
-            ni el botón existe para un admin común. */}
-        {esDuenoPlataforma && (
-          <button
-            type="button"
-            className={`admin-tab ${tab === "movimientos" ? "active" : ""}`}
-            onClick={() => setTab("movimientos")}
-          >
-            Movimientos entre equipos
-          </button>
-        )}
-        {esDuenoPlataforma && (
-          <button
-            type="button"
-            className={`admin-tab ${tab === "pruebas" ? "active" : ""}`}
-            onClick={() => setTab("pruebas")}
-          >
-            Pruebas
-          </button>
-        )}
-      </div>
+      <div className="admin-shell">
+        <nav className="admin-sidebar">
+          {GRUPOS_NAV.map((grupo) => {
+            const tabsVisibles = grupo.tabs.filter((t) => !t.soloDueno || esDuenoPlataforma);
+            if (tabsVisibles.length === 0) return null;
+
+            return (
+              <div key={grupo.titulo} className="admin-sidebar-grupo">
+                <p className="admin-sidebar-grupo-titulo">{grupo.titulo}</p>
+                {tabsVisibles.map((t) => {
+                  const contador = contadoresNav[t.value];
+                  return (
+                    <button
+                      key={t.value}
+                      type="button"
+                      className={`admin-sidebar-item ${tab === t.value ? "active" : ""}`}
+                      onClick={() => setTab(t.value)}
+                    >
+                      <span>{t.label}</span>
+                      {!!contador && <span className="admin-sidebar-badge">{contador}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </nav>
+
+        <div className="admin-content">
+      {tab === "resumen" && (
+        <div className="admin-panel">
+          <div className="admin-resumen-grid">
+            <div className="admin-resumen-card">
+              <p className="admin-resumen-card-numero">{torneos.length}</p>
+              <p className="admin-resumen-card-label">Torneos grandes por confirmar</p>
+              {torneos.length > 0 && (
+                <button type="button" className="btn-link" onClick={() => setTab("torneos")}>
+                  Revisar
+                </button>
+              )}
+            </div>
+            <div className="admin-resumen-card">
+              <p className="admin-resumen-card-numero">{disputas.length}</p>
+              <p className="admin-resumen-card-label">Disputas de resultado sin resolver</p>
+              {disputas.length > 0 && (
+                <button type="button" className="btn-link" onClick={() => setTab("disputas")}>
+                  Revisar
+                </button>
+              )}
+            </div>
+            <div className="admin-resumen-card">
+              <p className="admin-resumen-card-numero">{reportes.filter((r) => !r.resuelto).length}</p>
+              <p className="admin-resumen-card-label">Reportes al staff pendientes</p>
+              {reportes.some((r) => !r.resuelto) && (
+                <button type="button" className="btn-link" onClick={() => setTab("reportes")}>
+                  Revisar
+                </button>
+              )}
+            </div>
+            <div className="admin-resumen-card">
+              <p className="admin-resumen-card-numero">{alianzas.length}</p>
+              <p className="admin-resumen-card-label">Alianzas pendientes de aprobar</p>
+              {alianzas.length > 0 && (
+                <button type="button" className="btn-link" onClick={() => setTab("alianzas")}>
+                  Revisar
+                </button>
+              )}
+            </div>
+          </div>
+
+          <h3 className="detail-subtitle">Acceso rápido</h3>
+          <p className="tournament-card-meta">
+            Todo lo urgente vive en las cuatro tarjetas de arriba. Para lo que no es una urgencia --
+            moderar usuarios/equipos, publicar contenido, o (si sos el dueño de la plataforma) revisar
+            la actividad reciente -- usá el menú de la izquierda.
+          </p>
+        </div>
+      )}
 
       {tab === "torneos" && (
         <div className="admin-panel">
@@ -1585,8 +1740,25 @@ export default function AdminPage() {
 
       {tab === "usuarios" && (
         <div className="admin-panel">
+          <div className="form-group">
+            <label className="form-label" htmlFor="admin-usuarios-busqueda">
+              Buscar por nick, correo o #ID
+            </label>
+            <input
+              id="admin-usuarios-busqueda"
+              className="form-input"
+              type="text"
+              placeholder="Sin escribir nada, se muestran los 30 más recientes"
+              value={busquedaUsuarios}
+              onChange={(e) => setBusquedaUsuarios(e.target.value)}
+            />
+          </div>
+
           {errorUsuarios && <div className="form-error">{errorUsuarios}</div>}
           {cargandoUsuarios && <p className="tournament-card-meta">Cargando usuarios...</p>}
+          {!cargandoUsuarios && usuarios.length === 0 && (
+            <p className="detail-empty">Ningún usuario coincide con esa búsqueda.</p>
+          )}
           <div className="admin-list">
             {usuarios.map((usuario) => (
               <div key={usuario.id} className="admin-row admin-row-usuario">
@@ -2043,24 +2215,66 @@ export default function AdminPage() {
 
       {tab === "reportes" && (
         <div className="admin-panel">
-          {errorReportes && <div className="form-error">{errorReportes}</div>}
-          {cargandoReportes && <p className="tournament-card-meta">Cargando reportes...</p>}
-          {!cargandoReportes && reportes.length === 0 && (
-            <p className="tournament-card-meta">No hay reportes.</p>
-          )}
-          <div className="admin-list">
-            {reportes.map((r) => (
-              <div key={r.id} className="admin-row">
-                <div className="admin-row-info">
-                  <p className="admin-row-title">{r.asunto}</p>
-                  <p className="admin-row-meta">
-                    {r.reportadoPorNombre} · {formatFecha(r.createdAt)}
-                  </p>
-                  <p className="admin-row-meta">{r.descripcion}</p>
+          {(() => {
+            const pendientes = reportes.filter((r) => !r.resuelto);
+            const visibles = verReportesResueltos ? reportes : pendientes;
+            return (
+              <>
+                <div className="admin-row-actions">
+                  <label className="form-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={verReportesResueltos}
+                      onChange={(e) => setVerReportesResueltos(e.target.checked)}
+                    />
+                    Ver también los ya resueltos ({reportes.length - pendientes.length})
+                  </label>
                 </div>
-              </div>
-            ))}
-          </div>
+
+                {errorReportes && <div className="form-error">{errorReportes}</div>}
+                {cargandoReportes && <p className="tournament-card-meta">Cargando reportes...</p>}
+                {!cargandoReportes && visibles.length === 0 && (
+                  <p className="detail-empty">
+                    {pendientes.length === 0 ? "No hay reportes pendientes." : "No hay reportes."}
+                  </p>
+                )}
+                <div className="admin-list">
+                  {visibles.map((r) => (
+                    <div key={r.id} className="admin-row">
+                      <div className="admin-row-info">
+                        <p className="admin-row-title">{r.asunto}</p>
+                        <p className="admin-row-meta">
+                          {r.reportadoPorNombre} · {formatFecha(r.createdAt)}
+                        </p>
+                        <p className="admin-row-meta">{r.descripcion}</p>
+                        {r.resuelto && (
+                          <p className="form-success">
+                            Resuelto {r.resueltoPorNombre && `por ${r.resueltoPorNombre}`}
+                            {r.resueltoEn && ` el ${formatFecha(r.resueltoEn)}`}
+                          </p>
+                        )}
+                        {erroresResolverReporte[r.id] && (
+                          <div className="form-error">{erroresResolverReporte[r.id]}</div>
+                        )}
+                      </div>
+                      {!r.resuelto && (
+                        <div className="admin-row-actions">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={resolviendoReporte === r.id}
+                            onClick={() => handleResolverReporte(r.id)}
+                          >
+                            {resolviendoReporte === r.id ? "Marcando..." : "Marcar como resuelto"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
         </div>
       )}
 
@@ -2374,8 +2588,8 @@ export default function AdminPage() {
               <div className="admin-row-info">
                 <p className="admin-row-title">{torneoPruebaGenerado.nombre}</p>
                 <p className="admin-row-meta">
-                  {cantidadTorneoPrueba} {formatoTorneoPrueba === "1v1" ? "jugadores" : "clanes"} inscritos
-                  y confirmados.
+                  {torneoPruebaGenerado.cantidad} {torneoPruebaGenerado.formato === "1v1" ? "jugadores" : "clanes"}{" "}
+                  inscritos y confirmados.
                 </p>
                 <Link className="btn-link" to={`/tournaments/${torneoPruebaGenerado.tournament_id}`}>
                   Ver torneo
@@ -2447,6 +2661,34 @@ export default function AdminPage() {
           )}
         </div>
       )}
+
+      {tab === "actividad" && esDuenoPlataforma && (
+        <div className="admin-panel">
+          <p className="tournament-card-meta">
+            Registro de auditoría de las intervenciones del dueño de la plataforma (armar/intervenir un
+            lineup ajeno, extender un plazo, etc.) -- privado, ni otros administradores lo ven. Últimas
+            200.
+          </p>
+          {errorActividad && <div className="form-error">{errorActividad}</div>}
+          {cargandoActividad && <p className="tournament-card-meta">Cargando actividad...</p>}
+          {!cargandoActividad && actividadDueno.length === 0 && (
+            <p className="detail-empty">Todavía no hay ninguna actividad registrada.</p>
+          )}
+          <div className="admin-list">
+            {actividadDueno.map((a) => (
+              <div key={a.id} className="admin-row">
+                <div className="admin-row-info">
+                  <p className="admin-row-title">{a.accion}</p>
+                  <p className="admin-row-meta">{formatFecha(a.created_at)}</p>
+                  {a.detalle && <p className="admin-row-meta">{a.detalle}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+        </div>
+      </div>
     </section>
   );
 }

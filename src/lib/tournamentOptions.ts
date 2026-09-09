@@ -12,7 +12,7 @@ export const MODOS: { value: TorneoModo; label: string; descripcion: string }[] 
     value: "eliminacion_doble",
     label: "Eliminación doble",
     descripcion:
-      "Cada participante puede perder una vez sin quedar eliminado: pasa a la llave de perdedores antes de quedar fuera. Todavía no tiene motor propio -- por ahora no vas a poder iniciar un torneo en este modo.",
+      "Cada participante puede perder una vez sin quedar eliminado: pasa a la llave de perdedores antes de quedar fuera. El campeón de ganadores (invicto) y el de perdedores juegan la gran final; si gana el de perdedores, hay una revancha para desempatar. Necesita exactamente 4, 8, 16 o 32 confirmados -- no admite bye.",
   },
   {
     value: "todos_contra_todos",

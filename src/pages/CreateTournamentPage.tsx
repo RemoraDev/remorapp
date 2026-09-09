@@ -439,7 +439,14 @@ export default function CreateTournamentPage() {
             <div className="form-group">
               <span className="form-label">Modo de juego</span>
               <div className="modo-grid">
-                {MODOS.map((m) => (
+                {/* "Rey de la colina" queda afuera del selector: es un
+                    modo sin ningún motor detrás (ni generación de
+                    fixture ni progresión) -- crearlo dejaba al
+                    organizador con un torneo que nunca se podía
+                    arrancar. Sigue en MODOS (tournamentOptions.ts) para
+                    no romper el label de algún torneo viejo que ya lo
+                    tuviera, pero no se puede volver a elegir. */}
+                {MODOS.filter((m) => m.value !== "rey_de_la_colina").map((m) => (
                   <div key={m.value} className={`modo-card ${modo === m.value ? "selected" : ""}`}>
                     <label className="modo-card-label">
                       <input
@@ -457,6 +464,14 @@ export default function CreateTournamentPage() {
                 ))}
               </div>
             </div>
+
+            {modo === "eliminacion_doble" && (
+              <p className="form-hint">
+                Este modo necesita exactamente 4, 8, 16 o 32 confirmados al cerrar el check-in -- no
+                admite bye. Si te faltan o te sobran para llegar a la potencia de 2 más cercana, vas a
+                tener que esperar a que se sumen o dar de baja a alguno antes de generar la llave.
+              </p>
+            )}
 
             {modo === "suizo" && (
               <div className="form-group">
