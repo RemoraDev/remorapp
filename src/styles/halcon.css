@@ -26,6 +26,13 @@
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
   --color-accent-soft: #a5f3fc;
+  /* Color de texto sobre fondos de acento (botón primario, badges de
+     notificación): por defecto el mismo --color-bg oscuro de siempre,
+     porque el acento de marca y casi todos los SkinWeb son claros/neón.
+     Los SkinWeb oscuros (Café, Azul petróleo, Azul, Verde oscuro) lo pisan por
+     un texto claro más abajo, para que el texto del botón siga siendo
+     legible sobre un fondo oscuro. */
+  --color-on-accent: var(--color-bg);
 
   --color-text: #eceae4;
   --color-text-muted: #a39b8a;
@@ -109,19 +116,111 @@
    migración 033), que solo recolorea la página pública de un equipo,
    pero puesto en <html> (SkinWebContext) para que alcance a toda la
    app. "actual" no tiene bloque propio: cae en los valores base de
-   :root de arriba, que ya son el cian original -- "cian" se deja
-   explícito igual para que el catálogo quede completo. Los tonos de
-   "violeta" y "rosa" son los mismos que sus equivalentes de
-   data-tema-equipo, para que la paleta sea consistente en toda la app. */
-:root[data-skin-web="cian"] {
-  --h-accent: #22d3ee;
-  --h-accent-rgb: 34, 211, 238;
-  --h-accent-hover: #06b6d4;
+   :root de arriba, que ya son el cian original. Los colores oscuros
+   (Café, Azul petróleo, Azul, Verde oscuro) además pisan --color-on-accent con
+   un tono claro, para que el texto de los botones siga siendo legible
+   sobre un fondo oscuro -- el resto usa el texto oscuro por defecto. */
+:root[data-skin-web="cafe"] {
+  --h-accent: #92400e;
+  --h-accent-rgb: 146, 64, 14;
+  --h-accent-hover: #78350f;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #a5f3fc;
-  --shadow-accent: 0 0 0 1px rgba(var(--h-accent-rgb), 0.4), 0 0 24px rgba(var(--h-accent-rgb), 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(var(--h-accent-rgb), 0.55), 0 0 40px rgba(var(--h-accent-rgb), 0.35);
+  --color-accent-soft: #e3b78a;
+  --color-on-accent: var(--color-text);
+  --shadow-accent: 0 0 0 1px rgba(146, 64, 14, 0.4), 0 0 24px rgba(146, 64, 14, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(146, 64, 14, 0.55), 0 0 40px rgba(146, 64, 14, 0.35);
+}
+
+:root[data-skin-web="blanco"] {
+  --h-accent: #f8fafc;
+  --h-accent-rgb: 248, 250, 252;
+  --h-accent-hover: #e2e8f0;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #ffffff;
+  --shadow-accent: 0 0 0 1px rgba(248, 250, 252, 0.4), 0 0 24px rgba(248, 250, 252, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(248, 250, 252, 0.55), 0 0 40px rgba(248, 250, 252, 0.35);
+}
+
+:root[data-skin-web="azul-petroleo"] {
+  --h-accent: #0f766e;
+  --h-accent-rgb: 15, 118, 110;
+  --h-accent-hover: #115e59;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #99f6e4;
+  --color-on-accent: var(--color-text);
+  --shadow-accent: 0 0 0 1px rgba(15, 118, 110, 0.4), 0 0 24px rgba(15, 118, 110, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(15, 118, 110, 0.55), 0 0 40px rgba(15, 118, 110, 0.35);
+}
+
+:root[data-skin-web="amarillo"] {
+  --h-accent: #facc15;
+  --h-accent-rgb: 250, 204, 21;
+  --h-accent-hover: #eab308;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #fef08a;
+  --shadow-accent: 0 0 0 1px rgba(250, 204, 21, 0.4), 0 0 24px rgba(250, 204, 21, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(250, 204, 21, 0.55), 0 0 40px rgba(250, 204, 21, 0.35);
+}
+
+:root[data-skin-web="rojo"] {
+  --h-accent: #f87171;
+  --h-accent-rgb: 248, 113, 113;
+  --h-accent-hover: #ef4444;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #fecaca;
+  --shadow-accent: 0 0 0 1px rgba(248, 113, 113, 0.4), 0 0 24px rgba(248, 113, 113, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(248, 113, 113, 0.55), 0 0 40px rgba(248, 113, 113, 0.35);
+}
+
+:root[data-skin-web="azul"] {
+  --h-accent: #4f46e5;
+  --h-accent-rgb: 79, 70, 229;
+  --h-accent-hover: #4338ca;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #c7d2fe;
+  --color-on-accent: var(--color-text);
+  --shadow-accent: 0 0 0 1px rgba(79, 70, 229, 0.4), 0 0 24px rgba(79, 70, 229, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(79, 70, 229, 0.55), 0 0 40px rgba(79, 70, 229, 0.35);
+}
+
+:root[data-skin-web="verde-claro"] {
+  --h-accent: #84cc16;
+  --h-accent-rgb: 132, 204, 22;
+  --h-accent-hover: #65a30d;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #d9f99d;
+  --shadow-accent: 0 0 0 1px rgba(132, 204, 22, 0.4), 0 0 24px rgba(132, 204, 22, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(132, 204, 22, 0.55), 0 0 40px rgba(132, 204, 22, 0.35);
+}
+
+:root[data-skin-web="verde-oscuro"] {
+  --h-accent: #047857;
+  --h-accent-rgb: 4, 120, 87;
+  --h-accent-hover: #065f46;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #a7f3d0;
+  --color-on-accent: var(--color-text);
+  --shadow-accent: 0 0 0 1px rgba(4, 120, 87, 0.4), 0 0 24px rgba(4, 120, 87, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(4, 120, 87, 0.55), 0 0 40px rgba(4, 120, 87, 0.35);
+}
+
+:root[data-skin-web="naranja"] {
+  --h-accent: #fb923c;
+  --h-accent-rgb: 251, 146, 60;
+  --h-accent-hover: #f97316;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #fed7aa;
+  --shadow-accent: 0 0 0 1px rgba(251, 146, 60, 0.4), 0 0 24px rgba(251, 146, 60, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(251, 146, 60, 0.55), 0 0 40px rgba(251, 146, 60, 0.35);
 }
 
 :root[data-skin-web="violeta"] {
@@ -133,6 +232,17 @@
   --color-accent-soft: #ddd6fe;
   --shadow-accent: 0 0 0 1px rgba(167, 139, 250, 0.4), 0 0 24px rgba(167, 139, 250, 0.25);
   --shadow-accent-lg: 0 0 0 1px rgba(167, 139, 250, 0.55), 0 0 40px rgba(167, 139, 250, 0.35);
+}
+
+:root[data-skin-web="celeste"] {
+  --h-accent: #38bdf8;
+  --h-accent-rgb: 56, 189, 248;
+  --h-accent-hover: #0ea5e9;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #bae6fd;
+  --shadow-accent: 0 0 0 1px rgba(56, 189, 248, 0.4), 0 0 24px rgba(56, 189, 248, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(56, 189, 248, 0.55), 0 0 40px rgba(56, 189, 248, 0.35);
 }
 
 :root[data-skin-web="rosa"] {
@@ -247,7 +357,7 @@ input[type="radio"] {
 
 .btn-primary {
   background: var(--color-accent);
-  color: var(--color-bg);
+  color: var(--color-on-accent);
   padding: 0.65rem 1.5rem;
   box-shadow: var(--shadow-accent);
 }
@@ -387,7 +497,7 @@ input[type="radio"] {
   padding: 0 0.3rem;
   border-radius: 999px;
   background: var(--h-accent);
-  color: var(--color-bg);
+  color: var(--color-on-accent);
   font-size: 0.65rem;
   font-weight: 800;
   line-height: 1;
@@ -1370,7 +1480,7 @@ input[type="radio"] {
   padding: 0 0.35rem;
   border-radius: 999px;
   background: var(--color-accent);
-  color: var(--color-bg);
+  color: var(--color-on-accent);
   font-size: 0.7rem;
   font-weight: 700;
 }
@@ -1863,6 +1973,26 @@ input[type="radio"] {
 
 .player-detail-info-column .team-card {
   margin: 0.25rem 0 0.5rem;
+}
+
+/* Modificador de .team-card solo para la tarjeta de "Equipo actual"
+   del jugador: logo a la derecha (en vez de a la izquierda, como en
+   la grilla de /equipos) y un poco más grande, igual que el nombre. */
+.player-detail-equipo-card {
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.player-detail-equipo-card .team-card-logo,
+.player-detail-equipo-card .team-card-logo-placeholder {
+  width: 4rem;
+  height: 4rem;
+  font-size: 1.4rem;
+}
+
+.player-detail-equipo-card .team-card-name {
+  font-size: 1.25rem;
 }
 
 /* Logo chico a modo de ícono junto al nombre -- reusado en el Ranking
@@ -5380,4 +5510,40 @@ body.overlay-obs {
   display: flex;
   gap: 0.75rem;
   margin-top: 0.5rem;
+}
+
+/* ---------- Recortador interactivo de imágenes (react-easy-crop) ----------
+   Avatar de perfil, banner de perfil, logo de equipo y banner de
+   equipo comparten este mismo modal -- solo cambia la proporción
+   (aspecto) del marco de recorte según el contexto. */
+.modal-panel-recorte {
+  max-width: 32rem;
+}
+
+.recortador-area {
+  position: relative;
+  width: 100%;
+  height: min(48vh, 340px);
+  margin-top: 1rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #000;
+}
+
+.recortador-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.recortador-zoom-label {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.recortador-zoom input[type="range"] {
+  flex: 1;
+  accent-color: var(--color-accent);
 }

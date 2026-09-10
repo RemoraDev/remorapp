@@ -3,11 +3,12 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import { obtenerEquipoDelUsuario, recortarImagenCuadrada } from "../lib/teams";
+import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import { SC2_REGION_OPTIONS } from "../types/profile";
 import type { Sc2Region } from "../types/profile";
+import RecortadorImagenModal from "../components/RecortadorImagenModal";
 
 const TAG_REGEX = /^[A-Z]{3,6}$/;
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -21,7 +22,12 @@ export default function CreateTeamPage() {
   const [regiones, setRegiones] = useState<Sc2Region[]>([]);
   const [descripcion, setDescripcion] = useState("");
   const [esPublico, setEsPublico] = useState(true);
-  const [logoFile, setLogoFile] = useState<File | null>(null);
+  // logoFile guarda el resultado YA RECORTADO en el recortador
+  // interactivo (RecortadorImagenModal), por eso es un Blob y no un
+  // File -- el archivo original del <input> se guarda transitoriamente
+  // en archivoParaRecortarLogo mientras el modal está abierto.
+  const [archivoParaRecortarLogo, setArchivoParaRecortarLogo] = useState<File | null>(null);
+  const [logoFile, setLogoFile] = useState<Blob | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
 
   const [equipoActual, setEquipoActual] = useState<EquipoDelUsuario | null>(null);
@@ -50,21 +56,24 @@ export default function CreateTeamPage() {
   const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
     setError(null);
+    event.target.value = "";
 
-    if (!archivo) {
-      setLogoFile(null);
-      setLogoPreview(null);
-      return;
-    }
+    if (!archivo) return;
 
     if (archivo.size > LOGO_MAX_BYTES) {
       setError("El logo no puede pesar más de 2MB.");
-      event.target.value = "";
       return;
     }
 
-    setLogoFile(archivo);
-    setLogoPreview(URL.createObjectURL(archivo));
+    // El límite de tamaño se valida sobre el archivo original -- recién
+    // acá se abre el recortador interactivo, antes de subir nada.
+    setArchivoParaRecortarLogo(archivo);
+  };
+
+  const handleConfirmarRecorteLogo = (recorte: Blob) => {
+    setLogoFile(recorte);
+    setLogoPreview(URL.createObjectURL(recorte));
+    setArchivoParaRecortarLogo(null);
   };
 
   if (!authLoading && !user) {
@@ -166,13 +175,12 @@ export default function CreateTeamPage() {
     let logoUrl: string | null = null;
     if (logoFile) {
       try {
-        const recorte = await recortarImagenCuadrada(logoFile);
         const extension = logoFile.type === "image/png" ? "png" : "jpg";
         const ruta = `${user.id}/${Date.now()}-logo.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("team-logos")
-          .upload(ruta, recorte, { contentType: recorte.type });
+          .upload(ruta, logoFile, { contentType: logoFile.type });
 
         if (uploadError) {
           setError("No se pudo subir el logo: " + uploadError.message);
@@ -295,6 +303,15 @@ export default function CreateTeamPage() {
             accept="image/png,image/jpeg,image/webp"
             onChange={handleLogoChange}
           />
+          {archivoParaRecortarLogo && (
+            <RecortadorImagenModal
+              archivo={archivoParaRecortarLogo}
+              aspecto={1}
+              titulo="Ajustar logo del equipo"
+              onConfirmar={handleConfirmarRecorteLogo}
+              onCancelar={() => setArchivoParaRecortarLogo(null)}
+            />
+          )}
           {logoPreview && (
             <img src={logoPreview} alt="Vista previa del logo" className="team-logo-preview" />
           )}

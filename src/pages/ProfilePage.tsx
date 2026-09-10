@@ -6,7 +6,8 @@ import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useSkinWeb, SKINS_WEB } from "../context/SkinWebContext";
 import { validarNick } from "../lib/nickValidation";
-import { recortarImagenConProporcion, recortarImagenCuadrada, obtenerEquipoDelUsuario } from "../lib/teams";
+import { obtenerEquipoDelUsuario } from "../lib/teams";
+import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { formatFecha } from "../lib/formatters";
 import { BORDE_HEADER_OPTIONS, COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
 import type { BordeHeader, Country, Liga, LinkTransmision, Sc2Region, Profile } from "../types/profile";
@@ -324,7 +325,13 @@ export default function ProfilePage() {
   const [errorBordeHeader, setErrorBordeHeader] = useState<string | null>(null);
 
   // --- Foto de perfil ---
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  // avatarFile guarda el resultado YA RECORTADO por el usuario en el
+  // recortador interactivo (RecortadorImagenModal) -- por eso es un
+  // Blob y no un File: el archivo original que llega del <input> solo
+  // se guarda transitoriamente en archivoParaRecortarAvatar mientras
+  // el modal está abierto.
+  const [archivoParaRecortarAvatar, setArchivoParaRecortarAvatar] = useState<File | null>(null);
+  const [avatarFile, setAvatarFile] = useState<Blob | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [guardandoAvatar, setGuardandoAvatar] = useState(false);
   const [errorAvatar, setErrorAvatar] = useState<string | null>(null);
@@ -334,7 +341,8 @@ export default function ProfilePage() {
   // acá desde /jugador/:nick/:uniqueId (esa página ahora es solo
   // vitrina, sin ningún campo editable). ---
   const [perfilBio, setPerfilBio] = useState("");
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [archivoParaRecortarBanner, setArchivoParaRecortarBanner] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<Blob | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const [guardandoPerfilPublico, setGuardandoPerfilPublico] = useState(false);
   const [errorPerfilPublico, setErrorPerfilPublico] = useState<string | null>(null);
@@ -1224,21 +1232,24 @@ export default function ProfilePage() {
     const archivo = event.target.files?.[0] ?? null;
     setErrorAvatar(null);
     setAvatarGuardado(false);
+    event.target.value = "";
 
-    if (!archivo) {
-      setAvatarFile(null);
-      setAvatarPreview(null);
-      return;
-    }
+    if (!archivo) return;
 
     if (archivo.size > AVATAR_MAX_BYTES) {
       setErrorAvatar("La foto no puede pesar más de 2MB.");
-      event.target.value = "";
       return;
     }
 
-    setAvatarFile(archivo);
-    setAvatarPreview(URL.createObjectURL(archivo));
+    // El límite de tamaño se valida sobre el archivo original -- recién
+    // acá se abre el recortador interactivo, antes de subir nada.
+    setArchivoParaRecortarAvatar(archivo);
+  };
+
+  const handleConfirmarRecorteAvatar = (recorte: Blob) => {
+    setAvatarFile(recorte);
+    setAvatarPreview(URL.createObjectURL(recorte));
+    setArchivoParaRecortarAvatar(null);
   };
 
   const handleGuardarAvatar = async (event: FormEvent) => {
@@ -1250,13 +1261,12 @@ export default function ProfilePage() {
     setAvatarGuardado(false);
 
     try {
-      const recorte = await recortarImagenCuadrada(avatarFile);
       const extension = avatarFile.type === "image/png" ? "png" : "jpg";
       const ruta = `${user.id}/${Date.now()}-avatar.${extension}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(ruta, recorte, { contentType: recorte.type });
+        .upload(ruta, avatarFile, { contentType: avatarFile.type });
 
       if (uploadError) {
         setErrorAvatar("No se pudo subir la foto: " + uploadError.message);
@@ -1292,21 +1302,24 @@ export default function ProfilePage() {
     const archivo = event.target.files?.[0] ?? null;
     setErrorPerfilPublico(null);
     setPerfilPublicoGuardado(false);
+    event.target.value = "";
 
-    if (!archivo) {
-      setBannerFile(null);
-      setBannerPreview(null);
-      return;
-    }
+    if (!archivo) return;
 
     if (archivo.size > BANNER_MAX_BYTES) {
       setErrorPerfilPublico("El banner no puede pesar más de 3MB.");
-      event.target.value = "";
       return;
     }
 
-    setBannerFile(archivo);
-    setBannerPreview(URL.createObjectURL(archivo));
+    // El límite de tamaño se valida sobre el archivo original -- recién
+    // acá se abre el recortador interactivo, antes de subir nada.
+    setArchivoParaRecortarBanner(archivo);
+  };
+
+  const handleConfirmarRecorteBanner = (recorte: Blob) => {
+    setBannerFile(recorte);
+    setBannerPreview(URL.createObjectURL(recorte));
+    setArchivoParaRecortarBanner(null);
   };
 
   const handleGuardarPerfilPublico = async (event: FormEvent) => {
@@ -1323,13 +1336,12 @@ export default function ProfilePage() {
 
     try {
       if (bannerFile) {
-        const recorte = await recortarImagenConProporcion(bannerFile, 4);
         const extension = bannerFile.type === "image/png" ? "png" : "jpg";
         const ruta = `${user.id}/${Date.now()}-banner.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("player-banners")
-          .upload(ruta, recorte, { contentType: recorte.type });
+          .upload(ruta, bannerFile, { contentType: bannerFile.type });
 
         if (uploadError) {
           setErrorPerfilPublico("No se pudo subir el banner: " + uploadError.message);
@@ -1858,6 +1870,15 @@ export default function ProfilePage() {
                     accept="image/png,image/jpeg,image/webp"
                     onChange={handleAvatarChange}
                   />
+                  {archivoParaRecortarAvatar && (
+                    <RecortadorImagenModal
+                      archivo={archivoParaRecortarAvatar}
+                      aspecto={1}
+                      titulo="Ajustar foto de perfil"
+                      onConfirmar={handleConfirmarRecorteAvatar}
+                      onCancelar={() => setArchivoParaRecortarAvatar(null)}
+                    />
+                  )}
                   {avatarFile && (
                     <button type="submit" className="btn btn-ghost btn-block" disabled={guardandoAvatar}>
                       {guardandoAvatar ? "Subiendo..." : "Guardar foto"}
@@ -1891,6 +1912,15 @@ export default function ProfilePage() {
                     accept="image/png,image/jpeg,image/webp"
                     onChange={handleBannerChange}
                   />
+                  {archivoParaRecortarBanner && (
+                    <RecortadorImagenModal
+                      archivo={archivoParaRecortarBanner}
+                      aspecto={4}
+                      titulo="Ajustar banner de perfil"
+                      onConfirmar={handleConfirmarRecorteBanner}
+                      onCancelar={() => setArchivoParaRecortarBanner(null)}
+                    />
+                  )}
                   {(bannerPreview ?? profile?.banner_url) && (
                     <img
                       src={bannerPreview ?? profile?.banner_url ?? ""}

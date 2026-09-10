@@ -286,11 +286,13 @@ export default function PlayerDetailPage() {
           )}
 
           {/* Tarjeta de clan (mismo componente .team-card que la grilla
-              de /equipos): nombre completo + logo, sin tag y sin el
-              banner del equipo, que ya se sacó antes de acá por verse
-              mal en este espacio chico. */}
+              de /equipos, con el modificador player-detail-equipo-card
+              para poner el logo a la derecha y agrandarlo un poco):
+              nombre completo + logo, sin tag y sin el banner del
+              equipo, que ya se sacó antes de acá por verse mal en este
+              espacio chico. */}
           {equipoActual && (
-            <Link to={`/equipos/${equipoActual.tag}`} className="team-card">
+            <Link to={`/equipos/${equipoActual.tag}`} className="team-card player-detail-equipo-card">
               {equipoActual.logoUrl ? (
                 <img src={equipoActual.logoUrl} alt="" className="team-card-logo" />
               ) : (

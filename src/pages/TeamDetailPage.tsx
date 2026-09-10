@@ -3,7 +3,8 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import { obtenerEquipoDelUsuario, recortarImagenCuadrada, recortarImagenConProporcion } from "../lib/teams";
+import { obtenerEquipoDelUsuario } from "../lib/teams";
+import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import type { EquipoDelUsuario } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
 import { SC2_REGION_OPTIONS } from "../types/profile";
@@ -394,10 +395,16 @@ export default function TeamDetailPage() {
   const [notFound, setNotFound] = useState(false);
 
   // --- Panel de líder: editar descripción/logo/banner ---
+  // logoFile/bannerFile guardan el resultado YA RECORTADO en el
+  // recortador interactivo (RecortadorImagenModal), por eso son Blob y
+  // no File -- el archivo original del <input> se guarda transitoriamente
+  // en archivoParaRecortarLogo/Banner mientras el modal está abierto.
   const [descEquipo, setDescEquipo] = useState("");
-  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [archivoParaRecortarLogo, setArchivoParaRecortarLogo] = useState<File | null>(null);
+  const [logoFile, setLogoFile] = useState<Blob | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [archivoParaRecortarBanner, setArchivoParaRecortarBanner] = useState<File | null>(null);
+  const [bannerFile, setBannerFile] = useState<Blob | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const [guardandoEquipo, setGuardandoEquipo] = useState(false);
   const [errorEquipo, setErrorEquipo] = useState<string | null>(null);
@@ -1639,41 +1646,47 @@ export default function TeamDetailPage() {
   const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
     setErrorEquipo(null);
+    event.target.value = "";
 
-    if (!archivo) {
-      setLogoFile(null);
-      setLogoPreview(null);
-      return;
-    }
+    if (!archivo) return;
 
     if (archivo.size > LOGO_MAX_BYTES) {
       setErrorEquipo("El logo no puede pesar más de 2MB.");
-      event.target.value = "";
       return;
     }
 
-    setLogoFile(archivo);
-    setLogoPreview(URL.createObjectURL(archivo));
+    // El límite de tamaño se valida sobre el archivo original -- recién
+    // acá se abre el recortador interactivo, antes de subir nada.
+    setArchivoParaRecortarLogo(archivo);
+  };
+
+  const handleConfirmarRecorteLogo = (recorte: Blob) => {
+    setLogoFile(recorte);
+    setLogoPreview(URL.createObjectURL(recorte));
+    setArchivoParaRecortarLogo(null);
   };
 
   const handleBannerChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
     setErrorEquipo(null);
+    event.target.value = "";
 
-    if (!archivo) {
-      setBannerFile(null);
-      setBannerPreview(null);
-      return;
-    }
+    if (!archivo) return;
 
     if (archivo.size > BANNER_MAX_BYTES) {
       setErrorEquipo("El banner no puede pesar más de 3MB.");
-      event.target.value = "";
       return;
     }
 
-    setBannerFile(archivo);
-    setBannerPreview(URL.createObjectURL(archivo));
+    // El límite de tamaño se valida sobre el archivo original -- recién
+    // acá se abre el recortador interactivo, antes de subir nada.
+    setArchivoParaRecortarBanner(archivo);
+  };
+
+  const handleConfirmarRecorteBanner = (recorte: Blob) => {
+    setBannerFile(recorte);
+    setBannerPreview(URL.createObjectURL(recorte));
+    setArchivoParaRecortarBanner(null);
   };
 
   const handleGuardarEquipo = async (event: FormEvent) => {
@@ -1690,13 +1703,12 @@ export default function TeamDetailPage() {
 
     try {
       if (logoFile) {
-        const recorte = await recortarImagenCuadrada(logoFile);
         const extension = logoFile.type === "image/png" ? "png" : "jpg";
         const ruta = `${user.id}/${Date.now()}-logo.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("team-logos")
-          .upload(ruta, recorte, { contentType: recorte.type });
+          .upload(ruta, logoFile, { contentType: logoFile.type });
 
         if (uploadError) {
           setErrorEquipo("No se pudo subir el logo: " + uploadError.message);
@@ -1708,13 +1720,12 @@ export default function TeamDetailPage() {
       }
 
       if (bannerFile) {
-        const recorte = await recortarImagenConProporcion(bannerFile, 4);
         const extension = bannerFile.type === "image/png" ? "png" : "jpg";
         const ruta = `${user.id}/${Date.now()}-banner.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("team-banners")
-          .upload(ruta, recorte, { contentType: recorte.type });
+          .upload(ruta, bannerFile, { contentType: bannerFile.type });
 
         if (uploadError) {
           setErrorEquipo("No se pudo subir el banner: " + uploadError.message);
@@ -3556,6 +3567,15 @@ export default function TeamDetailPage() {
                 accept="image/png,image/jpeg,image/webp"
                 onChange={handleLogoChange}
               />
+              {archivoParaRecortarLogo && (
+                <RecortadorImagenModal
+                  archivo={archivoParaRecortarLogo}
+                  aspecto={1}
+                  titulo="Ajustar logo del equipo"
+                  onConfirmar={handleConfirmarRecorteLogo}
+                  onCancelar={() => setArchivoParaRecortarLogo(null)}
+                />
+              )}
               {(logoPreview ?? equipo.logo_url) && (
                 <img
                   src={logoPreview ?? equipo.logo_url ?? ""}
@@ -3576,6 +3596,15 @@ export default function TeamDetailPage() {
                 accept="image/png,image/jpeg,image/webp"
                 onChange={handleBannerChange}
               />
+              {archivoParaRecortarBanner && (
+                <RecortadorImagenModal
+                  archivo={archivoParaRecortarBanner}
+                  aspecto={4}
+                  titulo="Ajustar banner del equipo"
+                  onConfirmar={handleConfirmarRecorteBanner}
+                  onCancelar={() => setArchivoParaRecortarBanner(null)}
+                />
+              )}
               {(bannerPreview ?? equipo.banner_url) && (
                 <img
                   src={bannerPreview ?? equipo.banner_url ?? ""}
