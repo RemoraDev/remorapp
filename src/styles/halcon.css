@@ -14,8 +14,14 @@
   --h-border: rgba(255, 255, 255, 0.08);
   --color-border: var(--h-border);
 
-  /* Acento de marca de RemorApp — único lugar donde se define el hex. */
+  /* Acento de marca de RemorApp — único lugar donde se define el hex.
+     --h-accent-rgb es el mismo color en formato "r, g, b" (sin rgba()
+     alrededor), para poder armar rgba(var(--h-accent-rgb), alpha) en
+     bordes/brillos/fondos con transparencia en toda la hoja -- así
+     esos ~70 usos seguían el acento en vez de quedar en cian fijo sin
+     importar el SkinWeb o el tema de equipo elegidos. */
   --h-accent: #22d3ee;
+  --h-accent-rgb: 34, 211, 238;
   --h-accent-hover: #06b6d4;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
@@ -28,8 +34,8 @@
   --font-display: "Orbitron", sans-serif;
   --font-body: "Inter", sans-serif;
 
-  --shadow-accent: 0 0 0 1px rgba(34, 211, 238, 0.4), 0 0 24px rgba(34, 211, 238, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(34, 211, 238, 0.55), 0 0 40px rgba(34, 211, 238, 0.35);
+  --shadow-accent: 0 0 0 1px rgba(var(--h-accent-rgb), 0.4), 0 0 24px rgba(var(--h-accent-rgb), 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(var(--h-accent-rgb), 0.55), 0 0 40px rgba(var(--h-accent-rgb), 0.35);
 
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
@@ -94,8 +100,50 @@
 }
 
 :root[data-theme="claro"] body {
-  background-image: radial-gradient(circle at 15% 0%, rgba(34, 211, 238, 0.1), transparent 45%),
-    radial-gradient(circle at 85% 20%, rgba(34, 211, 238, 0.08), transparent 40%);
+  background-image: radial-gradient(circle at 15% 0%, rgba(var(--h-accent-rgb), 0.1), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(var(--h-accent-rgb), 0.08), transparent 40%);
+}
+
+/* ---------- SkinWeb: paleta de acento de toda la app (Apariencia) ----------
+   Mismo mecanismo que data-tema-equipo (más abajo en esta hoja,
+   migración 033), que solo recolorea la página pública de un equipo,
+   pero puesto en <html> (SkinWebContext) para que alcance a toda la
+   app. "actual" no tiene bloque propio: cae en los valores base de
+   :root de arriba, que ya son el cian original -- "cian" se deja
+   explícito igual para que el catálogo quede completo. Los tonos de
+   "violeta" y "rosa" son los mismos que sus equivalentes de
+   data-tema-equipo, para que la paleta sea consistente en toda la app. */
+:root[data-skin-web="cian"] {
+  --h-accent: #22d3ee;
+  --h-accent-rgb: 34, 211, 238;
+  --h-accent-hover: #06b6d4;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #a5f3fc;
+  --shadow-accent: 0 0 0 1px rgba(var(--h-accent-rgb), 0.4), 0 0 24px rgba(var(--h-accent-rgb), 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(var(--h-accent-rgb), 0.55), 0 0 40px rgba(var(--h-accent-rgb), 0.35);
+}
+
+:root[data-skin-web="violeta"] {
+  --h-accent: #a78bfa;
+  --h-accent-rgb: 167, 139, 250;
+  --h-accent-hover: #8b5cf6;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #ddd6fe;
+  --shadow-accent: 0 0 0 1px rgba(167, 139, 250, 0.4), 0 0 24px rgba(167, 139, 250, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(167, 139, 250, 0.55), 0 0 40px rgba(167, 139, 250, 0.35);
+}
+
+:root[data-skin-web="rosa"] {
+  --h-accent: #f472b6;
+  --h-accent-rgb: 244, 114, 182;
+  --h-accent-hover: #ec4899;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #fbcfe8;
+  --shadow-accent: 0 0 0 1px rgba(244, 114, 182, 0.4), 0 0 24px rgba(244, 114, 182, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(244, 114, 182, 0.55), 0 0 40px rgba(244, 114, 182, 0.35);
 }
 
 * {
@@ -111,8 +159,8 @@ body,
 body {
   margin: 0;
   background-color: var(--color-bg);
-  background-image: radial-gradient(circle at 15% 0%, rgba(34, 211, 238, 0.08), transparent 45%),
-    radial-gradient(circle at 85% 20%, rgba(34, 211, 238, 0.06), transparent 40%);
+  background-image: radial-gradient(circle at 15% 0%, rgba(var(--h-accent-rgb), 0.08), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(var(--h-accent-rgb), 0.06), transparent 40%);
   background-attachment: fixed;
   color: var(--color-text);
   font-family: var(--font-body);
@@ -157,6 +205,15 @@ input[type="radio"] {
 .app-shell {
   min-height: 100vh;
   padding-bottom: calc(var(--nav-height) + 24px);
+}
+
+.page-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 50vh;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
 }
 
 .suspended-banner {
@@ -405,7 +462,7 @@ input[type="radio"] {
 }
 
 .header-user-menu-item:hover {
-  background: rgba(34, 211, 238, 0.08);
+  background: rgba(var(--h-accent-rgb), 0.08);
   color: var(--color-text);
 }
 
@@ -661,7 +718,7 @@ input[type="radio"] {
   position: relative;
   overflow: hidden;
   border-radius: var(--radius-xl);
-  border: 1px solid rgba(34, 211, 238, 0.4);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.4);
   background: var(--color-panel);
   padding: 1.5rem;
   box-shadow: var(--shadow-accent-lg);
@@ -674,7 +731,7 @@ input[type="radio"] {
   height: 16rem;
   width: 16rem;
   border-radius: 50%;
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   filter: blur(64px);
   pointer-events: none;
 }
@@ -689,7 +746,7 @@ input[type="radio"] {
 .featured-badge {
   display: inline-block;
   border-radius: 999px;
-  border: 1px solid rgba(34, 211, 238, 0.5);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.5);
   padding: 0.25rem 0.75rem;
   font-size: 0.75rem;
   font-weight: 700;
@@ -791,14 +848,14 @@ input[type="radio"] {
   flex-direction: column;
   justify-content: space-between;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(34, 211, 238, 0.25);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.25);
   background: var(--color-card);
   padding: 1.25rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .tournament-card:hover {
-  border-color: rgba(34, 211, 238, 0.6);
+  border-color: rgba(var(--h-accent-rgb), 0.6);
   box-shadow: var(--shadow-accent);
 }
 
@@ -817,7 +874,7 @@ input[type="radio"] {
 }
 
 .badge-format {
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent-soft);
 }
 
@@ -979,7 +1036,7 @@ input[type="radio"] {
    por el componente Avatar en todos los tamaños: header, listas de
    participantes/miembros y /perfil. */
 .avatar-placeholder {
-  background: rgba(34, 211, 238, 0.15);
+  background: rgba(var(--h-accent-rgb), 0.15);
   color: var(--color-accent-soft);
   display: flex;
   align-items: center;
@@ -1300,7 +1357,7 @@ input[type="radio"] {
 }
 
 .admin-sidebar-item.active {
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent);
 }
 
@@ -1527,14 +1584,14 @@ input[type="radio"] {
   gap: 1rem;
   align-items: flex-start;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(34, 211, 238, 0.25);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.25);
   background: var(--color-card);
   padding: 1.25rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .team-card:hover {
-  border-color: rgba(34, 211, 238, 0.6);
+  border-color: rgba(var(--h-accent-rgb), 0.6);
   box-shadow: var(--shadow-accent);
 }
 
@@ -1550,7 +1607,7 @@ input[type="radio"] {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent-soft);
   font-family: var(--font-display);
   font-weight: 700;
@@ -1630,7 +1687,7 @@ input[type="radio"] {
 .player-detail-banner-placeholder {
   background-color: #06070a;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='none' stroke='%2322d3ee' stroke-opacity='0.09' stroke-width='1'%3E%3Cpath d='M0 70 L70 0 L140 70 L70 140 Z'/%3E%3Cpath d='M70 0 L70 140 M0 70 L140 70'/%3E%3Cpath d='M0 0 L35 35 M140 0 L105 35 M0 140 L35 105 M140 140 L105 105'/%3E%3C/g%3E%3C/svg%3E"),
-    radial-gradient(ellipse 70% 60% at 50% 0%, rgba(34, 211, 238, 0.12), transparent 70%);
+    radial-gradient(ellipse 70% 60% at 50% 0%, rgba(var(--h-accent-rgb), 0.12), transparent 70%);
   background-size: 140px 140px, 100% 100%;
 }
 
@@ -1808,15 +1865,9 @@ input[type="radio"] {
   margin: 0.25rem 0 0.5rem;
 }
 
-/* Equipo actual: logo chico a modo de ícono junto al nombre -- no el
-   banner completo, que ya se sacó de acá por verse mal en este
-   espacio chico (ver player-detail-equipo-actual-link). */
-.player-detail-equipo-actual-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
+/* Logo chico a modo de ícono junto al nombre -- reusado en el Ranking
+   (RankingPage.tsx), la tarjeta de Equipo actual del jugador usa el
+   componente .team-card de tamaño normal en su lugar. */
 .player-detail-equipo-actual-logo {
   width: 1.4rem;
   height: 1.4rem;
@@ -1829,7 +1880,7 @@ input[type="radio"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent-soft);
   font-family: var(--font-display);
   font-weight: 700;
@@ -1839,7 +1890,7 @@ input[type="radio"] {
 .team-owner-badge {
   margin-left: 0.5rem;
   border-radius: 999px;
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent-soft);
   font-size: 0.7rem;
   font-weight: 700;
@@ -1970,7 +2021,7 @@ input[type="radio"] {
   margin-top: 2rem;
   padding: 1.25rem;
   border-radius: var(--radius-lg);
-  border: 1px solid rgba(34, 211, 238, 0.3);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.3);
   background: var(--color-panel);
 }
 
@@ -1982,8 +2033,8 @@ input[type="radio"] {
   margin: 0.5rem 0 1.25rem;
   padding: 0.75rem 1rem;
   border-radius: 0.6rem;
-  border: 1px dashed rgba(34, 211, 238, 0.4);
-  background: rgba(34, 211, 238, 0.06);
+  border: 1px dashed rgba(var(--h-accent-rgb), 0.4);
+  background: rgba(var(--h-accent-rgb), 0.06);
 }
 
 .team-leader-invite-code {
@@ -2096,7 +2147,7 @@ input[type="radio"] {
 .bracket-slot.winner {
   color: var(--color-accent);
   font-weight: 700;
-  background: rgba(34, 211, 238, 0.08);
+  background: rgba(var(--h-accent-rgb), 0.08);
 }
 
 .bracket-slot.loser {
@@ -2138,7 +2189,7 @@ input[type="radio"] {
 
 .bracket-report .btn:hover:not(:disabled) {
   border-color: var(--color-accent);
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent);
   box-shadow: var(--shadow-accent);
 }
@@ -2358,8 +2409,8 @@ input[type="radio"] {
 
 [data-estilo-bracket="starcraft_oficial"] .bracket-match {
   position: relative;
-  border-color: rgba(34, 211, 238, 0.35);
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.12);
+  border-color: rgba(var(--h-accent-rgb), 0.35);
+  box-shadow: 0 0 10px rgba(var(--h-accent-rgb), 0.12);
 }
 
 [data-estilo-bracket="starcraft_oficial"] .bracket-round:not(:last-child) .bracket-match::after {
@@ -2735,7 +2786,7 @@ input[type="radio"] {
 }
 
 .lineup-card-caster a {
-  color: #22d3ee;
+  color: var(--color-accent);
 }
 
 @media (min-width: 640px) {
@@ -2797,7 +2848,7 @@ input[type="radio"] {
 }
 
 .ranking-strip-row.top {
-  background: linear-gradient(90deg, rgba(34, 211, 238, 0.18), rgba(34, 211, 238, 0.03));
+  background: linear-gradient(90deg, rgba(var(--h-accent-rgb), 0.18), rgba(var(--h-accent-rgb), 0.03));
   border-color: var(--color-accent);
 }
 
@@ -2842,7 +2893,7 @@ input[type="radio"] {
 }
 
 .ranking-strip-badge.win {
-  background: rgba(34, 211, 238, 0.18);
+  background: rgba(var(--h-accent-rgb), 0.18);
   color: var(--color-accent-soft);
 }
 
@@ -2964,7 +3015,7 @@ input[type="radio"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent-soft);
   font-family: var(--font-display);
   font-weight: 700;
@@ -3044,7 +3095,7 @@ input[type="radio"] {
   position: relative;
   overflow: hidden;
   border-radius: var(--radius-xl);
-  border: 1px solid rgba(34, 211, 238, 0.4);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.4);
   background: var(--color-panel);
   padding: 1.25rem;
   box-shadow: var(--shadow-accent-lg);
@@ -3057,7 +3108,7 @@ input[type="radio"] {
   height: 10rem;
   width: 10rem;
   border-radius: 50%;
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   filter: blur(48px);
   pointer-events: none;
 }
@@ -3073,7 +3124,7 @@ input[type="radio"] {
   align-self: flex-start;
   display: inline-block;
   border-radius: 999px;
-  border: 1px solid rgba(34, 211, 238, 0.5);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.5);
   padding: 0.2rem 0.65rem;
   font-size: 0.7rem;
   font-weight: 700;
@@ -3110,7 +3161,7 @@ input[type="radio"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent-soft);
   font-family: var(--font-display);
   font-weight: 700;
@@ -3206,7 +3257,7 @@ input[type="radio"] {
 
 .clan-war-card-clickeable:hover {
   transform: translateY(-2px);
-  border-color: rgba(34, 211, 238, 0.7);
+  border-color: rgba(var(--h-accent-rgb), 0.7);
 }
 
 .group-stage-matches {
@@ -3586,7 +3637,7 @@ input[type="radio"] {
 
 .fan-menu-item-hex polygon {
   fill: var(--h-surface-2);
-  stroke: rgba(34, 211, 238, 0.45);
+  stroke: rgba(var(--h-accent-rgb), 0.45);
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
   transition: stroke 0.15s ease, filter 0.15s ease;
@@ -3610,7 +3661,7 @@ input[type="radio"] {
 
 .fan-menu-item:not(.disabled):hover .fan-menu-item-hex polygon {
   stroke: var(--h-accent);
-  filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.65));
+  filter: drop-shadow(0 0 6px rgba(var(--h-accent-rgb), 0.65));
 }
 
 .fan-menu-item.disabled {
@@ -3628,13 +3679,13 @@ input[type="radio"] {
    apertura, no solo la primera vez). */
 @keyframes hex-encendido {
   0% {
-    filter: drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+    filter: drop-shadow(0 0 0 rgba(var(--h-accent-rgb), 0));
   }
   40% {
-    filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.85));
+    filter: drop-shadow(0 0 8px rgba(var(--h-accent-rgb), 0.85));
   }
   100% {
-    filter: drop-shadow(0 0 0 rgba(34, 211, 238, 0));
+    filter: drop-shadow(0 0 0 rgba(var(--h-accent-rgb), 0));
   }
 }
 
@@ -3734,7 +3785,7 @@ input[type="radio"] {
 .form-textarea:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15);
+  box-shadow: 0 0 0 3px rgba(var(--h-accent-rgb), 0.15);
 }
 
 /* ---------- Formulario de creación de torneo ----------
@@ -3795,7 +3846,7 @@ input[type="radio"] {
   height: 1.5rem;
   flex-shrink: 0;
   border-radius: 50%;
-  border: 1px solid rgba(34, 211, 238, 0.4);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.4);
   color: var(--color-accent);
   font-size: 0.75rem;
 }
@@ -3859,7 +3910,7 @@ input[type="radio"] {
 
 .modo-card.selected {
   border-color: var(--color-accent);
-  background: rgba(34, 211, 238, 0.08);
+  background: rgba(var(--h-accent-rgb), 0.08);
 }
 
 .modo-card-label {
@@ -3916,7 +3967,7 @@ input[type="radio"] {
 .pill-radio-option.selected {
   border-color: var(--color-accent);
   color: var(--color-text);
-  background: rgba(34, 211, 238, 0.12);
+  background: rgba(var(--h-accent-rgb), 0.12);
 }
 
 .pill-radio-option:has(input:focus-visible) {
@@ -4049,16 +4100,18 @@ input[type="radio"] {
    igual para que el catálogo sea completo y fácil de mantener. */
 [data-tema-equipo="cian"] {
   --h-accent: #22d3ee;
+  --h-accent-rgb: 34, 211, 238;
   --h-accent-hover: #06b6d4;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
   --color-accent-soft: #a5f3fc;
-  --shadow-accent: 0 0 0 1px rgba(34, 211, 238, 0.4), 0 0 24px rgba(34, 211, 238, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(34, 211, 238, 0.55), 0 0 40px rgba(34, 211, 238, 0.35);
+  --shadow-accent: 0 0 0 1px rgba(var(--h-accent-rgb), 0.4), 0 0 24px rgba(var(--h-accent-rgb), 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(var(--h-accent-rgb), 0.55), 0 0 40px rgba(var(--h-accent-rgb), 0.35);
 }
 
 [data-tema-equipo="purpura"] {
   --h-accent: #a78bfa;
+  --h-accent-rgb: 167, 139, 250;
   --h-accent-hover: #8b5cf6;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
@@ -4069,6 +4122,7 @@ input[type="radio"] {
 
 [data-tema-equipo="esmeralda"] {
   --h-accent: #34d399;
+  --h-accent-rgb: 52, 211, 153;
   --h-accent-hover: #10b981;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
@@ -4079,6 +4133,7 @@ input[type="radio"] {
 
 [data-tema-equipo="ambar"] {
   --h-accent: #fbbf24;
+  --h-accent-rgb: 251, 191, 36;
   --h-accent-hover: #f59e0b;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
@@ -4089,6 +4144,7 @@ input[type="radio"] {
 
 [data-tema-equipo="rosa"] {
   --h-accent: #f472b6;
+  --h-accent-rgb: 244, 114, 182;
   --h-accent-hover: #ec4899;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
@@ -4099,6 +4155,7 @@ input[type="radio"] {
 
 [data-tema-equipo="carmesi"] {
   --h-accent: #fb7185;
+  --h-accent-rgb: 251, 113, 133;
   --h-accent-hover: #f43f5e;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
@@ -4109,6 +4166,7 @@ input[type="radio"] {
 
 [data-tema-equipo="azul"] {
   --h-accent: #60a5fa;
+  --h-accent-rgb: 96, 165, 250;
   --h-accent-hover: #3b82f6;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
@@ -4311,8 +4369,8 @@ input[type="radio"] {
 
 .form-hint {
   border-radius: 0.5rem;
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  background: rgba(34, 211, 238, 0.08);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.3);
+  background: rgba(var(--h-accent-rgb), 0.08);
   color: var(--color-accent-soft);
   font-size: 0.8rem;
   padding: 0.5rem 0.75rem;
@@ -4340,7 +4398,7 @@ input[type="radio"] {
 }
 
 .map-picker-item.included {
-  border-color: rgba(34, 211, 238, 0.4);
+  border-color: rgba(var(--h-accent-rgb), 0.4);
 }
 
 /* ---------- Sala de la Fama (migración 030) ----------
@@ -4358,10 +4416,10 @@ input[type="radio"] {
   border-radius: var(--radius-lg);
   overflow: hidden;
   background-color: #030406;
-  background-image: radial-gradient(ellipse 65% 45% at 50% -5%, rgba(34, 211, 238, 0.14), transparent 70%),
-    radial-gradient(ellipse 55% 35% at 100% 100%, rgba(34, 211, 238, 0.07), transparent 70%),
+  background-image: radial-gradient(ellipse 65% 45% at 50% -5%, rgba(var(--h-accent-rgb), 0.14), transparent 70%),
+    radial-gradient(ellipse 55% 35% at 100% 100%, rgba(var(--h-accent-rgb), 0.07), transparent 70%),
     linear-gradient(180deg, #030406 0%, #0a0c11 55%, #030406 100%);
-  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(var(--h-accent-rgb), 0.12);
 }
 
 .hall-of-fame::before {
@@ -4385,7 +4443,7 @@ input[type="radio"] {
   gap: 1rem;
   margin-bottom: 2.5rem;
   padding-bottom: 1.5rem;
-  border-bottom: 1px solid rgba(34, 211, 238, 0.15);
+  border-bottom: 1px solid rgba(var(--h-accent-rgb), 0.15);
 }
 
 .hall-of-fame-title {
@@ -4398,7 +4456,7 @@ input[type="radio"] {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  text-shadow: 0 0 36px rgba(34, 211, 238, 0.35);
+  text-shadow: 0 0 36px rgba(var(--h-accent-rgb), 0.35);
 }
 
 .hall-of-fame-selector {
@@ -4631,7 +4689,7 @@ body.overlay-obs {
 }
 
 .hall-wall-row:hover {
-  border-color: rgba(34, 211, 238, 0.35);
+  border-color: rgba(var(--h-accent-rgb), 0.35);
 }
 
 .hall-wall-row:nth-child(1) {
@@ -4690,7 +4748,7 @@ body.overlay-obs {
   z-index: 1;
   display: flex;
   flex-direction: column;
-  border-left: 2px solid rgba(34, 211, 238, 0.25);
+  border-left: 2px solid rgba(var(--h-accent-rgb), 0.25);
   padding-left: 1.25rem;
 }
 
@@ -4708,7 +4766,7 @@ body.overlay-obs {
   height: 0.6rem;
   border-radius: 50%;
   background: var(--color-accent);
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.75);
+  box-shadow: 0 0 10px rgba(var(--h-accent-rgb), 0.75);
 }
 
 .hall-gallery-fecha {
@@ -4943,8 +5001,8 @@ body.overlay-obs {
   gap: 0.75rem;
   flex-wrap: wrap;
   border-radius: 0.6rem;
-  border: 1px solid rgba(34, 211, 238, 0.3);
-  background: rgba(34, 211, 238, 0.06);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.3);
+  background: rgba(var(--h-accent-rgb), 0.06);
   padding: 0.7rem 0.85rem;
 }
 
@@ -5064,7 +5122,7 @@ body.overlay-obs {
   height: 2.25rem;
   flex-shrink: 0;
   border-radius: 50%;
-  background: rgba(34, 211, 238, 0.12);
+  background: rgba(var(--h-accent-rgb), 0.12);
   color: var(--color-accent);
 }
 
@@ -5138,7 +5196,7 @@ body.overlay-obs {
   height: 1.9rem;
   flex-shrink: 0;
   border-radius: 0.55rem;
-  background: rgba(34, 211, 238, 0.1);
+  background: rgba(var(--h-accent-rgb), 0.1);
   color: var(--color-accent);
 }
 

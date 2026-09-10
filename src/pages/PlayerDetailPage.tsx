@@ -285,23 +285,22 @@ export default function PlayerDetailPage() {
             </p>
           )}
 
-          {/* Logo chico a modo de ícono junto al nombre -- no el banner
-              completo, que ya se sacó antes de acá por verse mal en
-              este espacio chico. */}
+          {/* Tarjeta de clan (mismo componente .team-card que la grilla
+              de /equipos): nombre completo + logo, sin tag y sin el
+              banner del equipo, que ya se sacó antes de acá por verse
+              mal en este espacio chico. */}
           {equipoActual && (
-            <p className="tournament-card-meta player-detail-equipo-actual">
-              Equipo actual:{" "}
-              <Link to={`/equipos/${equipoActual.tag}`} className="btn-link player-detail-equipo-actual-link">
-                {equipoActual.logoUrl ? (
-                  <img src={equipoActual.logoUrl} alt="" className="player-detail-equipo-actual-logo" />
-                ) : (
-                  <span className="player-detail-equipo-actual-logo player-detail-equipo-actual-logo-placeholder">
-                    {equipoActual.tag.charAt(0)}
-                  </span>
-                )}
-                {equipoActual.name} [{equipoActual.tag}]
-              </Link>
-            </p>
+            <Link to={`/equipos/${equipoActual.tag}`} className="team-card">
+              {equipoActual.logoUrl ? (
+                <img src={equipoActual.logoUrl} alt="" className="team-card-logo" />
+              ) : (
+                <div className="team-card-logo team-card-logo-placeholder">{equipoActual.tag.charAt(0)}</div>
+              )}
+              <div className="team-card-info">
+                <p className="team-card-meta">Equipo actual</p>
+                <p className="team-card-name">{equipoActual.name}</p>
+              </div>
+            </Link>
           )}
 
           {perfil.esCaster && (

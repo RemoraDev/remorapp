@@ -4,6 +4,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
+import { useSkinWeb, SKINS_WEB } from "../context/SkinWebContext";
 import { validarNick } from "../lib/nickValidation";
 import { recortarImagenConProporcion, recortarImagenCuadrada, obtenerEquipoDelUsuario } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
@@ -148,6 +149,7 @@ type SubsubseccionPerfil =
   | "subir-banner"
   | "bordes-avatar"
   | "borde-header"
+  | "skin-web"
   | "sc2"
   | null;
 
@@ -180,6 +182,7 @@ function resolverDestino(valor: string | null): DestinoPerfil {
 export default function ProfilePage() {
   const { user, profile, skinAvatarClave, bordeBasicoColorHex, loading, refreshProfile } = useAuth();
   const { tema, setTema } = useTheme();
+  const { skinWeb, setSkinWeb } = useSkinWeb();
   const location = useLocation();
   // El Panel de control de /jugador/:nick/:uniqueId (vitrina propia)
   // manda acá con ?tab=... -- sin el parámetro (o con cualquier otro
@@ -2331,6 +2334,37 @@ export default function ProfilePage() {
                   <span className="team-panel-menu-item-title">Borde del Header</span>
                   <span className="team-panel-menu-item-desc">4 colores lisos, exclusivo del avatar del header</span>
                 </button>
+                <button type="button" className="team-panel-menu-item" onClick={() => setSubsubseccion("skin-web")}>
+                  <span className="team-panel-menu-item-title">SkinWeb</span>
+                  <span className="team-panel-menu-item-desc">
+                    Cambia el color de acento de toda la web (botones, bordes, brillos)
+                  </span>
+                </button>
+              </div>
+            </>
+          )}
+
+          {subseccion === "apariencia" && subsubseccion === "skin-web" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">SkinWeb</h3>
+              <p className="tournament-card-meta">
+                Elige el color de acento de toda RemorApp. La elección se guarda solo en tu navegador.
+              </p>
+              <div className="team-tema-options">
+                {SKINS_WEB.map((s) => (
+                  <button
+                    key={s.value}
+                    type="button"
+                    className={`team-tema-option ${skinWeb === s.value ? "selected" : ""}`}
+                    onClick={() => setSkinWeb(s.value)}
+                  >
+                    <span className="team-tema-swatch" style={{ background: s.color }} />
+                    {s.label}
+                  </button>
+                ))}
               </div>
             </>
           )}
