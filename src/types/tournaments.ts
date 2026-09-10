@@ -78,6 +78,11 @@ export interface TournamentRow {
   formato_liga: "first_stand" | null;
   puntos_victoria_2_0: number;
   puntos_victoria_2_1: number;
+  // Migración 087: formato de las Clan Wars que genera el fixture de
+  // liga (First Stand o Todos contra todos) -- "simple" (partida por
+  // partida) o "wtl" (3 sets fijos por posición), esta última solo
+  // disponible en 3v3.
+  formato_clan_war: "simple" | "wtl";
   // Migración 060: liga y división para el ranking de clanes --
   // independiente de formato_liga (que es el formato de competencia,
   // no la liga). division_id, si está elegida, siempre pertenece a

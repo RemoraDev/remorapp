@@ -340,8 +340,18 @@ export default function GroupStage({
 
                       {/* First Stand es al mejor de 3: hace falta el
                           resultado del que pierde (0 o 1) para el
-                          sistema de puntos, además de quién gana. */}
-                      {match.status === "pendiente" && match.participant2_id && puedeReportar(match) && esFirstStand && (
+                          sistema de puntos, además de quién gana.
+                          Migración 087: si el partido ya tiene una
+                          Clan War vinculada, el resultado sale de ahí
+                          (ver el bloque de arriba, "Ir a la Clan
+                          War") -- este botón de un solo clic ya no
+                          aplica, reportar_resultado_grupo() lo
+                          rechaza igual, pero no queremos ni mostrarlo. */}
+                      {match.status === "pendiente" &&
+                        match.participant2_id &&
+                        puedeReportar(match) &&
+                        esFirstStand &&
+                        !match.clan_war_id && (
                         <div className="bracket-report">
                           <button
                             type="button"

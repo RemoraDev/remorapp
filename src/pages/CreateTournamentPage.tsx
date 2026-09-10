@@ -74,6 +74,12 @@ export default function CreateTournamentPage() {
   const [formatoLiga, setFormatoLiga] = useState(false);
   const [puntosVictoria21, setPuntosVictoria21] = useState("3");
   const [avanzanPlayoffsFirstStand, setAvanzanPlayoffsFirstStand] = useState("4");
+  // Formato de las Clan Wars que genera el fixture (migración 087):
+  // "simple" (reporte partida por partida, admite cualquier cantidad
+  // de jugadores) o "wtl" (3 sets fijos por posición, con ACE si
+  // empatan 3-3) -- WTL exige lineup de exactamente 3, así que solo se
+  // ofrece en 3v3 (ver el gate en el JSX).
+  const [formatoClanWar, setFormatoClanWar] = useState<"simple" | "wtl">("simple");
 
   // Suizo (migración 069): en blanco = generar_torneo_suizo() calcula
   // sola la cantidad de rondas.
@@ -159,6 +165,17 @@ export default function CreateTournamentPage() {
     if (cuposTocados) return;
     setCuposTotales(formato === "1v1" ? "16" : "8");
   }, [formato, cuposTocados]);
+
+  // Si el organizador elige WTL y después cambia el formato a algo
+  // distinto de 3v3, el select de WTL desaparece (ver el gate en el
+  // JSX) -- este efecto evita mandar "wtl" igual con el valor viejo
+  // ya elegido, que el check de la base (tournaments_wtl_solo_3v3)
+  // rechazaría al crear el torneo.
+  useEffect(() => {
+    if (formato !== "3v3" && formatoClanWar === "wtl") {
+      setFormatoClanWar("simple");
+    }
+  }, [formato, formatoClanWar]);
 
   const handleCrearLiga = async () => {
     const nombreLimpio = nuevaLigaNombre.trim();
@@ -286,6 +303,7 @@ export default function CreateTournamentPage() {
       tiene_tercer_lugar: modo === "eliminacion_simple" && !formatoLiga && tieneTercerLugar,
       formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
       puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
+      formato_clan_war: modo === "eliminacion_simple" && formatoLiga && formato === "3v3" ? formatoClanWar : "simple",
       liga_id: esLiga ? ligaId || null : null,
       swiss_rondas_totales: modo === "suizo" && swissRondas ? Number(swissRondas) : null,
     };
@@ -533,6 +551,26 @@ export default function CreateTournamentPage() {
                       <option value="2">2 puntos (sistema alternativo)</option>
                     </select>
                     <p className="form-hint">Una victoria 2-0 siempre vale 3 puntos.</p>
+
+                    <label className="form-label" htmlFor="torneo-formato-clan-war">
+                      Cómo se juega cada partido
+                    </label>
+                    <select
+                      id="torneo-formato-clan-war"
+                      className="form-select"
+                      value={formatoClanWar}
+                      onChange={(e) => setFormatoClanWar(e.target.value as "simple" | "wtl")}
+                    >
+                      <option value="simple">
+                        Clan War simple -- partida por partida, admite suplentes
+                      </option>
+                      {formato === "3v3" && <option value="wtl">WTL -- 3 sets fijos por posición, con ACE</option>}
+                    </select>
+                    <p className="form-hint">
+                      Cada partido del fixture se juega como una Clan War real: lineup, visto bueno de
+                      los dos capitanes y ventana de check-in antes de empezar.
+                      {formato !== "3v3" && " WTL solo está disponible en 3v3."}
+                    </p>
                   </div>
                 )}
               </div>

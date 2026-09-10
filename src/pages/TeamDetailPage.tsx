@@ -4587,7 +4587,15 @@ export default function TeamDetailPage() {
                         )}
                         </div>
 
-                        {soyChallenger && r.status === "aceptada" && (
+                        {/* Migración 088: antes solo se podía editar
+                            mientras el reto estaba "aceptada" -- con
+                            las Clan Wars de un fixture arrancando
+                            solas apenas se confirma el check-in (sin
+                            esperar este paso), ese estado podía durar
+                            muy poco. Se amplía a "en_curso" para que
+                            el organizador siga pudiendo corregir el
+                            dato después de que arrancó. */}
+                        {soyChallenger && (r.status === "aceptada" || r.status === "en_curso") && (
                           <>
                             <h5 className="detail-subtitle">Datos de transmisión</h5>
                             {erroresTransmision[r.id] && (

@@ -1068,17 +1068,21 @@ export default function TournamentDetailPage() {
     await cargarTorneo();
   };
 
-  // Migración 057: cierra el check-in y arma las 7 jornadas (21
-  // partidos) del fixture de First Stand -- reemplaza a
+  // Migración 057, reemplazada por la 087: cierra el check-in y arma
+  // las jornadas del fixture de First Stand -- reemplaza a
   // handleGenerarGrupos para este formato de liga, que no puede usar
-  // generar_grupos() (exige al menos 2 grupos).
+  // generar_grupos() (exige al menos 2 grupos). Desde la migración 087
+  // usa generar_todos_contra_todos() (la misma función que ya usaba la
+  // liga "Todos contra todos"), que además de armar el fixture crea
+  // una Clan War real por partido -- antes First Stand se quedaba en
+  // el reporte de un solo clic, sin lineup ni check-in de Clan War.
   const handleGenerarFixtureFirstStand = async () => {
     if (!torneo) return;
 
     setGenerandoFixture(true);
     setErrorFixture(null);
 
-    const { error } = await supabase.rpc("generar_fixture_first_stand", { p_tournament_id: torneo.id });
+    const { error } = await supabase.rpc("generar_todos_contra_todos", { p_tournament_id: torneo.id });
 
     setGenerandoFixture(false);
 
