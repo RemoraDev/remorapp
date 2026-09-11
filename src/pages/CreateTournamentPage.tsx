@@ -93,6 +93,10 @@ export default function CreateTournamentPage() {
   // se junta esa cantidad de clanes, así que ahí el default baja a 8 --
   // sin pisar nunca un valor que el organizador ya haya tocado a mano.
   const [cuposTocados, setCuposTocados] = useState(false);
+  // Ventana de revelación del lineup de Clan War (migración 089): antes
+  // fija en 30 minutos para cualquier torneo -- solo aplica a formatos
+  // de equipo, donde cada partido puede jugarse como Clan War real.
+  const [ventanaRevelacionMinutos, setVentanaRevelacionMinutos] = useState("30");
   const [pozoPremio, setPozoPremio] = useState("");
 
   // Liga y divisiones (migración 079): al elegir "Torneo por ligas",
@@ -304,6 +308,7 @@ export default function CreateTournamentPage() {
       formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
       puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
       formato_clan_war: modo === "eliminacion_simple" && formatoLiga && formato === "3v3" ? formatoClanWar : "simple",
+      ventana_revelacion_minutos: formato !== "1v1" ? Number(ventanaRevelacionMinutos) || 30 : 30,
       liga_id: esLiga ? ligaId || null : null,
       swiss_rondas_totales: modo === "suizo" && swissRondas ? Number(swissRondas) : null,
     };
@@ -678,6 +683,26 @@ export default function CreateTournamentPage() {
                 }}
               />
             </div>
+
+            {formato !== "1v1" && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="torneo-ventana-revelacion">
+                  Ventana de revelación del lineup (minutos)
+                </label>
+                <input
+                  id="torneo-ventana-revelacion"
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  value={ventanaRevelacionMinutos}
+                  onChange={(e) => setVentanaRevelacionMinutos(e.target.value)}
+                />
+                <p className="form-hint">
+                  Cuántos minutos antes de la hora de cada Clan War se traba la edición del lineup y se
+                  revela al rival. 30 por default.
+                </p>
+              </div>
+            )}
 
             {tipoEvento !== "privado" && (
               <div className="form-group">

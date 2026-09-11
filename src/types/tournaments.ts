@@ -83,6 +83,10 @@ export interface TournamentRow {
   // partida) o "wtl" (3 sets fijos por posición), esta última solo
   // disponible en 3v3.
   formato_clan_war: "simple" | "wtl";
+  // Migración 089: minutos antes de fecha_hora_cet en que se revela y
+  // se traba la edición del lineup de cada Clan War de este torneo
+  // (antes fijo en 30 para todos, ver plazo_edicion_lineup_cw()).
+  ventana_revelacion_minutos: number;
   // Migración 060: liga y división para el ranking de clanes --
   // independiente de formato_liga (que es el formato de competencia,
   // no la liga). division_id, si está elegida, siempre pertenece a

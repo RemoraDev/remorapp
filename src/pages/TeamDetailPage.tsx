@@ -152,6 +152,11 @@ interface ClanWarConNombres {
   // ese default. Se extiende aprobando una solicitud del rival
   // (solicitar_extension_lineup_cw) o directo por el dueño.
   lineupPlazoExtendidoHasta: string | null;
+  // Migración 089: minutos antes de fecha_hora_cet en que se traba la
+  // edición del lineup y se revela al rival -- sale del torneo si esta
+  // Clan War salió de un fixture (generar_todos_contra_todos()), o 30
+  // por default si es un reto propuesto a mano sin torneo detrás.
+  ventanaRevelacionMinutos: number;
 }
 
 // Migración 066: mismo patrón que ReprogramacionPendiente -- solo
@@ -242,6 +247,11 @@ interface LineupEntry {
   // temporales) y la posición (1/2/3) que ocupa en el lineup.
   jugadorId: string | null;
   posicion: 1 | 2 | 3 | null;
+  // Migración 089: anotado como reserva, sin ocupar una de las
+  // posiciones que se van a jugar -- se puede promover a titular con
+  // reemplazar_jugador_lineup() si el rival reporta un problema sobre
+  // alguno de los titulares.
+  esSuplente: boolean;
 }
 
 // Formato WTL/chino (migración 042): un set Bo2 por posición (1/2/3).
@@ -566,6 +576,13 @@ export default function TeamDetailPage() {
   // Formato WTL (migración 042): posición (1/2/3) elegida para el
   // próximo jugador que se agregue al lineup.
   const [posicionLineupNuevo, setPosicionLineupNuevo] = useState<Record<string, string>>({});
+  // Migración 089: anotar al jugador nuevo como suplente en vez de
+  // titular -- sin límite de cantidad, sin pedir posición.
+  const [esSuplenteLineupNuevo, setEsSuplenteLineupNuevo] = useState<Record<string, boolean>>({});
+  // Migración 089: reemplazo de un jugador reportado por un suplente.
+  const [suplenteElegidoPorTitular, setSuplenteElegidoPorTitular] = useState<Record<string, string>>({});
+  const [reemplazandoLineup, setReemplazandoLineup] = useState<string | null>(null);
+  const [erroresReemplazo, setErroresReemplazo] = useState<Record<string, string>>({});
   const [agregandoLineup, setAgregandoLineup] = useState<string | null>(null);
   const [quitandoLineup, setQuitandoLineup] = useState<string | null>(null);
   const [erroresLineup, setErroresLineup] = useState<Record<string, string>>({});
@@ -1020,6 +1037,29 @@ export default function TeamDetailPage() {
         );
       }
 
+      // Ventana de revelación (migración 089): solo las Clan Wars que
+      // salieron del fixture de un torneo tienen un valor propio --
+      // una propuesta a mano entre dos clanes no tiene torneo detrás,
+      // así que se queda en el default de 30 (ver plazoEdicionLineup()).
+      const retoIdsParaVentana = (retosData ?? []).map((r) => r.id);
+      let ventanaPorClanWarId: Record<string, number> = {};
+      if (retoIdsParaVentana.length > 0) {
+        const { data: ventanasData } = await supabase
+          .from("tournament_group_matches")
+          .select("clan_war_id, tournament_groups(tournaments(ventana_revelacion_minutos))")
+          .in("clan_war_id", retoIdsParaVentana);
+        for (const fila of ventanasData ?? []) {
+          type GrupoConTorneo = { tournaments: { ventana_revelacion_minutos: number } | { ventana_revelacion_minutos: number }[] | null };
+          const grupoRaw = fila.tournament_groups as unknown as GrupoConTorneo | GrupoConTorneo[] | null;
+          const grupo = Array.isArray(grupoRaw) ? grupoRaw[0] : grupoRaw;
+          const torneoRaw = grupo?.tournaments ?? null;
+          const torneo = Array.isArray(torneoRaw) ? torneoRaw[0] : torneoRaw;
+          if (fila.clan_war_id && torneo?.ventana_revelacion_minutos != null) {
+            ventanaPorClanWarId[fila.clan_war_id] = torneo.ventana_revelacion_minutos;
+          }
+        }
+      }
+
       const retosResueltos: ClanWarConNombres[] = (retosData ?? []).map((r) => ({
         id: r.id,
         challengerTeamId: r.challenger_team_id,
@@ -1052,6 +1092,7 @@ export default function TeamDetailPage() {
         fondoLineupImagenId: r.fondo_lineup_imagen_id,
         intervenidoPorAdmin: r.intervenido_por_admin,
         lineupPlazoExtendidoHasta: r.lineup_plazo_extendido_hasta,
+        ventanaRevelacionMinutos: ventanaPorClanWarId[r.id] ?? 30,
       }));
 
       setRetosPendientesResponder(
@@ -1229,7 +1270,7 @@ export default function TeamDetailPage() {
             // (jugador_id y agregado_por) -- hay que especificar la
             // columna, si no PostgREST tira PGRST201 por ambigüedad
             // (mismo caso ya visto con team_invitations).
-            "id, clan_war_id, team_id, jugador_id, jugador_temporal_id, link_verificacion, posicion, profiles!jugador_id(nick, unique_id), team_temp_players(nick_temporal)"
+            "id, clan_war_id, team_id, jugador_id, jugador_temporal_id, link_verificacion, posicion, es_suplente, profiles!jugador_id(nick, unique_id), team_temp_players(nick_temporal)"
           )
           .in("clan_war_id", retoIds);
 
@@ -1256,6 +1297,7 @@ export default function TeamDetailPage() {
             linkVerificacion: fila.link_verificacion,
             jugadorId: fila.jugador_id,
             posicion: fila.posicion as 1 | 2 | 3 | null,
+            esSuplente: fila.es_suplente,
           };
           const bucket = lineupPorRetoTmp[fila.clan_war_id] ?? { propio: [], rival: [] };
           if (fila.team_id === equipoData.id) {
@@ -2085,6 +2127,7 @@ export default function TeamDetailPage() {
       p_jugador_temporal_id: tipo === "temp" ? id : null,
       p_link_verificacion: linkLineupNuevo[retoId]?.trim() || null,
       p_posicion: posicionLineupNuevo[retoId] ? Number(posicionLineupNuevo[retoId]) : null,
+      p_es_suplente: !!esSuplenteLineupNuevo[retoId],
     });
 
     setAgregandoLineup(null);
@@ -2097,6 +2140,30 @@ export default function TeamDetailPage() {
     setJugadorLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
     setLinkLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
     setPosicionLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
+    setEsSuplenteLineupNuevo((prev) => ({ ...prev, [retoId]: false }));
+    await cargar();
+  };
+
+  // Migración 089: reemplaza a un jugador reportado por un suplente
+  // ya anotado del mismo equipo -- solo lo puede hacer el capitán/dueño
+  // del equipo DEL JUGADOR REPORTADO, y solo mientras la Clan War siga
+  // "aceptada" (antes de que se cierre el check-in).
+  const handleReemplazarJugador = async (lineupIdTitular: string, lineupIdSuplente: string, retoId: string) => {
+    setReemplazandoLineup(lineupIdTitular);
+    setErroresReemplazo((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("reemplazar_jugador_lineup", {
+      p_lineup_id_titular: lineupIdTitular,
+      p_lineup_id_suplente: lineupIdSuplente,
+    });
+
+    setReemplazandoLineup(null);
+
+    if (error) {
+      setErroresReemplazo((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
     await cargar();
   };
 
@@ -3987,7 +4054,8 @@ export default function TeamDetailPage() {
                     const vencioPlazoLineup = vencioPlazoEdicionLineup(
                       r.fechaHoraCet,
                       r.lineupPlazoExtendidoHasta,
-                      ahora
+                      ahora,
+                      r.ventanaRevelacionMinutos
                     );
                     const lineupRevelado = lineupAprobado || vencioPlazoLineup;
                     const extension = extensionPorReto[r.id] ?? null;
@@ -4291,6 +4359,7 @@ export default function TeamDetailPage() {
                                     {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
                                     {entry.nombre}
                                     {entry.esTemporal && <span className="team-temp-badge">Temporal</span>}
+                                    {entry.esSuplente && <span className="team-temp-badge">Suplente</span>}
                                     {entry.linkVerificacion && (
                                       <a
                                         href={entry.linkVerificacion}
@@ -4368,7 +4437,23 @@ export default function TeamDetailPage() {
                                       ))}
                                   </select>
                                 </div>
-                                {r.formato === "wtl" && (
+                                <div className="form-group">
+                                  <label className="form-checkbox-label">
+                                    <input
+                                      type="checkbox"
+                                      checked={!!esSuplenteLineupNuevo[r.id]}
+                                      onChange={(e) =>
+                                        setEsSuplenteLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.checked }))
+                                      }
+                                    />
+                                    Es suplente
+                                  </label>
+                                  <p className="form-hint">
+                                    Un suplente se anota igual, sin ocupar ninguna de las posiciones que se van a
+                                    jugar -- sirve para reemplazar a un titular si el rival reporta un problema.
+                                  </p>
+                                </div>
+                                {r.formato === "wtl" && !esSuplenteLineupNuevo[r.id] && (
                                   <div className="form-group">
                                     <label className="form-label" htmlFor={`lineup-posicion-${r.id}`}>
                                       Posición (1, 2 o 3)
@@ -4429,6 +4514,7 @@ export default function TeamDetailPage() {
                                     {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
                                     {entry.nombre}
                                     {entry.esTemporal && <span className="team-temp-badge">Temporal</span>}
+                                    {entry.esSuplente && <span className="team-temp-badge">Suplente</span>}
                                     {entry.linkVerificacion && (
                                       <a
                                         href={entry.linkVerificacion}
@@ -4571,15 +4657,84 @@ export default function TeamDetailPage() {
                               <>
                                 <h5 className="detail-subtitle">Reportes de este reto</h5>
                                 <div className="detail-participant-list">
-                                  {reportes.map((rep) => (
-                                    <div key={rep.id} className="reto-item">
-                                      <p className="reto-motivo">
-                                        {rep.reportadoPorNombre} reportó a {rep.jugadorAfectadoNombre}:{" "}
-                                        {CLAN_WAR_REPORTE_MOTIVO_OPTIONS.find((o) => o.value === rep.motivo)
-                                          ?.label ?? rep.motivo}
-                                      </p>
-                                    </div>
-                                  ))}
+                                  {reportes.map((rep) => {
+                                    // Migración 089: si el jugador reportado es
+                                    // mío (no del rival), puedo reemplazarlo por
+                                    // un suplente ya anotado -- solo mientras el
+                                    // reto siga "aceptada" (antes de que se
+                                    // cierre el check-in), igual que exige
+                                    // reemplazar_jugador_lineup() en la base.
+                                    const titular = lineupDeReto.propio.find(
+                                      (entry) => entry.jugadorId === rep.jugadorAfectadoId && !entry.esSuplente
+                                    );
+                                    const suplentesPropios = lineupDeReto.propio.filter((entry) => entry.esSuplente);
+
+                                    return (
+                                      <div key={rep.id} className="reto-item">
+                                        <p className="reto-motivo">
+                                          {rep.reportadoPorNombre} reportó a {rep.jugadorAfectadoNombre}:{" "}
+                                          {CLAN_WAR_REPORTE_MOTIVO_OPTIONS.find((o) => o.value === rep.motivo)
+                                            ?.label ?? rep.motivo}
+                                        </p>
+
+                                        {titular && r.status === "aceptada" && (
+                                          <>
+                                            {suplentesPropios.length === 0 ? (
+                                              <p className="tournament-card-meta">
+                                                Todavía no anotaste ningún suplente para reemplazarlo.
+                                              </p>
+                                            ) : (
+                                              <div className="form-group">
+                                                <label className="form-label" htmlFor={`suplente-${titular.id}`}>
+                                                  Reemplazar por
+                                                </label>
+                                                <select
+                                                  id={`suplente-${titular.id}`}
+                                                  className="form-select"
+                                                  value={suplenteElegidoPorTitular[titular.id] ?? ""}
+                                                  onChange={(e) =>
+                                                    setSuplenteElegidoPorTitular((prev) => ({
+                                                      ...prev,
+                                                      [titular.id]: e.target.value,
+                                                    }))
+                                                  }
+                                                >
+                                                  <option value="">Selecciona un suplente</option>
+                                                  {suplentesPropios.map((s) => (
+                                                    <option key={s.id} value={s.id}>
+                                                      {s.nombre}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                                {erroresReemplazo[r.id] && (
+                                                  <div className="form-error">{erroresReemplazo[r.id]}</div>
+                                                )}
+                                                <button
+                                                  type="button"
+                                                  className="btn btn-ghost"
+                                                  disabled={
+                                                    reemplazandoLineup === titular.id ||
+                                                    !suplenteElegidoPorTitular[titular.id]
+                                                  }
+                                                  onClick={() =>
+                                                    handleReemplazarJugador(
+                                                      titular.id,
+                                                      suplenteElegidoPorTitular[titular.id],
+                                                      r.id
+                                                    )
+                                                  }
+                                                >
+                                                  {reemplazandoLineup === titular.id
+                                                    ? "Reemplazando..."
+                                                    : "Reemplazar jugador"}
+                                                </button>
+                                              </div>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </>
                             )}
