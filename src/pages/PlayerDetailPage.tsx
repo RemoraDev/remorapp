@@ -40,6 +40,10 @@ interface PerfilPublico {
   // importar quién esté mirando.
   bordeBasicoActivo: string | null;
   bordeGrosor: number;
+  // Migración 092: true si avatarUrl quedó con transparencia real --
+  // apaga el borde básico/skin de efectos mientras tanto (ver
+  // AvatarSkin.tsx y su mismo uso en ProfilePage.tsx/Header.tsx).
+  avatarTransparente: boolean;
 }
 
 interface EquipoActual {
@@ -90,7 +94,7 @@ export default function PlayerDetailPage() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, nick, unique_id, avatar_url, banner_url, bio, country, es_caster, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, skin_avatar_activa, borde_basico_activo, borde_grosor"
+          "id, nick, unique_id, avatar_url, banner_url, bio, country, es_caster, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, skin_avatar_activa, borde_basico_activo, borde_grosor, avatar_transparente"
         )
         .eq("nick", nick)
         .eq("unique_id", uniqueId)
@@ -122,6 +126,7 @@ export default function PlayerDetailPage() {
         skinAvatarActiva: data.skin_avatar_activa,
         bordeBasicoActivo: data.borde_basico_activo,
         bordeGrosor: data.borde_grosor,
+        avatarTransparente: data.avatar_transparente,
       };
 
       // Perfil de juego de StarCraft II (migración 034): opcional, así
@@ -238,8 +243,8 @@ export default function PlayerDetailPage() {
         )}
         <div className={`player-detail-avatar-overlap ${claseForma}`}>
           <AvatarSkin
-            clave={skinAvatarClave}
-            bordeColor={bordeBasicoColorHex}
+            clave={perfil.avatarTransparente ? null : skinAvatarClave}
+            bordeColor={perfil.avatarTransparente ? null : bordeBasicoColorHex}
             bordeGrosor={perfil.bordeGrosor}
             forma="cuadrado"
           >
@@ -340,7 +345,9 @@ export default function PlayerDetailPage() {
           solo lectura, sin ningún formulario propio). */}
       {user?.id === perfil.id && (
         <div className="team-control-panel-wrap">
-          <button type="button" className="btn btn-primary btn-block" onClick={() => setPanelAbierto((a) => !a)}>
+          {/* Migración 092: sin btn-block -- se veía como una barra que
+              ocupaba todo el ancho, en vez de un botón normal. */}
+          <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
             {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
           </button>
 

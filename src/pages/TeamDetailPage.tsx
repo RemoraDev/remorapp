@@ -3484,9 +3484,11 @@ export default function TeamDetailPage() {
           cuenta. */}
       {puedeGestionar && (
         <div className="team-control-panel-wrap">
+          {/* Migración 092: sin btn-block -- se veía como una barra que
+              ocupaba todo el ancho, en vez de un botón normal. */}
           <button
             type="button"
-            className="btn btn-primary btn-block"
+            className="btn btn-primary"
             onClick={() => {
               setPanelAbierto((abierto) => !abierto);
               setSeccionPanel(null);

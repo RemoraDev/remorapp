@@ -7,7 +7,11 @@ interface RecortadorImagenModalProps {
   archivo: File;
   aspecto: number;
   titulo: string;
-  onConfirmar: (recorte: Blob) => void;
+  // Migración 092: tieneTransparencia avisa si el recorte final quedó
+  // con alpha real (PNG/WebP con algún píxel no opaco) -- el llamador
+  // lo usa cuando corresponde (por ahora, solo el avatar de perfil,
+  // para apagar el borde de color/skin) y lo ignora en el resto.
+  onConfirmar: (recorte: Blob, tieneTransparencia: boolean) => void;
   onCancelar: () => void;
 }
 
@@ -42,8 +46,8 @@ export default function RecortadorImagenModal({
     setProcesando(true);
     setError(null);
     try {
-      const recorte = await recortarImagenDesdeArea(archivo, areaRecorte);
-      onConfirmar(recorte);
+      const { blob, tieneTransparencia } = await recortarImagenDesdeArea(archivo, areaRecorte);
+      onConfirmar(blob, tieneTransparencia);
     } catch {
       setError("No se pudo procesar la imagen, prueba con otra.");
       setProcesando(false);

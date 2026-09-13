@@ -181,6 +181,13 @@ export interface Profile {
   // lisos fijos, sin grosor editable, sin efectos. Exclusivo del
   // avatar del header.
   borde_header: BordeHeader;
+  // Migración 092: true si el avatar_url actual quedó con
+  // transparencia real (se calcula en el navegador al recortar la
+  // imagen, ver recortarImagenDesdeArea() en src/lib/imageCrop.ts).
+  // Mientras esté en true, el borde básico/skin de efectos y el borde
+  // del header se apagan solos -- un anillo de color sólido rodeando
+  // una forma transparente se ve raro.
+  avatar_transparente: boolean;
 }
 
 export type BordeHeader = "negro" | "cyan" | "amarillo" | "verde";

@@ -333,6 +333,14 @@ export default function ProfilePage() {
   const [archivoParaRecortarAvatar, setArchivoParaRecortarAvatar] = useState<File | null>(null);
   const [avatarFile, setAvatarFile] = useState<Blob | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  // Migración 092: se calcula al recortar (antes de guardar) si el
+  // recorte quedó con transparencia real -- viaja junto con avatarFile
+  // hasta que se guarda, momento en que pasa a profiles.avatar_transparente.
+  const [avatarTieneTransparencia, setAvatarTieneTransparencia] = useState(false);
+  // Migración 092: mientras haya una foto recién recortada sin guardar
+  // (avatarPreview), manda su propia transparencia calculada al vuelo;
+  // si no, la del avatar ya guardado (profile.avatar_transparente).
+  const avatarEsTransparente = avatarPreview ? avatarTieneTransparencia : (profile?.avatar_transparente ?? false);
   const [guardandoAvatar, setGuardandoAvatar] = useState(false);
   const [errorAvatar, setErrorAvatar] = useState<string | null>(null);
   const [avatarGuardado, setAvatarGuardado] = useState(false);
@@ -1246,9 +1254,10 @@ export default function ProfilePage() {
     setArchivoParaRecortarAvatar(archivo);
   };
 
-  const handleConfirmarRecorteAvatar = (recorte: Blob) => {
+  const handleConfirmarRecorteAvatar = (recorte: Blob, tieneTransparencia: boolean) => {
     setAvatarFile(recorte);
     setAvatarPreview(URL.createObjectURL(recorte));
+    setAvatarTieneTransparencia(tieneTransparencia);
     setArchivoParaRecortarAvatar(null);
   };
 
@@ -1278,7 +1287,7 @@ export default function ProfilePage() {
 
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ avatar_url: avatarUrl })
+        .update({ avatar_url: avatarUrl, avatar_transparente: avatarTieneTransparencia })
         .eq("id", user.id);
 
       if (updateError) {
@@ -1290,6 +1299,7 @@ export default function ProfilePage() {
       await refreshProfile();
       setAvatarFile(null);
       setAvatarPreview(null);
+      setAvatarTieneTransparencia(false);
       setAvatarGuardado(true);
     } catch {
       setErrorAvatar("No se pudo procesar la foto, prueba con otra imagen.");
@@ -1845,8 +1855,8 @@ export default function ProfilePage() {
                   es siempre redondo (ver Header.tsx). */}
               <div className="profile-avatar-section">
                 <AvatarSkin
-                  clave={skinAvatarClave}
-                  bordeColor={bordeBasicoColorHex}
+                  clave={avatarEsTransparente ? null : skinAvatarClave}
+                  bordeColor={avatarEsTransparente ? null : bordeBasicoColorHex}
                   bordeGrosor={profile?.borde_grosor}
                   forma="cuadrado"
                 >
@@ -1857,6 +1867,12 @@ export default function ProfilePage() {
                     forma="cuadrado"
                   />
                 </AvatarSkin>
+                {avatarEsTransparente && (
+                  <p className="profile-avatar-hint">
+                    Esta foto tiene fondo transparente -- el borde de color y las skins de efectos quedan
+                    apagados mientras tanto.
+                  </p>
+                )}
                 {!avatarPreview && !profile?.avatar_url && (
                   <p className="profile-avatar-hint">Sube tu foto para que te reconozcan en tu clan.</p>
                 )}
@@ -1963,8 +1979,8 @@ export default function ProfilePage() {
 
               <div className="profile-avatar-section">
                 <AvatarSkin
-                  clave={skinAvatarClave}
-                  bordeColor={bordeBasicoColorHex}
+                  clave={profile?.avatar_transparente ? null : skinAvatarClave}
+                  bordeColor={profile?.avatar_transparente ? null : bordeBasicoColorHex}
                   bordeGrosor={grosorSeleccionado}
                   forma="cuadrado"
                 >
@@ -1976,6 +1992,13 @@ export default function ProfilePage() {
                   />
                 </AvatarSkin>
               </div>
+
+              {profile?.avatar_transparente && (
+                <p className="tournament-card-meta">
+                  Tu foto actual tiene fondo transparente -- el borde y las skins de efectos quedan
+                  apagados mientras tanto, aunque elijas uno acá abajo.
+                </p>
+              )}
 
               {errorBorde && <div className="form-error">{errorBorde}</div>}
               {errorSkin && <div className="form-error">{errorSkin}</div>}

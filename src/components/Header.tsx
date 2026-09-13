@@ -40,12 +40,17 @@ export default function Header() {
                     independiente de los "Bordes de Avatar" de Mi
                     perfil -- 4 colores lisos fijos, sin grosor
                     editable, sin efectos. La forma acá es SIEMPRE
-                    redonda, ya no elegible (antes era avatar_forma). */}
+                    redonda, ya no elegible (antes era avatar_forma).
+                    Migración 092: si el avatar activo quedó con
+                    transparencia real, este anillo de color se apaga
+                    solo (transparent) -- rodear una forma transparente
+                    con un borde sólido se ve raro. */}
                 <span
                   className="header-avatar-borde"
                   style={{
-                    borderColor: BORDE_HEADER_OPTIONS.find((o) => o.value === (profile?.borde_header ?? "negro"))
-                      ?.colorHex,
+                    borderColor: profile?.avatar_transparente
+                      ? "transparent"
+                      : BORDE_HEADER_OPTIONS.find((o) => o.value === (profile?.borde_header ?? "negro"))?.colorHex,
                   }}
                 >
                   <Avatar
