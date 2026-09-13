@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { obtenerNombresDeParticipantes, obtenerNombreDeParticipante } from "../lib/participants";
-import { getModoLabel } from "../lib/tournamentOptions";
+import { getModoLabel, getFormatoLabel } from "../lib/tournamentOptions";
 import { formatFecha, formatPozo } from "../lib/formatters";
 import type { TournamentRow } from "../types/tournaments";
 
@@ -152,7 +152,7 @@ export default function TournamentHistoryPage() {
           return (
             <div key={torneo.id} className="history-card">
               <div className="detail-badges">
-                <span className="badge badge-format">{torneo.formato}</span>
+                <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
                 <span className="badge badge-format">{getModoLabel(torneo.modo)}</span>
               </div>
 

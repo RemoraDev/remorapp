@@ -26,4 +26,9 @@ export interface BracketMatchRow {
   // (ganadores/perdedores/final/reset). En eliminación simple y First
   // Stand siempre es 'ganadores', el valor por defecto.
   bracket_tipo: "ganadores" | "perdedores" | "final" | "reset";
+  // Migración 090: en un torneo formato "wtl", este cruce se juega
+  // como una Clan War real (lineup, check-in, aprobación de los dos
+  // capitanes) -- no null significa que el resultado se carga desde
+  // ahí, no con el botón "Ganó X" de siempre.
+  clan_war_id: string | null;
 }

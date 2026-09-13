@@ -47,6 +47,22 @@ export function getModoDescripcion(modo: TorneoModo): string {
   return MODOS.find((m) => m.value === modo)?.descripcion ?? "";
 }
 
+// Migración 090: "wtl" no es autoexplicativo como el resto de los
+// formatos (1v1/2v2/3v3/4v4, que se muestran tal cual) -- este mapeo
+// se usa en cualquier lugar donde se renderiza torneo.formato como
+// badge o etiqueta visible.
+const FORMATO_LABELS: Record<TorneoFormato, string> = {
+  "1v1": "1v1",
+  "2v2": "2v2",
+  "3v3": "3v3",
+  "4v4": "4v4",
+  wtl: "Clan vs Clan (WTL)",
+};
+
+export function getFormatoLabel(formato: TorneoFormato): string {
+  return FORMATO_LABELS[formato] ?? formato;
+}
+
 // 1v1 inscribe a un jugador individual; el resto de los formatos
 // inscribe a un equipo completo (ver migración 009).
 export function esFormatoPorEquipo(formato: TorneoFormato): boolean {
@@ -55,8 +71,9 @@ export function esFormatoPorEquipo(formato: TorneoFormato): boolean {
 
 // Miembros mínimos que necesita un equipo para poder inscribirse a un
 // torneo de este formato -- coincide con el mínimo que valida
-// inscribir_equipo() en la base.
-export function getMinimoMiembrosEquipo(formato: TorneoFormato): number {
+// inscribir_equipo() en la base. En formato "wtl" el mínimo lo define
+// jugadores_por_set del torneo (migración 090), no un número fijo.
+export function getMinimoMiembrosEquipo(formato: TorneoFormato, jugadoresPorSet?: number): number {
   switch (formato) {
     case "2v2":
       return 2;
@@ -64,6 +81,8 @@ export function getMinimoMiembrosEquipo(formato: TorneoFormato): number {
       return 3;
     case "4v4":
       return 4;
+    case "wtl":
+      return jugadoresPorSet ?? 3;
     default:
       return 1;
   }

@@ -63,7 +63,27 @@ async function eventosTorneosFinalizados(): Promise<EventoGaleria[]> {
     .eq("estado", "finalizado")
     .not("campeon_participant_id", "is", null);
 
-  const filas = torneos ?? [];
+  const todosLosTorneos = torneos ?? [];
+  if (todosLosTorneos.length === 0) return [];
+
+  // Migración 091: la Sala de la Fama es para batallas épicas de
+  // verdad -- un torneo con 4 participantes o menos (un enfrentamiento
+  // chico entre pocos clanes) no cuenta, sin importar el formato. Una
+  // Clan War Amistosa ni siquiera llega hasta acá (no crea ninguna
+  // fila en tournaments), así que este filtro es una regla general
+  // sobre cualquier torneo, no algo puntual para ese caso.
+  const idsTorneos = todosLosTorneos.map((t) => t.id);
+  const { data: participantesPorTorneo } = await supabase
+    .from("tournament_participants")
+    .select("tournament_id")
+    .in("tournament_id", idsTorneos);
+
+  const conteoPorTorneoId: Record<string, number> = {};
+  for (const p of participantesPorTorneo ?? []) {
+    conteoPorTorneoId[p.tournament_id] = (conteoPorTorneoId[p.tournament_id] ?? 0) + 1;
+  }
+
+  const filas = todosLosTorneos.filter((t) => (conteoPorTorneoId[t.id] ?? 0) > 4);
   if (filas.length === 0) return [];
 
   const participantIds = filas.map((t) => t.campeon_participant_id as string);

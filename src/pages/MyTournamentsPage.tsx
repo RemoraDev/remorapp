@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import { getModoLabel } from "../lib/tournamentOptions";
+import { getModoLabel, getFormatoLabel } from "../lib/tournamentOptions";
 import { formatFecha, formatPozo } from "../lib/formatters";
 import type { TournamentRow, TorneoEstado } from "../types/tournaments";
 
@@ -82,7 +82,7 @@ export default function MyTournamentsPage() {
             <Link key={torneo.id} to={`/tournaments/${torneo.id}`} className="tournament-card">
               <div>
                 <div className="tournament-card-head">
-                  <span className="badge badge-format">{torneo.formato}</span>
+                  <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
                   <span className="badge badge-format">{getModoLabel(torneo.modo)}</span>
                   <span className="badge badge-format">{ESTADO_LABEL[torneo.estado]}</span>
                 </div>

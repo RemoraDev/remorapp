@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
   esFormatoPorEquipo,
+  getFormatoLabel,
   getMinimoMiembrosEquipo,
   getModoDescripcion,
   getModoLabel,
@@ -428,7 +429,7 @@ export default function TournamentDetailPage() {
       const { data: partidasData } = await supabase
         .from("bracket_matches")
         .select(
-          "id, tournament_id, round, match_number, participant1_id, participant2_id, winner_id, reported_p1_winner, reported_p2_winner, status, es_tercer_lugar, formato_partido, bracket_tipo"
+          "id, tournament_id, round, match_number, participant1_id, participant2_id, winner_id, reported_p1_winner, reported_p2_winner, status, es_tercer_lugar, formato_partido, bracket_tipo, clan_war_id"
         )
         .eq("tournament_id", id);
 
@@ -654,7 +655,7 @@ export default function TournamentDetailPage() {
   const participantesVisibles = participantes.filter((p) => !p.suspendido);
 
   const soyOwnerDeMiEquipo = miEquipo?.roles.includes("owner") ?? false;
-  const minimoMiembros = torneo ? getMinimoMiembrosEquipo(torneo.formato) : 1;
+  const minimoMiembros = torneo ? getMinimoMiembrosEquipo(torneo.formato, torneo.jugadores_por_set) : 1;
 
   const handleInscribirse = async () => {
     if (!user || !torneo) return;
@@ -1369,7 +1370,7 @@ export default function TournamentDetailPage() {
   return (
     <section className="section section-page">
       <div className="detail-badges">
-        <span className="badge badge-format">{torneo.formato}</span>
+        <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
         <span className={`badge ${torneo.publico ? "badge-public" : "badge-private"}`}>
           {torneo.publico ? "Público" : "Privado"}
         </span>
@@ -2053,6 +2054,8 @@ export default function TournamentDetailPage() {
                         userId={user?.id ?? null}
                         organizadorId={torneo.creador_id}
                         onCambio={cargarTorneo}
+                        miEquipoTag={miEquipo?.teamTag ?? null}
+                        miParticipantId={participantes.find((p) => p.teamId === miEquipo?.team_id)?.id ?? null}
                       />
                     </div>
                   )}
@@ -2451,7 +2454,7 @@ export default function TournamentDetailPage() {
               miEquipoMiembros < minimoMiembros && (
                 <p className="tournament-card-meta">
                   Tu equipo necesita al menos {minimoMiembros} miembros para un torneo{" "}
-                  {torneo.formato} (tiene {miEquipoMiembros}).
+                  {getFormatoLabel(torneo.formato)} (tiene {miEquipoMiembros}).
                 </p>
               )}
 

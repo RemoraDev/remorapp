@@ -37,6 +37,7 @@ import LigaBadge from "../components/LigaBadge";
 import PercentBar from "../components/PercentBar";
 import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
 import TitulosActivosList from "../components/TitulosActivosList";
+import LogrosClanWarList from "../components/LogrosClanWarList";
 import LineupFondoPicker from "../components/LineupFondoPicker";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -157,6 +158,18 @@ interface ClanWarConNombres {
   // Clan War salió de un fixture (generar_todos_contra_todos()), o 30
   // por default si es un reto propuesto a mano sin torneo detrás.
   ventanaRevelacionMinutos: number;
+  // Migración 090: cuántos titulares (posiciones) tiene el lineup WTL
+  // de este reto -- sale del torneo si esta Clan War salió de un
+  // bracket formato "wtl" (generar_llave()/avanzar_ganador()), o 3 por
+  // default para cualquier otro uso de WTL (First Stand, Todos contra
+  // todos, o un reto propuesto a mano).
+  jugadoresPorSet: number;
+  // Migración 091: true si esta Clan War viene de un torneo (fase de
+  // grupos o bracket) -- ahí jugadoresPorSet lo define el torneo y no
+  // se puede tocar desde acá. false para un reto directo (Clan War
+  // Amistosa incluida), donde sí es editable con
+  // cambiar_jugadores_por_set_cw().
+  esDeTorneo: boolean;
 }
 
 // Migración 066: mismo patrón que ReprogramacionPendiente -- solo
@@ -497,6 +510,10 @@ export default function TeamDetailPage() {
   // Formato WTL (migración 043): 'simple' por defecto, igual que
   // siempre.
   const [formatoReto, setFormatoReto] = useState<"simple" | "wtl">("simple");
+  // Migración 091: cuántos titulares por lado -- 3 por default, igual
+  // que el default de siempre para WTL; en formato simple es solo
+  // informativo (se puede ajustar después desde el lineup).
+  const [jugadoresPorSetReto, setJugadoresPorSetReto] = useState("3");
   // Temporada (migración 047): opcional, "" = sin temporada, mismo
   // comportamiento de siempre.
   const [temporadaReto, setTemporadaReto] = useState("");
@@ -588,6 +605,13 @@ export default function TeamDetailPage() {
   const [erroresLineup, setErroresLineup] = useState<Record<string, string>>({});
   const [confirmandoLineup, setConfirmandoLineup] = useState<string | null>(null);
   const [erroresConfirmarLineup, setErroresConfirmarLineup] = useState<Record<string, string>>({});
+  // Migración 091: cantidad de jugadores por lado de un reto directo
+  // (Clan War Amistosa incluida) -- editable en cualquier momento
+  // mientras el reto no esté cerrado, a diferencia de una Clan War
+  // vinculada a un torneo (esa la define el torneo).
+  const [jugadoresPorSetEditado, setJugadoresPorSetEditado] = useState<Record<string, string>>({});
+  const [guardandoJugadoresPorSet, setGuardandoJugadoresPorSet] = useState<string | null>(null);
+  const [erroresJugadoresPorSet, setErroresJugadoresPorSet] = useState<Record<string, string>>({});
   const [reportesPorReto, setReportesPorReto] = useState<Record<string, ReporteConNombres[]>>({});
   const [partidasPorReto, setPartidasPorReto] = useState<Record<string, PartidaConNombres[]>>({});
   // Formato WTL (migración 042): 3 sets Bo2, ACE si el marcador global
@@ -1043,6 +1067,7 @@ export default function TeamDetailPage() {
       // así que se queda en el default de 30 (ver plazoEdicionLineup()).
       const retoIdsParaVentana = (retosData ?? []).map((r) => r.id);
       let ventanaPorClanWarId: Record<string, number> = {};
+      let jugadoresPorSetPorClanWarId: Record<string, number> = {};
       if (retoIdsParaVentana.length > 0) {
         const { data: ventanasData } = await supabase
           .from("tournament_group_matches")
@@ -1056,6 +1081,27 @@ export default function TeamDetailPage() {
           const torneo = Array.isArray(torneoRaw) ? torneoRaw[0] : torneoRaw;
           if (fila.clan_war_id && torneo?.ventana_revelacion_minutos != null) {
             ventanaPorClanWarId[fila.clan_war_id] = torneo.ventana_revelacion_minutos;
+          }
+        }
+
+        // Migración 090: mismo criterio, pero para una Clan War que
+        // salió de un cruce del bracket de un torneo formato "wtl" en
+        // vez de la fase de grupos -- acá también sale jugadores_por_set.
+        const { data: bracketData } = await supabase
+          .from("bracket_matches")
+          .select("clan_war_id, tournaments(ventana_revelacion_minutos, jugadores_por_set)")
+          .in("clan_war_id", retoIdsParaVentana);
+        for (const fila of bracketData ?? []) {
+          type TorneoBracket = { ventana_revelacion_minutos: number; jugadores_por_set: number };
+          const torneoRaw = fila.tournaments as unknown as TorneoBracket | TorneoBracket[] | null;
+          const torneo = Array.isArray(torneoRaw) ? torneoRaw[0] : torneoRaw;
+          if (fila.clan_war_id && torneo) {
+            if (torneo.ventana_revelacion_minutos != null) {
+              ventanaPorClanWarId[fila.clan_war_id] = torneo.ventana_revelacion_minutos;
+            }
+            if (torneo.jugadores_por_set != null) {
+              jugadoresPorSetPorClanWarId[fila.clan_war_id] = torneo.jugadores_por_set;
+            }
           }
         }
       }
@@ -1093,6 +1139,12 @@ export default function TeamDetailPage() {
         intervenidoPorAdmin: r.intervenido_por_admin,
         lineupPlazoExtendidoHasta: r.lineup_plazo_extendido_hasta,
         ventanaRevelacionMinutos: ventanaPorClanWarId[r.id] ?? 30,
+        // Migración 091: si esta Clan War viene de un torneo, manda su
+        // jugadores_por_set (torneo_de_clan_war() gana esa carrera en
+        // la base); si no, es un reto directo -- se usa el propio
+        // clan_wars.jugadores_por_set, editable desde acá mismo.
+        jugadoresPorSet: jugadoresPorSetPorClanWarId[r.id] ?? r.jugadores_por_set ?? 3,
+        esDeTorneo: r.id in jugadoresPorSetPorClanWarId,
       }));
 
       setRetosPendientesResponder(
@@ -2045,11 +2097,19 @@ export default function TeamDetailPage() {
     // que la fecha sea futura, el cooldown de 7 días) vive en
     // proponer_clan_war() en la base -- esto de acá es solo el
     // formulario.
+    const jugadoresPorSet = Number(jugadoresPorSetReto);
+    if (!jugadoresPorSet || jugadoresPorSet < 1) {
+      setErrorReto("La cantidad de jugadores por lado tiene que ser al menos 1.");
+      setProponiendoReto(false);
+      return;
+    }
+
     const { error } = await supabase.rpc("proponer_clan_war", {
       p_challenged_team_id: equipoRival.id,
       p_fecha_hora_cet: datetimeLocalAIso(fechaHoraReto),
       p_formato: formatoReto,
       p_temporada_id: temporadaReto || null,
+      p_jugadores_por_set: jugadoresPorSet,
     });
 
     setProponiendoReto(false);
@@ -2360,6 +2420,31 @@ export default function TeamDetailPage() {
 
     if (error) {
       setErroresLineup((prev) => ({ ...prev, [retoId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleCambiarJugadoresPorSet = async (retoId: string) => {
+    const valor = Number(jugadoresPorSetEditado[retoId]);
+    if (!valor || valor < 1) {
+      setErroresJugadoresPorSet((prev) => ({ ...prev, [retoId]: "Tiene que ser al menos 1." }));
+      return;
+    }
+
+    setGuardandoJugadoresPorSet(retoId);
+    setErroresJugadoresPorSet((prev) => ({ ...prev, [retoId]: "" }));
+
+    const { error } = await supabase.rpc("cambiar_jugadores_por_set_cw", {
+      p_clan_war_id: retoId,
+      p_jugadores_por_set: valor,
+    });
+
+    setGuardandoJugadoresPorSet(null);
+
+    if (error) {
+      setErroresJugadoresPorSet((prev) => ({ ...prev, [retoId]: error.message }));
       return;
     }
 
@@ -3337,7 +3422,13 @@ export default function TeamDetailPage() {
         </div>
       )}
 
-      {seccionPublica === "logros" && <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />}
+      {seccionPublica === "logros" && (
+        <>
+          <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
+          <h4 className="detail-subtitle">Clan Wars amistosas</h4>
+          <LogrosClanWarList teamId={equipo.id} className="detail-participant-list" />
+        </>
+      )}
 
       {/* Migración 047: mercenarios y alianzas de la temporada actual,
           claramente separados de los miembros normales de arriba --
@@ -4346,6 +4437,43 @@ export default function TeamDetailPage() {
                           fondoImagenId={r.fondoLineupImagenId}
                           onCambio={cargar}
                         />
+                        {/* Migración 091: solo para un reto directo (sin
+                            torneo detrás) -- ahí la cantidad de jugadores
+                            por lado la define el propio torneo, no se
+                            edita desde acá. */}
+                        {!r.esDeTorneo && (
+                          <div className="form-group">
+                            <label className="form-label" htmlFor={`jugadores-por-set-${r.id}`}>
+                              Cantidad de jugadores por lado
+                            </label>
+                            <input
+                              id={`jugadores-por-set-${r.id}`}
+                              className="form-input"
+                              type="number"
+                              min={1}
+                              value={jugadoresPorSetEditado[r.id] ?? String(r.jugadoresPorSet)}
+                              onChange={(e) =>
+                                setJugadoresPorSetEditado((prev) => ({ ...prev, [r.id]: e.target.value }))
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={guardandoJugadoresPorSet === r.id}
+                              onClick={() => handleCambiarJugadoresPorSet(r.id)}
+                            >
+                              {guardandoJugadoresPorSet === r.id ? "Guardando..." : "Actualizar cantidad"}
+                            </button>
+                            {erroresJugadoresPorSet[r.id] && (
+                              <div className="form-error">{erroresJugadoresPorSet[r.id]}</div>
+                            )}
+                            <p className="form-hint">
+                              Al ser una Clan War amistosa, se puede subir o bajar en cualquier momento --
+                              no hace falta que los dos capitanes se pongan de acuerdo de nuevo con el
+                              lineup.
+                            </p>
+                          </div>
+                        )}
                         {!lineupAprobado ? (
                           <>
                             <h5 className="detail-subtitle">Lineup: tu equipo</h5>
@@ -4456,7 +4584,7 @@ export default function TeamDetailPage() {
                                 {r.formato === "wtl" && !esSuplenteLineupNuevo[r.id] && (
                                   <div className="form-group">
                                     <label className="form-label" htmlFor={`lineup-posicion-${r.id}`}>
-                                      Posición (1, 2 o 3)
+                                      Posición (1 a {r.jugadoresPorSet})
                                     </label>
                                     <select
                                       id={`lineup-posicion-${r.id}`}
@@ -4467,9 +4595,11 @@ export default function TeamDetailPage() {
                                       }
                                     >
                                       <option value="">Selecciona la posición</option>
-                                      <option value="1">Posición 1</option>
-                                      <option value="2">Posición 2</option>
-                                      <option value="3">Posición 3</option>
+                                      {Array.from({ length: r.jugadoresPorSet }, (_, i) => i + 1).map((pos) => (
+                                        <option key={pos} value={pos}>
+                                          Posición {pos}
+                                        </option>
+                                      ))}
                                     </select>
                                   </div>
                                 )}
@@ -5131,8 +5261,26 @@ export default function TeamDetailPage() {
                     onChange={(e) => setFormatoReto(e.target.value as "simple" | "wtl")}
                   >
                     <option value="simple">Simple (partidas sueltas)</option>
-                    <option value="wtl">WTL / chino (3 sets Bo2 + ACE)</option>
+                    <option value="wtl">WTL / chino (Bo2 + ACE)</option>
                   </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="reto-jugadores-por-set">
+                    Cantidad de jugadores por lado
+                  </label>
+                  <input
+                    id="reto-jugadores-por-set"
+                    className="form-input"
+                    type="number"
+                    min={1}
+                    value={jugadoresPorSetReto}
+                    onChange={(e) => setJugadoresPorSetReto(e.target.value)}
+                  />
+                  <p className="form-hint">
+                    En WTL define cuántos sets se juegan; en formato simple es solo de referencia -- se
+                    puede ajustar después, subir o bajar, desde el propio lineup.
+                  </p>
                 </div>
 
                 {/* Migración 047: opcional -- solo si este reto forma

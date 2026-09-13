@@ -2,7 +2,12 @@
 // Separados de src/types.ts porque ese archivo son los tipos del mock
 // de la portada (torneos de ejemplo), no datos reales de Supabase.
 
-export type TorneoFormato = "1v1" | "2v2" | "3v3" | "4v4";
+// Migración 090: "wtl" es un torneo de eliminación normal donde cada
+// cruce del bracket entre dos clanes genera una Clan War real en
+// formato WTL (varios jugadores, sets separados), en vez de reportarse
+// con el click de siempre. Distinto de 2v2/3v3/4v4, que son duelos de
+// clan sencillos (una sola partida por cruce).
+export type TorneoFormato = "1v1" | "2v2" | "3v3" | "4v4" | "wtl";
 
 export type TorneoModo =
   | "eliminacion_simple"
@@ -87,6 +92,12 @@ export interface TournamentRow {
   // se traba la edición del lineup de cada Clan War de este torneo
   // (antes fijo en 30 para todos, ver plazo_edicion_lineup_cw()).
   ventana_revelacion_minutos: number;
+  // Migración 090: solo aplican a un torneo formato "wtl" -- cuántos
+  // jugadores por set (posiciones del lineup) y cuántos mapas gana
+  // cada set. El resto de los formatos WTL (First Stand, Todos contra
+  // todos) siguen fijos en 3 y 2 por default, sin exponer el campo.
+  jugadores_por_set: number;
+  mapas_por_set: number;
   // Migración 060: liga y división para el ranking de clanes --
   // independiente de formato_liga (que es el formato de competencia,
   // no la liga). division_id, si está elegida, siempre pertenece a

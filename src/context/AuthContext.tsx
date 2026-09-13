@@ -101,7 +101,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("invited_user_id", userId)
       .eq("status", "pendiente");
 
-    setInvitacionesPendientes(count ?? 0);
+    // Migración 091: retos de Clan War (Clan War Amistosa incluida)
+    // pendientes de responder, para el equipo del que el usuario es
+    // dueño o capitán -- se suman al mismo contador del header.
+    const { data: retosPendientesCount } = await supabase.rpc("retos_clan_war_pendientes_count");
+
+    setInvitacionesPendientes((count ?? 0) + (retosPendientesCount ?? 0));
   }, []);
 
   useEffect(() => {

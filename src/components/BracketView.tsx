@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import type { BracketMatchRow } from "../types/bracket";
 import type { EstiloBracket } from "../types/tournaments";
@@ -40,6 +41,13 @@ interface BracketViewProps {
   userId: string | null;
   organizadorId: string;
   onCambio: () => void;
+  // Migración 090: en un torneo formato "wtl", el tag y el
+  // tournament_participants.id de mi propio equipo -- se usan para
+  // decidir si le muestro el link "Ir a la Clan War" (soy parte de
+  // ESE cruce puntual) o solo el aviso genérico. Mismo patrón que
+  // GroupStage.tsx.
+  miEquipoTag?: string | null;
+  miParticipantId?: string | null;
 }
 
 const ALTURA_PARTIDO_PX = 96;
@@ -57,6 +65,8 @@ export default function BracketView({
   userId,
   organizadorId,
   onCambio,
+  miEquipoTag = null,
+  miParticipantId = null,
 }: BracketViewProps) {
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -232,9 +242,28 @@ export default function BracketView({
           </p>
         )}
 
+        {/* Migración 090: un cruce del bracket con Clan War vinculada
+            (torneo formato "wtl") no se reporta con el click de
+            siempre -- el resultado sale de cerrar_clan_war() cuando
+            los dos capitanes cierran la guerra. Mismo criterio que
+            GroupStage.tsx para los partidos de liga. */}
+        {match.status === "pendiente" && match.participant1_id && match.participant2_id && match.clan_war_id && (
+          <div className="bracket-report">
+            {miEquipoTag &&
+            (match.participant1_id === miParticipantId || match.participant2_id === miParticipantId) ? (
+              <Link className="btn btn-ghost" to={`/equipos/${miEquipoTag}?panel=eventos`}>
+                Ir a la Clan War
+              </Link>
+            ) : (
+              <p className="tournament-card-meta">Se juega como Clan War entre los dos clanes.</p>
+            )}
+          </div>
+        )}
+
         {match.status === "pendiente" &&
           match.participant1_id &&
           match.participant2_id &&
+          !match.clan_war_id &&
           puedeReportar(match) && (
             <div className="bracket-report">
               <button

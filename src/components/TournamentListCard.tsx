@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { getModoLabel } from "../lib/tournamentOptions";
+import { getModoLabel, getFormatoLabel } from "../lib/tournamentOptions";
 import { formatCuposDisponibles, formatFecha, formatPozo } from "../lib/formatters";
 import type { TournamentRow } from "../types/tournaments";
 
@@ -15,7 +15,7 @@ export default function TournamentListCard({ torneo }: TournamentListCardProps) 
     <Link to={`/tournaments/${torneo.id}`} className="tournament-card">
       <div>
         <div className="tournament-card-head">
-          <span className="badge badge-format">{torneo.formato}</span>
+          <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
           <span className="badge badge-format">{getModoLabel(torneo.modo)}</span>
         </div>
         <h3 className="tournament-card-title">{torneo.nombre}</h3>
