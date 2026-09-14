@@ -1502,6 +1502,16 @@ export default function ProfilePage() {
             <span className="team-panel-menu-item-title">Historial de eventos</span>
             <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que participaste</span>
           </button>
+          {/* Migración 094: Panel Staff -- distinto del Panel de
+              Administración completo, con permisos acotados. Solo
+              visible si la cuenta tiene es_staff (o es admin/dueño de
+              la plataforma, que ya ven todo lo que ve Staff y más). */}
+          {(profile?.es_staff || profile?.es_admin) && (
+            <Link to="/staff" className="team-panel-menu-item">
+              <span className="team-panel-menu-item-title">Panel Staff</span>
+              <span className="team-panel-menu-item-desc">Crear liga de clanes, reportes al staff y bugs</span>
+            </Link>
+          )}
         </div>
       ) : (
         <button

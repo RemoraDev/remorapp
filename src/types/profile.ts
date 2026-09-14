@@ -119,6 +119,11 @@ export interface Profile {
   // usuario en /perfil cuando quiera.
   es_caster: boolean;
   es_admin: boolean;
+  // Migración 094: rol "Staff" -- gente que trabaja con el dueño de
+  // la plataforma, con permisos acotados (crear ligas, ver/resolver
+  // reportes al staff, reportar bugs). Protegida por el mismo
+  // mecanismo que es_admin: solo se activa a mano en el SQL Editor.
+  es_staff: boolean;
   nick: string | null;
   unique_id: string;
   country: Country | null;

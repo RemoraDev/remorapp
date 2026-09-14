@@ -762,11 +762,14 @@ export default function TeamDetailPage() {
     // un cron, la función no hace nada si todavía no corresponde.
     // Solo tiene sentido si hay sesión (la función es authenticated).
     if (user) {
-      await supabase.rpc("restaurar_banca_rota_equipo", { p_team_id: equipoData.id });
-      // Títulos Padre/Hijo (migración 026): mismo patrón, se evalúa al
-      // toque, sin cron -- un título vencido deja de mostrarse como
-      // activo. Barrido global, no depende de este equipo puntual.
-      await supabase.rpc("expirar_titulos_vencidos");
+      // Las dos son independientes entre sí (una opera sobre este
+      // equipo puntual, la otra es un barrido global) -- se corren
+      // juntas, y recién después se vuelve a pedir el equipo por si
+      // restaurar_banca_rota_equipo le cambió algo.
+      await Promise.all([
+        supabase.rpc("restaurar_banca_rota_equipo", { p_team_id: equipoData.id }),
+        supabase.rpc("expirar_titulos_vencidos"),
+      ]);
       const { data: equipoActualizado } = await supabase
         .from("teams")
         .select("*")
@@ -778,46 +781,56 @@ export default function TeamDetailPage() {
     setEquipo(equipoData as TeamRow);
     setDescEquipo(equipoData.description ?? "");
 
+    // A partir de acá, cada bloque es independiente de los demás
+    // (ninguno necesita el resultado de otro) -- antes se pedían en
+    // secuencia, uno esperando al anterior, lo que sumaba sus tiempos
+    // de red en vez de solaparlos. Se agrupan como funciones y se
+    // disparan todas juntas con Promise.all más abajo.
+
     // Temporadas (migración 047): listado público completo -- sin
     // historial todavía, así que en la práctica son pocas filas. Se
     // usa para elegir en "Proponer un reto", "Fichar mercenario" y
     // "Proponer alianza".
-    const { data: temporadasData } = await supabase
-      .from("temporadas")
-      .select("*")
-      .order("fecha_inicio", { ascending: false });
-    setTemporadas((temporadasData ?? []) as TemporadaRow[]);
+    const cargarTemporadas = async () => {
+      const { data: temporadasData } = await supabase
+        .from("temporadas")
+        .select("*")
+        .order("fecha_inicio", { ascending: false });
+      setTemporadas((temporadasData ?? []) as TemporadaRow[]);
+    };
 
     // Mercenarios propios (migración 047): públicos, se muestran en el
     // perfil del equipo, separados de los miembros normales -- solo
     // los de la temporada actual (hoy cae dentro de fecha_inicio/
     // fecha_fin), no un historial de todas las que hubo alguna vez.
-    const { data: mercenariosData } = await supabase
-      .from("team_mercenarios")
-      .select("id, jugador_id, temporada_id, profiles(nick, unique_id), temporadas(nombre, fecha_inicio, fecha_fin)")
-      .eq("team_id", equipoData.id)
-      .order("fichado_en", { ascending: false });
+    const cargarMercenariosPropios = async () => {
+      const { data: mercenariosData } = await supabase
+        .from("team_mercenarios")
+        .select("id, jugador_id, temporada_id, profiles(nick, unique_id), temporadas(nombre, fecha_inicio, fecha_fin)")
+        .eq("team_id", equipoData.id)
+        .order("fichado_en", { ascending: false });
 
-    const ahoraIso = new Date().toISOString();
-    setMercenariosPropios(
-      (mercenariosData ?? [])
-        .filter((m) => {
-          const t = Array.isArray(m.temporadas) ? m.temporadas[0] : m.temporadas;
-          const temp = t as { fecha_inicio?: string; fecha_fin?: string } | null;
-          return temp?.fecha_inicio && temp?.fecha_fin && temp.fecha_inicio <= ahoraIso && ahoraIso <= temp.fecha_fin;
-        })
-        .map((m) => {
-          const perfil = extraerPerfilBasico(m.profiles);
-          const temporada = Array.isArray(m.temporadas) ? m.temporadas[0] : m.temporadas;
-          return {
-            id: m.id,
-            jugadorId: m.jugador_id,
-            jugadorNombre: perfil.nick ? `${perfil.nick}#${perfil.unique_id}` : "Jugador de RemorApp",
-            temporadaId: m.temporada_id,
-            temporadaNombre: (temporada as { nombre?: string } | null)?.nombre ?? "Temporada",
-          };
-        })
-    );
+      const ahoraIso = new Date().toISOString();
+      setMercenariosPropios(
+        (mercenariosData ?? [])
+          .filter((m) => {
+            const t = Array.isArray(m.temporadas) ? m.temporadas[0] : m.temporadas;
+            const temp = t as { fecha_inicio?: string; fecha_fin?: string } | null;
+            return temp?.fecha_inicio && temp?.fecha_fin && temp.fecha_inicio <= ahoraIso && ahoraIso <= temp.fecha_fin;
+          })
+          .map((m) => {
+            const perfil = extraerPerfilBasico(m.profiles);
+            const temporada = Array.isArray(m.temporadas) ? m.temporadas[0] : m.temporadas;
+            return {
+              id: m.id,
+              jugadorId: m.jugador_id,
+              jugadorNombre: perfil.nick ? `${perfil.nick}#${perfil.unique_id}` : "Jugador de RemorApp",
+              temporadaId: m.temporada_id,
+              temporadaNombre: (temporada as { nombre?: string } | null)?.nombre ?? "Temporada",
+            };
+          })
+      );
+    };
 
     // Alianzas donde participa este equipo, en cualquier estado -- la
     // RLS ya filtra 'pendiente'/'rechazada' a solo los involucrados y
@@ -826,254 +839,298 @@ export default function TeamDetailPage() {
     // necesita ver sus solicitudes pendientes/rechazadas en el panel;
     // la vitrina pública más abajo sí filtra a solo las aprobadas de
     // la temporada actual.
-    const { data: alianzasData } = await supabase
-      .from("team_alianzas")
-      .select("id, team_a_id, team_b_id, temporada_id, status, aprobado_por_equipo_b, temporadas(nombre)")
-      .or(`team_a_id.eq.${equipoData.id},team_b_id.eq.${equipoData.id}`)
-      .order("created_at", { ascending: false });
+    const cargarAlianzas = async () => {
+      const { data: alianzasData } = await supabase
+        .from("team_alianzas")
+        .select("id, team_a_id, team_b_id, temporada_id, status, aprobado_por_equipo_b, temporadas(nombre)")
+        .or(`team_a_id.eq.${equipoData.id},team_b_id.eq.${equipoData.id}`)
+        .order("created_at", { ascending: false });
 
-    const idsEquiposAliados = [
-      ...new Set(
-        (alianzasData ?? []).map((a) => (a.team_a_id === equipoData.id ? a.team_b_id : a.team_a_id))
-      ),
-    ];
-    let nombrePorEquipoAliado: Record<string, string> = {};
-    if (idsEquiposAliados.length > 0) {
-      const { data: equiposAliadosData } = await supabase
-        .from("teams")
-        .select("id, name, tag")
-        .in("id", idsEquiposAliados);
-      nombrePorEquipoAliado = Object.fromEntries(
-        (equiposAliadosData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+      const idsEquiposAliados = [
+        ...new Set(
+          (alianzasData ?? []).map((a) => (a.team_a_id === equipoData.id ? a.team_b_id : a.team_a_id))
+        ),
+      ];
+      let nombrePorEquipoAliado: Record<string, string> = {};
+      if (idsEquiposAliados.length > 0) {
+        const { data: equiposAliadosData } = await supabase
+          .from("teams")
+          .select("id, name, tag")
+          .in("id", idsEquiposAliados);
+        nombrePorEquipoAliado = Object.fromEntries(
+          (equiposAliadosData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        );
+      }
+
+      setAlianzasPropias(
+        (alianzasData ?? []).map((a) => {
+          const aliadoId = a.team_a_id === equipoData.id ? a.team_b_id : a.team_a_id;
+          const temporada = Array.isArray(a.temporadas) ? a.temporadas[0] : a.temporadas;
+          return {
+            id: a.id,
+            aliadoId,
+            aliadoNombre: nombrePorEquipoAliado[aliadoId] ?? "Equipo",
+            temporadaId: a.temporada_id,
+            temporadaNombre: (temporada as { nombre?: string } | null)?.nombre ?? "Temporada",
+            status: a.status as "pendiente" | "aprobada" | "rechazada",
+            propuestaPorMi: a.team_a_id === equipoData.id,
+            aprobadoPorEquipoB: a.aprobado_por_equipo_b,
+          };
+        })
       );
-    }
-
-    setAlianzasPropias(
-      (alianzasData ?? []).map((a) => {
-        const aliadoId = a.team_a_id === equipoData.id ? a.team_b_id : a.team_a_id;
-        const temporada = Array.isArray(a.temporadas) ? a.temporadas[0] : a.temporadas;
-        return {
-          id: a.id,
-          aliadoId,
-          aliadoNombre: nombrePorEquipoAliado[aliadoId] ?? "Equipo",
-          temporadaId: a.temporada_id,
-          temporadaNombre: (temporada as { nombre?: string } | null)?.nombre ?? "Temporada",
-          status: a.status as "pendiente" | "aprobada" | "rechazada",
-          propuestaPorMi: a.team_a_id === equipoData.id,
-          aprobadoPorEquipoB: a.aprobado_por_equipo_b,
-        };
-      })
-    );
+    };
 
     // Amistades entre equipos (migración 073), en cualquier estado --
     // mismo criterio que las alianzas de arriba: el propio equipo
     // necesita ver sus solicitudes pendientes/rechazadas, no solo las
     // aceptadas.
-    const { data: amistadesData } = await supabase
-      .from("team_amistades")
-      .select("id, equipo_solicitante_id, equipo_destinatario_id, status")
-      .or(`equipo_solicitante_id.eq.${equipoData.id},equipo_destinatario_id.eq.${equipoData.id}`)
-      .order("created_at", { ascending: false });
+    const cargarAmistades = async () => {
+      const { data: amistadesData } = await supabase
+        .from("team_amistades")
+        .select("id, equipo_solicitante_id, equipo_destinatario_id, status")
+        .or(`equipo_solicitante_id.eq.${equipoData.id},equipo_destinatario_id.eq.${equipoData.id}`)
+        .order("created_at", { ascending: false });
 
-    const idsEquiposAmigos = [
-      ...new Set(
-        (amistadesData ?? []).map((a) =>
-          a.equipo_solicitante_id === equipoData.id ? a.equipo_destinatario_id : a.equipo_solicitante_id
-        )
-      ),
-    ];
-    let nombrePorEquipoAmigo: Record<string, string> = {};
-    if (idsEquiposAmigos.length > 0) {
-      const { data: equiposAmigosData } = await supabase
-        .from("teams")
-        .select("id, name, tag")
-        .in("id", idsEquiposAmigos);
-      nombrePorEquipoAmigo = Object.fromEntries(
-        (equiposAmigosData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+      const idsEquiposAmigos = [
+        ...new Set(
+          (amistadesData ?? []).map((a) =>
+            a.equipo_solicitante_id === equipoData.id ? a.equipo_destinatario_id : a.equipo_solicitante_id
+          )
+        ),
+      ];
+      let nombrePorEquipoAmigo: Record<string, string> = {};
+      if (idsEquiposAmigos.length > 0) {
+        const { data: equiposAmigosData } = await supabase
+          .from("teams")
+          .select("id, name, tag")
+          .in("id", idsEquiposAmigos);
+        nombrePorEquipoAmigo = Object.fromEntries(
+          (equiposAmigosData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        );
+      }
+
+      setAmistadesPropias(
+        (amistadesData ?? []).map((a) => {
+          const otroEquipoId =
+            a.equipo_solicitante_id === equipoData.id ? a.equipo_destinatario_id : a.equipo_solicitante_id;
+          return {
+            id: a.id,
+            otroEquipoId,
+            otroEquipoNombre: nombrePorEquipoAmigo[otroEquipoId] ?? "Equipo",
+            status: a.status as TeamAmistadStatus,
+            propuestaPorMi: a.equipo_solicitante_id === equipoData.id,
+          };
+        })
       );
-    }
-
-    setAmistadesPropias(
-      (amistadesData ?? []).map((a) => {
-        const otroEquipoId =
-          a.equipo_solicitante_id === equipoData.id ? a.equipo_destinatario_id : a.equipo_solicitante_id;
-        return {
-          id: a.id,
-          otroEquipoId,
-          otroEquipoNombre: nombrePorEquipoAmigo[otroEquipoId] ?? "Equipo",
-          status: a.status as TeamAmistadStatus,
-          propuestaPorMi: a.equipo_solicitante_id === equipoData.id,
-        };
-      })
-    );
+    };
 
     // Invitaciones a torneos que le llegaron a este equipo (migración
     // 073) -- se muestran todas, no solo 'pendiente', para que quede
     // el historial de lo que ya se aceptó/rechazó.
-    const { data: invitacionesTorneoData } = await supabase
-      .from("torneo_invitaciones_equipo")
-      .select("id, tournament_id, status, created_at, tournaments(nombre)")
-      .eq("equipo_id", equipoData.id)
-      .order("created_at", { ascending: false });
+    const cargarInvitacionesTorneo = async () => {
+      const { data: invitacionesTorneoData } = await supabase
+        .from("torneo_invitaciones_equipo")
+        .select("id, tournament_id, status, created_at, tournaments(nombre)")
+        .eq("equipo_id", equipoData.id)
+        .order("created_at", { ascending: false });
 
-    setInvitacionesTorneoPropias(
-      (invitacionesTorneoData ?? []).map((inv) => {
-        const torneo = Array.isArray(inv.tournaments) ? inv.tournaments[0] : inv.tournaments;
+      setInvitacionesTorneoPropias(
+        (invitacionesTorneoData ?? []).map((inv) => {
+          const torneo = Array.isArray(inv.tournaments) ? inv.tournaments[0] : inv.tournaments;
+          return {
+            id: inv.id,
+            tournamentId: inv.tournament_id,
+            torneoNombre: (torneo as { nombre?: string } | null)?.nombre ?? "Torneo",
+            status: inv.status as TorneoInvitacionEquipoStatus,
+            createdAt: inv.created_at,
+          };
+        })
+      );
+    };
+
+    const cargarMiembros = async () => {
+      const { data: miembrosData } = await supabase
+        .from("team_members")
+        .select(
+          "user_id, roles, es_capitan, profiles(nick, unique_id, avatar_url, avatar_forma, liga, mmr_equipos, liga_equipos, banca_rota, valentia_jugador, responsabilidad_cw, poco_confiable)"
+        )
+        .eq("team_id", equipoData.id)
+        .order("joined_at", { ascending: true });
+
+      const miembrosBase: MiembroConNombre[] = (miembrosData ?? []).map((m) => {
+        const perfil = extraerPerfil(m.profiles);
         return {
-          id: inv.id,
-          tournamentId: inv.tournament_id,
-          torneoNombre: (torneo as { nombre?: string } | null)?.nombre ?? "Torneo",
-          status: inv.status as TorneoInvitacionEquipoStatus,
-          createdAt: inv.created_at,
+          userId: m.user_id,
+          nick: perfil.nick,
+          uniqueId: perfil.unique_id,
+          avatarUrl: perfil.avatar_url,
+          avatarForma: perfil.avatar_forma,
+          liga: perfil.liga,
+          mmrEquipos: perfil.mmr_equipos,
+          ligaEquipos: perfil.liga_equipos,
+          bancaRota: perfil.banca_rota,
+          valentiaJugador: perfil.valentia_jugador,
+          responsabilidadCw: perfil.responsabilidad_cw,
+          pocoConfiable: perfil.poco_confiable,
+          roles: m.roles as string[],
+          esCapitan: m.es_capitan,
+          razaPrincipal: null,
+          razaSecundaria: null,
         };
-      })
-    );
+      });
 
-    const { data: miembrosData } = await supabase
-      .from("team_members")
-      .select(
-        "user_id, roles, es_capitan, profiles(nick, unique_id, avatar_url, avatar_forma, liga, mmr_equipos, liga_equipos, banca_rota, valentia_jugador, responsabilidad_cw, poco_confiable)"
-      )
-      .eq("team_id", equipoData.id)
-      .order("joined_at", { ascending: true });
+      // Raza de StarCraft II (migración 034): opcional para cada
+      // miembro -- se resuelve el juego_id una vez y se completa acá,
+      // en vez de embeber perfiles_juego en la consulta de arriba.
+      const idSc2 = await obtenerJuegoIdSc2();
+      if (idSc2 && miembrosBase.length > 0) {
+        const { data: razasData } = await supabase
+          .from("perfiles_juego")
+          .select("user_id, datos")
+          .eq("juego_id", idSc2)
+          .in(
+            "user_id",
+            miembrosBase.map((m) => m.userId)
+          );
 
-    const miembrosBase: MiembroConNombre[] = (miembrosData ?? []).map((m) => {
-      const perfil = extraerPerfil(m.profiles);
-      return {
-        userId: m.user_id,
-        nick: perfil.nick,
-        uniqueId: perfil.unique_id,
-        avatarUrl: perfil.avatar_url,
-        avatarForma: perfil.avatar_forma,
-        liga: perfil.liga,
-        mmrEquipos: perfil.mmr_equipos,
-        ligaEquipos: perfil.liga_equipos,
-        bancaRota: perfil.banca_rota,
-        valentiaJugador: perfil.valentia_jugador,
-        responsabilidadCw: perfil.responsabilidad_cw,
-        pocoConfiable: perfil.poco_confiable,
-        roles: m.roles as string[],
-        esCapitan: m.es_capitan,
-        razaPrincipal: null,
-        razaSecundaria: null,
-      };
-    });
-
-    // Raza de StarCraft II (migración 034): opcional para cada
-    // miembro -- se resuelve el juego_id una vez y se completa acá,
-    // en vez de embeber perfiles_juego en la consulta de arriba.
-    const idSc2 = await obtenerJuegoIdSc2();
-    if (idSc2 && miembrosBase.length > 0) {
-      const { data: razasData } = await supabase
-        .from("perfiles_juego")
-        .select("user_id, datos")
-        .eq("juego_id", idSc2)
-        .in(
-          "user_id",
-          miembrosBase.map((m) => m.userId)
+        const razaPorUserId: Record<string, DatosSc2> = Object.fromEntries(
+          (razasData ?? []).map((r) => [r.user_id, r.datos as DatosSc2])
         );
 
-      const razaPorUserId: Record<string, DatosSc2> = Object.fromEntries(
-        (razasData ?? []).map((r) => [r.user_id, r.datos as DatosSc2])
-      );
-
-      for (const m of miembrosBase) {
-        const datos = razaPorUserId[m.userId];
-        m.razaPrincipal = datos?.raza_principal ?? null;
-        m.razaSecundaria = datos?.raza_secundaria ?? null;
+        for (const m of miembrosBase) {
+          const datos = razaPorUserId[m.userId];
+          m.razaPrincipal = datos?.raza_principal ?? null;
+          m.razaSecundaria = datos?.raza_secundaria ?? null;
+        }
       }
-    }
 
-    setMiembros(miembrosBase);
+      setMiembros(miembrosBase);
+    };
 
     // Jugadores temporales (migración 033): públicos, igual que el
     // resto del roster -- si ya fueron reemplazados, se resuelve acá
     // el perfil real de una vez, para no repreguntar en el render.
-    const { data: temporalesData } = await supabase
-      .from("team_temp_players")
-      .select("id, nick_temporal, reemplazado_por, profiles!reemplazado_por(nick, unique_id, avatar_url, avatar_forma)")
-      .eq("team_id", equipoData.id)
-      .order("created_at", { ascending: true });
+    const cargarTemporales = async () => {
+      const { data: temporalesData } = await supabase
+        .from("team_temp_players")
+        .select("id, nick_temporal, reemplazado_por, profiles!reemplazado_por(nick, unique_id, avatar_url, avatar_forma)")
+        .eq("team_id", equipoData.id)
+        .order("created_at", { ascending: true });
 
-    setJugadoresTemporales(
-      (temporalesData ?? []).map((t) => {
-        const perfil = t.reemplazado_por
-          ? (Array.isArray(t.profiles) ? t.profiles[0] : t.profiles)
-          : null;
-        const p = perfil as
-          | { nick: string | null; unique_id: string | null; avatar_url: string | null; avatar_forma: AvatarForma }
-          | null;
-        return {
-          id: t.id,
-          nickTemporal: t.nick_temporal,
-          reemplazadoPorId: t.reemplazado_por,
-          reemplazadoPorNick: p?.nick ?? null,
-          reemplazadoPorUniqueId: p?.unique_id ?? null,
-          reemplazadoPorAvatarUrl: p?.avatar_url ?? null,
-          reemplazadoPorAvatarForma: p?.avatar_forma ?? "cuadrado",
-        };
-      })
-    );
+      setJugadoresTemporales(
+        (temporalesData ?? []).map((t) => {
+          const perfil = t.reemplazado_por
+            ? (Array.isArray(t.profiles) ? t.profiles[0] : t.profiles)
+            : null;
+          const p = perfil as
+            | { nick: string | null; unique_id: string | null; avatar_url: string | null; avatar_forma: AvatarForma }
+            | null;
+          return {
+            id: t.id,
+            nickTemporal: t.nick_temporal,
+            reemplazadoPorId: t.reemplazado_por,
+            reemplazadoPorNick: p?.nick ?? null,
+            reemplazadoPorUniqueId: p?.unique_id ?? null,
+            reemplazadoPorAvatarUrl: p?.avatar_url ?? null,
+            reemplazadoPorAvatarForma: p?.avatar_forma ?? "cuadrado",
+          };
+        })
+      );
+    };
 
     // Solo el dueño ve el historial de expulsados (la RLS de
     // team_kicks_log ya lo exige igual, esto es solo para no pedirlo
     // de más cuando no hace falta).
-    if (user && equipoData.owner_id === user.id) {
-      const { data: expulsadosData } = await supabase
-        .from("team_kicks_log")
-        .select("user_id, kicked_at, profiles!user_id(nick, unique_id)")
-        .eq("team_id", equipoData.id)
-        .order("kicked_at", { ascending: false });
+    // Todo lo de acá abajo (expulsados, Clan Wars, títulos, torneos
+    // históricos, historial de eventos) es exclusivo de esDueño -- la
+    // RLS ya lo exige igual, esto es solo para no pedirlo de más.
+    const cargarSeccionDueno = async () => {
+      if (!(user && equipoData.owner_id === user.id)) {
+        setExpulsados([]);
+        setRetosPendientesResponder([]);
+        setRetosPropuestosPorMi([]);
+        setRetosActivos([]);
+        setRosterPorTeamId({});
+        setLineupPorReto({});
+        setReportesPorReto({});
+        setPartidasPorReto({});
+        setHistorialRetos([]);
+        setTitulosPendientesResponder([]);
+        setTitulosPropuestosPorMi([]);
+        setSolicitudesHistoricas([]);
+        setTorneosParticipados([]);
+        return;
+      }
 
-      setExpulsados(
-        (expulsadosData ?? []).map((e) => {
-          const perfil = extraerPerfilBasico(e.profiles);
-          return {
-            userId: e.user_id,
-            nick: perfil.nick,
-            uniqueId: perfil.unique_id,
-            kickedAt: e.kicked_at,
-          };
-        })
-      );
+      const cargarExpulsados = async () => {
+        const { data: expulsadosData } = await supabase
+          .from("team_kicks_log")
+          .select("user_id, kicked_at, profiles!user_id(nick, unique_id)")
+          .eq("team_id", equipoData.id)
+          .order("kicked_at", { ascending: false });
+
+        setExpulsados(
+          (expulsadosData ?? []).map((e) => {
+            const perfil = extraerPerfilBasico(e.profiles);
+            return {
+              userId: e.user_id,
+              nick: perfil.nick,
+              uniqueId: perfil.unique_id,
+              kickedAt: e.kicked_at,
+            };
+          })
+        );
+      };
 
       // Clan Wars: tanto los retos que le propusieron a este equipo
       // como los que este equipo propuso -- la RLS de clan_wars ya
       // exige ser dueño de uno de los dos equipos involucrados, esto
       // de acá es solo para no pedirlo de más cuando no hace falta.
-      const { data: retosData } = await supabase
-        .from("clan_wars")
-        .select("*")
-        .or(`challenger_team_id.eq.${equipoData.id},challenged_team_id.eq.${equipoData.id}`)
-        .order("created_at", { ascending: false });
+      const cargarRetos = async () => {
+        const { data: retosData } = await supabase
+          .from("clan_wars")
+          .select("*")
+          .or(`challenger_team_id.eq.${equipoData.id},challenged_team_id.eq.${equipoData.id}`)
+          .order("created_at", { ascending: false });
 
-      const teamIdsRetos = [
-        ...new Set((retosData ?? []).flatMap((r) => [r.challenger_team_id, r.challenged_team_id])),
-      ];
-      let nombrePorTeamIdReto: Record<string, string> = {};
-      if (teamIdsRetos.length > 0) {
-        const { data: equiposRetoData } = await supabase
-          .from("teams")
-          .select("id, name, tag")
-          .in("id", teamIdsRetos);
-        nombrePorTeamIdReto = Object.fromEntries(
-          (equiposRetoData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        const teamIdsRetos = [
+          ...new Set((retosData ?? []).flatMap((r) => [r.challenger_team_id, r.challenged_team_id])),
+        ];
+        // Ventana de revelación (migración 089): solo las Clan Wars que
+        // salieron del fixture de un torneo tienen un valor propio --
+        // una propuesta a mano entre dos clanes no tiene torneo detrás,
+        // así que se queda en el default de 30 (ver plazoEdicionLineup()).
+        const retoIdsParaVentana = (retosData ?? []).map((r) => r.id);
+
+        // equiposRetoData, ventanasData y bracketData son 3 consultas
+        // independientes entre sí -- las tres dependen de retosData
+        // (recién resuelto arriba), pero ninguna necesita el resultado
+        // de las otras dos.
+        const [equiposRetoResult, ventanasResult, bracketResult] = await Promise.all([
+          teamIdsRetos.length > 0
+            ? supabase.from("teams").select("id, name, tag").in("id", teamIdsRetos)
+            : Promise.resolve({ data: [] as { id: string; name: string; tag: string }[] }),
+          retoIdsParaVentana.length > 0
+            ? supabase
+                .from("tournament_group_matches")
+                .select("clan_war_id, tournament_groups(tournaments(ventana_revelacion_minutos))")
+                .in("clan_war_id", retoIdsParaVentana)
+            : Promise.resolve({ data: [] as { clan_war_id: string; tournament_groups: unknown }[] }),
+          retoIdsParaVentana.length > 0
+            ? supabase
+                .from("bracket_matches")
+                .select("clan_war_id, tournaments(ventana_revelacion_minutos, jugadores_por_set)")
+                .in("clan_war_id", retoIdsParaVentana)
+            : Promise.resolve({ data: [] as { clan_war_id: string; tournaments: unknown }[] }),
+        ]);
+
+        const nombrePorTeamIdReto: Record<string, string> = Object.fromEntries(
+          (equiposRetoResult.data ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
         );
-      }
 
-      // Ventana de revelación (migración 089): solo las Clan Wars que
-      // salieron del fixture de un torneo tienen un valor propio --
-      // una propuesta a mano entre dos clanes no tiene torneo detrás,
-      // así que se queda en el default de 30 (ver plazoEdicionLineup()).
-      const retoIdsParaVentana = (retosData ?? []).map((r) => r.id);
-      let ventanaPorClanWarId: Record<string, number> = {};
-      let jugadoresPorSetPorClanWarId: Record<string, number> = {};
-      if (retoIdsParaVentana.length > 0) {
-        const { data: ventanasData } = await supabase
-          .from("tournament_group_matches")
-          .select("clan_war_id, tournament_groups(tournaments(ventana_revelacion_minutos))")
-          .in("clan_war_id", retoIdsParaVentana);
-        for (const fila of ventanasData ?? []) {
+        let ventanaPorClanWarId: Record<string, number> = {};
+        let jugadoresPorSetPorClanWarId: Record<string, number> = {};
+        for (const fila of ventanasResult.data ?? []) {
           type GrupoConTorneo = { tournaments: { ventana_revelacion_minutos: number } | { ventana_revelacion_minutos: number }[] | null };
           const grupoRaw = fila.tournament_groups as unknown as GrupoConTorneo | GrupoConTorneo[] | null;
           const grupo = Array.isArray(grupoRaw) ? grupoRaw[0] : grupoRaw;
@@ -1087,11 +1144,7 @@ export default function TeamDetailPage() {
         // Migración 090: mismo criterio, pero para una Clan War que
         // salió de un cruce del bracket de un torneo formato "wtl" en
         // vez de la fase de grupos -- acá también sale jugadores_por_set.
-        const { data: bracketData } = await supabase
-          .from("bracket_matches")
-          .select("clan_war_id, tournaments(ventana_revelacion_minutos, jugadores_por_set)")
-          .in("clan_war_id", retoIdsParaVentana);
-        for (const fila of bracketData ?? []) {
+        for (const fila of bracketResult.data ?? []) {
           type TorneoBracket = { ventana_revelacion_minutos: number; jugadores_por_set: number };
           const torneoRaw = fila.tournaments as unknown as TorneoBracket | TorneoBracket[] | null;
           const torneo = Array.isArray(torneoRaw) ? torneoRaw[0] : torneoRaw;
@@ -1104,130 +1157,146 @@ export default function TeamDetailPage() {
             }
           }
         }
-      }
 
-      const retosResueltos: ClanWarConNombres[] = (retosData ?? []).map((r) => ({
-        id: r.id,
-        challengerTeamId: r.challenger_team_id,
-        challengerNombre: nombrePorTeamIdReto[r.challenger_team_id] ?? "Equipo",
-        challengedTeamId: r.challenged_team_id,
-        challengedNombre: nombrePorTeamIdReto[r.challenged_team_id] ?? "Equipo",
-        fechaHoraCet: r.fecha_hora_cet,
-        status: r.status,
-        motivoRechazo: r.motivo_rechazo,
-        motivoDetalle: r.motivo_detalle,
-        lineupVistoBuenoChallenger: r.lineup_visto_bueno_challenger,
-        lineupVistoBuenoChallenged: r.lineup_visto_bueno_challenged,
-        challengerConfirmado: r.challenger_confirmado,
-        challengedConfirmado: r.challenged_confirmado,
-        casterNombre: r.caster_nombre,
-        casterLink: r.caster_link,
-        tieneDelay: r.tiene_delay,
-        challengerCierreConfirmado: r.challenger_cierre_confirmado,
-        challengedCierreConfirmado: r.challenged_cierre_confirmado,
-        ganadorTeamId: r.ganador_team_id,
-        formato: r.formato,
-        aceChallengerId: r.ace_challenger_id,
-        aceChallengedId: r.ace_challenged_id,
-        aceGanadorId: r.ace_ganador_id,
-        resultadoMapasChallenger: r.resultado_mapas_challenger,
-        resultadoMapasChallenged: r.resultado_mapas_challenged,
-        reprogramacionesUsadas: r.reprogramaciones_usadas,
-        temporadaId: r.temporada_id,
-        fondoLineup: r.fondo_lineup,
-        fondoLineupImagenId: r.fondo_lineup_imagen_id,
-        intervenidoPorAdmin: r.intervenido_por_admin,
-        lineupPlazoExtendidoHasta: r.lineup_plazo_extendido_hasta,
-        ventanaRevelacionMinutos: ventanaPorClanWarId[r.id] ?? 30,
-        // Migración 091: si esta Clan War viene de un torneo, manda su
-        // jugadores_por_set (torneo_de_clan_war() gana esa carrera en
-        // la base); si no, es un reto directo -- se usa el propio
-        // clan_wars.jugadores_por_set, editable desde acá mismo.
-        jugadoresPorSet: jugadoresPorSetPorClanWarId[r.id] ?? r.jugadores_por_set ?? 3,
-        esDeTorneo: r.id in jugadoresPorSetPorClanWarId,
-      }));
+        const retosResueltos: ClanWarConNombres[] = (retosData ?? []).map((r) => ({
+          id: r.id,
+          challengerTeamId: r.challenger_team_id,
+          challengerNombre: nombrePorTeamIdReto[r.challenger_team_id] ?? "Equipo",
+          challengedTeamId: r.challenged_team_id,
+          challengedNombre: nombrePorTeamIdReto[r.challenged_team_id] ?? "Equipo",
+          fechaHoraCet: r.fecha_hora_cet,
+          status: r.status,
+          motivoRechazo: r.motivo_rechazo,
+          motivoDetalle: r.motivo_detalle,
+          lineupVistoBuenoChallenger: r.lineup_visto_bueno_challenger,
+          lineupVistoBuenoChallenged: r.lineup_visto_bueno_challenged,
+          challengerConfirmado: r.challenger_confirmado,
+          challengedConfirmado: r.challenged_confirmado,
+          casterNombre: r.caster_nombre,
+          casterLink: r.caster_link,
+          tieneDelay: r.tiene_delay,
+          challengerCierreConfirmado: r.challenger_cierre_confirmado,
+          challengedCierreConfirmado: r.challenged_cierre_confirmado,
+          ganadorTeamId: r.ganador_team_id,
+          formato: r.formato,
+          aceChallengerId: r.ace_challenger_id,
+          aceChallengedId: r.ace_challenged_id,
+          aceGanadorId: r.ace_ganador_id,
+          resultadoMapasChallenger: r.resultado_mapas_challenger,
+          resultadoMapasChallenged: r.resultado_mapas_challenged,
+          reprogramacionesUsadas: r.reprogramaciones_usadas,
+          temporadaId: r.temporada_id,
+          fondoLineup: r.fondo_lineup,
+          fondoLineupImagenId: r.fondo_lineup_imagen_id,
+          intervenidoPorAdmin: r.intervenido_por_admin,
+          lineupPlazoExtendidoHasta: r.lineup_plazo_extendido_hasta,
+          ventanaRevelacionMinutos: ventanaPorClanWarId[r.id] ?? 30,
+          // Migración 091: si esta Clan War viene de un torneo, manda su
+          // jugadores_por_set (torneo_de_clan_war() gana esa carrera en
+          // la base); si no, es un reto directo -- se usa el propio
+          // clan_wars.jugadores_por_set, editable desde acá mismo.
+          jugadoresPorSet: jugadoresPorSetPorClanWarId[r.id] ?? r.jugadores_por_set ?? 3,
+          esDeTorneo: r.id in jugadoresPorSetPorClanWarId,
+        }));
 
-      setRetosPendientesResponder(
-        retosResueltos.filter((r) => r.status === "pendiente" && r.challengedTeamId === equipoData.id)
-      );
-      setRetosPropuestosPorMi(
-        retosResueltos.filter((r) => r.status === "pendiente" && r.challengerTeamId === equipoData.id)
-      );
+        setRetosPendientesResponder(
+          retosResueltos.filter((r) => r.status === "pendiente" && r.challengedTeamId === equipoData.id)
+        );
+        setRetosPropuestosPorMi(
+          retosResueltos.filter((r) => r.status === "pendiente" && r.challengerTeamId === equipoData.id)
+        );
 
-      const activos = retosResueltos.filter((r) => r.status === "aceptada" || r.status === "en_curso");
-      setRetosActivos(activos);
-      setHistorialRetos(
-        retosResueltos.filter(
-          (r) => r.status === "rechazada" || r.status === "cancelada" || r.status === "finalizada" || r.status === "empatada"
-        )
-      );
+        const activos = retosResueltos.filter((r) => r.status === "aceptada" || r.status === "en_curso");
+        setRetosActivos(activos);
+        setHistorialRetos(
+          retosResueltos.filter(
+            (r) => r.status === "rechazada" || r.status === "cancelada" || r.status === "finalizada" || r.status === "empatada"
+          )
+        );
 
-      // Roster de los DOS equipos de cada reto activo (no solo el
-      // rival): hace falta el propio también para elegir jugadores al
-      // agregar una partida (Fase 3). Se traen todos de una, la
-      // ventana de check-in solo decide qué se muestra, no qué se pide.
-      if (activos.length > 0) {
-        const teamIdsInvolucrados = [
-          ...new Set(activos.flatMap((r) => [r.challengerTeamId, r.challengedTeamId])),
-        ];
-
-        const { data: rosterData } = await supabase
-          .from("team_members")
-          .select("team_id, user_id, profiles(nick, unique_id, sc2_id)")
-          .in("team_id", teamIdsInvolucrados);
-
-        // Raza de StarCraft II (migración 034) para cada jugador del
-        // roster -- el capitán la necesita a mano en el check-in, para
-        // decidir el line-up real contra un rival específico.
-        const idSc2ParaRoster = await obtenerJuegoIdSc2();
-        let razaPorUserIdRoster: Record<string, DatosSc2> = {};
-        if (idSc2ParaRoster) {
-          const userIdsRoster = [...new Set((rosterData ?? []).map((f) => f.user_id))];
-          const { data: razasRosterData } = await supabase
-            .from("perfiles_juego")
-            .select("user_id, datos")
-            .eq("juego_id", idSc2ParaRoster)
-            .in("user_id", userIdsRoster);
-          razaPorUserIdRoster = Object.fromEntries(
-            (razasRosterData ?? []).map((r) => [r.user_id, r.datos as DatosSc2])
-          );
-        }
-
-        const rosterPorTeamIdTmp: Record<string, MiembroRoster[]> = {};
-        for (const fila of rosterData ?? []) {
-          const perfil = fila.profiles as unknown as
-            | { nick: string | null; unique_id: string | null; sc2_id: string | null }
-            | { nick: string | null; unique_id: string | null; sc2_id: string | null }[]
-            | null;
-          const p = Array.isArray(perfil) ? perfil[0] : perfil;
-          const razaDeFila = razaPorUserIdRoster[fila.user_id];
-          const lista = rosterPorTeamIdTmp[fila.team_id] ?? [];
-          lista.push({
-            userId: fila.user_id,
-            nick: p?.nick ?? null,
-            uniqueId: p?.unique_id ?? null,
-            sc2Id: p?.sc2_id ?? null,
-            razaPrincipal: razaDeFila?.raza_principal ?? null,
-            razaSecundaria: razaDeFila?.raza_secundaria ?? null,
-          });
-          rosterPorTeamIdTmp[fila.team_id] = lista;
-        }
-
-        // Migración 047: mercenarios fichados para la temporada de
-        // cada reto activo se agregan al roster de su equipo, con la
-        // etiqueta correspondiente -- no son team_members, pero deben
-        // verse en la pantalla de check-in igual que cualquier otro
-        // puesto del roster.
-        const retosConTemporada = activos.filter((r) => r.temporadaId);
-        if (retosConTemporada.length > 0) {
+        // Roster de los DOS equipos de cada reto activo (no solo el
+        // rival): hace falta el propio también para elegir jugadores al
+        // agregar una partida (Fase 3). Se traen todos de una, la
+        // ventana de check-in solo decide qué se muestra, no qué se pide.
+        if (activos.length > 0) {
+          const teamIdsInvolucrados = [
+            ...new Set(activos.flatMap((r) => [r.challengerTeamId, r.challengedTeamId])),
+          ];
+          const retosConTemporada = activos.filter((r) => r.temporadaId);
           const temporadaIdsActivos = [...new Set(retosConTemporada.map((r) => r.temporadaId as string))];
-          const { data: mercenariosCheckInData } = await supabase
-            .from("team_mercenarios")
-            .select("team_id, jugador_id, temporada_id, profiles(nick, unique_id, sc2_id)")
-            .in("team_id", teamIdsInvolucrados)
-            .in("temporada_id", temporadaIdsActivos);
 
-          for (const fila of mercenariosCheckInData ?? []) {
+          // El roster (+ su propia raza, en cadena) y los mercenarios
+          // fichados para check-in son independientes entre sí -- el
+          // segundo no necesita esperar al primero, solo se combinan
+          // recién al construir rosterPorTeamIdTmp más abajo.
+          const [rosterResult, mercenariosCheckInResult] = await Promise.all([
+            (async () => {
+              const { data: rosterData } = await supabase
+                .from("team_members")
+                .select("team_id, user_id, profiles(nick, unique_id, sc2_id)")
+                .in("team_id", teamIdsInvolucrados);
+
+              // Raza de StarCraft II (migración 034) para cada jugador
+              // del roster -- el capitán la necesita a mano en el
+              // check-in, para decidir el line-up real contra un rival
+              // específico.
+              const idSc2ParaRoster = await obtenerJuegoIdSc2();
+              let razaPorUserIdRoster: Record<string, DatosSc2> = {};
+              if (idSc2ParaRoster) {
+                const userIdsRoster = [...new Set((rosterData ?? []).map((f) => f.user_id))];
+                const { data: razasRosterData } = await supabase
+                  .from("perfiles_juego")
+                  .select("user_id, datos")
+                  .eq("juego_id", idSc2ParaRoster)
+                  .in("user_id", userIdsRoster);
+                razaPorUserIdRoster = Object.fromEntries(
+                  (razasRosterData ?? []).map((r) => [r.user_id, r.datos as DatosSc2])
+                );
+              }
+              return { rosterData: rosterData ?? [], razaPorUserIdRoster };
+            })(),
+            retosConTemporada.length > 0
+              ? supabase
+                  .from("team_mercenarios")
+                  .select("team_id, jugador_id, temporada_id, profiles(nick, unique_id, sc2_id)")
+                  .in("team_id", teamIdsInvolucrados)
+                  .in("temporada_id", temporadaIdsActivos)
+              : Promise.resolve({
+                  data: [] as {
+                    team_id: string;
+                    jugador_id: string;
+                    temporada_id: string;
+                    profiles: unknown;
+                  }[],
+                }),
+          ]);
+
+          const rosterPorTeamIdTmp: Record<string, MiembroRoster[]> = {};
+          for (const fila of rosterResult.rosterData) {
+            const perfil = fila.profiles as unknown as
+              | { nick: string | null; unique_id: string | null; sc2_id: string | null }
+              | { nick: string | null; unique_id: string | null; sc2_id: string | null }[]
+              | null;
+            const p = Array.isArray(perfil) ? perfil[0] : perfil;
+            const razaDeFila = rosterResult.razaPorUserIdRoster[fila.user_id];
+            const lista = rosterPorTeamIdTmp[fila.team_id] ?? [];
+            lista.push({
+              userId: fila.user_id,
+              nick: p?.nick ?? null,
+              uniqueId: p?.unique_id ?? null,
+              sc2Id: p?.sc2_id ?? null,
+              razaPrincipal: razaDeFila?.raza_principal ?? null,
+              razaSecundaria: razaDeFila?.raza_secundaria ?? null,
+            });
+            rosterPorTeamIdTmp[fila.team_id] = lista;
+          }
+
+          // Migración 047: mercenarios fichados para la temporada de
+          // cada reto activo se agregan al roster de su equipo, con la
+          // etiqueta correspondiente -- no son team_members, pero deben
+          // verse en la pantalla de check-in igual que cualquier otro
+          // puesto del roster.
+          for (const fila of mercenariosCheckInResult.data ?? []) {
             // Solo tiene sentido para el/los retos cuya temporada
             // coincide con la de este fichaje -- un mercenario fichado
             // para una temporada no aparece en el roster de un reto de
@@ -1255,297 +1324,313 @@ export default function TeamDetailPage() {
             });
             rosterPorTeamIdTmp[fila.team_id] = lista;
           }
-        }
 
-        setRosterPorTeamId(rosterPorTeamIdTmp);
+          setRosterPorTeamId(rosterPorTeamIdTmp);
 
-        const nombrePorUserId: Record<string, string> = {};
-        for (const lista of Object.values(rosterPorTeamIdTmp)) {
-          for (const m of lista) {
-            nombrePorUserId[m.userId] = m.nick
-              ? `${m.nick}${m.uniqueId ? `#${m.uniqueId}` : ""}`
-              : "Jugador de RemorApp";
-          }
-        }
-
-        // Migración 047: a quién puede poner un capitán en el lineup
-        // de cada reto con temporada -- roster_elegible_cw() ya
-        // resuelve miembros + mercenario propio + (con alianza
-        // aprobada) roster del equipo aliado. Sin temporada en el
-        // reto, el <select> del lineup sigue usando `miembros`
-        // directamente, sin ningún cambio.
-        if (retosConTemporada.length > 0) {
-          const elegiblesTmp: Record<string, JugadorElegibleLineup[]> = {};
-          for (const r of retosConTemporada) {
-            const miTeamIdReto = r.challengerTeamId === equipoData.id ? r.challengerTeamId : r.challengedTeamId;
-            const { data: elegiblesData, error: elegiblesError } = await supabase.rpc("roster_elegible_cw", {
-              p_team_id: miTeamIdReto,
-              p_temporada_id: r.temporadaId,
-            });
-            if (elegiblesError || !elegiblesData) continue;
-
-            const idsFaltantes = (elegiblesData as { jugador_id: string }[])
-              .map((e) => e.jugador_id)
-              .filter((id) => !nombrePorUserId[id]);
-            if (idsFaltantes.length > 0) {
-              const { data: perfilesFaltantes } = await supabase
-                .from("profiles")
-                .select("id, nick, unique_id")
-                .in("id", idsFaltantes);
-              for (const pf of perfilesFaltantes ?? []) {
-                nombrePorUserId[pf.id] = pf.nick ? `${pf.nick}#${pf.unique_id}` : "Jugador de RemorApp";
-              }
+          const nombrePorUserId: Record<string, string> = {};
+          for (const lista of Object.values(rosterPorTeamIdTmp)) {
+            for (const m of lista) {
+              nombrePorUserId[m.userId] = m.nick
+                ? `${m.nick}${m.uniqueId ? `#${m.uniqueId}` : ""}`
+                : "Jugador de RemorApp";
             }
-
-            elegiblesTmp[r.id] = (elegiblesData as { jugador_id: string; es_mercenario: boolean; es_aliado: boolean }[]).map(
-              (e) => ({
-                jugadorId: e.jugador_id,
-                nombre: nombrePorUserId[e.jugador_id] ?? "Jugador de RemorApp",
-                esMercenario: e.es_mercenario,
-                esAliado: e.es_aliado,
-              })
-            );
           }
-          setElegiblesPorReto(elegiblesTmp);
-        } else {
-          setElegiblesPorReto({});
-        }
 
-        const retoIds = activos.map((r) => r.id);
+          // Migración 047: a quién puede poner un capitán en el lineup
+          // de cada reto con temporada -- roster_elegible_cw() ya
+          // resuelve miembros + mercenario propio + (con alianza
+          // aprobada) roster del equipo aliado. Sin temporada en el
+          // reto, el <select> del lineup sigue usando `miembros`
+          // directamente, sin ningún cambio.
+          //
+          // Este loop queda SECUENCIAL a propósito, sin paralelizar:
+          // cada iteración puede completar en nombrePorUserId el
+          // nombre de un jugador que la siguiente iteración reutiliza
+          // al vuelo (evitando pedirlo de nuevo) -- correrlas todas
+          // juntas con Promise.all podría hacer que dos iteraciones
+          // pidan el mismo perfil faltante dos veces, o que una lea el
+          // acumulador antes de que otra, ya en curso, lo haya
+          // completado.
+          if (retosConTemporada.length > 0) {
+            const elegiblesTmp: Record<string, JugadorElegibleLineup[]> = {};
+            for (const r of retosConTemporada) {
+              const miTeamIdReto = r.challengerTeamId === equipoData.id ? r.challengerTeamId : r.challengedTeamId;
+              const { data: elegiblesData, error: elegiblesError } = await supabase.rpc("roster_elegible_cw", {
+                p_team_id: miTeamIdReto,
+                p_temporada_id: r.temporadaId,
+              });
+              if (elegiblesError || !elegiblesData) continue;
 
-        // Lineup de Clan War (migración 037): se separa acá mismo en
-        // "propio" (team_id === equipo.id, esta página) y "rival".
-        const { data: lineupData, error: lineupError } = await supabase
-          .from("clan_war_lineup")
-          .select(
-            // clan_war_lineup tiene DOS relaciones con profiles
-            // (jugador_id y agregado_por) -- hay que especificar la
-            // columna, si no PostgREST tira PGRST201 por ambigüedad
-            // (mismo caso ya visto con team_invitations).
-            "id, clan_war_id, team_id, jugador_id, jugador_temporal_id, link_verificacion, posicion, es_suplente, profiles!jugador_id(nick, unique_id), team_temp_players(nick_temporal)"
-          )
-          .in("clan_war_id", retoIds);
+              const idsFaltantes = (elegiblesData as { jugador_id: string }[])
+                .map((e) => e.jugador_id)
+                .filter((id) => !nombrePorUserId[id]);
+              if (idsFaltantes.length > 0) {
+                const { data: perfilesFaltantes } = await supabase
+                  .from("profiles")
+                  .select("id, nick, unique_id")
+                  .in("id", idsFaltantes);
+                for (const pf of perfilesFaltantes ?? []) {
+                  nombrePorUserId[pf.id] = pf.nick ? `${pf.nick}#${pf.unique_id}` : "Jugador de RemorApp";
+                }
+              }
 
-        if (lineupError) {
-          console.error("Error cargando el lineup de Clan War:", lineupError);
-        }
-
-        const lineupPorRetoTmp: Record<string, { propio: LineupEntry[]; rival: LineupEntry[] }> = {};
-        for (const fila of lineupData ?? []) {
-          const perfil = extraerPerfilBasico(fila.profiles);
-          const tempRaw = fila.team_temp_players as unknown as
-            | { nick_temporal: string }
-            | { nick_temporal: string }[]
-            | null;
-          const temp = Array.isArray(tempRaw) ? tempRaw[0] : tempRaw;
-          const entry: LineupEntry = {
-            id: fila.id,
-            nombre: fila.jugador_id
-              ? perfil.nick
-                ? `${perfil.nick}#${perfil.unique_id}`
-                : "Jugador de RemorApp"
-              : `Temporal: ${temp?.nick_temporal ?? "?"}`,
-            esTemporal: !!fila.jugador_temporal_id,
-            linkVerificacion: fila.link_verificacion,
-            jugadorId: fila.jugador_id,
-            posicion: fila.posicion as 1 | 2 | 3 | null,
-            esSuplente: fila.es_suplente,
-          };
-          const bucket = lineupPorRetoTmp[fila.clan_war_id] ?? { propio: [], rival: [] };
-          if (fila.team_id === equipoData.id) {
-            bucket.propio.push(entry);
+              elegiblesTmp[r.id] = (elegiblesData as { jugador_id: string; es_mercenario: boolean; es_aliado: boolean }[]).map(
+                (e) => ({
+                  jugadorId: e.jugador_id,
+                  nombre: nombrePorUserId[e.jugador_id] ?? "Jugador de RemorApp",
+                  esMercenario: e.es_mercenario,
+                  esAliado: e.es_aliado,
+                })
+              );
+            }
+            setElegiblesPorReto(elegiblesTmp);
           } else {
-            bucket.rival.push(entry);
+            setElegiblesPorReto({});
           }
-          lineupPorRetoTmp[fila.clan_war_id] = bucket;
+
+          const retoIds = activos.map((r) => r.id);
+
+          // lineup, reportes, partidas, wtlSets, reprogramaciones y
+          // extensiones son 6 consultas independientes entre sí --
+          // todas leen de mapas ya calculados más arriba
+          // (nombrePorTeamIdReto, nombrePorUserId), ninguna necesita el
+          // resultado de otra.
+          const [lineupResult, reportesResult, partidasResult, wtlSetsResult, reprogramacionesResult, extensionesResult] =
+            await Promise.all([
+              supabase
+                .from("clan_war_lineup")
+                .select(
+                  // clan_war_lineup tiene DOS relaciones con profiles
+                  // (jugador_id y agregado_por) -- hay que especificar
+                  // la columna, si no PostgREST tira PGRST201 por
+                  // ambigüedad (mismo caso ya visto con
+                  // team_invitations).
+                  "id, clan_war_id, team_id, jugador_id, jugador_temporal_id, link_verificacion, posicion, es_suplente, profiles!jugador_id(nick, unique_id), team_temp_players(nick_temporal)"
+                )
+                .in("clan_war_id", retoIds),
+              supabase
+                .from("clan_war_reportes")
+                .select("id, clan_war_id, reportado_por, jugador_afectado_id, motivo, created_at, profiles!jugador_afectado_id(nick, unique_id)")
+                .in("clan_war_id", retoIds)
+                .order("created_at", { ascending: false }),
+              supabase
+                .from("clan_war_matches")
+                .select("*")
+                .in("clan_war_id", retoIds)
+                .order("created_at", { ascending: true }),
+              // Formato WTL (migración 042/093): sets generados solos al
+              // arrancar la guerra -- mismo nombrePorUserId de arriba.
+              supabase
+                .from("clan_war_wtl_sets")
+                .select("*")
+                .in("clan_war_id", retoIds)
+                .order("posicion", { ascending: true }),
+              // Reprogramar una Clan War (migración 045): solo la
+              // solicitud pendiente de cada reto -- solo puede haber
+              // una a la vez.
+              supabase
+                .from("clan_war_reschedules")
+                .select("id, clan_war_id, propuesto_por, nueva_fecha_hora_cet, motivo")
+                .in("clan_war_id", retoIds)
+                .eq("status", "pendiente"),
+              // Extensión del plazo de edición del lineup (migración
+              // 066): solo la solicitud pendiente de cada reto -- mismo
+              // criterio que la reprogramación de arriba.
+              supabase
+                .from("clan_war_lineup_extensiones")
+                .select("id, clan_war_id, propuesto_por, minutos_solicitados, motivo")
+                .in("clan_war_id", retoIds)
+                .eq("status", "pendiente"),
+            ]);
+
+          if (lineupResult.error) {
+            console.error("Error cargando el lineup de Clan War:", lineupResult.error);
+          }
+
+          const lineupPorRetoTmp: Record<string, { propio: LineupEntry[]; rival: LineupEntry[] }> = {};
+          for (const fila of lineupResult.data ?? []) {
+            const perfil = extraerPerfilBasico(fila.profiles);
+            const tempRaw = fila.team_temp_players as unknown as
+              | { nick_temporal: string }
+              | { nick_temporal: string }[]
+              | null;
+            const temp = Array.isArray(tempRaw) ? tempRaw[0] : tempRaw;
+            const entry: LineupEntry = {
+              id: fila.id,
+              nombre: fila.jugador_id
+                ? perfil.nick
+                  ? `${perfil.nick}#${perfil.unique_id}`
+                  : "Jugador de RemorApp"
+                : `Temporal: ${temp?.nick_temporal ?? "?"}`,
+              esTemporal: !!fila.jugador_temporal_id,
+              linkVerificacion: fila.link_verificacion,
+              jugadorId: fila.jugador_id,
+              posicion: fila.posicion as 1 | 2 | 3 | null,
+              esSuplente: fila.es_suplente,
+            };
+            const bucket = lineupPorRetoTmp[fila.clan_war_id] ?? { propio: [], rival: [] };
+            if (fila.team_id === equipoData.id) {
+              bucket.propio.push(entry);
+            } else {
+              bucket.rival.push(entry);
+            }
+            lineupPorRetoTmp[fila.clan_war_id] = bucket;
+          }
+          setLineupPorReto(lineupPorRetoTmp);
+
+          const reportesPorRetoTmp: Record<string, ReporteConNombres[]> = {};
+          for (const rep of reportesResult.data ?? []) {
+            const perfil = extraerPerfilBasico(rep.profiles);
+            const nombreJugador = perfil.nick
+              ? `${perfil.nick}${perfil.unique_id ? `#${perfil.unique_id}` : ""}`
+              : "Jugador de RemorApp";
+            const equipoReportante = nombrePorTeamIdReto[rep.reportado_por] ?? "Equipo";
+            const lista = reportesPorRetoTmp[rep.clan_war_id] ?? [];
+            lista.push({
+              id: rep.id,
+              reportadoPorNombre: equipoReportante,
+              jugadorAfectadoId: rep.jugador_afectado_id,
+              jugadorAfectadoNombre: nombreJugador,
+              motivo: rep.motivo,
+              createdAt: rep.created_at,
+            });
+            reportesPorRetoTmp[rep.clan_war_id] = lista;
+          }
+          setReportesPorReto(reportesPorRetoTmp);
+
+          const partidasPorRetoTmp: Record<string, PartidaConNombres[]> = {};
+          for (const p of partidasResult.data ?? []) {
+            const lista = partidasPorRetoTmp[p.clan_war_id] ?? [];
+            lista.push({
+              id: p.id,
+              jugadorChallengerId: p.jugador_challenger_id,
+              jugadorChallengerNombre: nombrePorUserId[p.jugador_challenger_id] ?? "Jugador de RemorApp",
+              jugadorChallengedId: p.jugador_challenged_id,
+              jugadorChallengedNombre: nombrePorUserId[p.jugador_challenged_id] ?? "Jugador de RemorApp",
+              ganadorId: p.ganador_id,
+              status: p.status,
+            });
+            partidasPorRetoTmp[p.clan_war_id] = lista;
+          }
+          setPartidasPorReto(partidasPorRetoTmp);
+
+          const wtlSetsPorRetoTmp: Record<string, WtlSetConNombres[]> = {};
+          for (const s of wtlSetsResult.data ?? []) {
+            const lista = wtlSetsPorRetoTmp[s.clan_war_id] ?? [];
+            lista.push({
+              id: s.id,
+              posicion: s.posicion,
+              jugadorChallengerId: s.jugador_challenger_id,
+              jugadorChallengerNombre: nombrePorUserId[s.jugador_challenger_id] ?? "Jugador de RemorApp",
+              jugadorChallengedId: s.jugador_challenged_id,
+              jugadorChallengedNombre: nombrePorUserId[s.jugador_challenged_id] ?? "Jugador de RemorApp",
+              mapasGanadosChallenger: s.mapas_ganados_challenger,
+              mapasGanadosChallenged: s.mapas_ganados_challenged,
+              status: s.status,
+            });
+            wtlSetsPorRetoTmp[s.clan_war_id] = lista;
+          }
+          setWtlSetsPorReto(wtlSetsPorRetoTmp);
+
+          const reprogramacionPorRetoTmp: Record<string, ReprogramacionPendiente | null> = {};
+          for (const rp of reprogramacionesResult.data ?? []) {
+            reprogramacionPorRetoTmp[rp.clan_war_id] = {
+              id: rp.id,
+              propuestoPor: rp.propuesto_por,
+              nuevaFechaHoraCet: rp.nueva_fecha_hora_cet,
+              motivo: rp.motivo,
+            };
+          }
+          setReprogramacionPorReto(reprogramacionPorRetoTmp);
+
+          const extensionPorRetoTmp: Record<string, ExtensionLineupPendiente | null> = {};
+          for (const ext of extensionesResult.data ?? []) {
+            extensionPorRetoTmp[ext.clan_war_id] = {
+              id: ext.id,
+              propuestoPor: ext.propuesto_por,
+              minutosSolicitados: ext.minutos_solicitados,
+              motivo: ext.motivo,
+            };
+          }
+          setExtensionPorReto(extensionPorRetoTmp);
+        } else {
+          setRosterPorTeamId({});
+          setLineupPorReto({});
+          setReportesPorReto({});
+          setPartidasPorReto({});
+          setWtlSetsPorReto({});
+          setReprogramacionPorReto({});
+          setExtensionPorReto({});
         }
-        setLineupPorReto(lineupPorRetoTmp);
-
-        const { data: reportesData } = await supabase
-          .from("clan_war_reportes")
-          .select("id, clan_war_id, reportado_por, jugador_afectado_id, motivo, created_at, profiles!jugador_afectado_id(nick, unique_id)")
-          .in("clan_war_id", retoIds)
-          .order("created_at", { ascending: false });
-
-        const reportesPorRetoTmp: Record<string, ReporteConNombres[]> = {};
-        for (const rep of reportesData ?? []) {
-          const perfil = extraerPerfilBasico(rep.profiles);
-          const nombreJugador = perfil.nick
-            ? `${perfil.nick}${perfil.unique_id ? `#${perfil.unique_id}` : ""}`
-            : "Jugador de RemorApp";
-          const equipoReportante = nombrePorTeamIdReto[rep.reportado_por] ?? "Equipo";
-          const lista = reportesPorRetoTmp[rep.clan_war_id] ?? [];
-          lista.push({
-            id: rep.id,
-            reportadoPorNombre: equipoReportante,
-            jugadorAfectadoId: rep.jugador_afectado_id,
-            jugadorAfectadoNombre: nombreJugador,
-            motivo: rep.motivo,
-            createdAt: rep.created_at,
-          });
-          reportesPorRetoTmp[rep.clan_war_id] = lista;
-        }
-        setReportesPorReto(reportesPorRetoTmp);
-
-        const { data: partidasData } = await supabase
-          .from("clan_war_matches")
-          .select("*")
-          .in("clan_war_id", retoIds)
-          .order("created_at", { ascending: true });
-
-        const partidasPorRetoTmp: Record<string, PartidaConNombres[]> = {};
-        for (const p of partidasData ?? []) {
-          const lista = partidasPorRetoTmp[p.clan_war_id] ?? [];
-          lista.push({
-            id: p.id,
-            jugadorChallengerId: p.jugador_challenger_id,
-            jugadorChallengerNombre: nombrePorUserId[p.jugador_challenger_id] ?? "Jugador de RemorApp",
-            jugadorChallengedId: p.jugador_challenged_id,
-            jugadorChallengedNombre: nombrePorUserId[p.jugador_challenged_id] ?? "Jugador de RemorApp",
-            ganadorId: p.ganador_id,
-            status: p.status,
-          });
-          partidasPorRetoTmp[p.clan_war_id] = lista;
-        }
-        setPartidasPorReto(partidasPorRetoTmp);
-
-        // Formato WTL (migración 042): 3 sets Bo2 por reto, generados
-        // solos al arrancar la guerra -- mismo nombrePorUserId de arriba.
-        const { data: wtlSetsData } = await supabase
-          .from("clan_war_wtl_sets")
-          .select("*")
-          .in("clan_war_id", retoIds)
-          .order("posicion", { ascending: true });
-
-        const wtlSetsPorRetoTmp: Record<string, WtlSetConNombres[]> = {};
-        for (const s of wtlSetsData ?? []) {
-          const lista = wtlSetsPorRetoTmp[s.clan_war_id] ?? [];
-          lista.push({
-            id: s.id,
-            posicion: s.posicion,
-            jugadorChallengerId: s.jugador_challenger_id,
-            jugadorChallengerNombre: nombrePorUserId[s.jugador_challenger_id] ?? "Jugador de RemorApp",
-            jugadorChallengedId: s.jugador_challenged_id,
-            jugadorChallengedNombre: nombrePorUserId[s.jugador_challenged_id] ?? "Jugador de RemorApp",
-            mapasGanadosChallenger: s.mapas_ganados_challenger,
-            mapasGanadosChallenged: s.mapas_ganados_challenged,
-            status: s.status,
-          });
-          wtlSetsPorRetoTmp[s.clan_war_id] = lista;
-        }
-        setWtlSetsPorReto(wtlSetsPorRetoTmp);
-
-        // Reprogramar una Clan War (migración 045): solo la solicitud
-        // pendiente de cada reto -- solo puede haber una a la vez.
-        const { data: reprogramacionesData } = await supabase
-          .from("clan_war_reschedules")
-          .select("id, clan_war_id, propuesto_por, nueva_fecha_hora_cet, motivo")
-          .in("clan_war_id", retoIds)
-          .eq("status", "pendiente");
-
-        const reprogramacionPorRetoTmp: Record<string, ReprogramacionPendiente | null> = {};
-        for (const rp of reprogramacionesData ?? []) {
-          reprogramacionPorRetoTmp[rp.clan_war_id] = {
-            id: rp.id,
-            propuestoPor: rp.propuesto_por,
-            nuevaFechaHoraCet: rp.nueva_fecha_hora_cet,
-            motivo: rp.motivo,
-          };
-        }
-        setReprogramacionPorReto(reprogramacionPorRetoTmp);
-
-        // Extensión del plazo de edición del lineup (migración 066):
-        // solo la solicitud pendiente de cada reto -- mismo criterio
-        // que la reprogramación de arriba.
-        const { data: extensionesData } = await supabase
-          .from("clan_war_lineup_extensiones")
-          .select("id, clan_war_id, propuesto_por, minutos_solicitados, motivo")
-          .in("clan_war_id", retoIds)
-          .eq("status", "pendiente");
-
-        const extensionPorRetoTmp: Record<string, ExtensionLineupPendiente | null> = {};
-        for (const ext of extensionesData ?? []) {
-          extensionPorRetoTmp[ext.clan_war_id] = {
-            id: ext.id,
-            propuestoPor: ext.propuesto_por,
-            minutosSolicitados: ext.minutos_solicitados,
-            motivo: ext.motivo,
-          };
-        }
-        setExtensionPorReto(extensionPorRetoTmp);
-      } else {
-        setRosterPorTeamId({});
-        setLineupPorReto({});
-        setReportesPorReto({});
-        setPartidasPorReto({});
-        setWtlSetsPorReto({});
-        setReprogramacionPorReto({});
-        setExtensionPorReto({});
-      }
+      };
 
       // Títulos Padre/Hijo entre clanes: propuestas pendientes de
       // responder y las mías propias, esperando respuesta -- los
       // títulos ACTIVOS se muestran aparte, públicamente, con
       // TitulosActivosList (no hace falta ser dueño para verlos).
-      const { data: titulosData } = await supabase
-        .from("titulos_padre_hijo")
-        .select("*")
-        .eq("tipo", "clan")
-        .eq("status", "pendiente")
-        .or(`retador_id.eq.${equipoData.id},retado_id.eq.${equipoData.id}`)
-        .order("created_at", { ascending: false });
+      const cargarTitulos = async () => {
+        const { data: titulosData } = await supabase
+          .from("titulos_padre_hijo")
+          .select("*")
+          .eq("tipo", "clan")
+          .eq("status", "pendiente")
+          .or(`retador_id.eq.${equipoData.id},retado_id.eq.${equipoData.id}`)
+          .order("created_at", { ascending: false });
 
-      const teamIdsTitulos = [
-        ...new Set((titulosData ?? []).flatMap((t) => [t.retador_id, t.retado_id])),
-      ];
-      let nombrePorTeamIdTitulo: Record<string, string> = {};
-      if (teamIdsTitulos.length > 0) {
-        const { data: equiposTituloData } = await supabase
-          .from("teams")
-          .select("id, name, tag")
-          .in("id", teamIdsTitulos);
-        nombrePorTeamIdTitulo = Object.fromEntries(
-          (equiposTituloData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+        const teamIdsTitulos = [
+          ...new Set((titulosData ?? []).flatMap((t) => [t.retador_id, t.retado_id])),
+        ];
+        let nombrePorTeamIdTitulo: Record<string, string> = {};
+        if (teamIdsTitulos.length > 0) {
+          const { data: equiposTituloData } = await supabase
+            .from("teams")
+            .select("id, name, tag")
+            .in("id", teamIdsTitulos);
+          nombrePorTeamIdTitulo = Object.fromEntries(
+            (equiposTituloData ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
+          );
+        }
+
+        const titulosResueltos: TituloConNombre[] = (titulosData ?? []).map((t) => ({
+          id: t.id,
+          retadorId: t.retador_id,
+          retadorNombre: nombrePorTeamIdTitulo[t.retador_id] ?? "Equipo",
+          retadoId: t.retado_id,
+          retadoNombre: nombrePorTeamIdTitulo[t.retado_id] ?? "Equipo",
+          duracionDias: t.duracion_dias,
+          aceptado: t.aceptado,
+        }));
+
+        setTitulosPendientesResponder(
+          titulosResueltos.filter((t) => !t.aceptado && t.retadoId === equipoData.id)
         );
-      }
-
-      const titulosResueltos: TituloConNombre[] = (titulosData ?? []).map((t) => ({
-        id: t.id,
-        retadorId: t.retador_id,
-        retadorNombre: nombrePorTeamIdTitulo[t.retador_id] ?? "Equipo",
-        retadoId: t.retado_id,
-        retadoNombre: nombrePorTeamIdTitulo[t.retado_id] ?? "Equipo",
-        duracionDias: t.duracion_dias,
-        aceptado: t.aceptado,
-      }));
-
-      setTitulosPendientesResponder(
-        titulosResueltos.filter((t) => !t.aceptado && t.retadoId === equipoData.id)
-      );
-      setTitulosPropuestosPorMi(
-        titulosResueltos.filter((t) => t.retadorId === equipoData.id)
-      );
+        setTitulosPropuestosPorMi(
+          titulosResueltos.filter((t) => t.retadorId === equipoData.id)
+        );
+      };
 
       // Torneos Históricos (migración 029): solicitudes de
       // consentimiento pendientes -- "este torneo dice que
       // participaste, ¿aceptas que sea público?".
-      const { data: solicitudesData } = await supabase
-        .from("historical_tournament_participants")
-        .select("id, historical_tournament_id, historical_tournaments(nombre)")
-        .eq("team_id", equipoData.id)
-        .is("consentimiento", null);
+      const cargarSolicitudesHistoricas = async () => {
+        const { data: solicitudesData } = await supabase
+          .from("historical_tournament_participants")
+          .select("id, historical_tournament_id, historical_tournaments(nombre)")
+          .eq("team_id", equipoData.id)
+          .is("consentimiento", null);
 
-      setSolicitudesHistoricas(
-        (solicitudesData ?? []).map((s) => {
-          const torneo = Array.isArray(s.historical_tournaments)
-            ? s.historical_tournaments[0]
-            : s.historical_tournaments;
-          return {
-            id: s.id,
-            torneoNombre: (torneo as { nombre?: string } | undefined)?.nombre ?? "Torneo histórico",
-          };
-        })
-      );
+        setSolicitudesHistoricas(
+          (solicitudesData ?? []).map((s) => {
+            const torneo = Array.isArray(s.historical_tournaments)
+              ? s.historical_tournaments[0]
+              : s.historical_tournaments;
+            return {
+              id: s.id,
+              torneoNombre: (torneo as { nombre?: string } | undefined)?.nombre ?? "Torneo histórico",
+            };
+          })
+        );
+      };
 
       // Mi historial de eventos: torneos DENTRO de la plataforma en
       // los que participó este equipo, ya finalizados. Solo hace
@@ -1557,65 +1642,77 @@ export default function TeamDetailPage() {
       // (tercer_lugar_participant_id, además de campeon_participant_id),
       // así que el embed sin calificar quedó ambiguo (PGRST201) y esta
       // consulta dejó de funcionar en silencio hasta este arreglo.
-      const { data: participacionesData } = await supabase
-        .from("tournament_participants")
-        .select(
-          "id, tournaments!tournament_participants_tournament_id_fkey(id, nombre, fecha_inicio, estado, modo, campeon_participant_id)"
-        )
-        .eq("team_id", equipoData.id);
+      const cargarParticipaciones = async () => {
+        const { data: participacionesData } = await supabase
+          .from("tournament_participants")
+          .select(
+            "id, tournaments!tournament_participants_tournament_id_fkey(id, nombre, fecha_inicio, estado, modo, campeon_participant_id)"
+          )
+          .eq("team_id", equipoData.id);
 
-      const finalizadas = (participacionesData ?? [])
-        .map((p) => {
-          const torneo = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
-          return {
-            participantId: p.id as string,
-            torneo: torneo as
-              | { id: string; nombre: string; fecha_inicio: string; estado: string; modo: string; campeon_participant_id: string | null }
-              | undefined,
-          };
-        })
-        .filter((p) => p.torneo?.estado === "finalizado");
+        const finalizadas = (participacionesData ?? [])
+          .map((p) => {
+            const torneo = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
+            return {
+              participantId: p.id as string,
+              torneo: torneo as
+                | { id: string; nombre: string; fecha_inicio: string; estado: string; modo: string; campeon_participant_id: string | null }
+                | undefined,
+            };
+          })
+          .filter((p) => p.torneo?.estado === "finalizado");
 
-      const torneosResueltos: TorneoParticipadoConResultado[] = [];
-      for (const { participantId, torneo } of finalizadas) {
-        if (!torneo) continue;
-        let resultado = "Participó";
-        if (torneo.modo === "eliminacion_simple") {
-          resultado = torneo.campeon_participant_id === participantId ? "Campeón 🏆" : "Participó";
-        } else {
-          const { data: resultadosData } = await supabase
-            .from("tournament_results")
-            .select("gano")
-            .eq("tournament_id", torneo.id)
-            .eq("participant_id", participantId);
-          if (resultadosData && resultadosData.length > 0) {
-            resultado = resultadosData.some((r) => r.gano) ? "Ganó" : "Perdió";
-          }
-        }
-        torneosResueltos.push({
-          id: torneo.id,
-          nombre: torneo.nombre,
-          fechaInicio: torneo.fecha_inicio,
-          resultado,
-        });
-      }
-      torneosResueltos.sort((a, b) => new Date(b.fechaInicio).getTime() - new Date(a.fechaInicio).getTime());
-      setTorneosParticipados(torneosResueltos);
-    } else {
-      setExpulsados([]);
-      setRetosPendientesResponder([]);
-      setRetosPropuestosPorMi([]);
-      setRetosActivos([]);
-      setRosterPorTeamId({});
-      setLineupPorReto({});
-      setReportesPorReto({});
-      setPartidasPorReto({});
-      setHistorialRetos([]);
-      setTitulosPendientesResponder([]);
-      setTitulosPropuestosPorMi([]);
-      setSolicitudesHistoricas([]);
-      setTorneosParticipados([]);
-    }
+        // El resultado de cada torneo finalizado es independiente del
+        // de los demás -- se piden todos juntos en vez de uno por uno.
+        const torneosResueltos: TorneoParticipadoConResultado[] = await Promise.all(
+          finalizadas
+            .filter((f): f is typeof f & { torneo: NonNullable<typeof f.torneo> } => !!f.torneo)
+            .map(async ({ participantId, torneo }) => {
+              let resultado = "Participó";
+              if (torneo.modo === "eliminacion_simple") {
+                resultado = torneo.campeon_participant_id === participantId ? "Campeón 🏆" : "Participó";
+              } else {
+                const { data: resultadosData } = await supabase
+                  .from("tournament_results")
+                  .select("gano")
+                  .eq("tournament_id", torneo.id)
+                  .eq("participant_id", participantId);
+                if (resultadosData && resultadosData.length > 0) {
+                  resultado = resultadosData.some((r) => r.gano) ? "Ganó" : "Perdió";
+                }
+              }
+              return {
+                id: torneo.id,
+                nombre: torneo.nombre,
+                fechaInicio: torneo.fecha_inicio,
+                resultado,
+              };
+            })
+        );
+
+        torneosResueltos.sort((a, b) => new Date(b.fechaInicio).getTime() - new Date(a.fechaInicio).getTime());
+        setTorneosParticipados(torneosResueltos);
+      };
+
+      await Promise.all([
+        cargarExpulsados(),
+        cargarRetos(),
+        cargarTitulos(),
+        cargarSolicitudesHistoricas(),
+        cargarParticipaciones(),
+      ]);
+    };
+
+    await Promise.all([
+      cargarTemporadas(),
+      cargarMercenariosPropios(),
+      cargarAlianzas(),
+      cargarAmistades(),
+      cargarInvitacionesTorneo(),
+      cargarMiembros(),
+      cargarTemporales(),
+      cargarSeccionDueno(),
+    ]);
 
     setLoading(false);
   };
