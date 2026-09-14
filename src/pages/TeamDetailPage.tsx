@@ -25,6 +25,7 @@ import { NICK_REGEX, validarNick } from "../lib/nickValidation";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import {
+  BO_OPTIONS,
   datetimeLocalAIso,
   dentroDeVentanaCheckIn,
   formatearHoraCet,
@@ -507,13 +508,12 @@ export default function TeamDetailPage() {
 
   const [tagRivalReto, setTagRivalReto] = useState("");
   const [fechaHoraReto, setFechaHoraReto] = useState("");
-  // Formato WTL (migración 043): 'simple' por defecto, igual que
-  // siempre.
-  const [formatoReto, setFormatoReto] = useState<"simple" | "wtl">("simple");
-  // Migración 091: cuántos titulares por lado -- 3 por default, igual
-  // que el default de siempre para WTL; en formato simple es solo
-  // informativo (se puede ajustar después desde el lineup).
+  // Migración 093: un solo sistema de lineup para cualquier cantidad
+  // de jugadores -- ya no se elige entre "simple" y "WTL" por
+  // separado, siempre es 'wtl' (cada titular juega su propio set 1v1
+  // contra la posición equivalente del rival).
   const [jugadoresPorSetReto, setJugadoresPorSetReto] = useState("3");
+  const [mapasPorSetReto, setMapasPorSetReto] = useState("2");
   // Temporada (migración 047): opcional, "" = sin temporada, mismo
   // comportamiento de siempre.
   const [temporadaReto, setTemporadaReto] = useState("");
@@ -2107,9 +2107,10 @@ export default function TeamDetailPage() {
     const { error } = await supabase.rpc("proponer_clan_war", {
       p_challenged_team_id: equipoRival.id,
       p_fecha_hora_cet: datetimeLocalAIso(fechaHoraReto),
-      p_formato: formatoReto,
+      p_formato: "wtl",
       p_temporada_id: temporadaReto || null,
       p_jugadores_por_set: jugadoresPorSet,
+      p_mapas_por_set: Number(mapasPorSetReto) || 2,
     });
 
     setProponiendoReto(false);
@@ -5252,21 +5253,11 @@ export default function TeamDetailPage() {
                   />
                 </div>
 
-                <div className="form-group">
-                  <label className="form-label" htmlFor="reto-formato">
-                    Formato
-                  </label>
-                  <select
-                    id="reto-formato"
-                    className="form-select"
-                    value={formatoReto}
-                    onChange={(e) => setFormatoReto(e.target.value as "simple" | "wtl")}
-                  >
-                    <option value="simple">Simple (partidas sueltas)</option>
-                    <option value="wtl">WTL / chino (Bo2 + ACE)</option>
-                  </select>
-                </div>
-
+                {/* Migración 093: un solo sistema de lineup para
+                    cualquier cantidad de jugadores -- ya no se elige
+                    entre "Simple" y "WTL", siempre es el mismo (cada
+                    titular juega su propio set 1v1 contra la posición
+                    equivalente del rival). */}
                 <div className="form-group">
                   <label className="form-label" htmlFor="reto-jugadores-por-set">
                     Cantidad de jugadores por lado
@@ -5280,9 +5271,27 @@ export default function TeamDetailPage() {
                     onChange={(e) => setJugadoresPorSetReto(e.target.value)}
                   />
                   <p className="form-hint">
-                    En WTL define cuántos sets se juegan; en formato simple es solo de referencia -- se
-                    puede ajustar después, subir o bajar, desde el propio lineup.
+                    Cada titular juega su propio set 1v1 contra la posición equivalente del rival. Es
+                    editable -- se puede ajustar después, subir o bajar, desde el propio lineup.
                   </p>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="reto-mapas-por-set">
+                    "Bo" de cada set
+                  </label>
+                  <select
+                    id="reto-mapas-por-set"
+                    className="form-select"
+                    value={mapasPorSetReto}
+                    onChange={(e) => setMapasPorSetReto(e.target.value)}
+                  >
+                    {BO_OPTIONS.map((bo) => (
+                      <option key={bo.value} value={bo.value}>
+                        {bo.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Migración 047: opcional -- solo si este reto forma

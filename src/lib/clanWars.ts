@@ -56,6 +56,23 @@ export function dentroDeVentanaCheckIn(fechaHoraCetIso: string, ahoraMs: number 
 // se sigue usando este mismo default de 30.
 export const VENTANA_REVELACION_MINUTOS_DEFAULT = 30;
 
+// Migración 093: catálogo de "Bo" (mejor de N mapas) para cada set del
+// lineup -- reemplaza el viejo selector de formato (1v1/2v2/3v3/4v4 vs
+// WTL) de Clan War Amistosa y "Retar a otro clan": ahora cualquier
+// reto directo usa siempre el mismo sistema de lineup (jugadores_por_set
+// titulares por lado, cada uno jugando su propio set 1v1 contra la
+// posición equivalente del rival), y este catálogo define cuántos
+// mapas como máximo tiene cada uno de esos sets. reportar_mapa_wtl()
+// en la base cierra el set apenas alguien alcanza la mayoría real de
+// este número (Bo2 es la única excepción: al no haber mayoría posible
+// antes de agotar los 2 mapas, puede terminar empatado 1-1).
+export const BO_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: "Bo1 -- un solo mapa" },
+  { value: 2, label: "Bo2 -- hasta 2 mapas, puede terminar empatado 1-1" },
+  { value: 3, label: "Bo3 -- hasta 3 mapas, se cierra apenas alguien gana 2" },
+  { value: 5, label: "Bo5 -- hasta 5 mapas, se cierra apenas alguien gana 3" },
+];
+
 export function plazoEdicionLineup(
   fechaHoraCetIso: string,
   plazoExtendidoHastaIso: string | null,

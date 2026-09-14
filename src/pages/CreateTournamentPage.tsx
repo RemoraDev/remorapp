@@ -8,24 +8,13 @@ import ModoIcono from "../components/ModoIcono";
 import TipoEventoIcono from "../components/TipoEventoIcono";
 import { MODOS, getFormatoLabel } from "../lib/tournamentOptions";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
-import { datetimeLocalAIso } from "../lib/clanWars";
+import { datetimeLocalAIso, BO_OPTIONS } from "../lib/clanWars";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import type { TorneoFormato, TorneoModo } from "../types/tournaments";
 import type { DivisionLiga, Liga } from "../types/ranking";
 
 const FORMATOS: TorneoFormato[] = ["1v1", "2v2", "3v3", "4v4", "wtl"];
-
-// Migración 091: cuántos titulares por lado sugiere cada píldora de
-// formato al elegirla -- el número queda igual de editable después,
-// tanto acá como desde el propio lineup (cambiar_jugadores_por_set_cw()).
-const JUGADORES_SUGERIDOS_POR_FORMATO: Record<TorneoFormato, number> = {
-  "1v1": 1,
-  "2v2": 2,
-  "3v3": 3,
-  "4v4": 4,
-  wtl: 3,
-};
 
 // Migración 091: se simplifica de 3 opciones a 2 -- "Evento privado"
 // desaparece (un torneo por ligas siempre es público) y "Torneo
@@ -72,14 +61,18 @@ export default function CreateTournamentPage() {
   const [formato, setFormato] = useState<TorneoFormato>("1v1");
   const [modo, setModo] = useState<TorneoModo>("eliminacion_simple");
 
-  // Migración 091: Clan War Amistosa -- formulario mínimo, sin paso a
-  // paso, que no crea ningún torneo: llama directo a
+  // Migración 091/093: Clan War Amistosa -- formulario mínimo, sin
+  // paso a paso, que no crea ningún torneo: llama directo a
   // proponer_clan_war() (el mismo "Retar a otro clan" de siempre) con
-  // el clan elegido en el buscador.
+  // el clan elegido en el buscador. Un solo sistema de lineup para
+  // cualquier cantidad de jugadores (ya no hay que elegir entre
+  // 1v1/2v2/3v3/4v4 y WTL por separado, migración 093): cada titular
+  // juega su propio set 1v1 contra la posición equivalente del rival,
+  // con el "Bo" que se configure acá.
   const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
   const [cargandoMiEquipo, setCargandoMiEquipo] = useState(true);
-  const [cwFormato, setCwFormato] = useState<TorneoFormato>("1v1");
-  const [cwJugadoresPorSet, setCwJugadoresPorSet] = useState("1");
+  const [cwJugadoresPorSet, setCwJugadoresPorSet] = useState("3");
+  const [cwMapasPorSet, setCwMapasPorSet] = useState("2");
   const [cwFechaHora, setCwFechaHora] = useState("");
   const [cwBusqueda, setCwBusqueda] = useState("");
   const [cwResultados, setCwResultados] = useState<{ id: string; name: string; tag: string }[]>([]);
@@ -241,14 +234,6 @@ export default function CreateTournamentPage() {
       .finally(() => setCargandoMiEquipo(false));
   }, [user]);
 
-  // Al cambiar la píldora de formato de la Clan War Amistosa, se
-  // sugiere la cantidad de titulares típica de ese formato -- queda
-  // igual de editable después, así que esto no pisa un valor que el
-  // organizador ya haya tocado a mano si vuelve a tocar la píldora.
-  useEffect(() => {
-    setCwJugadoresPorSet(String(JUGADORES_SUGERIDOS_POR_FORMATO[cwFormato]));
-  }, [cwFormato]);
-
   // Buscador de clanes públicos para invitar a la Clan War Amistosa --
   // mismo criterio de "equipo público" que usa /equipos (is_public y
   // no disuelto), excluyendo mi propio equipo y los que están en
@@ -306,12 +291,15 @@ export default function CreateTournamentPage() {
 
     setCwEnviando(true);
 
+    // Migración 093: Clan War Amistosa siempre usa el sistema de
+    // lineup (antes "WTL") -- ya no existe la opción "simple" acá.
     const { error: proponerError } = await supabase.rpc("proponer_clan_war", {
       p_challenged_team_id: cwEquipoElegido.id,
       p_fecha_hora_cet: datetimeLocalAIso(cwFechaHora),
-      p_formato: cwFormato === "wtl" ? "wtl" : "simple",
+      p_formato: "wtl",
       p_temporada_id: null,
       p_jugadores_por_set: jugadores,
+      p_mapas_por_set: Number(cwMapasPorSet) || 2,
     });
 
     setCwEnviando(false);
@@ -587,24 +575,12 @@ export default function CreateTournamentPage() {
 
           {miEquipo && (
             <div className="form-section">
-              <div className="form-group">
-                <span className="form-label">Formato</span>
-                <div className="pill-radio-group">
-                  {FORMATOS.map((f) => (
-                    <label key={f} className={`pill-radio-option ${cwFormato === f ? "selected" : ""}`}>
-                      <input
-                        type="radio"
-                        className="sr-only"
-                        name="cwFormato"
-                        checked={cwFormato === f}
-                        onChange={() => setCwFormato(f)}
-                      />
-                      {getFormatoLabel(f)}
-                    </label>
-                  ))}
-                </div>
-              </div>
-
+              {/* Migración 093: un solo sistema de lineup para
+                  cualquier cantidad de jugadores -- cada titular juega
+                  su propio set 1v1 contra la posición equivalente del
+                  rival. Ya no hay que elegir un "formato" aparte
+                  (1v1/2v2/3v3/4v4 vs WTL): la cantidad de jugadores y
+                  el "Bo" de cada set son los dos únicos ajustes. */}
               <div className="form-group">
                 <label className="form-label" htmlFor="cw-jugadores-por-set">
                   Cantidad de jugadores por lado
@@ -618,8 +594,31 @@ export default function CreateTournamentPage() {
                   onChange={(e) => setCwJugadoresPorSet(e.target.value)}
                 />
                 <p className="form-hint">
-                  Se sugiere sola según el formato elegido, pero es editable -- y se puede volver a
-                  ajustar más adelante, subir o bajar, directo desde el lineup de la Clan War.
+                  Cada titular juega su propio set 1v1 contra la posición equivalente del rival. Es
+                  editable -- y se puede volver a ajustar más adelante, subir o bajar, directo desde el
+                  lineup de la Clan War.
+                </p>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="cw-mapas-por-set">
+                  "Bo" de cada set
+                </label>
+                <select
+                  id="cw-mapas-por-set"
+                  className="form-select"
+                  value={cwMapasPorSet}
+                  onChange={(e) => setCwMapasPorSet(e.target.value)}
+                >
+                  {BO_OPTIONS.map((bo) => (
+                    <option key={bo.value} value={bo.value}>
+                      {bo.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="form-hint">
+                  Cuántos mapas como máximo se juegan en cada set -- se cierra apenas alguien alcanza la
+                  mayoría necesaria, sin jugar de más.
                 </p>
               </div>
 
@@ -753,19 +752,24 @@ export default function CreateTournamentPage() {
                 />
 
                 <label className="form-label" htmlFor="torneo-mapas-por-set">
-                  Mapas por set
+                  "Bo" de cada set
                 </label>
-                <input
+                <select
                   id="torneo-mapas-por-set"
-                  className="form-input"
-                  type="number"
-                  min={1}
+                  className="form-select"
                   value={mapasPorSet}
                   onChange={(e) => setMapasPorSet(e.target.value)}
-                />
+                >
+                  {BO_OPTIONS.map((bo) => (
+                    <option key={bo.value} value={bo.value}>
+                      {bo.label}
+                    </option>
+                  ))}
+                </select>
                 <p className="form-hint">
                   Cuántos jugadores de cada clan juegan sets 1v1 separados en cada Clan War, y cuántos
-                  mapas hay que ganar para cerrar cada set.
+                  mapas como máximo tiene cada set -- se cierra apenas alguien alcanza la mayoría
+                  necesaria.
                 </p>
               </div>
             )}
