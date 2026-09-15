@@ -46,6 +46,21 @@ const TIPOS_EVENTO: { value: TipoEvento; label: string; descripcion: string }[] 
 // aceptaría o viceversa.
 const TOLERANCIA_FECHA_MS = 5 * 60 * 1000;
 
+// Migración 095: mismo límite de 60 días que exige
+// validar_fecha_inicio_torneo() en la base -- acá es solo para
+// acotar el selector de fecha y mostrar el aviso, la validación real
+// vive en el trigger.
+const LIMITE_ANTICIPACION_DIAS = 60;
+
+// El input datetime-local necesita "YYYY-MM-DDTHH:mm" en hora local,
+// sin zona horaria -- toISOString() da UTC con "Z", hay que armarlo a
+// mano para que el límite se vea en la hora del propio navegador.
+function fechaMaximaDatetimeLocal(): string {
+  const limite = new Date(Date.now() + LIMITE_ANTICIPACION_DIAS * 24 * 60 * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${limite.getFullYear()}-${pad(limite.getMonth() + 1)}-${pad(limite.getDate())}T${pad(limite.getHours())}:${pad(limite.getMinutes())}`;
+}
+
 export default function CreateTournamentPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -81,6 +96,25 @@ export default function CreateTournamentPage() {
   const [cwEnviando, setCwEnviando] = useState(false);
   const [cwError, setCwError] = useState<string | null>(null);
   const [cwEnviado, setCwEnviado] = useState(false);
+
+  // Migración 095: un torneo/liga por equipos (cualquier formato
+  // distinto de 1v1 -- 2v2/3v3/4v4/wtl, First Stand incluido, que
+  // siempre se arma sobre un formato de equipo) exige ser caster,
+  // dueño/capitán de algún clan, staff, admin, o dueño de la
+  // plataforma. Esto es solo la vista previa en el cliente (oculta las
+  // píldoras que igual la base rechazaría) -- la validación real vive
+  // en el trigger validar_creador_torneo(), ver la migración.
+  const [puedeCrearTorneoDeEquipo, setPuedeCrearTorneoDeEquipo] = useState(false);
+  useEffect(() => {
+    if (!user) return;
+    Promise.all([supabase.rpc("lidera_algun_equipo"), supabase.rpc("es_dueno_plataforma")]).then(
+      ([liderRes, duenoRes]) => {
+        setPuedeCrearTorneoDeEquipo(
+          !!(profile?.es_caster || profile?.es_admin || profile?.es_staff || liderRes.data || duenoRes.data)
+        );
+      }
+    );
+  }, [user, profile]);
 
   // Etapa de grupos (migración 041) -- solo aplica con eliminación
   // simple, ver el gate en el JSX.
@@ -189,6 +223,17 @@ export default function CreateTournamentPage() {
         setDivisionesSeleccionadas({});
       });
   }, [ligaId]);
+
+  // Si en algún momento se resuelve que el organizador NO puede crear
+  // un torneo por equipos (por ejemplo, la respuesta del permiso llega
+  // después de que ya había elegido un formato de equipo a mano), se
+  // lo vuelve a 1v1 -- mismo criterio que el resto de los efectos de
+  // limpieza de esta página.
+  useEffect(() => {
+    if (!puedeCrearTorneoDeEquipo && formato !== "1v1") {
+      setFormato("1v1");
+    }
+  }, [puedeCrearTorneoDeEquipo, formato]);
 
   // Default de cupos según el formato -- pero solo mientras el
   // organizador no haya tocado el campo a mano, para no pisarle un
@@ -385,6 +430,14 @@ export default function CreateTournamentPage() {
       return;
     }
 
+    // Migración 095: también bloqueado por el trigger
+    // validar_creador_torneo() -- este chequeo acá es solo para
+    // mostrar el aviso al toque.
+    if (!profile?.cuenta_validada) {
+      setError("Necesitas completar tu perfil (nick, país, servidor y ID de SC2) antes de crear un torneo.");
+      return;
+    }
+
     // El nombre del torneo se muestra públicamente (listado y detalle),
     // así que pasa por el mismo filtro que el nick.
     if (contieneLenguajeInapropiado(nombre)) {
@@ -396,6 +449,15 @@ export default function CreateTournamentPage() {
     // base.
     if (new Date(fechaInicio).getTime() < Date.now() - TOLERANCIA_FECHA_MS) {
       setError("La fecha de inicio no puede ser en el pasado.");
+      return;
+    }
+
+    // Migración 095: mismo límite de 60 días que exige
+    // validar_fecha_inicio_torneo() en la base.
+    if (new Date(fechaInicio).getTime() > Date.now() + LIMITE_ANTICIPACION_DIAS * 24 * 60 * 60 * 1000) {
+      setError(
+        `La fecha de inicio no puede ser más de ${LIMITE_ANTICIPACION_DIAS} días en el futuro. Si necesitas programar con más anticipación, pídele a un administrador que extienda el plazo una vez creado el torneo.`
+      );
       return;
     }
 
@@ -708,19 +770,32 @@ export default function CreateTournamentPage() {
             <div className="form-group">
               <span className="form-label">Formato</span>
               <div className="pill-radio-group">
-                {FORMATOS.map((f) => (
-                  <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
-                    <input
-                      type="radio"
-                      className="sr-only"
-                      name="formato"
-                      checked={formato === f}
-                      onChange={() => setFormato(f)}
-                    />
-                    {getFormatoLabel(f)}
-                  </label>
-                ))}
+                {FORMATOS.map((f) => {
+                  const habilitado = f === "1v1" || puedeCrearTorneoDeEquipo;
+                  return (
+                    <label
+                      key={f}
+                      className={`pill-radio-option ${formato === f ? "selected" : ""} ${habilitado ? "" : "disabled"}`}
+                    >
+                      <input
+                        type="radio"
+                        className="sr-only"
+                        name="formato"
+                        checked={formato === f}
+                        disabled={!habilitado}
+                        onChange={() => setFormato(f)}
+                      />
+                      {getFormatoLabel(f)}
+                    </label>
+                  );
+                })}
               </div>
+              {!puedeCrearTorneoDeEquipo && (
+                <p className="form-hint">
+                  Un torneo o liga por equipos (2v2/3v3/4v4/Clan vs Clan) requiere ser caster, dueño o
+                  capitán de un clan, staff, o administrador.
+                </p>
+              )}
               {esLiga && formato !== "1v1" && (
                 <p className="form-hint">
                   Los clanes entran por invitación tuya o pidiendo el ingreso -- no hay inscripción
@@ -982,9 +1057,15 @@ export default function CreateTournamentPage() {
                 className="form-input"
                 type="datetime-local"
                 required
+                max={fechaMaximaDatetimeLocal()}
                 value={fechaInicio}
                 onChange={(e) => setFechaInicio(e.target.value)}
               />
+              <p className="form-hint">
+                No puede ser más de {LIMITE_ANTICIPACION_DIAS} días en el futuro. Si necesitas programar
+                con más anticipación, pídele a un administrador que extienda el plazo una vez creado el
+                torneo.
+              </p>
             </div>
 
             <div className="form-group">

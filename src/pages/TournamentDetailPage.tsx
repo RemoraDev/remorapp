@@ -290,14 +290,40 @@ export default function TournamentDetailPage() {
   const [guardandoRangos, setGuardandoRangos] = useState<string | null>(null);
   const [errorRangos, setErrorRangos] = useState<string | null>(null);
 
+  // Vencimiento automático de torneos sin actividad (migración 095).
+  const [reactivandoTorneo, setReactivandoTorneo] = useState(false);
+  const [errorReactivarTorneo, setErrorReactivarTorneo] = useState<string | null>(null);
+
   const cargarTorneo = useCallback(async () => {
     if (!id) return;
 
-    const { data: torneoData, error: torneoError } = await supabase
+    let { data: torneoData, error: torneoError } = await supabase
       .from("tournaments")
       .select("*")
       .eq("id", id)
       .single();
+
+    if (torneoError || !torneoData) {
+      setNotFound(true);
+      setLoading(false);
+      return;
+    }
+
+    // Migración 095: se evalúa al cargar la ficha (mismo patrón que
+    // restaurar_banca_rota_equipo(), sin cron) -- si el torneo lleva
+    // más de 30 días sin actividad desde su fecha de inicio (ni
+    // partidos de grupos, ni de bracket, ni Clan Wars asociadas),
+    // queda marcado como candidato a eliminación; si ya habían pasado
+    // 7 días más desde esa marca, se borra de forma permanente acá
+    // mismo -- por eso se vuelve a pedir el torneo después, puede que
+    // ya no exista.
+    await supabase.rpc("evaluar_vencimiento_torneo", { p_tournament_id: id });
+
+    ({ data: torneoData, error: torneoError } = await supabase
+      .from("tournaments")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle());
 
     if (torneoError || !torneoData) {
       setNotFound(true);
@@ -823,6 +849,23 @@ export default function TournamentDetailPage() {
 
     setNombreTemporada("");
     setFechaFinTemporada("");
+    await cargarTorneo();
+  };
+
+  const handleReactivarTorneo = async () => {
+    if (!torneo) return;
+    setReactivandoTorneo(true);
+    setErrorReactivarTorneo(null);
+
+    const { error } = await supabase.rpc("reactivar_torneo_candidato", { p_tournament_id: torneo.id });
+
+    setReactivandoTorneo(false);
+
+    if (error) {
+      setErrorReactivarTorneo(error.message);
+      return;
+    }
+
     await cargarTorneo();
   };
 
@@ -1408,6 +1451,38 @@ export default function TournamentDetailPage() {
           <p className="featured-stat-value">{formatFecha(torneo.fecha_inicio)}</p>
         </div>
       </div>
+
+      {/* Vencimiento automático de torneos sin actividad (migración
+          095): visible solo para el organizador -- si el torneo lleva
+          30 días sin ningún partido jugado desde su fecha de inicio,
+          queda marcado como candidato a eliminación, con 7 días de
+          margen antes de que se borre en forma permanente. */}
+      {esOrganizador && torneo.candidato_eliminacion_desde && (
+        <div className="form-error torneo-candidato-eliminacion-aviso">
+          <p>
+            Este torneo quedó marcado como <strong>candidato a eliminación</strong> por no
+            registrar ningún partido jugado (de grupos, de llave, ni Clan War asociada) durante
+            los 30 días posteriores a su fecha de inicio. Si nadie lo reactiva, se borrará de
+            forma permanente el{" "}
+            {formatFecha(
+              new Date(
+                new Date(torneo.candidato_eliminacion_desde).getTime() + 7 * 24 * 60 * 60 * 1000
+              ).toISOString()
+            )}
+            . Si necesitas más tiempo antes de eso, pídele a un administrador que extienda el
+            plazo del torneo.
+          </p>
+          {errorReactivarTorneo && <p>{errorReactivarTorneo}</p>}
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={reactivandoTorneo}
+            onClick={handleReactivarTorneo}
+          >
+            {reactivandoTorneo ? "Reactivando…" : "Reactivar torneo"}
+          </button>
+        </div>
+      )}
 
       {/* Temporadas (migración 047): solo el organizador las
           administra -- contenedor mínimo para que "fichado para toda

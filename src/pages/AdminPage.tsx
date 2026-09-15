@@ -238,6 +238,12 @@ export default function AdminPage() {
   const [filtroTorneos, setFiltroTorneos] = useState("");
   const [eliminandoTorneoId, setEliminandoTorneoId] = useState<string | null>(null);
 
+  // Migración 095: admin_extender_plazo_torneo() -- mueve fecha_inicio
+  // de un torneo puntual más allá del límite normal de 60 días.
+  const [nuevaFechaPorTorneoId, setNuevaFechaPorTorneoId] = useState<Record<string, string>>({});
+  const [extendiendoTorneoId, setExtendiendoTorneoId] = useState<string | null>(null);
+  const [errorExtenderTorneoId, setErrorExtenderTorneoId] = useState<Record<string, string>>({});
+
   // --- Noticias: lista completa, publicar y eliminación permanente.
   // La tabla y su RLS son de la migración 065 (la política de insert
   // para is_admin() ya existía) -- el formulario de publicar se agregó
@@ -1180,6 +1186,41 @@ export default function AdminPage() {
     setTorneos((prev) => prev.filter((t) => t.id !== torneo.id));
   };
 
+  // Migración 095: extiende fecha_inicio de un torneo puntual más allá
+  // del límite normal de 60 días -- admin_extender_plazo_torneo() (en
+  // la base) es la que de verdad verifica is_admin()/es_dueno_plataforma()
+  // y deja registrado quién lo autorizó y cuándo.
+  const handleExtenderPlazoTorneo = async (torneo: TorneoAdminRow) => {
+    const nuevaFecha = nuevaFechaPorTorneoId[torneo.id];
+    if (!nuevaFecha) {
+      setErrorExtenderTorneoId((prev) => ({ ...prev, [torneo.id]: "Elige la nueva fecha de inicio." }));
+      return;
+    }
+
+    setExtendiendoTorneoId(torneo.id);
+    setErrorExtenderTorneoId((prev) => ({ ...prev, [torneo.id]: "" }));
+
+    const { error } = await supabase.rpc("admin_extender_plazo_torneo", {
+      p_tournament_id: torneo.id,
+      p_nueva_fecha_inicio: new Date(nuevaFecha).toISOString(),
+    });
+
+    setExtendiendoTorneoId(null);
+
+    if (error) {
+      setErrorExtenderTorneoId((prev) => ({ ...prev, [torneo.id]: error.message }));
+      return;
+    }
+
+    setTorneosTodos((prev) =>
+      prev.map((t) =>
+        t.id === torneo.id
+          ? { ...t, fecha_inicio: new Date(nuevaFecha).toISOString(), candidato_eliminacion_desde: null }
+          : t
+      )
+    );
+  };
+
   // Publicar noticia: noticias_insert_admin (RLS que ya existía desde
   // la migración 065) ya exige is_admin() -- no hace falta ninguna
   // migración nueva, esto de acá es solo el formulario.
@@ -1723,6 +1764,36 @@ export default function AdminPage() {
                       Organizado por {t.organizadorNombre} · {t.formato} · {t.modo} · {t.cupos_ocupados}/
                       {t.cupos_totales} inscritos · {t.estado}
                     </p>
+                    {t.candidato_eliminacion_desde && (
+                      <p className="admin-row-meta">
+                        Candidato a eliminación desde {formatFecha(t.candidato_eliminacion_desde)} (se
+                        borra a los 7 días de esa marca si sigue sin actividad).
+                      </p>
+                    )}
+                    {/* Migración 095: extiende fecha_inicio más allá del
+                        límite normal de 60 días para este torneo puntual. */}
+                    <div className="admin-row-extender-plazo">
+                      <input
+                        className="form-input"
+                        type="datetime-local"
+                        aria-label={`Nueva fecha de inicio para ${t.nombre}`}
+                        value={nuevaFechaPorTorneoId[t.id] ?? ""}
+                        onChange={(e) =>
+                          setNuevaFechaPorTorneoId((prev) => ({ ...prev, [t.id]: e.target.value }))
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={extendiendoTorneoId === t.id}
+                        onClick={() => handleExtenderPlazoTorneo(t)}
+                      >
+                        {extendiendoTorneoId === t.id ? "Extendiendo..." : "Extender plazo"}
+                      </button>
+                    </div>
+                    {errorExtenderTorneoId[t.id] && (
+                      <div className="form-error">{errorExtenderTorneoId[t.id]}</div>
+                    )}
                   </div>
                   <button
                     type="button"

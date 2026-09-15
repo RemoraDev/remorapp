@@ -1616,6 +1616,16 @@ input[type="radio"] {
   margin: 0.25rem 0 0;
 }
 
+/* Migración 095: input de nueva fecha + botón de
+   admin_extender_plazo_torneo(), dentro de cada fila de "Todos los
+   torneos". */
+.admin-row-extender-plazo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
 .admin-row-actions {
   display: flex;
   align-items: center;
@@ -4100,6 +4110,13 @@ input[type="radio"] {
   background: rgba(var(--h-accent-rgb), 0.12);
 }
 
+/* Migración 095: formato que el organizador no puede elegir (torneo
+   por equipos sin ser caster/líder de clan/staff/admin). */
+.pill-radio-option.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .pill-radio-option:has(input:focus-visible) {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
@@ -5006,6 +5023,19 @@ body.overlay-obs {
   border-color: rgba(251, 191, 36, 0.35);
   color: #fbbf24;
   font-weight: 600;
+}
+
+/* Aviso de "candidato a eliminación" (migración 095) -- mismo tono
+   ámbar que .clan-war-intervenido-aviso, con espacio para el texto y
+   el botón de reactivar en columna. */
+.torneo-candidato-eliminacion-aviso {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.35);
+  color: #fbbf24;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
 }
 
 .form-success {

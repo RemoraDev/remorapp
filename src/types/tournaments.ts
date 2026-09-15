@@ -115,6 +115,14 @@ export interface TournamentRow {
   permite_autoreporte: boolean;
   excluido_de_busqueda: boolean;
   mostrar_posiciones: boolean;
+  // Migración 095: límite de anticipación de 60 días para fecha_inicio,
+  // extensible solo por un administrador (admin_extender_plazo_torneo()).
+  plazo_extendido_por: string | null;
+  plazo_extendido_en: string | null;
+  // Migración 095: vencimiento automático de torneos sin actividad --
+  // ver evaluar_vencimiento_torneo() y reactivar_torneo_candidato().
+  candidato_eliminacion_desde: string | null;
+  ultima_reactivacion_en: string | null;
 }
 
 // Migración 041: etapa de grupos.
