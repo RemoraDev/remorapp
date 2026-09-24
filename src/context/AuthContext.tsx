@@ -95,18 +95,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBordeBasicoColorHex(null);
     }
 
-    const { count } = await supabase
-      .from("team_invitations")
-      .select("*", { count: "exact", head: true })
-      .eq("invited_user_id", userId)
-      .eq("status", "pendiente");
+    // Migración 096: notificaciones_pendientes_count() reemplaza el
+    // conteo anterior (que solo sumaba invitaciones de equipo + retos
+    // de Clan War) -- ahora también suma invitaciones de torneo,
+    // solicitudes de reprogramación propuestas por el rival, y retos
+    // de título Padre/Hijo, todo calculado en un solo viaje a la base.
+    const { data: totalPendientes } = await supabase.rpc("notificaciones_pendientes_count");
 
-    // Migración 091: retos de Clan War (Clan War Amistosa incluida)
-    // pendientes de responder, para el equipo del que el usuario es
-    // dueño o capitán -- se suman al mismo contador del header.
-    const { data: retosPendientesCount } = await supabase.rpc("retos_clan_war_pendientes_count");
-
-    setInvitacionesPendientes((count ?? 0) + (retosPendientesCount ?? 0));
+    setInvitacionesPendientes(totalPendientes ?? 0);
   }, []);
 
   useEffect(() => {

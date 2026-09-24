@@ -290,23 +290,21 @@ export default function PlayerDetailPage() {
             </p>
           )}
 
-          {/* Tarjeta de clan (mismo componente .team-card que la grilla
-              de /equipos, con el modificador player-detail-equipo-card
-              para poner el logo a la derecha y agrandarlo un poco):
-              nombre completo + logo, sin tag y sin el banner del
-              equipo, que ya se sacó antes de acá por verse mal en este
-              espacio chico. */}
+          {/* Compacta, en una sola línea (logo chico + nombre), no la
+              tarjeta grande .team-card de antes -- esa ocupaba
+              demasiado espacio y no dejaba lugar para el resto de los
+              datos de esta columna. Mismo logo chico que ya se usa en
+              el Ranking (RankingPage.tsx). */}
           {equipoActual && (
-            <Link to={`/equipos/${equipoActual.tag}`} className="team-card player-detail-equipo-card">
+            <Link to={`/equipos/${equipoActual.tag}`} className="ranking-clan-link">
               {equipoActual.logoUrl ? (
-                <img src={equipoActual.logoUrl} alt="" className="team-card-logo" />
+                <img src={equipoActual.logoUrl} alt="" className="player-detail-equipo-actual-logo" />
               ) : (
-                <div className="team-card-logo team-card-logo-placeholder">{equipoActual.tag.charAt(0)}</div>
+                <span className="player-detail-equipo-actual-logo player-detail-equipo-actual-logo-placeholder">
+                  {equipoActual.tag.charAt(0)}
+                </span>
               )}
-              <div className="team-card-info">
-                <p className="team-card-meta">Equipo actual</p>
-                <p className="team-card-name">{equipoActual.name}</p>
-              </div>
+              {equipoActual.name}
             </Link>
           )}
 
@@ -391,10 +389,13 @@ export default function PlayerDetailPage() {
           Panel de control -- uno es la gestión personal como jugador,
           el otro es el poder del dueño de la plataforma sobre TODA
           ella, así que no vive anidado dentro del otro. Solo visible
-          para es_admin, mirando el propio perfil. */}
+          para es_admin, mirando el propio perfil. Sin btn-block, mismo
+          criterio que el botón de "Panel de control" de acá arriba --
+          los dos deben verse del mismo porte, no uno como barra
+          completa y el otro como botón normal. */}
       {user?.id === perfil.id && profile?.es_admin && (
         <div className="team-control-panel-wrap">
-          <Link to="/admin" className="btn btn-primary btn-block">
+          <Link to="/admin" className="btn btn-primary">
             Panel de Administración
           </Link>
         </div>
