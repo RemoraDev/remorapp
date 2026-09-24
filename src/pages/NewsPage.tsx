@@ -23,7 +23,9 @@ export default function NewsPage() {
     supabase
       .from("noticias")
       .select("id, titulo, contenido, created_at, publicado_por")
-      .order("created_at", { ascending: false })
+      // Migración 100: orden manual (arrastrar y soltar en el Panel de
+      // Administración / Panel Staff) en vez del orden fijo por fecha.
+      .order("orden", { ascending: true })
       .then(async ({ data, error }) => {
         if (error || !data) {
           console.error("Error cargando noticias:", error);

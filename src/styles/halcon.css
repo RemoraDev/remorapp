@@ -5906,3 +5906,25 @@ body.overlay-obs {
   justify-content: flex-end;
   margin-bottom: 0.75rem;
 }
+
+/* Manija de arrastre para reordenar noticias / roster (migración 100,
+   dnd-kit/sortable). */
+.noticia-drag-handle,
+.roster-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  background: none;
+  color: var(--color-text-faint);
+  cursor: grab;
+  touch-action: none;
+}
+
+.noticia-drag-handle:hover,
+.roster-drag-handle:hover {
+  color: var(--color-accent);
+}

@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
+import ListaNoticiasReordenable from "../components/ListaNoticiasReordenable";
 
 interface ReporteStaff {
   id: string;
@@ -209,9 +210,32 @@ export default function StaffPage() {
     await cargarBugs();
   };
 
+  // --- Migración 100: reordenar noticias (solo el orden -- publicar y
+  // eliminar noticias sigue siendo exclusivo del Panel de
+  // Administración completo, acá no se agrega esa capacidad). ---
+  const [noticiasOrden, setNoticiasOrden] = useState<{ id: string; titulo: string }[]>([]);
+  const [cargandoNoticiasOrden, setCargandoNoticiasOrden] = useState(true);
+
+  const cargarNoticiasOrden = async () => {
+    const { data, error } = await supabase
+      .from("noticias")
+      .select("id, titulo")
+      .order("orden", { ascending: true });
+
+    if (error) {
+      console.error("Error cargando noticias:", error);
+      setCargandoNoticiasOrden(false);
+      return;
+    }
+
+    setNoticiasOrden(data ?? []);
+    setCargandoNoticiasOrden(false);
+  };
+
   useEffect(() => {
     cargarReportes();
     cargarBugs();
+    cargarNoticiasOrden();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -374,6 +398,29 @@ export default function StaffPage() {
               </div>
             </div>
           ))}
+        </div>
+
+        <h3 className="detail-subtitle" style={{ marginTop: "1.5rem" }}>
+          Reordenar noticias
+        </h3>
+        <p className="form-hint">Arrastra desde el ícono para cambiar el orden en que aparecen en Noticias.</p>
+        {cargandoNoticiasOrden && <p className="tournament-card-meta">Cargando noticias...</p>}
+        {!cargandoNoticiasOrden && noticiasOrden.length === 0 && (
+          <p className="detail-empty">Todavía no hay ninguna noticia publicada.</p>
+        )}
+        <div className="admin-list">
+          <ListaNoticiasReordenable
+            noticias={noticiasOrden}
+            onReordenar={setNoticiasOrden}
+            renderFila={(n, manija) => (
+              <div className="admin-row">
+                {manija}
+                <div className="admin-row-info">
+                  <p className="admin-row-title">{n.titulo}</p>
+                </div>
+              </div>
+            )}
+          />
         </div>
       </div>
     </section>

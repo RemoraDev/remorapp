@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
 import { Check, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import ListaNoticiasReordenable from "../components/ListaNoticiasReordenable";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
 import { datetimeLocalAIso } from "../lib/clanWars";
@@ -136,6 +137,7 @@ interface NoticiaAdminRow {
   contenido: string;
   createdAt: string;
   publicadoPorNombre: string;
+  orden: number;
 }
 
 // Migración 062: gestión de Clan War para el dueño de la plataforma.
@@ -867,8 +869,8 @@ export default function AdminPage() {
     const cargarNoticias = async () => {
       const { data, error } = await supabase
         .from("noticias")
-        .select("id, titulo, contenido, created_at, publicado_por")
-        .order("created_at", { ascending: false });
+        .select("id, titulo, contenido, created_at, publicado_por, orden")
+        .order("orden", { ascending: true });
 
       if (error) {
         setErrorNoticias(error.message);
@@ -896,6 +898,7 @@ export default function AdminPage() {
           contenido: n.contenido,
           createdAt: n.created_at,
           publicadoPorNombre: nombrePorAutorId[n.publicado_por] ?? "Jugador de RemorApp",
+          orden: n.orden,
         }))
       );
       setCargandoNoticias(false);
@@ -1243,7 +1246,7 @@ export default function AdminPage() {
     const { data, error } = await supabase
       .from("noticias")
       .insert({ titulo, contenido, publicado_por: user.id })
-      .select("id, created_at")
+      .select("id, created_at, orden")
       .single();
 
     setPublicandoNoticia(false);
@@ -1260,6 +1263,7 @@ export default function AdminPage() {
         contenido,
         createdAt: data.created_at,
         publicadoPorNombre: profile?.nick ? `${profile.nick}#${profile.unique_id}` : "Jugador de RemorApp",
+        orden: data.orden,
       },
       ...prev,
     ]);
@@ -2035,26 +2039,34 @@ export default function AdminPage() {
           {!cargandoNoticias && noticias.length === 0 && (
             <p className="tournament-card-meta">Todavía no hay ninguna noticia publicada.</p>
           )}
+          {noticias.length > 0 && (
+            <p className="form-hint">Arrastra desde el ícono para cambiar el orden en que aparecen en Noticias.</p>
+          )}
           <div className="admin-list">
-            {noticias.map((n) => (
-              <div key={n.id} className="admin-row">
-                <div className="admin-row-info">
-                  <p className="admin-row-title">{n.titulo}</p>
-                  <p className="admin-row-meta">
-                    Publicada por {n.publicadoPorNombre} · {formatFecha(n.createdAt)}
-                  </p>
-                  <p className="admin-row-meta">{n.contenido}</p>
+            <ListaNoticiasReordenable
+              noticias={noticias}
+              onReordenar={setNoticias}
+              renderFila={(n, manija) => (
+                <div className="admin-row">
+                  {manija}
+                  <div className="admin-row-info">
+                    <p className="admin-row-title">{n.titulo}</p>
+                    <p className="admin-row-meta">
+                      Publicada por {n.publicadoPorNombre} · {formatFecha(n.createdAt)}
+                    </p>
+                    <p className="admin-row-meta">{n.contenido}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={eliminandoNoticiaId === n.id}
+                    onClick={() => handleEliminarNoticia(n)}
+                  >
+                    {eliminandoNoticiaId === n.id ? "Eliminando..." : "Eliminar definitivamente"}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={eliminandoNoticiaId === n.id}
-                  onClick={() => handleEliminarNoticia(n)}
-                >
-                  {eliminandoNoticiaId === n.id ? "Eliminando..." : "Eliminar definitivamente"}
-                </button>
-              </div>
-            ))}
+              )}
+            />
           </div>
         </div>
       )}

@@ -1,6 +1,17 @@
 ﻿import { useEffect, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   Users,
   Crown,
@@ -13,7 +24,9 @@ import {
   UserPlus,
   Flag,
   Trophy,
+  GripVertical,
 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
@@ -99,6 +112,10 @@ interface MiembroConNombre {
   // no existir todavía para este jugador.
   razaPrincipal: RazaSc2 | null;
   razaSecundaria: RazaSc2 | null;
+  // Migración 100: orden puramente cosmético de la vista pública --
+  // null hasta que el dueño o un capitán lo reordene a mano por
+  // primera vez, ver reordenar_roster_equipo().
+  ordenVisual: number | null;
 }
 
 interface JugadorEncontrado {
@@ -422,6 +439,36 @@ function extraerPerfil(profiles: unknown): {
   };
 }
 
+// Migración 100: envuelve una fila del roster para que se pueda
+// arrastrar (dnd-kit/sortable) -- children recibe la manija ya lista
+// para poner donde convenga dentro de la fila, en vez de fijarle una
+// posición acá.
+function FilaMiembroSortable({ id, children }: { id: string; children: (manija: ReactNode) => ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  const manija = (
+    <button
+      type="button"
+      className="roster-drag-handle"
+      aria-label="Arrastrar para reordenar"
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical size={16} />
+    </button>
+  );
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      {children(manija)}
+    </div>
+  );
+}
+
 export default function TeamDetailPage() {
   const { tag } = useParams<{ tag: string }>();
   const navigate = useNavigate();
@@ -430,6 +477,18 @@ export default function TeamDetailPage() {
   const [miembros, setMiembros] = useState<MiembroConNombre[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+
+  // Migración 100: declarado ACÁ arriba, antes de cualquier "return"
+  // condicional (loading/notFound más abajo) -- useSensors() es un
+  // hook, y llamarlo después de un return condicional viola las reglas
+  // de hooks (error real de React #310 encontrado al probar esto en
+  // vivo: "menos hooks de los esperados" apenas la página terminaba de
+  // cargar, porque en el primer render con loading=true la función
+  // cortaba antes de llegar a este hook).
+  const sensoresRoster = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } })
+  );
 
   // --- Panel de líder: editar descripción/logo/banner ---
   // logoFile/bannerFile guardan el resultado YA RECORTADO en el
@@ -965,9 +1024,12 @@ export default function TeamDetailPage() {
       const { data: miembrosData } = await supabase
         .from("team_members")
         .select(
-          "user_id, roles, es_capitan, profiles(nick, unique_id, avatar_url, avatar_forma, liga, mmr_equipos, liga_equipos, banca_rota, valentia_jugador, responsabilidad_cw, poco_confiable)"
+          "user_id, roles, es_capitan, orden_visual, profiles(nick, unique_id, avatar_url, avatar_forma, liga, mmr_equipos, liga_equipos, banca_rota, valentia_jugador, responsabilidad_cw, poco_confiable)"
         )
         .eq("team_id", equipoData.id)
+        // Migración 100: orden_visual manda si ya se reordenó a mano
+        // (nulls last, orden de siempre por antigüedad como respaldo).
+        .order("orden_visual", { ascending: true })
         .order("joined_at", { ascending: true });
 
       const miembrosBase: MiembroConNombre[] = (miembrosData ?? []).map((m) => {
@@ -989,6 +1051,7 @@ export default function TeamDetailPage() {
           esCapitan: m.es_capitan,
           razaPrincipal: null,
           razaSecundaria: null,
+          ordenVisual: m.orden_visual,
         };
       });
 
@@ -3316,8 +3379,9 @@ export default function TeamDetailPage() {
   // Responsabilidad, "Poco Responsable" ni insignias de rol/controles
   // de gestión, que quedan reservados al perfil de cada jugador, a
   // Estadísticas, o a "Líderes de clan"/Editar equipo respectivamente.
-  const renderMiembroSimple = (m: MiembroConNombre) => (
+  const renderMiembroSimple = (m: MiembroConNombre, manija?: ReactNode) => (
     <div key={m.userId} className="detail-participant-item">
+      {manija}
       <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
       {m.nick ?? "Jugador de RemorApp"}
       {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
@@ -3330,6 +3394,32 @@ export default function TeamDetailPage() {
       )}
     </div>
   );
+
+  // Migración 100: arrastrar para reordenar el roster de la vista
+  // pública -- solo dueño/capitán, y solo cosmético (orden_visual, no
+  // toca nada del lineup real de Clan War). Optimista: se ve el nuevo
+  // orden al toque, y se revierte solo si el servidor lo rechaza.
+  const handleReordenarRoster = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !equipo) return;
+
+    const oldIndex = miembros.findIndex((m) => m.userId === active.id);
+    const newIndex = miembros.findIndex((m) => m.userId === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const nuevos = arrayMove(miembros, oldIndex, newIndex);
+    setMiembros(nuevos);
+
+    const { error } = await supabase.rpc("reordenar_roster_equipo", {
+      p_team_id: equipo.id,
+      p_orden: nuevos.map((m) => m.userId),
+    });
+
+    if (error) {
+      toast.error(error.message);
+      setMiembros(miembros);
+    }
+  };
 
   return (
     <section className="section section-page" data-tema-equipo={equipo.tema_equipo}>
@@ -3500,7 +3590,26 @@ export default function TeamDetailPage() {
 
       {seccionPublica === "jugadores" && (
         <div className="detail-participant-list">
-          {miembros.map((m) => renderMiembroSimple(m))}
+          {puedeGestionar ? (
+            <>
+              <p className="form-hint">Arrastra desde el ícono para cambiar el orden en que se muestran.</p>
+              <DndContext
+                sensors={sensoresRoster}
+                collisionDetection={closestCenter}
+                onDragEnd={handleReordenarRoster}
+              >
+                <SortableContext items={miembros.map((m) => m.userId)} strategy={verticalListSortingStrategy}>
+                  {miembros.map((m) => (
+                    <FilaMiembroSortable key={m.userId} id={m.userId}>
+                      {(manija) => renderMiembroSimple(m, manija)}
+                    </FilaMiembroSortable>
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </>
+          ) : (
+            miembros.map((m) => renderMiembroSimple(m))
+          )}
           {jugadoresTemporales.map((t) =>
             t.reemplazadoPorId ? (
               <div key={t.id} className="detail-participant-item">
