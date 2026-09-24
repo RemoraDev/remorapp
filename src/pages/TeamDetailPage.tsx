@@ -1,6 +1,19 @@
 ﻿import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Users,
+  Crown,
+  Award,
+  Settings,
+  BarChart3,
+  TrendingUp,
+  CalendarClock,
+  Handshake,
+  UserPlus,
+  Flag,
+  Trophy,
+} from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
@@ -3458,15 +3471,24 @@ export default function TeamDetailPage() {
       {seccionPublica === null ? (
         <div className="team-panel-menu">
           <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("jugadores")}>
-            <span className="team-panel-menu-item-title">Lista de Jugadores</span>
+            <span className="team-panel-menu-item-title">
+              <Users className="icon-inline" />
+              Lista de Jugadores
+            </span>
             <span className="team-panel-menu-item-desc">Nick#ID, liga y raza de cada miembro</span>
           </button>
           <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("lideres")}>
-            <span className="team-panel-menu-item-title">Líderes de clan</span>
+            <span className="team-panel-menu-item-title">
+              <Crown className="icon-inline" />
+              Líderes de clan
+            </span>
             <span className="team-panel-menu-item-desc">Dueño y capitanes</span>
           </button>
           <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("logros")}>
-            <span className="team-panel-menu-item-title">Logros</span>
+            <span className="team-panel-menu-item-title">
+              <Award className="icon-inline" />
+              Logros
+            </span>
             <span className="team-panel-menu-item-desc">Títulos Padre/Hijo del equipo</span>
           </button>
         </div>
@@ -3608,7 +3630,10 @@ export default function TeamDetailPage() {
                       className="team-panel-menu-item"
                       onClick={() => setSeccionPanel("configuracion")}
                     >
-                      <span className="team-panel-menu-item-title">Configuración</span>
+                      <span className="team-panel-menu-item-title">
+                        <Settings className="icon-inline" />
+                        Configuración
+                      </span>
                       <span className="team-panel-menu-item-desc">
                         Logo, banner, título Padre/Hijo activo y eliminar equipo
                       </span>
@@ -3622,7 +3647,10 @@ export default function TeamDetailPage() {
                     className="team-panel-menu-item"
                     onClick={() => setSeccionPanel("estadisticas")}
                   >
-                    <span className="team-panel-menu-item-title">Estadísticas</span>
+                    <span className="team-panel-menu-item-title">
+                      <BarChart3 className="icon-inline" />
+                      Estadísticas
+                    </span>
                     <span className="team-panel-menu-item-desc">Valentía del clan</span>
                   </button>
                   <button
@@ -3630,7 +3658,10 @@ export default function TeamDetailPage() {
                     className="team-panel-menu-item"
                     onClick={() => setSeccionPanel("editar-equipo")}
                   >
-                    <span className="team-panel-menu-item-title">Editar equipo</span>
+                    <span className="team-panel-menu-item-title">
+                      <Users className="icon-inline" />
+                      Editar equipo
+                    </span>
                     <span className="team-panel-menu-item-desc">
                       Lista de jugadores, invitar, quitar e investigar jugador
                     </span>
@@ -3643,20 +3674,29 @@ export default function TeamDetailPage() {
                       cargarRanking();
                     }}
                   >
-                    <span className="team-panel-menu-item-title">Ranking de jugadores</span>
+                    <span className="team-panel-menu-item-title">
+                      <TrendingUp className="icon-inline" />
+                      Ranking de jugadores
+                    </span>
                     <span className="team-panel-menu-item-desc">
                       Torneos y Clan Wars ganadas, jugador por jugador
                     </span>
                   </button>
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("eventos")}>
-                    <span className="team-panel-menu-item-title">Gestor de eventos</span>
+                    <span className="team-panel-menu-item-title">
+                      <CalendarClock className="icon-inline" />
+                      Gestor de eventos
+                    </span>
                     <span className="team-panel-menu-item-desc">
                       Solicitudes de Clan War, retos y su historial
                     </span>
                   </button>
                   {esDueño && (
                     <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("titulos")}>
-                      <span className="team-panel-menu-item-title">Títulos</span>
+                      <span className="team-panel-menu-item-title">
+                        <Award className="icon-inline" />
+                        Títulos
+                      </span>
                       <span className="team-panel-menu-item-desc">Responder, proponer y ver Títulos Padre/Hijo</span>
                     </button>
                   )}
@@ -3665,7 +3705,10 @@ export default function TeamDetailPage() {
                     className="team-panel-menu-item"
                     onClick={() => setSeccionPanel("temporada")}
                   >
-                    <span className="team-panel-menu-item-title">Mercenarios y Alianzas</span>
+                    <span className="team-panel-menu-item-title">
+                      <Handshake className="icon-inline" />
+                      Mercenarios y Alianzas
+                    </span>
                     <span className="team-panel-menu-item-desc">
                       Fichar un mercenario y proponer una alianza con otro equipo
                     </span>
@@ -3675,13 +3718,19 @@ export default function TeamDetailPage() {
                     className="team-panel-menu-item"
                     onClick={() => setSeccionPanel("amistades")}
                   >
-                    <span className="team-panel-menu-item-title">Equipos amigos</span>
+                    <span className="team-panel-menu-item-title">
+                      <UserPlus className="icon-inline" />
+                      Equipos amigos
+                    </span>
                     <span className="team-panel-menu-item-desc">
                       Enviar y responder solicitudes de amistad, e invitaciones a torneos
                     </span>
                   </button>
                   <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("logros")}>
-                    <span className="team-panel-menu-item-title">Logros</span>
+                    <span className="team-panel-menu-item-title">
+                      <Award className="icon-inline" />
+                      Logros
+                    </span>
                     <span className="team-panel-menu-item-desc">Skins desbloqueadas por nivel</span>
                   </button>
                   <button
@@ -3689,11 +3738,17 @@ export default function TeamDetailPage() {
                     className="team-panel-menu-item"
                     onClick={() => setSeccionPanel("reportar")}
                   >
-                    <span className="team-panel-menu-item-title">Reportar un problema</span>
+                    <span className="team-panel-menu-item-title">
+                      <Flag className="icon-inline" />
+                      Reportar un problema
+                    </span>
                     <span className="team-panel-menu-item-desc">Avisa al staff sobre algo puntual</span>
                   </button>
                   <Link to={`/sala-de-la-fama?clan=${equipo.tag}`} className="team-panel-menu-item">
-                    <span className="team-panel-menu-item-title">Hall of Fame</span>
+                    <span className="team-panel-menu-item-title">
+                      <Trophy className="icon-inline" />
+                      Hall of Fame
+                    </span>
                     <span className="team-panel-menu-item-desc">Ver este equipo en la Sala de la Fama</span>
                   </Link>
                 </div>

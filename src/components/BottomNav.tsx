@@ -1,49 +1,14 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
+import { Home, Newspaper, BarChart3, User } from "lucide-react";
 import FanMenu from "./FanMenu";
 import { useAuth } from "../context/AuthContext";
 
-const strokeProps = {
-  strokeWidth: 2,
-  strokeLinecap: "round" as const,
-  strokeLinejoin: "round" as const,
-  fill: "none",
-};
-
-function HomeIcon() {
-  return (
-    <svg viewBox="0 0 24 24" {...strokeProps}>
-      <path d="M4 11.5 12 4l8 7.5" />
-      <path d="M6 10v9h12v-9" />
-    </svg>
-  );
-}
-
-function NewsIcon() {
-  return (
-    <svg viewBox="0 0 24 24" {...strokeProps}>
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-      <path d="M8 9h8M8 13h8M8 17h4" />
-    </svg>
-  );
-}
-
-function RankingIcon() {
-  return (
-    <svg viewBox="0 0 24 24" {...strokeProps}>
-      <path d="M5 21V10M12 21V3M19 21v-7" />
-    </svg>
-  );
-}
-
-function ProfileIcon() {
-  return (
-    <svg viewBox="0 0 24 24" {...strokeProps}>
-      <circle cx="12" cy="8.5" r="3.5" />
-      <path d="M5 20c0-3.6 3.1-6.5 7-6.5s7 2.9 7 6.5" />
-    </svg>
-  );
-}
+// Migración 098: los 4 íconos de la barra inferior eran SVG a mano,
+// uno por uno -- se reemplazan por lucide-react (mismo trazo de 2px,
+// sin relleno, puntas y uniones redondeadas, así que no hace falta
+// tocar el CSS de .bottom-nav-item svg, ya apunta a cualquier <svg>
+// hijo sea cual sea su origen).
 
 export default function BottomNav() {
   const { user, profile } = useAuth();
@@ -67,7 +32,7 @@ export default function BottomNav() {
     <nav className="bottom-nav">
       <div className="bottom-nav-inner">
         <NavLink to="/" end className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <HomeIcon />
+          <Home />
           <span>Inicio</span>
         </NavLink>
 
@@ -75,7 +40,7 @@ export default function BottomNav() {
             estructura de voz con LiveKit) -- Noticias vuelve a tener
             ícono propio en la barra, en el lugar que dejó. */}
         <NavLink to="/news" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <NewsIcon />
+          <Newspaper />
           <span>Noticias</span>
         </NavLink>
 
@@ -101,12 +66,12 @@ export default function BottomNav() {
             Torneos ya vive en el abanico central, no hace falta
             moverlo de nuevo (ver el comentario en FanMenu.tsx). */}
         <NavLink to="/ranking" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <RankingIcon />
+          <BarChart3 />
           <span>Ranking</span>
         </NavLink>
 
         <NavLink to={miPerfilHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <ProfileIcon />
+          <User />
           <span>Mi perfil</span>
         </NavLink>
       </div>

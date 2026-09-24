@@ -1,6 +1,8 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { useTheme } from "./context/ThemeContext";
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
 
@@ -44,6 +46,7 @@ function PageFallback() {
 // este componente, no a App -- App es quien lo declara).
 function AppContent() {
   const { profile } = useAuth();
+  const { tema } = useTheme();
   const location = useLocation();
   // Overlay para OBS (migración 044): páginas públicas, sin login, sin
   // el header ni la barra de navegación de la app -- solo el
@@ -109,6 +112,10 @@ function AppContent() {
         </Suspense>
       </main>
       <BottomNav />
+      {/* Migración 098: notificaciones flotantes (sonner) -- arriba a la
+          derecha para no chocar con la barra de navegación inferior,
+          mismo tema claro/oscuro que el resto de la app. */}
+      <Toaster position="top-right" theme={tema === "oscuro" ? "dark" : "light"} richColors closeButton />
     </div>
   );
 }

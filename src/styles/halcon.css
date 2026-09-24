@@ -2356,6 +2356,133 @@ input[type="radio"] {
   border-top: 1px dashed var(--color-border);
 }
 
+/* ---------- Armar llave manualmente, arrastrar y soltar (migración 097) ---------- */
+
+.llave-manual-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin: 1rem 0;
+}
+
+.llave-manual-columna {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.llave-manual-pool {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-height: 4rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border);
+  background: var(--color-card);
+}
+
+.llave-manual-pool-sobre {
+  border-color: var(--color-accent);
+  background: rgba(var(--h-accent-rgb), 0.08);
+}
+
+.llave-manual-partidos {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.llave-manual-partido {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.6rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+}
+
+.llave-manual-partido-numero {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.llave-manual-partido-vs {
+  align-self: center;
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+}
+
+.llave-manual-casillero {
+  min-height: 3.25rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+}
+
+.llave-manual-casillero-vacio {
+  border-style: dashed;
+  justify-content: center;
+}
+
+.llave-manual-casillero-sobre {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(var(--h-accent-rgb), 0.35);
+}
+
+.llave-manual-casillero-texto {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.llave-manual-tarjeta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  background: rgba(var(--h-accent-rgb), 0.08);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.llave-manual-tarjeta-arrastrando {
+  opacity: 0.35;
+}
+
+.llave-manual-tarjeta-overlay {
+  cursor: grabbing;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.llave-manual-tarjeta-avatar {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: cover;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.llave-manual-tarjeta-nombre {
+  font-size: 0.85rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.llave-manual-acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
 /* ---------- Catálogo de estilos de bracket + fondos (migración 040) ----------
    El layout base (.bracket, .bracket-round, .bracket-match, ...) de
    arriba es "clasico", intacto -- ninguna regla de acá lo toca por
@@ -5045,6 +5172,18 @@ body.overlay-obs {
   padding: 0.6rem 0.85rem;
   font-size: 0.8rem;
   color: #6ee7b7;
+}
+
+/* Migración 098: ícono de lucide-react en línea con texto (reemplaza
+   emojis sueltos como 🏆/🥈/🥉/✓/✗) -- se escala solo con el
+   font-size del texto que acompaña, no con un tamaño fijo. */
+.icon-inline {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin-right: 0.3rem;
+  flex-shrink: 0;
 }
 
 .auth-switch {

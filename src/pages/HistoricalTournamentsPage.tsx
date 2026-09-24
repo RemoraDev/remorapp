@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { Trophy, Medal } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
 import { formatFecha } from "../lib/formatters";
@@ -357,8 +358,14 @@ export default function HistoricalTournamentsPage() {
             <h3 className="tournament-card-title">{torneo.nombre}</h3>
             <p className="tournament-card-meta">{formatFecha(torneo.fecha_aproximada)}</p>
 
-            <p className="form-success">🥇 {torneo.primer_lugar_nombre}</p>
-            <p className="tournament-card-meta">🥈 {torneo.segundo_lugar_nombre}</p>
+            <p className="form-success">
+              <Trophy className="icon-inline" />
+              {torneo.primer_lugar_nombre}
+            </p>
+            <p className="tournament-card-meta">
+              <Medal className="icon-inline" />
+              {torneo.segundo_lugar_nombre}
+            </p>
 
             <h4 className="detail-subtitle">Participantes</h4>
             <div className="detail-participant-list">

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { BarChart3, Award, History, Settings } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
@@ -358,23 +359,35 @@ export default function PlayerDetailPage() {
                   sueltos -- viven dentro de Configuración. */}
               <div className="team-panel-menu">
                 <Link to="/perfil?tab=estadisticas" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Estadísticas</span>
+                  <span className="team-panel-menu-item-title">
+                    <BarChart3 className="icon-inline" />
+                    Estadísticas
+                  </span>
                   <span className="team-panel-menu-item-desc">
                     Valentía del jugador y Responsabilidad en Torneos y Clan War
                   </span>
                 </Link>
                 <Link to="/perfil?tab=logros" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Logros</span>
+                  <span className="team-panel-menu-item-title">
+                    <Award className="icon-inline" />
+                    Logros
+                  </span>
                   <span className="team-panel-menu-item-desc">
                     Títulos por nivel y el gestor de títulos Padre/Hijo
                   </span>
                 </Link>
                 <Link to="/perfil?tab=historial" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Historial de eventos</span>
+                  <span className="team-panel-menu-item-title">
+                    <History className="icon-inline" />
+                    Historial de eventos
+                  </span>
                   <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que jugaste</span>
                 </Link>
                 <Link to="/perfil?tab=configuracion" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">Configuración</span>
+                  <span className="team-panel-menu-item-title">
+                    <Settings className="icon-inline" />
+                    Configuración
+                  </span>
                   <span className="team-panel-menu-item-desc">
                     Editar datos, transmisión, apariencia, juegos e idioma
                   </span>

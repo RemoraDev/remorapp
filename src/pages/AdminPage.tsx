@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { Check, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
@@ -2082,8 +2083,18 @@ export default function AdminPage() {
                     {cw.status} · {cw.formato === "wtl" ? "WTL" : "Simple"} · {formatFecha(cw.fechaHoraCet)}
                   </p>
                   <p className="admin-row-meta">
-                    Visto bueno: {cw.challengerNombre} {cw.lineupVistoBuenoChallenger ? "✓" : "✗"} ·{" "}
-                    {cw.challengedNombre} {cw.lineupVistoBuenoChallenged ? "✓" : "✗"}
+                    Visto bueno: {cw.challengerNombre}{" "}
+                    {cw.lineupVistoBuenoChallenger ? (
+                      <Check className="icon-inline" />
+                    ) : (
+                      <X className="icon-inline" />
+                    )}{" "}
+                    · {cw.challengedNombre}{" "}
+                    {cw.lineupVistoBuenoChallenged ? (
+                      <Check className="icon-inline" />
+                    ) : (
+                      <X className="icon-inline" />
+                    )}
                   </p>
                   {cw.intervenidoPorAdmin && (
                     <p className="clan-war-intervenido-aviso">Intervenido por administración de la plataforma</p>

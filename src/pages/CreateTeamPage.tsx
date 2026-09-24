@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
@@ -34,7 +35,6 @@ export default function CreateTeamPage() {
   const [cargandoEquipoActual, setCargandoEquipoActual] = useState(true);
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -55,13 +55,12 @@ export default function CreateTeamPage() {
 
   const handleLogoChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
-    setError(null);
     event.target.value = "";
 
     if (!archivo) return;
 
     if (archivo.size > LOGO_MAX_BYTES) {
-      setError("El logo no puede pesar más de 2MB.");
+      toast.error("El logo no puede pesar más de 2MB.");
       return;
     }
 
@@ -129,15 +128,15 @@ export default function CreateTeamPage() {
     const tagNormalizado = tag.trim().toUpperCase();
 
     if (nombreLimpio.length < 3 || nombreLimpio.length > 20) {
-      setError("El nombre del equipo tiene que tener entre 3 y 20 caracteres.");
+      toast.error("El nombre del equipo tiene que tener entre 3 y 20 caracteres.");
       return;
     }
     if (!TAG_REGEX.test(tagNormalizado)) {
-      setError("El tag tiene que ser de 3 a 6 letras mayúsculas, sin números ni símbolos.");
+      toast.error("El tag tiene que ser de 3 a 6 letras mayúsculas, sin números ni símbolos.");
       return;
     }
     if (regiones.length === 0) {
-      setError("Elige al menos un servidor.");
+      toast.error("Elige al menos un servidor.");
       return;
     }
     if (
@@ -145,12 +144,11 @@ export default function CreateTeamPage() {
       contieneLenguajeInapropiado(tagNormalizado) ||
       (descripcion.trim() && contieneLenguajeInapropiado(descripcion))
     ) {
-      setError("Ese nombre, tag o descripción no está permitido. Por favor cámbialo.");
+      toast.error("Ese nombre, tag o descripción no está permitido. Por favor cámbialo.");
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     // Chequeo de tag único por servidor -- esto es solo para mostrar el
     // aviso al toque; el trigger validar_tag_unico_por_servidor en la
@@ -167,7 +165,7 @@ export default function CreateTeamPage() {
         .find((r) => regiones.includes(r));
       const label =
         SC2_REGION_OPTIONS.find((o) => o.value === regionEnConflicto)?.label ?? "ese servidor";
-      setError(`Ese tag ya está en uso en ${label}. Intenta con otro.`);
+      toast.error(`Ese tag ya está en uso en ${label}. Intenta con otro.`);
       setLoading(false);
       return;
     }
@@ -183,14 +181,14 @@ export default function CreateTeamPage() {
           .upload(ruta, logoFile, { contentType: logoFile.type });
 
         if (uploadError) {
-          setError("No se pudo subir el logo: " + uploadError.message);
+          toast.error("No se pudo subir el logo: " + uploadError.message);
           setLoading(false);
           return;
         }
 
         logoUrl = supabase.storage.from("team-logos").getPublicUrl(ruta).data.publicUrl;
       } catch {
-        setError("No se pudo procesar el logo, prueba con otra imagen.");
+        toast.error("No se pudo procesar el logo, prueba con otra imagen.");
         setLoading(false);
         return;
       }
@@ -213,10 +211,11 @@ export default function CreateTeamPage() {
     setLoading(false);
 
     if (teamError || !equipo) {
-      setError(teamError?.message ?? "No se pudo crear el equipo.");
+      toast.error(teamError?.message ?? "No se pudo crear el equipo.");
       return;
     }
 
+    toast.success("Equipo creado correctamente.");
     navigate(`/equipos/${equipo.tag}`);
   };
 
@@ -226,8 +225,6 @@ export default function CreateTeamPage() {
       <p className="auth-sub">Arma tu clan y compite en RemorApp.</p>
 
       <form className="auth-form" onSubmit={handleSubmit}>
-        {error && <div className="form-error">{error}</div>}
-
         <div className="form-group">
           <label className="form-label" htmlFor="team-nombre">
             Nombre del equipo

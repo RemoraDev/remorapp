@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
+import { BarChart3, Settings, Award, History, Shield } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
@@ -230,8 +232,6 @@ export default function ProfilePage() {
   const [nick, setNick] = useState("");
   const [country, setCountry] = useState<Country | "">("");
   const [guardandoIdentidad, setGuardandoIdentidad] = useState(false);
-  const [errorIdentidad, setErrorIdentidad] = useState<string | null>(null);
-  const [identidadGuardada, setIdentidadGuardada] = useState(false);
 
   // --- Servidor e ID de StarCraft II: se mudaron acá, junto a raza y
   // liga -- ver handleGuardarDatosJuego() más abajo, que ahora guarda
@@ -893,17 +893,15 @@ export default function ProfilePage() {
 
     const errorNick = validarNick(nick);
     if (errorNick) {
-      setErrorIdentidad(errorNick);
+      toast.error(errorNick);
       return;
     }
     if (!country) {
-      setErrorIdentidad("Debes completar todos los campos.");
+      toast.error("Debes completar todos los campos.");
       return;
     }
 
     setGuardandoIdentidad(true);
-    setErrorIdentidad(null);
-    setIdentidadGuardada(false);
 
     // cuenta_validada no se manda: se recalcula sola en la base
     // (trigger actualizar_cuenta_validada) a partir de los 4 campos
@@ -915,12 +913,12 @@ export default function ProfilePage() {
     setGuardandoIdentidad(false);
 
     if (updateError) {
-      setErrorIdentidad(updateError.message);
+      toast.error(updateError.message);
       return;
     }
 
     await refreshProfile();
-    setIdentidadGuardada(true);
+    toast.success("Tu perfil se guardó correctamente.");
   };
 
   // Reorganización: pide la contraseña ACTUAL primero, como
@@ -1471,7 +1469,10 @@ export default function ProfilePage() {
             className="team-panel-menu-item"
             onClick={() => setSeccionActiva("estadisticas")}
           >
-            <span className="team-panel-menu-item-title">Estadísticas</span>
+            <span className="team-panel-menu-item-title">
+              <BarChart3 className="icon-inline" />
+              Estadísticas
+            </span>
             <span className="team-panel-menu-item-desc">
               Valentía del jugador y Responsabilidad en Torneos y Clan War
             </span>
@@ -1481,7 +1482,10 @@ export default function ProfilePage() {
             className="team-panel-menu-item"
             onClick={() => setSeccionActiva("configuracion")}
           >
-            <span className="team-panel-menu-item-title">Configuración</span>
+            <span className="team-panel-menu-item-title">
+              <Settings className="icon-inline" />
+              Configuración
+            </span>
             <span className="team-panel-menu-item-desc">
               Datos, transmisión, apariencia, juegos e idioma
             </span>
@@ -1491,7 +1495,10 @@ export default function ProfilePage() {
             className="team-panel-menu-item"
             onClick={() => setSeccionActiva("logros")}
           >
-            <span className="team-panel-menu-item-title">Logros</span>
+            <span className="team-panel-menu-item-title">
+              <Award className="icon-inline" />
+              Logros
+            </span>
             <span className="team-panel-menu-item-desc">Títulos Padre/Hijo activos, pendientes y adquiridos</span>
           </button>
           <button
@@ -1499,7 +1506,10 @@ export default function ProfilePage() {
             className="team-panel-menu-item"
             onClick={() => setSeccionActiva("historial")}
           >
-            <span className="team-panel-menu-item-title">Historial de eventos</span>
+            <span className="team-panel-menu-item-title">
+              <History className="icon-inline" />
+              Historial de eventos
+            </span>
             <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que participaste</span>
           </button>
           {/* Migración 094: Panel Staff -- distinto del Panel de
@@ -1508,7 +1518,10 @@ export default function ProfilePage() {
               la plataforma, que ya ven todo lo que ve Staff y más). */}
           {(profile?.es_staff || profile?.es_admin) && (
             <Link to="/staff" className="team-panel-menu-item">
-              <span className="team-panel-menu-item-title">Panel Staff</span>
+              <span className="team-panel-menu-item-title">
+                <Shield className="icon-inline" />
+                Panel Staff
+              </span>
               <span className="team-panel-menu-item-desc">Crear liga de clanes, reportes al staff y bugs</span>
             </Link>
           )}
@@ -1599,9 +1612,6 @@ export default function ProfilePage() {
               </button>
 
               <form className="auth-form" onSubmit={handleGuardarIdentidad}>
-                {errorIdentidad && <div className="form-error">{errorIdentidad}</div>}
-                {identidadGuardada && <div className="form-success">Tu perfil se guardó correctamente.</div>}
-
                 <div className="form-group">
                   <label className="form-label" htmlFor="perfil-nick">
                     Nick

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
+import { Settings, LogOut } from "lucide-react";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
 import { useAuth } from "../context/AuthContext";
@@ -83,12 +84,14 @@ export default function Header() {
                   ya no hace falta un segundo link separado acá. */}
               <div className={`header-user-menu ${menuAbierto ? "is-open" : ""}`} aria-hidden={!menuAbierto}>
                 <Link to="/perfil?tab=configuracion" className="header-user-menu-item" onClick={cerrarMenu}>
+                  <Settings className="icon-inline" />
                   Configuración
                 </Link>
 
                 <div className="header-user-menu-divider" />
 
                 <button type="button" className="header-user-menu-item" onClick={() => void handleCerrarSesion()}>
+                  <LogOut className="icon-inline" />
                   Cerrar sesión
                 </button>
               </div>

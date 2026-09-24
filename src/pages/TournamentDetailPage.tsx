@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
+import { Trophy, Medal } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -18,6 +19,8 @@ import BracketStylePicker from "../components/BracketStylePicker";
 import GroupStage from "../components/GroupStage";
 import Avatar from "../components/Avatar";
 import LigaBadge from "../components/LigaBadge";
+import ArmarLlaveManual from "../components/ArmarLlaveManual";
+import type { ParticipanteParaLlave } from "../components/ArmarLlaveManual";
 import type { PosicionGrupo, TournamentGroupMatchRow, TournamentGroupRow, TournamentRow } from "../types/tournaments";
 import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
@@ -197,6 +200,13 @@ export default function TournamentDetailPage() {
 
   const [generandoLlave, setGenerandoLlave] = useState(false);
   const [errorLlave, setErrorLlave] = useState<string | null>(null);
+
+  // Migración 097: alternativa al sorteo automático de generar_llave()
+  // -- "auto" mantiene el botón de siempre sin ningún cambio;
+  // "manual" abre ArmarLlaveManual (arrastrar y soltar) en vez de
+  // generar la llave al toque.
+  const [metodoLlave, setMetodoLlave] = useState<"auto" | "manual">("auto");
+  const [mostrandoLlaveManual, setMostrandoLlaveManual] = useState(false);
 
   // Suizo (migración 069).
   const [iniciandoSuizo, setIniciandoSuizo] = useState(false);
@@ -963,6 +973,139 @@ export default function TournamentDetailPage() {
     }
 
     await cargarTorneo();
+  };
+
+  // Migración 097: mismo botón de "generar la llave", pero con el
+  // orden que el organizador armó a mano en ArmarLlaveManual, en vez
+  // de un sorteo. generar_llave_manual() valida todo del lado de la
+  // base (cantidad exacta de casilleros, sin repetidos, sin partidas
+  // con los dos casilleros vacíos) antes de crear las mismas
+  // bracket_matches que crearía el sorteo automático.
+  const handleGenerarLlaveManual = async (orden: (string | null)[]) => {
+    if (!torneo) return;
+
+    setGenerandoLlave(true);
+    setErrorLlave(null);
+
+    const { error } = await supabase.rpc("generar_llave_manual", {
+      p_tournament_id: torneo.id,
+      p_orden: orden,
+    });
+
+    setGenerandoLlave(false);
+
+    if (error) {
+      setErrorLlave(error.message);
+      return;
+    }
+
+    setMostrandoLlaveManual(false);
+    setMetodoLlave("auto");
+    await cargarTorneo();
+  };
+
+  // Mismo criterio de "quién puede jugar la llave" que ya usa
+  // generar_llave() en la base: los clasificados de la etapa de
+  // grupos (ganados desc, inscrito_en asc, hasta avanzan_por_grupo por
+  // grupo) si el torneo tiene fase de grupos y sigue en ella, o los
+  // inscritos con check-in confirmado si no. Se recalcula acá para que
+  // ArmarLlaveManual sepa a quién mostrar en la columna "Sin asignar",
+  // pero la validación real de quién puede entrar sigue viviendo
+  // exclusivamente en la base.
+  const participantesParaLlaveManual = (): ParticipanteParaLlave[] => {
+    if (!torneo) return [];
+
+    const porId = new Map(participantes.map((p) => [p.id, p]));
+    let ids: string[];
+
+    if (torneo.tiene_fase_grupos && torneo.fase_actual === "grupos") {
+      const porGrupo = new Map<string, PosicionGrupo[]>();
+      for (const p of posiciones) {
+        porGrupo.set(p.group_id, [...(porGrupo.get(p.group_id) ?? []), p]);
+      }
+      const avanzanPorGrupo = torneo.avanzan_por_grupo ?? 2;
+      ids = [];
+      for (const lista of porGrupo.values()) {
+        const ordenada = [...lista].sort((a, b) => {
+          if (b.ganados !== a.ganados) return b.ganados - a.ganados;
+          return new Date(a.inscrito_en).getTime() - new Date(b.inscrito_en).getTime();
+        });
+        ids.push(...ordenada.slice(0, avanzanPorGrupo).map((x) => x.participant_id));
+      }
+    } else {
+      ids = participantesVisibles.filter((p) => p.checkedIn).map((p) => p.id);
+    }
+
+    return ids
+      .map((id) => porId.get(id))
+      .filter((p): p is ParticipanteConNombre => !!p)
+      .map((p) => ({
+        id: p.id,
+        nombre: p.nombre ?? "Participante",
+        avatarUrl: p.avatarUrl,
+        avatarForma: p.avatarForma,
+      }));
+  };
+
+  // Selector "Sorteo automático" / "Ordenar manualmente" + el botón o
+  // la interfaz de arrastrar y soltar según lo que se elija -- se
+  // reusa en los dos lugares donde se puede generar la llave (torneo
+  // abierto sin fase de grupos, y al cerrar la etapa de grupos).
+  const renderControlGenerarLlave = (textoBotonAuto: string) => {
+    if (mostrandoLlaveManual) {
+      return (
+        <ArmarLlaveManual
+          participantes={participantesParaLlaveManual()}
+          guardando={generandoLlave}
+          error={errorLlave}
+          onConfirmar={handleGenerarLlaveManual}
+          onCancelar={() => setMostrandoLlaveManual(false)}
+        />
+      );
+    }
+
+    return (
+      <>
+        {errorLlave && <div className="form-error">{errorLlave}</div>}
+        <div className="pill-radio-group">
+          <label className={`pill-radio-option ${metodoLlave === "auto" ? "selected" : ""}`}>
+            <input
+              type="radio"
+              className="sr-only"
+              name="metodo-llave"
+              checked={metodoLlave === "auto"}
+              onChange={() => setMetodoLlave("auto")}
+            />
+            Sorteo automático
+          </label>
+          <label className={`pill-radio-option ${metodoLlave === "manual" ? "selected" : ""}`}>
+            <input
+              type="radio"
+              className="sr-only"
+              name="metodo-llave"
+              checked={metodoLlave === "manual"}
+              onChange={() => setMetodoLlave("manual")}
+            />
+            Ordenar manualmente
+          </label>
+        </div>
+
+        {metodoLlave === "auto" ? (
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            disabled={generandoLlave}
+            onClick={handleGenerarLlave}
+          >
+            {generandoLlave ? "Generando..." : textoBotonAuto}
+          </button>
+        ) : (
+          <button type="button" className="btn btn-primary btn-block" onClick={() => setMostrandoLlaveManual(true)}>
+            Armar bracket manualmente
+          </button>
+        )}
+      </>
+    );
   };
 
   // Suizo (migración 069): arranca el torneo (arma el grupo único y la
@@ -2010,16 +2153,10 @@ export default function TournamentDetailPage() {
                 </>
               )}
 
-              {esOrganizador && torneo.formato_liga !== "first_stand" && !torneo.tiene_fase_grupos && (
-                <button
-                  type="button"
-                  className="btn btn-primary btn-block"
-                  disabled={generandoLlave}
-                  onClick={handleGenerarLlave}
-                >
-                  {generandoLlave ? "Generando..." : "Cerrar check-in y generar llave"}
-                </button>
-              )}
+              {esOrganizador &&
+                torneo.formato_liga !== "first_stand" &&
+                !torneo.tiene_fase_grupos &&
+                renderControlGenerarLlave("Cerrar check-in y generar llave")}
             </div>
           )}
 
@@ -2044,20 +2181,10 @@ export default function TournamentDetailPage() {
 
               {esOrganizador && (
                 <div className="detail-register-box">
-                  {errorLlave && <div className="form-error">{errorLlave}</div>}
                   {partidasGrupo.length > 0 && partidasGrupo.every((m) => m.status === "jugado") ? (
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-block"
-                      disabled={generandoLlave}
-                      onClick={handleGenerarLlave}
-                    >
-                      {generandoLlave
-                        ? "Generando..."
-                        : torneo.formato_liga === "first_stand"
-                        ? "Generar playoffs"
-                        : "Cerrar etapa de grupos y generar llave"}
-                    </button>
+                    renderControlGenerarLlave(
+                      torneo.formato_liga === "first_stand" ? "Generar playoffs" : "Cerrar etapa de grupos y generar llave"
+                    )
                   ) : (
                     <p className="tournament-card-meta">
                       Todavía faltan partidos de grupo por jugarse antes de poder generar la llave.
@@ -2081,14 +2208,14 @@ export default function TournamentDetailPage() {
                 <>
                   {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
                     <p className="form-success">
-                      🏆 Campeón:{" "}
+                      <Trophy className="icon-inline" />Campeón:{" "}
                       {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
                         "Jugador de RemorApp"}
                     </p>
                   )}
                   {torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id && (
                     <p className="tournament-card-meta">
-                      🥉 Tercer lugar:{" "}
+                      <Medal className="icon-inline" />Tercer lugar:{" "}
                       {participantes.find((p) => p.id === torneo.tercer_lugar_participant_id)?.nombre ??
                         "Jugador de RemorApp"}
                     </p>
@@ -2151,7 +2278,7 @@ export default function TournamentDetailPage() {
 
           {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
             <p className="form-success">
-              🏆 Campeón:{" "}
+              <Trophy className="icon-inline" />Campeón:{" "}
               {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
                 "Jugador de RemorApp"}
             </p>
@@ -2234,7 +2361,7 @@ export default function TournamentDetailPage() {
 
           {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
             <p className="form-success">
-              🏆 Campeón:{" "}
+              <Trophy className="icon-inline" />Campeón:{" "}
               {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
                 "Jugador de RemorApp"}
             </p>
@@ -2359,7 +2486,7 @@ export default function TournamentDetailPage() {
 
           {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
             <p className="form-success">
-              🏆 Campeón:{" "}
+              <Trophy className="icon-inline" />Campeón:{" "}
               {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
                 "Jugador de RemorApp"}
             </p>

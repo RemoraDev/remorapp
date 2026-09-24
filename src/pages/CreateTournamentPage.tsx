@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import InfoTooltip from "../components/InfoTooltip";
@@ -94,8 +95,6 @@ export default function CreateTournamentPage() {
   const [cwBuscando, setCwBuscando] = useState(false);
   const [cwEquipoElegido, setCwEquipoElegido] = useState<{ id: string; name: string; tag: string } | null>(null);
   const [cwEnviando, setCwEnviando] = useState(false);
-  const [cwError, setCwError] = useState<string | null>(null);
-  const [cwEnviado, setCwEnviado] = useState(false);
 
   // Migración 095: un torneo/liga por equipos (cualquier formato
   // distinto de 1v1 -- 2v2/3v3/4v4/wtl, First Stand incluido, que
@@ -173,7 +172,6 @@ export default function CreateTournamentPage() {
   const [mostrarFormNuevaLiga, setMostrarFormNuevaLiga] = useState(false);
   const [nuevaLigaNombre, setNuevaLigaNombre] = useState("");
   const [creandoLiga, setCreandoLiga] = useState(false);
-  const [errorLiga, setErrorLiga] = useState<string | null>(null);
 
   // Temporada (migración 079): se crea junto con el/los torneo(s) de
   // liga, en vez de tener que volver después a /tournaments/:id a
@@ -184,7 +182,6 @@ export default function CreateTournamentPage() {
   const [temporadaFechaFin, setTemporadaFechaFin] = useState("");
 
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const esLiga = tipoEvento === "liga";
   const totalPasos = esLiga ? 4 : 2;
@@ -318,19 +315,18 @@ export default function CreateTournamentPage() {
   const handleProponerClanWarAmistosa = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
-    setCwError(null);
 
     if (!cwEquipoElegido) {
-      setCwError("Elige un clan rival en el buscador.");
+      toast.error("Elige un clan rival en el buscador.");
       return;
     }
     if (!cwFechaHora) {
-      setCwError("Elige la fecha y hora de la Clan War.");
+      toast.error("Elige la fecha y hora de la Clan War.");
       return;
     }
     const jugadores = Number(cwJugadoresPorSet);
     if (!jugadores || jugadores < 1) {
-      setCwError("La cantidad de jugadores por lado tiene que ser al menos 1.");
+      toast.error("La cantidad de jugadores por lado tiene que ser al menos 1.");
       return;
     }
 
@@ -350,11 +346,13 @@ export default function CreateTournamentPage() {
     setCwEnviando(false);
 
     if (proponerError) {
-      setCwError(proponerError.message);
+      toast.error(proponerError.message);
       return;
     }
 
-    setCwEnviado(true);
+    toast.success(
+      "¡Solicitud enviada! El otro clan la va a ver en su Panel de control para aceptarla o rechazarla."
+    );
     setCwEquipoElegido(null);
     setCwBusqueda("");
     setCwFechaHora("");
@@ -365,19 +363,18 @@ export default function CreateTournamentPage() {
     if (!nombreLimpio) return;
 
     if (contieneLenguajeInapropiado(nombreLimpio)) {
-      setErrorLiga("Ese nombre no está permitido.");
+      toast.error("Ese nombre no está permitido.");
       return;
     }
 
     setCreandoLiga(true);
-    setErrorLiga(null);
 
     const { data, error: crearError } = await supabase.rpc("crear_liga", { p_nombre: nombreLimpio });
 
     setCreandoLiga(false);
 
     if (crearError || !data) {
-      setErrorLiga(crearError?.message ?? "No se pudo crear la liga.");
+      toast.error(crearError?.message ?? "No se pudo crear la liga.");
       return;
     }
 
@@ -397,24 +394,22 @@ export default function CreateTournamentPage() {
   const puedeAvanzarDesdePaso3 = !esLiga || !!ligaId;
 
   const handleSiguiente = () => {
-    setError(null);
     if (paso === 1 && !puedeAvanzarDesdePaso1) {
-      setError("Ponle un nombre al torneo antes de seguir.");
+      toast.error("Ponle un nombre al torneo antes de seguir.");
       return;
     }
     if (paso === 2 && !puedeAvanzarDesdePaso2) {
-      setError("Elige la fecha de inicio y una cantidad de cupos válida.");
+      toast.error("Elige la fecha de inicio y una cantidad de cupos válida.");
       return;
     }
     if (paso === 3 && !puedeAvanzarDesdePaso3) {
-      setError("Elige una liga antes de seguir.");
+      toast.error("Elige una liga antes de seguir.");
       return;
     }
     setPaso((p) => Math.min(p + 1, totalPasos));
   };
 
   const handleAtras = () => {
-    setError(null);
     setPaso((p) => Math.max(p - 1, 1));
   };
 
@@ -426,7 +421,7 @@ export default function CreateTournamentPage() {
     // migración 004) -- este chequeo acá es solo para no dejar mandar
     // el formulario y mostrar el aviso al toque, no la única barrera.
     if (profile?.suspendido) {
-      setError("Tu cuenta está suspendida.");
+      toast.error("Tu cuenta está suspendida.");
       return;
     }
 
@@ -434,28 +429,28 @@ export default function CreateTournamentPage() {
     // validar_creador_torneo() -- este chequeo acá es solo para
     // mostrar el aviso al toque.
     if (!profile?.cuenta_validada) {
-      setError("Necesitas completar tu perfil (nick, país, servidor y ID de SC2) antes de crear un torneo.");
+      toast.error("Necesitas completar tu perfil (nick, país, servidor y ID de SC2) antes de crear un torneo.");
       return;
     }
 
     // El nombre del torneo se muestra públicamente (listado y detalle),
     // así que pasa por el mismo filtro que el nick.
     if (contieneLenguajeInapropiado(nombre)) {
-      setError("Ese nombre no está permitido. Por favor elige otro.");
+      toast.error("Ese nombre no está permitido. Por favor elige otro.");
       return;
     }
 
     // Migración 074: mismo margen de tolerancia que el trigger de la
     // base.
     if (new Date(fechaInicio).getTime() < Date.now() - TOLERANCIA_FECHA_MS) {
-      setError("La fecha de inicio no puede ser en el pasado.");
+      toast.error("La fecha de inicio no puede ser en el pasado.");
       return;
     }
 
     // Migración 095: mismo límite de 60 días que exige
     // validar_fecha_inicio_torneo() en la base.
     if (new Date(fechaInicio).getTime() > Date.now() + LIMITE_ANTICIPACION_DIAS * 24 * 60 * 60 * 1000) {
-      setError(
+      toast.error(
         `La fecha de inicio no puede ser más de ${LIMITE_ANTICIPACION_DIAS} días en el futuro. Si necesitas programar con más anticipación, pídele a un administrador que extienda el plazo una vez creado el torneo.`
       );
       return;
@@ -464,20 +459,19 @@ export default function CreateTournamentPage() {
     const divisionesElegidas = esLiga ? divisiones.filter((d) => divisionesSeleccionadas[d.id]) : [];
 
     if (esLiga && temporadaModo === "manual" && !temporadaNombreManual.trim()) {
-      setError("Escribe el nombre de la temporada, o cambia a numerada.");
+      toast.error("Escribe el nombre de la temporada, o cambia a numerada.");
       return;
     }
     if (esLiga && !temporadaFechaFin) {
-      setError("Elige la fecha de fin de la temporada.");
+      toast.error("Elige la fecha de fin de la temporada.");
       return;
     }
     if (esLiga && temporadaFechaFin && new Date(temporadaFechaFin) <= new Date(fechaInicio)) {
-      setError("La fecha de fin de la temporada debe ser posterior a la fecha de inicio del torneo.");
+      toast.error("La fecha de fin de la temporada debe ser posterior a la fecha de inicio del torneo.");
       return;
     }
 
     setLoading(true);
-    setError(null);
 
     // Opciones avanzadas (Bracket/Permissions/Misc) ya NO se
     // configuran acá -- quedan en su valor por defecto al crear, y se
@@ -532,7 +526,7 @@ export default function CreateTournamentPage() {
 
       if (torneoError || !torneo) {
         setLoading(false);
-        setError(
+        toast.error(
           idsCreados.length > 0
             ? `Se crearon ${idsCreados.length} de ${tandas.length} torneos antes de este error: ${
                 torneoError?.message ?? "No se pudo crear el torneo."
@@ -559,6 +553,7 @@ export default function CreateTournamentPage() {
     }
 
     setLoading(false);
+    toast.success(idsCreados.length === 1 ? "Torneo creado correctamente." : "Torneos creados correctamente.");
     navigate(idsCreados.length === 1 ? `/tournaments/${idsCreados[0]}` : "/tournaments");
   };
 
@@ -618,14 +613,6 @@ export default function CreateTournamentPage() {
 
       {esClanWarAmistosa ? (
         <form className="create-tournament-form" onSubmit={handleProponerClanWarAmistosa}>
-          {cwError && <div className="form-error">{cwError}</div>}
-          {cwEnviado && (
-            <div className="form-success">
-              ¡Solicitud enviada! El otro clan la va a ver en su Panel de control para aceptarla o
-              rechazarla.
-            </div>
-          )}
-
           {!cargandoMiEquipo && !miEquipo && (
             <p className="form-hint">
               Necesitas pertenecer a un equipo para proponer una Clan War Amistosa.{" "}
@@ -744,8 +731,6 @@ export default function CreateTournamentPage() {
         </form>
       ) : (
       <form className="create-tournament-form" onSubmit={handleSubmit}>
-        {error && <div className="form-error">{error}</div>}
-
         {paso === 1 && (
           <div className="form-section">
             <h2 className="form-section-title">
@@ -1148,7 +1133,6 @@ export default function CreateTournamentPage() {
                 </button>
               ) : (
                 <div className="form-group">
-                  {errorLiga && <div className="form-error">{errorLiga}</div>}
                   <input
                     className="form-input"
                     type="text"
@@ -1171,7 +1155,6 @@ export default function CreateTournamentPage() {
                       onClick={() => {
                         setMostrarFormNuevaLiga(false);
                         setNuevaLigaNombre("");
-                        setErrorLiga(null);
                       }}
                     >
                       Cancelar

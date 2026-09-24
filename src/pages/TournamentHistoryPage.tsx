@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Trophy, Medal } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { obtenerNombresDeParticipantes, obtenerNombreDeParticipante } from "../lib/participants";
 import { getModoLabel, getFormatoLabel } from "../lib/tournamentOptions";
@@ -163,10 +164,14 @@ export default function TournamentHistoryPage() {
 
               {esEliminacionSimple ? (
                 <>
-                  <p className="form-success">🏆 Campeón: {campeonNombre ?? "Sin definir todavía"}</p>
+                  <p className="form-success">
+                    <Trophy className="icon-inline" />
+                    Campeón: {campeonNombre ?? "Sin definir todavía"}
+                  </p>
                   {torneo.tiene_tercer_lugar && (
                     <p className="tournament-card-meta">
-                      🥉 Tercer lugar: {tercerLugarNombre ?? "Sin definir todavía"}
+                      <Medal className="icon-inline" />
+                      Tercer lugar: {tercerLugarNombre ?? "Sin definir todavía"}
                     </p>
                   )}
                 </>

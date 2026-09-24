@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 import Cropper from "react-easy-crop";
 import type { Area, Point } from "react-easy-crop";
 import { recortarImagenDesdeArea } from "../lib/imageCrop";
@@ -58,7 +59,7 @@ export default function RecortadorImagenModal({
     <div className="modal-backdrop">
       <div className="modal-panel modal-panel-recorte">
         <button type="button" className="modal-close" onClick={onCancelar} aria-label="Cancelar">
-          ✕
+          <X size={18} />
         </button>
         <h3 className="modal-title">{titulo}</h3>
         <p className="modal-sub">Arrastra la imagen para ubicarla y usa la barra para acercar o alejar.</p>
