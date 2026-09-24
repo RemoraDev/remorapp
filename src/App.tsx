@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-route
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
+import { SearchProvider } from "./context/SearchContext";
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
 
@@ -67,56 +68,58 @@ function AppContent() {
   }
 
   return (
-    <div className="app-shell">
-      <Header />
-      {profile?.suspendido && (
-        <div className="suspended-banner">
-          Tu cuenta está suspendida. Algunas acciones (crear torneos, inscribirte) no están
-          disponibles.
-        </div>
-      )}
-      <main>
-        <Suspense fallback={<PageFallback />}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/tournaments" element={<TournamentsPage />} />
-            <Route path="/tournaments/create" element={<CreateTournamentPage />} />
-            <Route path="/tournaments/history" element={<TournamentHistoryPage />} />
-            <Route path="/torneos-historicos" element={<HistoricalTournamentsPage />} />
-            <Route path="/sala-de-la-fama" element={<HallOfFamePage />} />
-            <Route path="/jugador/:nick/:uniqueId" element={<PlayerDetailPage />} />
-            <Route path="/tournaments/inscritos" element={<MyTournamentsPage />} />
-            <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
-            <Route path="/perfil" element={<ProfilePage />} />
-            <Route path="/admin" element={<AdminPage />} />
-            <Route path="/staff" element={<StaffPage />} />
-            <Route path="/pruebas/lineup/:clanWarId" element={<PruebasLineupObservarPage />} />
-            <Route path="/equipos" element={<TeamsPage />} />
-            <Route path="/equipos/crear" element={<CreateTeamPage />} />
-            <Route path="/equipos/:tag" element={<TeamDetailPage />} />
-            <Route path="/news" element={<NewsPage />} />
-            <Route path="/ayuda" element={<AyudaPage />} />
-            <Route path="/ranking" element={<RankingPage />} />
-            <Route path="/calendario" element={<ClanWarsSchedulePage />} />
-            <Route path="/clan-war/:id" element={<ClanWarLineupPublicoPage />} />
-            {/* La Tienda se descartó por completo -- la ruta se mantiene
-                únicamente para redirigir a Inicio a quien tenga un
-                enlace o marcador viejo, en vez de mostrar una página
-                rota. */}
-            <Route path="/store" element={<Navigate to="/" replace />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-            <Route path="/reset-password" element={<ResetPasswordPage />} />
-          </Routes>
-        </Suspense>
-      </main>
-      <BottomNav />
-      {/* Migración 098: notificaciones flotantes (sonner) -- arriba a la
-          derecha para no chocar con la barra de navegación inferior,
-          mismo tema claro/oscuro que el resto de la app. */}
-      <Toaster position="top-right" theme={tema === "oscuro" ? "dark" : "light"} richColors closeButton />
-    </div>
+    <SearchProvider>
+      <div className="app-shell">
+        <Header />
+        {profile?.suspendido && (
+          <div className="suspended-banner">
+            Tu cuenta está suspendida. Algunas acciones (crear torneos, inscribirte) no están
+            disponibles.
+          </div>
+        )}
+        <main>
+          <Suspense fallback={<PageFallback />}>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/tournaments" element={<TournamentsPage />} />
+              <Route path="/tournaments/create" element={<CreateTournamentPage />} />
+              <Route path="/tournaments/history" element={<TournamentHistoryPage />} />
+              <Route path="/torneos-historicos" element={<HistoricalTournamentsPage />} />
+              <Route path="/sala-de-la-fama" element={<HallOfFamePage />} />
+              <Route path="/jugador/:nick/:uniqueId" element={<PlayerDetailPage />} />
+              <Route path="/tournaments/inscritos" element={<MyTournamentsPage />} />
+              <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
+              <Route path="/perfil" element={<ProfilePage />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/staff" element={<StaffPage />} />
+              <Route path="/pruebas/lineup/:clanWarId" element={<PruebasLineupObservarPage />} />
+              <Route path="/equipos" element={<TeamsPage />} />
+              <Route path="/equipos/crear" element={<CreateTeamPage />} />
+              <Route path="/equipos/:tag" element={<TeamDetailPage />} />
+              <Route path="/news" element={<NewsPage />} />
+              <Route path="/ayuda" element={<AyudaPage />} />
+              <Route path="/ranking" element={<RankingPage />} />
+              <Route path="/calendario" element={<ClanWarsSchedulePage />} />
+              <Route path="/clan-war/:id" element={<ClanWarLineupPublicoPage />} />
+              {/* La Tienda se descartó por completo -- la ruta se mantiene
+                  únicamente para redirigir a Inicio a quien tenga un
+                  enlace o marcador viejo, en vez de mostrar una página
+                  rota. */}
+              <Route path="/store" element={<Navigate to="/" replace />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+            </Routes>
+          </Suspense>
+        </main>
+        <BottomNav />
+        {/* Migración 098: notificaciones flotantes (sonner) -- arriba a la
+            derecha para no chocar con la barra de navegación inferior,
+            mismo tema claro/oscuro que el resto de la app. */}
+        <Toaster position="top-right" theme={tema === "oscuro" ? "dark" : "light"} richColors closeButton />
+      </div>
+    </SearchProvider>
   );
 }
 

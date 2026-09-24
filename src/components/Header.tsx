@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Settings, LogOut } from "lucide-react";
+import { Settings, LogOut, Search } from "lucide-react";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
 import { useAuth } from "../context/AuthContext";
+import { useSearch } from "../context/SearchContext";
 import { BORDE_HEADER_OPTIONS } from "../types/profile";
 
 export default function Header() {
   const { user, profile, invitacionesPendientes, signOut } = useAuth();
+  const { abrirBuscador } = useSearch();
   const [menuAbierto, setMenuAbierto] = useState(false);
 
   const cerrarMenu = () => setMenuAbierto(false);
@@ -24,6 +26,20 @@ export default function Header() {
         <Link to="/">
           <Logo withWordmark />
         </Link>
+        {/* Migración 099: buscador global (Ctrl+K / Cmd+K) -- este botón
+            es solo el disparador visible (también funciona el atajo de
+            teclado desde cualquier lugar); el modal en sí vive en
+            SearchProvider, montado una sola vez en App.tsx. */}
+        <button
+          type="button"
+          className="header-search-btn"
+          onClick={abrirBuscador}
+          aria-label="Buscar torneos, equipos o jugadores"
+        >
+          <Search size={15} />
+          <span className="header-search-btn-label">Buscar</span>
+          <kbd className="header-search-btn-kbd">Ctrl K</kbd>
+        </button>
         <div className="header-actions">
           {user ? (
             <div className="header-user-wrap">

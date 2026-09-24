@@ -5716,3 +5716,193 @@ body.overlay-obs {
   flex: 1;
   accent-color: var(--color-accent);
 }
+
+/* ---------- Buscador global, Ctrl+K (migración 099, cmdk) ---------- */
+
+.cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+  z-index: 200;
+  animation: cmdk-fade-in 0.12s ease;
+}
+
+.cmdk-dialog {
+  position: fixed;
+  top: 12vh;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(34rem, 92vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  box-shadow: var(--shadow-accent-lg);
+  z-index: 201;
+  overflow: hidden;
+  animation: cmdk-slide-in 0.15s ease;
+}
+
+@keyframes cmdk-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes cmdk-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-0.5rem) scale(0.98);
+  }
+}
+
+.cmdk-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+
+.cmdk-input-icon {
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.cmdk-dialog [cmdk-input] {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.cmdk-dialog [cmdk-input]::placeholder {
+  color: var(--color-text-faint);
+}
+
+.cmdk-dialog [cmdk-list] {
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+
+.cmdk-hint {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-text-faint);
+}
+
+.cmdk-dialog [cmdk-empty] {
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-text-faint);
+}
+
+.cmdk-dialog [cmdk-group-heading] {
+  padding: 0.5rem 0.6rem 0.3rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-faint);
+}
+
+.cmdk-dialog [cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: 0.9rem;
+}
+
+.cmdk-dialog [cmdk-item][aria-selected="true"] {
+  background: rgba(var(--h-accent-rgb), 0.14);
+  color: var(--color-accent-soft);
+}
+
+.cmdk-item-icon {
+  flex-shrink: 0;
+  color: var(--color-text-faint);
+}
+
+.cmdk-item-avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.35rem;
+  object-fit: cover;
+  flex-shrink: 0;
+  font-size: 0.65rem;
+}
+
+.cmdk-item-meta {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+.cmdk-footer {
+  padding: 0.6rem 1rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.7rem;
+  color: var(--color-text-faint);
+  flex-shrink: 0;
+}
+
+/* Botón/indicación "Ctrl+K" en el header. */
+.header-search-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-faint);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.header-search-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.header-search-btn-kbd {
+  font-family: inherit;
+  font-size: 0.7rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 0.3rem;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 640px) {
+  /* En pantallas angostas el botón queda solo con la lupa -- el texto
+     "Ctrl+K" no tiene sentido en celular (no hay teclado físico), y ya
+     está la barra inferior para todo lo demás. */
+  .header-search-btn-label,
+  .header-search-btn-kbd {
+    display: none;
+  }
+}
+
+/* Botón "Descargar como imagen" arriba del bracket (migración 099,
+   html-to-image). */
+.bracket-descargar-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { AnimatePresence, motion } from "motion/react";
 import { supabase } from "../lib/supabaseClient";
 import { formatFecha } from "../lib/formatters";
 import type { ClanWarProxima } from "../types/clanWars";
@@ -182,9 +183,19 @@ export default function ProximasClanWars() {
             <div className="proxima-clan-war-grupo">
               <h3 className="proxima-clan-war-grupo-titulo">En vivo</h3>
               <div className="clan-war-cards-grid">
-                {enVivo.map((cw) => (
-                  <TarjetaClanWar key={cw.id} cw={cw} ahora={ahora} />
-                ))}
+                <AnimatePresence>
+                  {enVivo.map((cw) => (
+                    <motion.div
+                      key={cw.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.97 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                    >
+                      <TarjetaClanWar cw={cw} ahora={ahora} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             </div>
           )}
@@ -192,9 +203,19 @@ export default function ProximasClanWars() {
             <div className="proxima-clan-war-grupo">
               <h3 className="proxima-clan-war-grupo-titulo">Hoy</h3>
               <div className="clan-war-cards-grid">
-                {deHoy.map((cw) => (
-                  <TarjetaClanWar key={cw.id} cw={cw} ahora={ahora} />
-                ))}
+                <AnimatePresence>
+                  {deHoy.map((cw) => (
+                    <motion.div
+                      key={cw.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.97 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                    >
+                      <TarjetaClanWar cw={cw} ahora={ahora} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             </div>
           )}
@@ -202,9 +223,19 @@ export default function ProximasClanWars() {
             <div className="proxima-clan-war-grupo">
               <h3 className="proxima-clan-war-grupo-titulo">Mañana</h3>
               <div className="clan-war-cards-grid">
-                {deManana.map((cw) => (
-                  <TarjetaClanWar key={cw.id} cw={cw} ahora={ahora} />
-                ))}
+                <AnimatePresence>
+                  {deManana.map((cw) => (
+                    <motion.div
+                      key={cw.id}
+                      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.97 }}
+                      transition={{ duration: 0.25, ease: "easeOut" }}
+                    >
+                      <TarjetaClanWar cw={cw} ahora={ahora} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             </div>
           )}

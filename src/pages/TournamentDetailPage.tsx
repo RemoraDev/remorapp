@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Trophy, Medal } from "lucide-react";
+import { toPng } from "html-to-image";
+import { toast } from "sonner";
+import { Trophy, Medal, Download } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -207,6 +209,13 @@ export default function TournamentDetailPage() {
   // generar la llave al toque.
   const [metodoLlave, setMetodoLlave] = useState<"auto" | "manual">("auto");
   const [mostrandoLlaveManual, setMostrandoLlaveManual] = useState(false);
+
+  // Migración 099: descargar el bracket como imagen (html-to-image) --
+  // bracketRef apunta al mismo contenedor que ya trae el estilo y el
+  // fondo que eligió el organizador (data-estilo-bracket/data-fondo-bracket),
+  // así que la imagen sale exactamente como se ve en la página.
+  const bracketRef = useRef<HTMLDivElement>(null);
+  const [descargandoBracket, setDescargandoBracket] = useState(false);
 
   // Suizo (migración 069).
   const [iniciandoSuizo, setIniciandoSuizo] = useState(false);
@@ -1002,6 +1011,50 @@ export default function TournamentDetailPage() {
     setMostrandoLlaveManual(false);
     setMetodoLlave("auto");
     await cargarTorneo();
+  };
+
+  const handleDescargarBracket = async () => {
+    if (!bracketRef.current || !torneo) return;
+
+    setDescargandoBracket(true);
+    try {
+      const wrap = bracketRef.current;
+      // .bracket es flex sin ancho propio -- toma el 100% del ancho
+      // disponible de la página aunque el contenido (pocas rondas) sea
+      // mucho más angosto, así que la imagen quedaría con un margen
+      // vacío enorme a la derecha si se exporta tal cual. Se mide el
+      // borde derecho real de la última ronda y se le pide a
+      // html-to-image que renderice el clon con ESE ancho, sin tocar
+      // el ancho de la página real en ningún momento.
+      const rondas = wrap.querySelectorAll<HTMLElement>(".bracket-round");
+      let anchoContenido = wrap.offsetWidth;
+      if (rondas.length > 0) {
+        const wrapRect = wrap.getBoundingClientRect();
+        const ultimaRondaRect = rondas[rondas.length - 1].getBoundingClientRect();
+        const PADDING_LATERAL = 32;
+        anchoContenido = Math.min(
+          wrap.offsetWidth,
+          Math.ceil(ultimaRondaRect.right - wrapRect.left) + PADDING_LATERAL
+        );
+      }
+
+      const dataUrl = await toPng(wrap, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#06070a",
+        width: anchoContenido,
+        style: { width: `${anchoContenido}px` },
+      });
+      const enlace = document.createElement("a");
+      enlace.href = dataUrl;
+      enlace.download = `bracket-${torneo.nombre.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
+      enlace.click();
+    } catch (err) {
+      console.error("Error generando la imagen del bracket:", err);
+      toast.error("No se pudo generar la imagen del bracket. Prueba de nuevo.");
+    } finally {
+      setDescargandoBracket(false);
+    }
   };
 
   // Mismo criterio de "quién puede jugar la llave" que ya usa
@@ -2236,30 +2289,47 @@ export default function TournamentDetailPage() {
                   {partidas.length === 0 ? (
                     <p className="detail-empty">Cargando la llave...</p>
                   ) : (
-                    <div className="tournament-bracket-wrap" data-fondo-bracket={torneo.fondo_bracket}>
-                      <BracketView
-                        matches={partidas}
-                        nombresPorParticipante={Object.fromEntries(
-                          participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
-                        )}
-                        logosPorParticipante={
-                          esPorEquipos
-                            ? Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))
-                            : undefined
-                        }
-                        avatarsPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))}
-                        estilo={torneo.estilo_bracket}
-                        nombreTorneo={torneo.nombre}
-                        nombresRondaPersonalizados={torneo.mostrar_nombres_ronda_personalizados}
-                        permiteAutoreporte={torneo.permite_autoreporte}
-                        puedeReportarPorParticipante={puedeReportarPorParticipante}
-                        userId={user?.id ?? null}
-                        organizadorId={torneo.creador_id}
-                        onCambio={cargarTorneo}
-                        miEquipoTag={miEquipo?.teamTag ?? null}
-                        miParticipantId={participantes.find((p) => p.teamId === miEquipo?.team_id)?.id ?? null}
-                      />
-                    </div>
+                    <>
+                      <div className="bracket-descargar-wrap">
+                        <button
+                          type="button"
+                          className="btn btn-ghost"
+                          disabled={descargandoBracket}
+                          onClick={handleDescargarBracket}
+                        >
+                          <Download size={16} className="icon-inline" />
+                          {descargandoBracket ? "Generando imagen..." : "Descargar como imagen"}
+                        </button>
+                      </div>
+                      <div
+                        className="tournament-bracket-wrap"
+                        data-fondo-bracket={torneo.fondo_bracket}
+                        ref={bracketRef}
+                      >
+                        <BracketView
+                          matches={partidas}
+                          nombresPorParticipante={Object.fromEntries(
+                            participantes.map((p) => [p.id, p.nombre ?? "Jugador de RemorApp"])
+                          )}
+                          logosPorParticipante={
+                            esPorEquipos
+                              ? Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))
+                              : undefined
+                          }
+                          avatarsPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))}
+                          estilo={torneo.estilo_bracket}
+                          nombreTorneo={torneo.nombre}
+                          nombresRondaPersonalizados={torneo.mostrar_nombres_ronda_personalizados}
+                          permiteAutoreporte={torneo.permite_autoreporte}
+                          puedeReportarPorParticipante={puedeReportarPorParticipante}
+                          userId={user?.id ?? null}
+                          organizadorId={torneo.creador_id}
+                          onCambio={cargarTorneo}
+                          miEquipoTag={miEquipo?.teamTag ?? null}
+                          miParticipantId={participantes.find((p) => p.teamId === miEquipo?.team_id)?.id ?? null}
+                        />
+                      </div>
+                    </>
                   )}
                 </>
               )}
