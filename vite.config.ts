@@ -3,6 +3,19 @@ import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
+  // Evita que el watcher de Vite vigile src-tauri/target: ahí es donde
+  // Cargo escribe la compilación de Rust (migración de la versión de
+  // escritorio) -- sin este ignore, "tauri dev" hace crashear a Vite
+  // con un EBUSY apenas Cargo toca un archivo ahí adentro mientras
+  // compila, porque los dos procesos corren en paralelo.
+  server: {
+    watch: {
+      // RegExp en vez de glob: en Windows, el glob "**/src-tauri/**" no
+      // alcanza a filtrar los archivos que toca Cargo (separador de
+      // carpetas con backslash, no barra) y el EBUSY seguía pasando.
+      ignored: [/[\\/]src-tauri[\\/]target[\\/]/],
+    },
+  },
   plugins: [
     react(),
     // Migración 098: instalable como app (ícono propio, ventana sin la

@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
 import { SearchProvider } from "./context/SearchContext";
 import Header from "./components/Header";
+import DesktopTitleBar from "./components/DesktopTitleBar";
 import ObsController from "./components/ObsController";
 import ActualizacionDesktop from "./components/ActualizacionDesktop";
 import BottomNav from "./components/BottomNav";
@@ -74,6 +75,7 @@ function AppContent() {
   return (
     <SearchProvider>
       <div className="app-shell">
+        <DesktopTitleBar />
         <Header />
         <ObsController />
         <ActualizacionDesktop />

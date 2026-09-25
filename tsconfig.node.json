@@ -4,7 +4,13 @@
     "skipLibCheck": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
+    // "composite" exige emitir (no admite noEmit), pero sin outDir
+    // tsc dejaba vite.config.js y vite.config.d.ts compilados justo al
+    // lado de vite.config.ts -- Vite terminaba leyendo ese .js viejo en
+    // vez del .ts recién editado, así que una edición a este archivo
+    // podía quedar sin efecto hasta el próximo build completo.
+    "outDir": "node_modules/.tsc-out/tsconfig.node"
   },
   "include": ["vite.config.ts"]
 }

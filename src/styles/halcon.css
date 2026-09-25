@@ -6517,3 +6517,80 @@ body.overlay-obs {
   font-size: 0.8rem;
   color: var(--color-text-muted);
 }
+
+/* ------------------------------------------------------------
+   Versión de escritorio (Tauri): todo lo de acá vive bajo
+   html.es-escritorio, una clase que SOLO se agrega cuando la app
+   corre dentro de Tauri (ver DesktopTitleBar.tsx) -- la web normal en
+   el navegador nunca tiene esa clase, así que ninguna de estas reglas
+   la afecta ahí.
+   ------------------------------------------------------------ */
+
+/* Franja de marca fija, justo debajo de la barra de título NATIVA de
+   Windows (se mantiene esa, ver el comentario largo en
+   DesktopTitleBar.tsx) -- .header sigue siendo sticky, pero ahora
+   pegado debajo de esta franja en vez de pegado arriba de todo. */
+.app-titlebar-escritorio {
+  position: sticky;
+  top: 0;
+  /* Por debajo de .modal-backdrop (60) a propósito, igual que .header
+     -- un modal sigue tapando todo lo demás. Por encima de .header
+     (50), que va justo debajo de esta franja. */
+  z-index: 55;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 0 1rem;
+  background: #05060a;
+  border-bottom: 1px solid var(--color-border);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app-titlebar-escritorio-logo {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+}
+
+.app-titlebar-escritorio-accent {
+  color: var(--color-accent);
+}
+
+html.es-escritorio .header {
+  top: 36px;
+}
+
+/* El contenido no queda pegado a los bordes de la ventana -- margen
+   sutil, solo en escritorio. El header y la barra inferior siguen
+   ocupando el ancho completo a propósito (así se ven la mayoría de
+   las apps nativas: la barra de herramientas va de borde a borde, el
+   contenido queda con aire alrededor). */
+html.es-escritorio main {
+  padding: 1.25rem 1.5rem 0;
+}
+
+/* Scroll fino y discreto, estilo apps nativas modernas -- Tauri usa
+   WebView2 (Chromium) en Windows y WKWebView (WebKit) en Mac, los dos
+   soportan estos pseudo-elementos "-webkit-". No aplica en el
+   navegador normal porque html.es-escritorio nunca se agrega ahí. */
+html.es-escritorio ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+html.es-escritorio ::-webkit-scrollbar-track {
+  background: transparent;
+}
+html.es-escritorio ::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+html.es-escritorio ::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.28);
+  background-clip: content-box;
+}
