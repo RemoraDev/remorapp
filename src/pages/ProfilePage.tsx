@@ -86,9 +86,10 @@ function extraerUno<T>(valor: unknown): T | null {
   return (valor as T) ?? null;
 }
 
-// Los 5 datos que hacen que un perfil se sienta "completo" -- los 4 de
-// perfilEstaCompleto() más la foto (que no es obligatoria, así que no
-// forma parte del gate, pero sí de este indicador amistoso).
+// Los 5 datos que hacen que un perfil se sienta "completo" -- solo el
+// nick es obligatorio (perfilEstaCompleto(), migración 107); país,
+// servidor/ID de SC2 y la foto quedan afuera del gate, pero siguen
+// contando acá como parte de este indicador amistoso, no bloqueante.
 function calcularProgresoPerfil(profile: Profile | null) {
   const campos = [
     { ok: !!profile?.nick, falta: "el nick" },
@@ -223,13 +224,13 @@ export default function ProfilePage() {
     obtenerEquipoDelUsuario(user.id).then((equipo) => setTieneEquipo(!!equipo));
   }, [user]);
 
-  // --- Identidad de jugador: nick y país -- reorganización posterior:
-  // servidor SC2 e ID SC2 se mudaron enteros a "Editar Datos del
-  // Juego" (junto con el resto de lo específico de StarCraft II), así
-  // que ya no forman parte de este formulario. El gate de perfil
-  // completo (perfilEstaCompleto()) sigue exigiendo los 4 campos
-  // igual que antes -- ahora, completarlo requiere pasar por las dos
-  // pantallas en vez de una sola.
+  // --- Identidad de jugador: nick (obligatorio) y país (opcional,
+  // migración 107) -- servidor SC2 e ID SC2 viven aparte en "Editar
+  // Datos del Juego" (junto con el resto de lo específico de
+  // StarCraft II), también opcionales. El gate de perfil completo
+  // (perfilEstaCompleto()) solo exige el nick -- guardar este
+  // formulario con nick alcanza para que la cuenta quede validada, sin
+  // necesidad de país ni de pasar por la otra pantalla.
   const [nick, setNick] = useState("");
   const [country, setCountry] = useState<Country | "">("");
   const [guardandoIdentidad, setGuardandoIdentidad] = useState(false);
@@ -901,8 +902,9 @@ export default function ProfilePage() {
     );
   }
 
-  // Reorganización: solo nick y país -- servidor/ID de SC2 se guardan
-  // ahora en handleGuardarDatosJuego(), junto con raza y liga.
+  // Reorganización: nick (obligatorio) y país (opcional, migración
+  // 107) -- servidor/ID de SC2 se guardan ahora en
+  // handleGuardarDatosJuego(), junto con raza y liga.
   const handleGuardarIdentidad = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
@@ -912,19 +914,20 @@ export default function ProfilePage() {
       toast.error(errorNick);
       return;
     }
-    if (!country) {
-      toast.error("Debes completar todos los campos.");
-      return;
-    }
 
     setGuardandoIdentidad(true);
 
     // cuenta_validada no se manda: se recalcula sola en la base
-    // (trigger actualizar_cuenta_validada) a partir de los 4 campos
-    // obligatorios -- nick y country se guardan acá, sc2_region/sc2_id
-    // en "Editar Datos del Juego", así que el perfil recién queda
-    // completo cuando se pasó por las dos pantallas.
-    const { error: updateError } = await supabase.from("profiles").update({ nick, country }).eq("id", user.id);
+    // (trigger actualizar_cuenta_validada) a partir del nick, el único
+    // campo obligatorio (migración 107) -- guardar este formulario ya
+    // deja la cuenta validada, con o sin país. country || null: el
+    // <select> vacío guarda "" (no admitido por el check constraint de
+    // la columna, que exige null o un país válido), country nunca
+    // debe mandarse como cadena vacía.
+    const { error: updateError } = await supabase
+      .from("profiles")
+      .update({ nick, country: country || null })
+      .eq("id", user.id);
 
     setGuardandoIdentidad(false);
 
@@ -1699,18 +1702,15 @@ export default function ProfilePage() {
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="perfil-country">
-                    País (de dónde eres)
+                    País (de dónde eres) -- opcional
                   </label>
                   <select
                     id="perfil-country"
                     className="form-select"
-                    required
                     value={country}
-                    onChange={(e) => setCountry(e.target.value as Country)}
+                    onChange={(e) => setCountry(e.target.value as Country | "")}
                   >
-                    <option value="" disabled>
-                      Elige tu país
-                    </option>
+                    <option value="">Prefiero no decirlo</option>
                     {COUNTRY_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}

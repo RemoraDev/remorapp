@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
+import { validarNick } from "../lib/nickValidation";
 
 const AVISO_SESION_ACTIVA =
   "Ya tienes una sesión iniciada. Cierra sesión primero si quieres crear o entrar con otra cuenta.";
@@ -12,6 +13,7 @@ export default function RegisterPage() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const [nombre, setNombre] = useState("");
+  const [nick, setNick] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -31,6 +33,17 @@ export default function RegisterPage() {
     // de un torneo), así que pasa por el mismo filtro que el nick.
     if (contieneLenguajeInapropiado(nombre)) {
       setError("Ese nombre no está permitido. Por favor elige otro.");
+      return;
+    }
+
+    // Migración 107: el nick se pide acá directo (mismas reglas que ya
+    // existían en "Mi perfil" -- 3 a 13 caracteres, sin espacios,
+    // filtro de lenguaje) para no obligar a pasar por una pantalla
+    // aparte después solo para desbloquear crear un torneo o un
+    // equipo.
+    const errorNick = validarNick(nick);
+    if (errorNick) {
+      setError(errorNick);
       return;
     }
 
@@ -56,8 +69,10 @@ export default function RegisterPage() {
       options: {
         // perfil_tipo no se manda -- nadie lo elige a mano (migración
         // 011): arranca en 'jugador' solo, por el default de la
-        // columna en la base.
-        data: { nombre },
+        // columna en la base. nick viaja acá igual que nombre --
+        // handle_new_user() (migración 107) lo lee de
+        // raw_user_meta_data y lo guarda directo en profiles.nick.
+        data: { nombre, nick },
         emailRedirectTo: window.location.origin,
       },
     });
@@ -121,6 +136,24 @@ export default function RegisterPage() {
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
           />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label" htmlFor="register-nick">
+            Nick
+          </label>
+          <input
+            id="register-nick"
+            className="form-input"
+            type="text"
+            required
+            value={nick}
+            onChange={(e) => setNick(e.target.value)}
+          />
+          <p className="form-hint">
+            3 a 13 caracteres, sin espacios. Es tu identidad dentro de RemorApp (aparece como
+            Nick#1234) -- se puede cambiar después desde Mi perfil.
+          </p>
         </div>
 
         <div className="form-group">

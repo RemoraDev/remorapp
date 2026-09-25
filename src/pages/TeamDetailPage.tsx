@@ -3648,8 +3648,7 @@ export default function TeamDetailPage() {
           <div className="team-friend-request-box">
             {!profile?.cuenta_validada ? (
               <p className="tournament-card-meta">
-                Completa tu perfil (nick, país, región y Battle.net) para poder solicitar unirte a un
-                equipo.
+                Completa tu perfil (el nick) para poder solicitar unirte a un equipo.
               </p>
             ) : miSolicitudEquipo?.status === "pendiente" ? (
               <p className="tournament-card-meta">Solicitud enviada -- esperando respuesta del líder.</p>

@@ -211,15 +211,12 @@ export const BORDE_HEADER_OPTIONS: { value: BordeHeader; label: string; colorHex
   { value: "verde", label: "Verde", colorHex: "#22c55e" },
 ];
 
-// Los 4 campos que exige el gate de /perfil. Se usa tanto para
-// mostrar el aviso bloqueante como para decidir si conviene mostrar
-// el resto de la app como "cuenta validada".
+// Migración 107: solo el nick -- RemorApp es agnóstica a cualquier
+// juego, país, servidor/ID de SC2 quedaron totalmente opcionales y ya
+// no forman parte de este gate (mismo criterio que
+// actualizar_cuenta_validada() en la base, este helper es su espejo
+// del lado del cliente).
 export function perfilEstaCompleto(profile: Profile | null): boolean {
   if (!profile) return false;
-  return (
-    profile.nick !== null &&
-    profile.country !== null &&
-    profile.sc2_region !== null &&
-    profile.sc2_id !== null
-  );
+  return profile.nick !== null;
 }

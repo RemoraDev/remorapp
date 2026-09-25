@@ -429,11 +429,12 @@ export default function CreateTournamentPage() {
       return;
     }
 
-    // Migración 095: también bloqueado por el trigger
-    // validar_creador_torneo() -- este chequeo acá es solo para
-    // mostrar el aviso al toque.
+    // Migración 095, ajustado en la 107: también bloqueado por el
+    // trigger validar_creador_torneo() -- este chequeo acá es solo
+    // para mostrar el aviso al toque. Solo el nick (país, servidor/ID
+    // de SC2 quedaron opcionales, RemorApp no exige jugar StarCraft II).
     if (!profile?.cuenta_validada) {
-      toast.error("Necesitas completar tu perfil (nick, país, servidor y ID de SC2) antes de crear un torneo.");
+      toast.error("Necesitas completar tu perfil (el nick) antes de crear un torneo.");
       return;
     }
 
