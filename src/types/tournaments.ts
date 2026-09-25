@@ -217,3 +217,21 @@ export interface TournamentResultRow {
   puntaje: number | null;
   creado_en: string;
 }
+
+// Migración 109: fila devuelta por eventos_publicos() -- une torneo
+// por ligas, Race War y Clan War Amistosa en un solo listado. Los
+// campos que no aplican a un tipo dado vienen null (formato/modo/cupos
+// /pozo_premio son propios de "torneo" nada más).
+export type EventoTipo = "torneo" | "race_war" | "clan_war_amistosa";
+
+export interface EventoPublico {
+  tipo: EventoTipo;
+  id: string;
+  titulo: string;
+  formato: TorneoFormato | null;
+  modo: TorneoModo | null;
+  fecha: string;
+  cupos_totales: number | null;
+  cupos_ocupados: number | null;
+  pozo_premio: number | null;
+}

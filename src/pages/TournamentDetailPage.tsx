@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
 import { Trophy, Medal, Download } from "lucide-react";
@@ -180,6 +180,7 @@ function OpcionToggle({
 
 export default function TournamentDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
 
   const [torneo, setTorneo] = useState<TournamentRow | null>(null);
@@ -272,6 +273,8 @@ export default function TournamentDetailPage() {
 
   const [abandonando, setAbandonando] = useState(false);
   const [errorAbandonar, setErrorAbandonar] = useState<string | null>(null);
+
+  const [eliminandoTorneo, setEliminandoTorneo] = useState(false);
 
   // --- Mi equipo (solo relevante en torneos 2v2/3v3/4v4) ---
   const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
@@ -1606,6 +1609,28 @@ export default function TournamentDetailPage() {
     await cargarTorneo();
   };
 
+  // Migración 108: sin ninguna condición de "debe estar vacío" -- el
+  // organizador puede eliminar el torneo en cualquier momento, sin
+  // importar cuántos inscritos tenga. admin_eliminar_torneo() (en la
+  // base) ya validaba esto para is_admin(), se amplió para que el
+  // propio creador_id también pueda usarla.
+  const handleEliminarTorneo = async () => {
+    if (!torneo) return;
+    if (!window.confirm("¿Seguro? Esta acción es irreversible y afecta a todos los inscritos.")) return;
+
+    setEliminandoTorneo(true);
+    const { error } = await supabase.rpc("admin_eliminar_torneo", { p_tournament_id: torneo.id });
+    setEliminandoTorneo(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Torneo eliminado.");
+    navigate("/tournaments");
+  };
+
   return (
     <section className="section section-page">
       <div className="detail-badges">
@@ -2857,6 +2882,17 @@ export default function TournamentDetailPage() {
             {abandonando ? "Abandonando..." : "Abandonar torneo"}
           </button>
         </div>
+      )}
+
+      {esOrganizador && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-block eliminar-torneo-btn"
+          disabled={eliminandoTorneo}
+          onClick={handleEliminarTorneo}
+        >
+          {eliminandoTorneo ? "Eliminando..." : "Eliminar torneo"}
+        </button>
       )}
     </section>
   );

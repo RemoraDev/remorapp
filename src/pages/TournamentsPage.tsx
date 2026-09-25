@@ -1,57 +1,26 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { toast } from "sonner";
+import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
-import { useAuth } from "../context/AuthContext";
 import TournamentListCard from "../components/TournamentListCard";
-import type { TournamentRow } from "../types/tournaments";
+import type { EventoPublico } from "../types/tournaments";
 
+// Migración 109: "Torneos" pasa a llamarse "Eventos" y lista los tres
+// tipos juntos (torneo por ligas, Clan War Amistosa, Race War) -- ver
+// eventos_publicos() en la base. Antes había acá un botón aparte
+// "Crear Race War"; ahora Race War es una opción más dentro de "Crear
+// evento" (CreateTournamentPage.tsx), igual que Clan War Amistosa.
 export default function TournamentsPage() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [torneos, setTorneos] = useState<TournamentRow[]>([]);
+  const [eventos, setEventos] = useState<EventoPublico[]>([]);
   const [loading, setLoading] = useState(true);
-  const [creandoRaceWar, setCreandoRaceWar] = useState(false);
-
-  // Migración 106: Race War es un evento independiente, no un
-  // complemento de un torneo -- un solo click alcanza (crear_race_war()
-  // arma por dentro un torneo oculto como anfitrión técnico, invisible
-  // en este listado porque queda con publico = false) y entra directo
-  // a la página del marcador.
-  const handleCrearRaceWar = async () => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-    setCreandoRaceWar(true);
-    const { data, error } = await supabase.rpc("crear_race_war");
-    setCreandoRaceWar(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    navigate(`/guerra-razas/${data}`);
-  };
 
   useEffect(() => {
-    // Solo torneos públicos y abiertos. Los privados existen en la
-    // base pero nunca se listan acá: solo son visibles por link
-    // directo a /tournaments/:id (ver política RLS en el schema).
     supabase
-      .from("tournaments")
-      .select("*")
-      .eq("publico", true)
-      .eq("estado", "abierto")
-      // Migración 069: el organizador puede excluir su torneo del
-      // buscador público -- sigue existiendo y siendo accesible por
-      // link directo (RLS ya lo permite), solo no aparece listado acá.
-      .eq("excluido_de_busqueda", false)
-      .order("fecha_inicio", { ascending: true })
+      .rpc("eventos_publicos")
       .then(({ data, error }) => {
         if (error) {
-          console.error("Error cargando torneos:", error);
+          console.error("Error cargando eventos:", error);
         } else {
-          setTorneos(data ?? []);
+          setEventos((data ?? []) as EventoPublico[]);
         }
         setLoading(false);
       });
@@ -60,15 +29,10 @@ export default function TournamentsPage() {
   return (
     <section className="section section-page">
       <div className="section-head">
-        <h1 className="section-title">Torneos</h1>
-        <div className="tournaments-head-actions">
-          <button type="button" className="btn btn-ghost" onClick={handleCrearRaceWar} disabled={creandoRaceWar}>
-            {creandoRaceWar ? "Creando..." : "Crear Race War"}
-          </button>
-          <Link to="/tournaments/create" className="btn btn-primary">
-            Crear torneo
-          </Link>
-        </div>
+        <h1 className="section-title">Eventos</h1>
+        <Link to="/tournaments/create" className="btn btn-primary">
+          Crear evento
+        </Link>
       </div>
 
       <p className="tournament-card-meta">
@@ -81,16 +45,16 @@ export default function TournamentsPage() {
         </Link>
       </p>
 
-      {loading && <p className="tournament-card-meta">Cargando torneos...</p>}
+      {loading && <p className="tournament-card-meta">Cargando eventos...</p>}
 
-      {!loading && torneos.length === 0 && (
-        <p className="tournament-card-meta">No hay torneos abiertos por ahora.</p>
+      {!loading && eventos.length === 0 && (
+        <p className="tournament-card-meta">No hay eventos abiertos por ahora.</p>
       )}
 
-      {!loading && torneos.length > 0 && (
+      {!loading && eventos.length > 0 && (
         <div className="tournament-grid">
-          {torneos.map((torneo) => (
-            <TournamentListCard key={torneo.id} torneo={torneo} />
+          {eventos.map((evento) => (
+            <TournamentListCard key={`${evento.tipo}-${evento.id}`} evento={evento} />
           ))}
         </div>
       )}

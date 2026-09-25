@@ -1,6 +1,6 @@
 // Íconos lineales (SVG) para el selector de "Tipo de evento" en
 // /tournaments/create -- mismo criterio que ModoIcono.tsx.
-export default function TipoEventoIcono({ tipo }: { tipo: "privado" | "liga" | "amistosa" }) {
+export default function TipoEventoIcono({ tipo }: { tipo: "privado" | "liga" | "amistosa" | "race_war" }) {
   const comunes = {
     width: 28,
     height: 28,
@@ -35,6 +35,16 @@ export default function TipoEventoIcono({ tipo }: { tipo: "privado" | "liga" | "
           <path d="M3 11l4-4 3 2 4-4 3 3 4-4" />
           <path d="M3 11v3h4M21 7v3h-4" />
           <path d="M9 15l3 3 3-3" />
+        </svg>
+      );
+    case "race_war":
+      // Marcador de puntaje: tres barras de distinta altura, una por
+      // raza (Protoss/Terran/Zerg), mismo espíritu que el podio de
+      // GuerraDeRazasPage.
+      return (
+        <svg {...comunes}>
+          <path d="M6 20V13M12 20V6M18 20V10" />
+          <path d="M4 20h16" />
         </svg>
       );
     default:

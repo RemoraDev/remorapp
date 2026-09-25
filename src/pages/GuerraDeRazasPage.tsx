@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Plus, Star, Trash2, Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
@@ -46,11 +46,13 @@ const CAMPO_IMAGEN: Record<RazaGuerra, "imagen_protoss_url" | "imagen_terran_url
 export default function GuerraDeRazasPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const navigate = useNavigate();
 
   const [guerra, setGuerra] = useState<GuerraRazasRow | null>(null);
   const [jugadores, setJugadores] = useState<GuerraRazasJugadorRow[]>([]);
   const [cargando, setCargando] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
 
   const [vistaPrevia, setVistaPrevia] = useState(false);
   const [categoriaActiva, setCategoriaActiva] = useState<CategoriaGuerra>("3500");
@@ -146,6 +148,25 @@ export default function GuerraDeRazasPage() {
 
   const esOrganizador = !!user && user.id === guerra.creado_por;
   const modoEdicionActivo = esOrganizador && !vistaPrevia;
+
+  // Migración 108: sin ninguna condición de "debe estar vacío" -- el
+  // organizador puede eliminar este Race War en cualquier momento.
+  const handleEliminar = async () => {
+    if (!guerra) return;
+    if (!window.confirm("¿Seguro? Esta acción es irreversible y afecta a todos los inscritos.")) return;
+
+    setEliminando(true);
+    const { error } = await supabase.rpc("eliminar_race_war", { p_guerra_id: guerra.id });
+    setEliminando(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Race War eliminado.");
+    navigate("/tournaments");
+  };
 
   const ranking = (["protoss", "terran", "zerg"] as RazaGuerra[]).slice().sort((a, b) => {
     const diff = guerra[CAMPO_PUNTOS[b]] - guerra[CAMPO_PUNTOS[a]];
@@ -443,6 +464,17 @@ export default function GuerraDeRazasPage() {
           );
         })}
       </div>
+
+      {esOrganizador && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-block guerra-razas-eliminar-btn"
+          disabled={eliminando}
+          onClick={handleEliminar}
+        >
+          {eliminando ? "Eliminando..." : "Eliminar Race War"}
+        </button>
+      )}
     </section>
   );
 }

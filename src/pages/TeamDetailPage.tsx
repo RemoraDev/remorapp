@@ -659,6 +659,10 @@ export default function TeamDetailPage() {
 
   const [respondiendoReto, setRespondiendoReto] = useState<string | null>(null);
   const [erroresResponderReto, setErroresResponderReto] = useState<Record<string, string>>({});
+  // Migración 108: eliminar una Clan War Amistosa que YO propuse, sin
+  // ninguna condición de "debe estar vacío" -- ver
+  // eliminar_clan_war_amistosa() en la base.
+  const [eliminandoReto, setEliminandoReto] = useState<string | null>(null);
   const [motivoRechazoPorReto, setMotivoRechazoPorReto] = useState<Record<string, ClanWarMotivoRechazo | "">>({});
   const [detalleRechazoPorReto, setDetalleRechazoPorReto] = useState<Record<string, string>>({});
 
@@ -2402,6 +2406,25 @@ export default function TeamDetailPage() {
       return;
     }
 
+    await cargar();
+  };
+
+  // Migración 108: sin ninguna condición de "debe estar vacío" -- el
+  // equipo que propuso esta Clan War Amistosa puede eliminarla en
+  // cualquier momento (pendiente, aceptada o en curso).
+  const handleEliminarReto = async (retoId: string) => {
+    if (!window.confirm("¿Seguro? Esta acción es irreversible y afecta a todos los inscritos.")) return;
+
+    setEliminandoReto(retoId);
+    const { error } = await supabase.rpc("eliminar_clan_war_amistosa", { p_clan_war_id: retoId });
+    setEliminandoReto(null);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Clan War eliminada.");
     await cargar();
   };
 
@@ -4546,6 +4569,14 @@ export default function TeamDetailPage() {
                         Tu hora local: {formatearHoraLocal(r.fechaHoraCet)} · Hora CET:{" "}
                         {formatearHoraCet(r.fechaHoraCet)}
                       </p>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={eliminandoReto === r.id}
+                        onClick={() => handleEliminarReto(r.id)}
+                      >
+                        {eliminandoReto === r.id ? "Eliminando..." : "Eliminar"}
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -4633,6 +4664,20 @@ export default function TeamDetailPage() {
                           Tu hora local: {formatearHoraLocal(r.fechaHoraCet)} · Hora CET:{" "}
                           {formatearHoraCet(r.fechaHoraCet)}
                         </p>
+
+                        {/* Migración 108: solo el equipo que propuso la
+                            Clan War Amistosa puede eliminarla -- sin
+                            ninguna condición de "debe estar vacío". */}
+                        {soyChallenger && (
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={eliminandoReto === r.id}
+                            onClick={() => handleEliminarReto(r.id)}
+                          >
+                            {eliminandoReto === r.id ? "Eliminando..." : "Eliminar Clan War"}
+                          </button>
+                        )}
 
                         <div className="overlay-obs-copy">
                           <button

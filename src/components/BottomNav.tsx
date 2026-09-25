@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Users, BarChart3, User } from "lucide-react";
+import { MessageSquare, Users, BarChart3, User } from "lucide-react";
 import FanMenu from "./FanMenu";
 import { useAuth } from "../context/AuthContext";
 
@@ -31,9 +31,14 @@ export default function BottomNav() {
   return (
     <nav className="bottom-nav">
       <div className="bottom-nav-inner">
-        <NavLink to="/" end className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <Home />
-          <span>Inicio</span>
+        {/* Migración 109: "Chat" pasa de vivir en el abanico a ser un
+            ícono fijo acá, en el lugar que tenía "Inicio" -- Inicio ya
+            no tiene ícono propio en la barra, queda accesible desde el
+            logo "RemorApp" del header (Header.tsx ya lo lleva a "/"),
+            para que no se quede sin ningún camino de vuelta. */}
+        <NavLink to="/chat-lideres" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <MessageSquare />
+          <span>Chat</span>
         </NavLink>
 
         {/* "Equipos" reemplaza a Noticias en la barra inferior: lleva

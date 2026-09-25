@@ -874,13 +874,24 @@ main {
   margin-bottom: 1rem;
 }
 
-/* Migración 106: dos acciones juntas en /tournaments ("Crear Race
-   War" + "Crear torneo") -- envueltas para que se apilen en celular
-   en vez de forzar el ancho de .section-head. */
-.tournaments-head-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
+/* Migración 109: distingue de un vistazo el tipo de evento en la
+   tarjeta (torneo por ligas / Race War / Clan War Amistosa) --
+   colores discretos, sin competir con los badges de formato/modo que
+   ya tenía la tarjeta. */
+.badge-tipo-evento {
+  font-weight: 700;
+}
+.badge-tipo-torneo {
+  background: rgba(var(--h-accent-rgb), 0.16);
+  color: var(--color-accent);
+}
+.badge-tipo-race_war {
+  background: rgba(168, 85, 247, 0.16);
+  color: #c084fc;
+}
+.badge-tipo-clan_war_amistosa {
+  background: rgba(234, 179, 8, 0.16);
+  color: #eab308;
 }
 
 .section-title {
@@ -6882,4 +6893,12 @@ html.es-escritorio ::-webkit-scrollbar-thumb:hover {
   align-items: center;
   gap: 0.5rem;
   font-weight: 700;
+}
+
+/* Migración 108: botones de eliminar, exclusivos del organizador --
+   solo necesitan despegarse del contenido de arriba, mismo estilo
+   btn-ghost que "Abandonar torneo" en TournamentDetailPage. */
+.guerra-razas-eliminar-btn,
+.eliminar-torneo-btn {
+  margin-top: 2rem;
 }

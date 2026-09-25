@@ -23,8 +23,12 @@ const FORMATOS: TorneoFormato[] = ["1v1", "2v2", "3v3", "4v4", "wtl"];
 // con cupos y llave, sino el reto directo entre dos clanes (mismo
 // mecanismo que "Retar a otro clan" del Panel de control del equipo),
 // con un formulario mínimo y una invitación por buscador en vez de
-// tener que escribir el tag exacto del rival.
-type TipoEvento = "liga" | "amistosa";
+// tener que escribir el tag exacto del rival. Migración 109: se suma
+// "Race War" como tercera opción -- antes tenía su propio botón aparte
+// en /tournaments ("Crear Race War"), ahora vive acá adentro como
+// cualquier otro tipo de evento (crear_race_war() no pide nada más que
+// confirmar, así que no tiene un formulario propio, solo un botón).
+type TipoEvento = "liga" | "amistosa" | "race_war";
 
 const TIPOS_EVENTO: { value: TipoEvento; label: string; descripcion: string }[] = [
   {
@@ -38,6 +42,12 @@ const TIPOS_EVENTO: { value: TipoEvento; label: string; descripcion: string }[] 
     label: "Torneo por ligas",
     descripcion:
       "Parte de una competencia oficial con ranking (StarLeague Latam, BTL, etc.). Cualquier formato -- en 2v2/3v3/4v4, los clanes entran por invitación o solicitud, no por inscripción libre.",
+  },
+  {
+    value: "race_war",
+    label: "Race War",
+    descripcion:
+      "Marcador en vivo con temática StarCraft II (Protoss/Terran/Zerg): puntaje y jugadores destacados por raza, independiente de cualquier torneo.",
   },
 ];
 
@@ -87,6 +97,10 @@ export default function CreateTournamentPage() {
   // con el "Bo" que se configure acá.
   const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
   const [cargandoMiEquipo, setCargandoMiEquipo] = useState(true);
+
+  // Migración 109: Race War -- sin formulario propio, crear_race_war()
+  // no pide nada más que confirmar.
+  const [creandoRaceWar, setCreandoRaceWar] = useState(false);
   const [cwJugadoresPorSet, setCwJugadoresPorSet] = useState("3");
   const [cwMapasPorSet, setCwMapasPorSet] = useState("2");
   const [cwFechaHora, setCwFechaHora] = useState("");
@@ -362,6 +376,20 @@ export default function CreateTournamentPage() {
     setCwFechaHora("");
   };
 
+  const handleCrearRaceWar = async () => {
+    if (!user) return;
+    setCreandoRaceWar(true);
+    const { data, error } = await supabase.rpc("crear_race_war");
+    setCreandoRaceWar(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    navigate(`/guerra-razas/${data}`);
+  };
+
   const handleCrearLiga = async () => {
     const nombreLimpio = nuevaLigaNombre.trim();
     if (!nombreLimpio) return;
@@ -579,13 +607,14 @@ export default function CreateTournamentPage() {
   }
 
   const esClanWarAmistosa = tipoEvento === "amistosa";
+  const esRaceWar = tipoEvento === "race_war";
 
   return (
     <section className="create-tournament-page">
       <div className="section-head">
-        <h1 className="section-title">Crear torneo</h1>
+        <h1 className="section-title">Crear evento</h1>
       </div>
-      {!esClanWarAmistosa && (
+      {!esClanWarAmistosa && !esRaceWar && (
         <p className="auth-sub" style={{ textAlign: "left", marginTop: 0, marginBottom: "0.5rem" }}>
           Paso {paso} de {totalPasos}
         </p>
@@ -593,7 +622,8 @@ export default function CreateTournamentPage() {
       <p className="form-hint" style={{ marginBottom: "1.5rem" }}>
         Un <strong>torneo por ligas</strong> tiene llave o tabla propia, para cualquier cantidad de
         inscritos. Una <strong>Clan War Amistosa</strong> es un enfrentamiento directo entre tu clan y
-        otro -- sin llave ni cupos, es directamente esa Clan War.
+        otro -- sin llave ni cupos, es directamente esa Clan War. Un <strong>Race War</strong> es un
+        marcador en vivo por raza, independiente de cualquier torneo.
       </p>
 
       <div className="form-group">
@@ -736,6 +766,21 @@ export default function CreateTournamentPage() {
             </div>
           )}
         </form>
+      ) : esRaceWar ? (
+        <div className="create-tournament-form">
+          <p className="form-hint">
+            No necesita ningún otro dato -- se crea al toque y te lleva directo al marcador, donde
+            configuras los puntos iniciales, las imágenes de cada raza y los jugadores destacados.
+          </p>
+          <button
+            type="button"
+            className="btn btn-primary btn-block"
+            disabled={creandoRaceWar}
+            onClick={handleCrearRaceWar}
+          >
+            {creandoRaceWar ? "Creando..." : "Crear Race War"}
+          </button>
+        </div>
       ) : (
       <form className="create-tournament-form" onSubmit={handleSubmit}>
         {paso === 1 && (

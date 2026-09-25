@@ -151,9 +151,22 @@ export default function TeamsPage() {
     <section className="section section-page">
       <div className="section-head">
         <h1 className="section-title">Equipos</h1>
-        <Link to="/equipos/crear" className="btn btn-primary">
-          Crear equipo
-        </Link>
+        {/* Bug corregido: este botón se mostraba siempre, incluso a
+            quien ya pertenece a un equipo ("un jugador, un equipo") --
+            equipoActual ya se calculaba más arriba (se usa en
+            handleUnirse) pero nunca se consultaba acá. */}
+        {equipoActual ? (
+          <Link
+            to={equipoActual.teamTag ? `/equipos/${equipoActual.teamTag}` : "/equipos"}
+            className="btn btn-primary"
+          >
+            Mi equipo
+          </Link>
+        ) : (
+          <Link to="/equipos/crear" className="btn btn-primary">
+            Crear equipo
+          </Link>
+        )}
       </div>
 
       <form className="team-join-box" onSubmit={handleUnirse}>
