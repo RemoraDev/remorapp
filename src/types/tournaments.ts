@@ -68,6 +68,11 @@ export interface TournamentRow {
   // campeon_participant_id, se completa solo cuando se juega.
   tiene_tercer_lugar: boolean;
   tercer_lugar_participant_id: string | null;
+  // Migración 101: solo aplica cuando modo = 'eliminacion_doble' -- si
+  // el campeón de la llave de perdedores le gana la Gran Final al
+  // invicto de ganadores, se juega un partido de reset (default,
+  // comportamiento de siempre) o la Gran Final queda como partido único.
+  gran_final_con_reset: boolean;
   // Check-in antes de generar la llave (migración 010): mientras está
   // en true, los inscritos pueden confirmar que van a jugar.
   check_in_abierto: boolean;

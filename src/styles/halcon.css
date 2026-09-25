@@ -77,6 +77,36 @@
   }
 }
 
+/* Migración 101: en un celular angosto de verdad (320-400px, no solo
+   "no es escritorio") la barra se seguía viendo chica -- íconos y área
+   táctil un escalón más grande todavía, sin tocar el breakpoint de
+   arriba (que sigue sirviendo para tablets/celulares grandes).
+   .bottom-nav-inner ya centra sola vía margin:0 auto + max-width, así
+   que agrandar estos tokens no la desalinea -- solo achica el margen
+   sobrante a los costados, nunca la corre hacia un lado. */
+@media (max-width: 400px) {
+  :root {
+    --nav-height: 84px;
+    --nav-center-size: 4rem;
+    --nav-center-lift: 1.15rem;
+    --nav-icon-size: 2.125rem;
+    --nav-label-size: 0.72rem;
+  }
+
+  .bottom-nav-item {
+    gap: 0.3rem;
+    padding: 0.6rem 0.4rem;
+  }
+
+  .bottom-nav-inner {
+    padding: 0 0.6rem;
+  }
+
+  .center-nav-r {
+    font-size: 1.85rem;
+  }
+}
+
 /* Tema claro (pestaña "Apariencia" de /perfil, migración de tema
    claro/oscuro). Redefine solo los tokens de color/sombra -- el resto
    de la hoja de estilos usa var(--color-*), así que hereda el cambio
@@ -5927,4 +5957,563 @@ body.overlay-obs {
 .noticia-drag-handle:hover,
 .roster-drag-handle:hover {
   color: var(--color-accent);
+}
+
+/* ------------------------------------------------------------
+   Guerra de Razas (migración 102): marcador en vivo con temática
+   StarCraft II. Fondo espacial (mismo campo de estrellas de
+   .tournament-bracket-wrap[data-fondo-bracket="campo_estrellas"]),
+   título metálico, podio de 3 razas siempre lado a lado (el orden
+   visual lo decide React vía "order", no un reordenamiento del DOM,
+   para no perder estado/transiciones al cambiar el puntaje) y un
+   efecto de energía en la raza puntera que reutiliza la técnica de
+   anillo rotando en conic-gradient de los marcos de prestigio de
+   avatar (.avatar-skin-prestigio-anillo) -- transform/opacity/filter
+   únicamente, sin animar layout.
+   ------------------------------------------------------------ */
+.guerra-razas-page {
+  min-height: 100vh;
+  background-color: #05060a;
+  background-image:
+    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(1px 1px at 40% 72%, rgba(255, 255, 255, 0.65), transparent 60%),
+    radial-gradient(1.5px 1.5px at 70% 32%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(1px 1px at 85% 88%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.5px 1.5px at 25% 92%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(1px 1px at 55% 12%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(1px 1px at 95% 45%, rgba(255, 255, 255, 0.6), transparent 60%);
+  background-size: 180px 180px;
+  padding: 1.5rem 1rem 3rem;
+  color: var(--color-text);
+}
+
+.guerra-razas-volver {
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--color-text-muted);
+}
+
+.guerra-razas-header {
+  text-align: center;
+  margin: 0 auto 1rem;
+  max-width: 720px;
+}
+
+.guerra-razas-titulo {
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 6vw, 3rem);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 0;
+  background: linear-gradient(180deg, #f8f8f8 0%, #c3c9d4 45%, #6b7280 55%, #eef0f3 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+
+.guerra-razas-franja {
+  height: 5px;
+  width: min(100%, 420px);
+  margin: 0.6rem auto 0;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #d4af37 0%,
+    #d4af37 33.33%,
+    #4a7fb5 33.33%,
+    #4a7fb5 66.66%,
+    #9b59b6 66.66%,
+    #9b59b6 100%
+  );
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.15);
+}
+
+.guerra-razas-badge-fila {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 1.1rem 0;
+}
+
+.guerra-razas-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.guerra-razas-badge-edicion {
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  color: #4ade80;
+}
+
+.guerra-razas-badge-lectura {
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  color: #cbd5e1;
+}
+
+.guerra-razas-badge-boton {
+  font-family: var(--font-body);
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.75rem;
+  background: none;
+  border: none;
+  border-left: 1px solid currentColor;
+  padding-left: 0.6rem;
+  color: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* Podio: siempre 3 de lado a lado -- el orden visual lo fija la
+   propiedad "order" (calculada en React según el puntaje actual), la
+   posición en el DOM queda fija en Protoss/Terran/Zerg. */
+.guerra-razas-podio {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: clamp(0.5rem, 2vw, 1.25rem);
+  max-width: 900px;
+  margin: 1.75rem auto;
+}
+
+.guerra-razas-podio-lugar {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 0.6rem 1.25rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  position: relative;
+  transition: transform 0.35s ease;
+}
+
+.guerra-razas-podio-primero {
+  transform: translateY(-1.25rem);
+  z-index: 2;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.guerra-razas-raza-protoss {
+  --gr-glow-1: #f5d68a;
+  --gr-glow-2: #d4af37;
+}
+.guerra-razas-raza-terran {
+  --gr-glow-1: #8fc0ec;
+  --gr-glow-2: #3f6ea5;
+}
+.guerra-razas-raza-zerg {
+  --gr-glow-1: #d3a6ec;
+  --gr-glow-2: #7d3fa0;
+}
+
+.guerra-razas-podio-nombre-raza {
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.guerra-razas-mascota-wrap {
+  position: relative;
+  width: clamp(60px, 16vw, 92px);
+  height: clamp(60px, 16vw, 92px);
+  margin-bottom: 0.5rem;
+}
+
+.guerra-razas-mascota-img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
+}
+
+/* Efecto de energía de la raza puntera: anillo de conic-gradient
+   rotando (mismo mecanismo que .avatar-skin-prestigio-anillo) más un
+   brillo pulsante por opacidad -- ninguna de las dos anima layout. */
+.guerra-razas-anillo-energia {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  padding: 3px;
+  background: conic-gradient(from 0deg, var(--gr-glow-1), var(--gr-glow-2), var(--gr-glow-1), var(--gr-glow-2), var(--gr-glow-1));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: guerra-razas-girar 6s linear infinite;
+}
+
+.guerra-razas-anillo-energia::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  box-shadow: 0 0 18px 3px var(--gr-glow-2);
+  animation: guerra-razas-pulso 2.2s ease-in-out infinite;
+}
+
+@keyframes guerra-razas-girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes guerra-razas-pulso {
+  0%, 100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guerra-razas-anillo-energia,
+  .guerra-razas-anillo-energia::after {
+    animation: none !important;
+  }
+}
+
+.guerra-razas-puntos {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 5vw, 2.1rem);
+  margin: 0.15rem 0;
+}
+
+.guerra-razas-puntos-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.guerra-razas-puntos-btn {
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.guerra-razas-puntos-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.guerra-razas-imagen-label {
+  margin-top: 0.6rem;
+  font-size: 0.72rem;
+  color: var(--color-accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.guerra-razas-imagen-hint {
+  font-size: 0.65rem;
+  color: var(--color-text-faint);
+  max-width: 180px;
+  text-align: center;
+  margin: 0.3rem 0 0;
+}
+
+/* Pestañas de categoría: pueden envolver en varias líneas en vez de
+   generar scroll horizontal, mismo criterio que las columnas de abajo. */
+.guerra-razas-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.75rem 0 1.25rem;
+}
+
+.guerra-razas-tab {
+  flex: 0 0 auto;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.guerra-razas-tab.selected {
+  color: #05060a;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* 3 columnas (una por raza) siempre lado a lado -- min-width: 0 en la
+   grilla y en cada columna, más el nombre truncado, evitan el scroll
+   horizontal forzado en pantallas angostas que pedía la consigna. */
+.guerra-razas-columnas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(0.4rem, 2vw, 0.9rem);
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.guerra-razas-columna {
+  min-width: 0;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.7rem 0.5rem;
+}
+
+.guerra-razas-columna-titulo {
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  text-align: center;
+  margin: 0 0 0.6rem;
+  color: var(--color-text-muted);
+}
+
+.guerra-razas-jugador-fila {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  margin-bottom: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.guerra-razas-jugador-nombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* Jugador "elegido": borde pulsante por opacidad únicamente (sin
+   animar layout), mismo criterio que el resto de los efectos de esta
+   página. */
+.guerra-razas-jugador-elegido::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid var(--color-accent);
+  opacity: 0.4;
+  animation: guerra-razas-elegido-pulso 1.8s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes guerra-razas-elegido-pulso {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guerra-razas-jugador-elegido::before {
+    animation: none !important;
+  }
+}
+
+.guerra-razas-jugador-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.guerra-razas-jugador-btn {
+  border: none;
+  background: none;
+  color: var(--color-text-faint);
+  cursor: pointer;
+  padding: 0.1rem;
+  display: inline-flex;
+}
+.guerra-razas-jugador-btn:hover {
+  color: var(--color-accent);
+}
+
+.guerra-razas-agregar-jugador {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
+}
+.guerra-razas-agregar-jugador input {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 0.78rem;
+  padding: 0.3rem 0.5rem;
+}
+
+@media (max-width: 480px) {
+  .guerra-razas-columnas {
+    gap: 0.35rem;
+  }
+  .guerra-razas-columna {
+    padding: 0.5rem 0.3rem;
+  }
+  .guerra-razas-columna-titulo {
+    font-size: 0.62rem;
+  }
+  .guerra-razas-jugador-fila {
+    font-size: 0.7rem;
+    padding: 0.3rem 0.35rem;
+  }
+  .guerra-razas-puntos-btn {
+    width: 1.6rem;
+    height: 1.6rem;
+    font-size: 0.95rem;
+  }
+}
+
+.guerra-razas-link {
+  margin-bottom: 1rem;
+}
+
+/* ------------------------------------------------------------
+   Control remoto de OBS (migración 103). El indicador es un chip fijo
+   en la esquina, visible únicamente cuando el propio caster logueado
+   tiene la configuración completa -- no interfiere con el resto de la
+   página, y queda arriba de la barra inferior en mobile.
+   ------------------------------------------------------------ */
+.obs-indicador {
+  position: fixed;
+  right: 1rem;
+  bottom: calc(var(--nav-height, 0px) + 1rem);
+  z-index: 40;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.obs-indicador-conectando {
+  background: rgba(234, 179, 8, 0.15);
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  color: #eab308;
+}
+
+.obs-indicador-conectado {
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+  color: #4ade80;
+}
+
+.obs-indicador-error {
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  color: #f87171;
+  max-width: min(90vw, 420px);
+}
+
+.obs-config-ayuda {
+  margin: 0.75rem 0 1.25rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.obs-config-ayuda-titulo {
+  margin: 0 0 0.4rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.obs-config-ayuda ol {
+  margin: 0;
+  padding-left: 1.2rem;
+}
+
+.obs-config-ayuda li {
+  margin-bottom: 0.3rem;
+}
+
+.obs-config-ayuda code {
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+/* ------------------------------------------------------------
+   "Instalá RemorApp en tu dispositivo" (Inicio). Dos tarjetas
+   siempre lado a lado, incluso en mobile -- min-width: 0 más flex-wrap
+   evita el scroll horizontal forzado si el texto no entra.
+   ------------------------------------------------------------ */
+.home-instalar-section {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 2.5rem;
+  text-align: center;
+}
+
+.instalar-cards {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.instalar-card {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.25rem 1rem;
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  text-decoration: none;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.instalar-card:hover {
+  border-color: var(--color-accent);
+  transform: translateY(-2px);
+}
+
+.instalar-card-titulo {
+  margin: 0.25rem 0 0;
+  font-weight: 600;
+}
+
+.instalar-card-desc {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
 }

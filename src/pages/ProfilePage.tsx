@@ -18,6 +18,7 @@ import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import type { SkinAvatar } from "../types/skins";
 import { BORDE_GROSOR_MAX, BORDE_GROSOR_MIN } from "../types/bordes";
+import { EVENTO_OBS_CONFIG_ACTUALIZADA } from "../lib/obsWebsocket";
 import type { BordeBasico } from "../types/bordes";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
@@ -300,6 +301,18 @@ export default function ProfilePage() {
   const [guardandoCaster, setGuardandoCaster] = useState(false);
   const [errorCaster, setErrorCaster] = useState<string | null>(null);
 
+  // --- Control remoto de OBS (migración 103) -- la contraseña nunca
+  // se vuelve a mostrar (ni siquiera al propio caster): dejarla en
+  // blanco al reenviar el formulario mantiene la ya guardada, ver
+  // guardar_config_obs() en la base. ---
+  const [obsUrl, setObsUrl] = useState("");
+  const [obsPassword, setObsPassword] = useState("");
+  const [obsEscenaBracket, setObsEscenaBracket] = useState("");
+  const [obsEscenaEnVivo, setObsEscenaEnVivo] = useState("");
+  const [guardandoObs, setGuardandoObs] = useState(false);
+  const [errorObs, setErrorObs] = useState<string | null>(null);
+  const [obsGuardado, setObsGuardado] = useState(false);
+
   // --- Skins de avatar (migración 052): catalogo_skins_avatar solo es
   // legible vía RLS cuando es_dueno_plataforma() es verdadero -- si la
   // consulta vuelve vacía, esta sección no se muestra, sin necesidad
@@ -405,6 +418,9 @@ export default function ProfilePage() {
     setEsCaster(profile.es_caster);
     setLinksTransmision(profile.links_transmision ?? []);
     setPerfilBio(profile.bio ?? "");
+    setObsUrl(profile.obs_websocket_url ?? "");
+    setObsEscenaBracket(profile.obs_escena_bracket ?? "");
+    setObsEscenaEnVivo(profile.obs_escena_en_vivo ?? "");
   }, [profile]);
 
   // Correo de recuperación (migración 061): privado, no viaja con el
@@ -1140,6 +1156,61 @@ export default function ProfilePage() {
     await refreshProfile();
   };
 
+  const handleGuardarObs = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user) return;
+
+    setGuardandoObs(true);
+    setErrorObs(null);
+    setObsGuardado(false);
+
+    const { error } = await supabase.rpc("guardar_config_obs", {
+      p_url: obsUrl.trim() || null,
+      // Vacío significa "no cambiar la contraseña ya guardada" -- ver
+      // guardar_config_obs() en la base.
+      p_password: obsPassword,
+      p_escena_bracket: obsEscenaBracket.trim() || null,
+      p_escena_en_vivo: obsEscenaEnVivo.trim() || null,
+    });
+
+    setGuardandoObs(false);
+
+    if (error) {
+      setErrorObs(error.message);
+      return;
+    }
+
+    setObsPassword("");
+    await refreshProfile();
+    window.dispatchEvent(new Event(EVENTO_OBS_CONFIG_ACTUALIZADA));
+    setObsGuardado(true);
+  };
+
+  const handleDesconectarObs = async () => {
+    if (!user) return;
+    if (!window.confirm("¿Desconectar OBS? Se borran la dirección, la contraseña y los nombres de escena guardados.")) return;
+
+    setGuardandoObs(true);
+    setErrorObs(null);
+    setObsGuardado(false);
+
+    const { error } = await supabase.rpc("borrar_config_obs");
+
+    setGuardandoObs(false);
+
+    if (error) {
+      setErrorObs(error.message);
+      return;
+    }
+
+    setObsUrl("");
+    setObsPassword("");
+    setObsEscenaBracket("");
+    setObsEscenaEnVivo("");
+    await refreshProfile();
+    window.dispatchEvent(new Event(EVENTO_OBS_CONFIG_ACTUALIZADA));
+  };
+
   // "Bordes de Avatar" es una sola lista (borde básico + skins de
   // efectos): elegir cualquiera de las dos cosas apaga la otra --
   // nunca quedan las dos activas a la vez, aunque la prioridad visual
@@ -1861,6 +1932,105 @@ export default function ProfilePage() {
                   {guardandoLinks ? "Guardando..." : "Guardar links"}
                 </button>
               </div>
+
+              {esCaster && (
+                <>
+                  <h3 className="detail-subtitle">Conectar con OBS (opcional)</h3>
+                  <p className="tournament-card-meta">
+                    Permite que RemorApp le cambie la escena a tu OBS solo, cuando cambia el estado de una
+                    Clan War de tu equipo -- mientras tengas esta pestaña abierta en el mismo navegador
+                    donde corre OBS. La conexión la abre tu propio navegador directo a tu OBS: RemorApp
+                    nunca ve tu contraseña de vuelta (queda cifrada) ni la comparte con nadie más.
+                  </p>
+                  <div className="obs-config-ayuda">
+                    <p className="obs-config-ayuda-titulo">Cómo activar el WebSocket Server en OBS:</p>
+                    <ol>
+                      <li>En OBS, ve a Herramientas → WebSocket Server Settings.</li>
+                      <li>Marca "Habilitar WebSocket Server".</li>
+                      <li>
+                        Anota el puerto (por defecto 4455) y presiona "Mostrar contraseña de conexión" para
+                        copiarla.
+                      </li>
+                      <li>
+                        La dirección para el campo de abajo es <code>ws://localhost:4455</code> (cambia el
+                        puerto si usaste otro).
+                      </li>
+                    </ol>
+                  </div>
+
+                  {errorObs && <div className="form-error">{errorObs}</div>}
+                  {obsGuardado && <div className="form-success">Configuración de OBS guardada correctamente.</div>}
+
+                  <form className="auth-form" onSubmit={handleGuardarObs}>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="obs-url">
+                        Dirección del WebSocket Server
+                      </label>
+                      <input
+                        id="obs-url"
+                        className="form-input"
+                        type="text"
+                        placeholder="ws://localhost:4455"
+                        value={obsUrl}
+                        onChange={(e) => setObsUrl(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="obs-password">
+                        Contraseña del WebSocket Server
+                      </label>
+                      <input
+                        id="obs-password"
+                        className="form-input"
+                        type="password"
+                        placeholder={profile?.obs_websocket_url ? "Ya guardada -- dejar en blanco para no cambiarla" : ""}
+                        value={obsPassword}
+                        onChange={(e) => setObsPassword(e.target.value)}
+                        autoComplete="new-password"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="obs-escena-en-vivo">
+                        Escena "en vivo" (mientras se juega la Clan War)
+                      </label>
+                      <input
+                        id="obs-escena-en-vivo"
+                        className="form-input"
+                        type="text"
+                        placeholder="Nombre exacto de la escena en OBS"
+                        value={obsEscenaEnVivo}
+                        onChange={(e) => setObsEscenaEnVivo(e.target.value)}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="obs-escena-bracket">
+                        Escena "bracket" (entre partidas, o al terminar)
+                      </label>
+                      <input
+                        id="obs-escena-bracket"
+                        className="form-input"
+                        type="text"
+                        placeholder="Nombre exacto de la escena en OBS"
+                        value={obsEscenaBracket}
+                        onChange={(e) => setObsEscenaBracket(e.target.value)}
+                      />
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block" disabled={guardandoObs}>
+                      {guardandoObs ? "Guardando..." : "Guardar configuración de OBS"}
+                    </button>
+                    {profile?.obs_websocket_url && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-block"
+                        disabled={guardandoObs}
+                        onClick={handleDesconectarObs}
+                      >
+                        Desconectar OBS
+                      </button>
+                    )}
+                  </form>
+                </>
+              )}
             </>
           )}
 

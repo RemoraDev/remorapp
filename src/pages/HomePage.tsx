@@ -2,6 +2,7 @@ import Hero from "../components/Hero";
 import StatsBar from "../components/StatsBar";
 import ProximasClanWars from "../components/ProximasClanWars";
 import NewsSection from "../components/NewsSection";
+import InstalarRemorApp from "../components/InstalarRemorApp";
 
 // Inicio se achicó a propósito: solo el Hero (título, países, CTA y el
 // panal decorativo). "Torneo destacado" y "Torneos activos" salieron de
@@ -19,6 +20,7 @@ export default function HomePage() {
       <StatsBar />
       <ProximasClanWars />
       <NewsSection />
+      <InstalarRemorApp />
     </>
   );
 }

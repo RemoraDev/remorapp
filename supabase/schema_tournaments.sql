@@ -17067,3 +17067,985 @@ end;
 $$;
 
 grant execute on function public.reordenar_roster_equipo(uuid, uuid[]) to authenticated;
+
+-- ------------------------------------------------------------
+-- Migración 101: la eliminación doble ya existe por completo en la
+-- base (tournaments.modo = 'eliminacion_doble', generar_llave_doble(),
+-- avanzar_ganador_doble(), bracket_matches.bracket_tipo
+-- 'ganadores'/'perdedores'/'final'/'reset') -- lo único que faltaba es
+-- poder desactivar el partido de reset de la Gran Final. Hoy SIEMPRE
+-- se juega si el campeón de la llave de perdedores le gana la final al
+-- campeón (invicto) de la llave de ganadores. gran_final_con_reset
+-- (default true, mismo comportamiento de siempre) permite que el
+-- organizador elija una Gran Final única sin revancha.
+-- ------------------------------------------------------------
+
+alter table public.tournaments
+  add column gran_final_con_reset boolean not null default true;
+
+-- Mismo cuerpo de avanzar_ganador_doble() de siempre, con un solo
+-- cambio: en el bracket_tipo = 'final', si gran_final_con_reset es
+-- false, el ganador de esa única partida es campeón sin importar de
+-- qué llave viene -- nunca se crea la partida de reset.
+create or replace function public.avanzar_ganador_doble(p_match_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_match record;
+  v_torneo record;
+  v_loser_id uuid;
+  v_user1 uuid;
+  v_user2 uuid;
+  v_user_ganador uuid;
+  v_total_en_ronda_wb int;
+  v_target_round_lb int;
+  v_target_match_lb int;
+  v_es_impar boolean;
+  v_target record;
+  v_total_en_ronda_lb int;
+  v_es_final_lb boolean;
+begin
+  select * into v_match from public.bracket_matches where id = p_match_id;
+  select * into v_torneo from public.tournaments where id = v_match.tournament_id;
+
+  if v_match.status <> 'jugado' or v_match.winner_id is null then
+    raise exception 'Este partido todavía no tiene resultado.';
+  end if;
+  if v_torneo.creador_id <> auth.uid()
+     and not public.es_dueno_del_participante(v_match.participant1_id)
+     and not public.es_dueno_del_participante(v_match.participant2_id)
+  then
+    raise exception 'No tienes permiso para avanzar este partido.';
+  end if;
+
+  if v_match.participant1_id is not null and v_match.participant2_id is not null then
+    perform public.registrar_actividad_participante(v_match.participant1_id);
+    perform public.registrar_actividad_participante(v_match.participant2_id);
+
+    select user_id into v_user1 from public.tournament_participants where id = v_match.participant1_id;
+    select user_id into v_user2 from public.tournament_participants where id = v_match.participant2_id;
+
+    if v_user1 is not null and v_user2 is not null then
+      select user_id into v_user_ganador from public.tournament_participants where id = v_match.winner_id;
+
+      update public.titulos_padre_hijo
+        set status = 'activo',
+            ganador_id = v_user_ganador,
+            fecha_inicio = now(),
+            fecha_fin = now() + (duracion_dias || ' days')::interval
+        where tipo = 'jugador'
+          and aceptado = true
+          and status = 'pendiente'
+          and (
+            (retador_id = v_user1 and retado_id = v_user2)
+            or (retador_id = v_user2 and retado_id = v_user1)
+          );
+    end if;
+  end if;
+
+  if v_match.bracket_tipo = 'final' then
+    -- Migración 101: sin reset, cualquiera de los dos gana la única
+    -- Gran Final y ya es campeón -- no importa de qué llave viene.
+    if v_match.winner_id = v_match.participant1_id or not v_torneo.gran_final_con_reset then
+      update public.tournaments
+        set estado = 'finalizado', campeon_participant_id = v_match.winner_id
+        where id = v_match.tournament_id;
+    else
+      insert into public.bracket_matches (
+        tournament_id, round, match_number, participant1_id, participant2_id, status, bracket_tipo
+      ) values (
+        v_match.tournament_id, v_match.round + 1, 1, v_match.participant1_id, v_match.participant2_id, 'pendiente', 'reset'
+      );
+    end if;
+    return;
+  end if;
+
+  if v_match.bracket_tipo = 'reset' then
+    update public.tournaments
+      set estado = 'finalizado', campeon_participant_id = v_match.winner_id
+      where id = v_match.tournament_id;
+    return;
+  end if;
+
+  v_loser_id := case when v_match.winner_id = v_match.participant1_id
+    then v_match.participant2_id else v_match.participant1_id end;
+
+  if v_match.bracket_tipo = 'ganadores' then
+    select count(*) into v_total_en_ronda_wb
+    from public.bracket_matches
+    where tournament_id = v_match.tournament_id and round = v_match.round and bracket_tipo = 'ganadores';
+
+    if v_total_en_ronda_wb = 1 then
+      select * into v_target
+      from public.bracket_matches
+      where tournament_id = v_match.tournament_id and bracket_tipo = 'final'
+      for update;
+
+      if not found then
+        insert into public.bracket_matches (
+          tournament_id, round, match_number, participant1_id, status, bracket_tipo
+        ) values (
+          v_match.tournament_id, v_match.round + 1, 1, v_match.winner_id, 'pendiente', 'final'
+        );
+      else
+        update public.bracket_matches set participant1_id = v_match.winner_id where id = v_target.id;
+      end if;
+    else
+      select * into v_target
+      from public.bracket_matches
+      where tournament_id = v_match.tournament_id
+        and bracket_tipo = 'ganadores'
+        and round = v_match.round + 1
+        and match_number = ceil(v_match.match_number::numeric / 2)
+      for update;
+
+      v_es_impar := (v_match.match_number % 2) = 1;
+
+      if not found then
+        insert into public.bracket_matches (
+          tournament_id, round, match_number, participant1_id, participant2_id, status, bracket_tipo
+        ) values (
+          v_match.tournament_id,
+          v_match.round + 1,
+          ceil(v_match.match_number::numeric / 2),
+          case when v_es_impar then v_match.winner_id else null end,
+          case when v_es_impar then null else v_match.winner_id end,
+          'pendiente',
+          'ganadores'
+        );
+      else
+        if v_es_impar then
+          update public.bracket_matches set participant1_id = v_match.winner_id where id = v_target.id;
+        else
+          update public.bracket_matches set participant2_id = v_match.winner_id where id = v_target.id;
+        end if;
+      end if;
+    end if;
+
+    if v_match.round = 1 then
+      v_target_round_lb := 1;
+      v_target_match_lb := ceil(v_match.match_number::numeric / 2);
+      v_es_impar := (v_match.match_number % 2) = 1;
+
+      select * into v_target
+      from public.bracket_matches
+      where tournament_id = v_match.tournament_id
+        and bracket_tipo = 'perdedores'
+        and round = v_target_round_lb
+        and match_number = v_target_match_lb
+      for update;
+
+      if not found then
+        insert into public.bracket_matches (
+          tournament_id, round, match_number, participant1_id, participant2_id, status, bracket_tipo
+        ) values (
+          v_match.tournament_id,
+          v_target_round_lb,
+          v_target_match_lb,
+          case when v_es_impar then v_loser_id else null end,
+          case when v_es_impar then null else v_loser_id end,
+          'pendiente',
+          'perdedores'
+        );
+      else
+        if v_es_impar then
+          update public.bracket_matches set participant1_id = v_loser_id where id = v_target.id;
+        else
+          update public.bracket_matches set participant2_id = v_loser_id where id = v_target.id;
+        end if;
+      end if;
+    else
+      v_target_round_lb := 2 * (v_match.round - 1);
+      v_target_match_lb := v_match.match_number;
+
+      select * into v_target
+      from public.bracket_matches
+      where tournament_id = v_match.tournament_id
+        and bracket_tipo = 'perdedores'
+        and round = v_target_round_lb
+        and match_number = v_target_match_lb
+      for update;
+
+      if not found then
+        insert into public.bracket_matches (
+          tournament_id, round, match_number, participant2_id, status, bracket_tipo
+        ) values (
+          v_match.tournament_id, v_target_round_lb, v_target_match_lb, v_loser_id, 'pendiente', 'perdedores'
+        );
+      else
+        update public.bracket_matches set participant2_id = v_loser_id where id = v_target.id;
+      end if;
+    end if;
+
+    return;
+  end if;
+
+  if (v_match.round % 2) = 1 then
+    select * into v_target
+    from public.bracket_matches
+    where tournament_id = v_match.tournament_id
+      and bracket_tipo = 'perdedores'
+      and round = v_match.round + 1
+      and match_number = v_match.match_number
+    for update;
+
+    if not found then
+      insert into public.bracket_matches (
+        tournament_id, round, match_number, participant1_id, status, bracket_tipo
+      ) values (
+        v_match.tournament_id, v_match.round + 1, v_match.match_number, v_match.winner_id, 'pendiente', 'perdedores'
+      );
+    else
+      update public.bracket_matches set participant1_id = v_match.winner_id where id = v_target.id;
+    end if;
+  else
+    select count(*) into v_total_en_ronda_lb
+    from public.bracket_matches
+    where tournament_id = v_match.tournament_id and bracket_tipo = 'perdedores' and round = v_match.round;
+
+    v_es_final_lb := (v_total_en_ronda_lb = 1);
+
+    if v_es_final_lb then
+      select * into v_target
+      from public.bracket_matches
+      where tournament_id = v_match.tournament_id and bracket_tipo = 'final'
+      for update;
+
+      if not found then
+        insert into public.bracket_matches (
+          tournament_id, round, match_number, participant2_id, status, bracket_tipo
+        ) values (
+          v_match.tournament_id, v_match.round + 1, 1, v_match.winner_id, 'pendiente', 'final'
+        );
+      else
+        update public.bracket_matches set participant2_id = v_match.winner_id where id = v_target.id;
+      end if;
+    else
+      select * into v_target
+      from public.bracket_matches
+      where tournament_id = v_match.tournament_id
+        and bracket_tipo = 'perdedores'
+        and round = v_match.round + 1
+        and match_number = ceil(v_match.match_number::numeric / 2)
+      for update;
+
+      v_es_impar := (v_match.match_number % 2) = 1;
+
+      if not found then
+        insert into public.bracket_matches (
+          tournament_id, round, match_number, participant1_id, participant2_id, status, bracket_tipo
+        ) values (
+          v_match.tournament_id,
+          v_match.round + 1,
+          ceil(v_match.match_number::numeric / 2),
+          case when v_es_impar then v_match.winner_id else null end,
+          case when v_es_impar then null else v_match.winner_id end,
+          'pendiente',
+          'perdedores'
+        );
+      else
+        if v_es_impar then
+          update public.bracket_matches set participant1_id = v_match.winner_id where id = v_target.id;
+        else
+          update public.bracket_matches set participant2_id = v_match.winner_id where id = v_target.id;
+        end if;
+      end if;
+    end if;
+  end if;
+end;
+$$;
+
+-- ------------------------------------------------------------
+-- Migración 102: "Guerra de Razas" -- marcador en vivo con temática
+-- StarCraft II (Protoss/Terran/Zerg), como complemento opcional de un
+-- torneo. Es independiente del propio bracket: no participa en el
+-- avance de partidas ni en generar_llave(), es solo un panel de
+-- puntaje y jugadores destacados por raza que el organizador controla
+-- y que cualquiera con el link ve actualizarse en vivo (Realtime).
+--
+-- guerra_razas: una fila por torneo (unique en tournament_id). Los
+-- puntajes iniciales (19/18/10) son el default que pidió el
+-- organizador, no un cálculo -- se ajustan a mano desde ahí en
+-- adelante con los botones +1/-1.
+--
+-- guerra_razas_jugadores: jugadores "destacados" que el organizador
+-- carga a mano por categoría (rango de MMR) y raza, sin relación con
+-- tournament_participants -- es una lista informativa para el
+-- marcador, no inscripción real a nada.
+-- ------------------------------------------------------------
+
+create table public.guerra_razas (
+  id uuid primary key default gen_random_uuid(),
+  tournament_id uuid not null references public.tournaments (id) on delete cascade,
+  creado_por uuid not null references public.profiles (id),
+  puntos_protoss integer not null default 19,
+  puntos_terran integer not null default 18,
+  puntos_zerg integer not null default 10,
+  imagen_protoss_url text,
+  imagen_terran_url text,
+  imagen_zerg_url text,
+  creado_en timestamptz not null default now(),
+  unique (tournament_id)
+);
+
+create table public.guerra_razas_jugadores (
+  id uuid primary key default gen_random_uuid(),
+  guerra_id uuid not null references public.guerra_razas (id) on delete cascade,
+  categoria text not null check (categoria in ('3500', '4000', '4500', '5000', 'sin_limite')),
+  raza text not null check (raza in ('protoss', 'terran', 'zerg')),
+  nombre text not null check (char_length(trim(nombre)) between 1 and 40),
+  elegido boolean not null default false,
+  creado_en timestamptz not null default now()
+);
+
+create index guerra_razas_jugadores_guerra_id_idx on public.guerra_razas_jugadores (guerra_id);
+
+alter table public.guerra_razas enable row level security;
+alter table public.guerra_razas_jugadores enable row level security;
+
+-- Lectura pública en ambas tablas: es un marcador para compartir por
+-- link, cualquiera que lo abra (con sesión o sin ella) tiene que
+-- poder verlo sin pedir permiso.
+create policy "guerra_razas_select_publico"
+  on public.guerra_razas for select
+  using (true);
+
+create policy "guerra_razas_jugadores_select_publico"
+  on public.guerra_razas_jugadores for select
+  using (true);
+
+-- Solo se crea una fila al activar el checkbox al crear el torneo, y
+-- solo el propio organizador de ESE torneo puede hacerlo (no cualquier
+-- usuario autenticado apuntando a un tournament_id ajeno).
+create policy "guerra_razas_insert_organizador"
+  on public.guerra_razas for insert
+  to authenticated
+  with check (
+    creado_por = auth.uid()
+    and exists (
+      select 1 from public.tournaments t
+      where t.id = tournament_id and t.creador_id = auth.uid()
+    )
+  );
+
+create policy "guerra_razas_update_organizador"
+  on public.guerra_razas for update
+  to authenticated
+  using (creado_por = auth.uid())
+  with check (creado_por = auth.uid());
+
+create policy "guerra_razas_jugadores_insert_organizador"
+  on public.guerra_razas_jugadores for insert
+  to authenticated
+  with check (
+    exists (
+      select 1 from public.guerra_razas g
+      where g.id = guerra_id and g.creado_por = auth.uid()
+    )
+  );
+
+create policy "guerra_razas_jugadores_update_organizador"
+  on public.guerra_razas_jugadores for update
+  to authenticated
+  using (
+    exists (
+      select 1 from public.guerra_razas g
+      where g.id = guerra_id and g.creado_por = auth.uid()
+    )
+  )
+  with check (
+    exists (
+      select 1 from public.guerra_razas g
+      where g.id = guerra_id and g.creado_por = auth.uid()
+    )
+  );
+
+create policy "guerra_razas_jugadores_delete_organizador"
+  on public.guerra_razas_jugadores for delete
+  to authenticated
+  using (
+    exists (
+      select 1 from public.guerra_razas g
+      where g.id = guerra_id and g.creado_por = auth.uid()
+    )
+  );
+
+grant select on public.guerra_razas to anon, authenticated;
+grant insert, update on public.guerra_razas to authenticated;
+grant select on public.guerra_razas_jugadores to anon, authenticated;
+grant insert, update, delete on public.guerra_razas_jugadores to authenticated;
+
+-- Realtime: mismo mecanismo que ya se dejó habilitado para
+-- mensajes_equipo (migración 071, "Delfin Mode") -- cualquiera con la
+-- página abierta recibe los cambios de puntaje/jugadores sin recargar.
+alter publication supabase_realtime add table public.guerra_razas;
+alter publication supabase_realtime add table public.guerra_razas_jugadores;
+
+-- Bucket para las 3 imágenes de mascota (Protoss/Terran/Zerg), mismo
+-- patrón que team-logos: carpeta por uid de quien sube, público para
+-- lectura.
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'guerra-razas',
+  'guerra-razas',
+  true,
+  3145728,
+  array['image/png', 'image/jpeg', 'image/webp']
+)
+on conflict (id) do nothing;
+
+create policy "guerra_razas_imagenes_lectura_publica"
+  on storage.objects for select
+  using (bucket_id = 'guerra-razas');
+
+create policy "guerra_razas_imagenes_subida_propia"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'guerra-razas'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- ------------------------------------------------------------
+-- Migración 102b: corrige una condición de carrera real encontrada en
+-- la prueba en vivo de Guerra de Razas -- el botón +1/-1 hacía un
+-- "leer valor actual en el cliente, sumar, escribir" (UPDATE con el
+-- valor ya calculado). Con clics rápidos, el eco de Realtime de una
+-- actualización anterior podía llegar y pisar el estado local justo
+-- antes de que se calculara el siguiente clic, perdiendo incrementos
+-- (probado: 15 clics de +1 sobre 10 dieron 23 en vez de 25).
+--
+-- La solución es que el incremento se calcule DENTRO de la base, en
+-- una sola sentencia atómica (puntos_x = puntos_x + delta), para que
+-- no importe en qué orden ni con qué latencia lleguen los ecos de
+-- Realtime -- cada clic parte siempre del valor real ya confirmado.
+-- ------------------------------------------------------------
+
+create function public.ajustar_puntos_guerra_razas(p_guerra_id uuid, p_raza text, p_delta integer)
+returns public.guerra_razas
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_resultado public.guerra_razas;
+begin
+  if p_raza not in ('protoss', 'terran', 'zerg') then
+    raise exception 'Raza inválida: %', p_raza;
+  end if;
+
+  update public.guerra_razas
+  set
+    puntos_protoss = case when p_raza = 'protoss' then puntos_protoss + p_delta else puntos_protoss end,
+    puntos_terran = case when p_raza = 'terran' then puntos_terran + p_delta else puntos_terran end,
+    puntos_zerg = case when p_raza = 'zerg' then puntos_zerg + p_delta else puntos_zerg end
+  where id = p_guerra_id and creado_por = auth.uid()
+  returning * into v_resultado;
+
+  if v_resultado is null then
+    raise exception 'No se encontró la Guerra de Razas, o no sos el organizador.';
+  end if;
+
+  return v_resultado;
+end;
+$$;
+
+grant execute on function public.ajustar_puntos_guerra_razas(uuid, text, integer) to authenticated;
+
+-- ------------------------------------------------------------
+-- Migración 102c: falta una política de DELETE para el bucket
+-- "guerra-razas" -- sin ella, ni siquiera quien subió una imagen puede
+-- borrarla (se descubrió al intentar limpiar las imágenes de prueba
+-- de la migración 102: la API de Storage devolvía éxito pero sin
+-- borrar nada, por RLS). Mismo alcance que la política de subida: solo
+-- la propia carpeta (uid del que subió).
+-- ------------------------------------------------------------
+
+create policy "guerra_razas_imagenes_borrado_propio"
+  on storage.objects for delete
+  to authenticated
+  using (
+    bucket_id = 'guerra-razas'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+-- ------------------------------------------------------------
+-- Migración 103: control remoto de OBS vía obs-websocket (protocolo
+-- v5, incluido gratis en OBS 28+ -- Herramientas > WebSocket Server
+-- Settings). Distinto del overlay para OBS que ya existe (migración
+-- 044: páginas públicas de solo lectura pensadas como "Fuente de
+-- navegador") -- acá el propio RemorApp, corriendo en el navegador del
+-- caster, abre una conexión WebSocket hacia SU OBS local y le cambia
+-- la escena sola cuando cambia el estado de una Clan War.
+--
+-- La contraseña de OBS es lo único sensible de toda esta migración:
+-- queda cifrada con pgcrypto (pgp_sym_encrypt/pgp_sym_decrypt) usando
+-- una clave simétrica guardada en Supabase Vault (vault.secrets --
+-- cifrado en reposo con la clave raíz de la plataforma, no legible ni
+-- siquiera por una consulta SQL común), y la columna nunca tiene
+-- grant de SELECT para nadie: la única forma de leerla (ya
+-- descifrada) es obtener_config_obs(), que devuelve exclusivamente la
+-- fila de quien la llama (auth.uid()) -- ni un administrador puede
+-- leer la contraseña de otro caster desde acá.
+-- ------------------------------------------------------------
+
+create extension if not exists supabase_vault;
+
+alter table public.profiles
+  add column obs_websocket_url text,
+  -- Cifrada -- ver _clave_cifrado_obs()/guardar_config_obs()/
+  -- obtener_config_obs() más abajo. Nunca se le da grant de select a
+  -- nadie (ni siquiera al propio dueño): a propósito, para que la
+  -- única puerta de lectura sea la RPC de auth.uid().
+  add column obs_websocket_password text,
+  add column obs_escena_bracket text,
+  add column obs_escena_en_vivo text;
+
+-- La url y los nombres de escena no son secretos (son iguales a los
+-- que cualquiera vería mirando por encima del hombro al caster
+-- transmitiendo) -- se puede leer la propia fila igual que el resto
+-- de los datos de transmisión.
+grant select (obs_websocket_url, obs_escena_bracket, obs_escena_en_vivo) on public.profiles to authenticated;
+
+-- Se genera una única clave simétrica para todo el proyecto la
+-- primera vez que corre esta migración -- si ya existiera (por correr
+-- esto dos veces), no se pisa.
+do $$
+begin
+  if not exists (select 1 from vault.secrets where name = 'obs_websocket_encryption_key') then
+    perform vault.create_secret(
+      encode(gen_random_bytes(32), 'hex'),
+      'obs_websocket_encryption_key',
+      'Clave simétrica para cifrar/descifrar profiles.obs_websocket_password (migración 103).'
+    );
+  end if;
+end $$;
+
+-- Función interna -- nunca se le da grant de execute a nadie. Solo la
+-- llaman, desde dentro, las dos funciones de más abajo (al ser
+-- security definer, se ejecutan como el dueño de la función, que
+-- siempre puede leer vault.decrypted_secrets aunque authenticated no
+-- tenga ningún permiso sobre esa vista).
+create function public._clave_cifrado_obs()
+returns text
+language plpgsql
+security definer
+set search_path = public, vault
+as $$
+declare
+  v_clave text;
+begin
+  select decrypted_secret into v_clave
+  from vault.decrypted_secrets
+  where name = 'obs_websocket_encryption_key';
+
+  if v_clave is null then
+    raise exception 'No se encontró la clave de cifrado de OBS -- contactar a un administrador.';
+  end if;
+
+  return v_clave;
+end;
+$$;
+
+-- Explícito a propósito, sin confiar en que este proyecto ya tenga
+-- revocado el execute default de PUBLIC sobre funciones nuevas: esta
+-- función devuelve la clave maestra de cifrado en texto plano, así
+-- que además del hecho de no tener ningún "grant execute" para
+-- authenticated/anon, se le saca el privilegio por defecto también.
+revoke all on function public._clave_cifrado_obs() from public;
+
+-- p_password en null o '' significa "no cambiar la contraseña ya
+-- guardada" -- el formulario nunca vuelve a mostrar la contraseña
+-- real, así que reenviar el formulario sin tocar ese campo no debe
+-- borrarla. borrar_config_obs() de más abajo es la única forma de
+-- limpiarla de verdad.
+create function public.guardar_config_obs(
+  p_url text,
+  p_password text,
+  p_escena_bracket text,
+  p_escena_en_vivo text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, vault
+as $$
+begin
+  if p_password is not null and p_password <> '' then
+    update public.profiles
+    set
+      obs_websocket_url = p_url,
+      obs_websocket_password = encode(pgp_sym_encrypt(p_password, public._clave_cifrado_obs()), 'base64'),
+      obs_escena_bracket = p_escena_bracket,
+      obs_escena_en_vivo = p_escena_en_vivo
+    where id = auth.uid();
+  else
+    update public.profiles
+    set
+      obs_websocket_url = p_url,
+      obs_escena_bracket = p_escena_bracket,
+      obs_escena_en_vivo = p_escena_en_vivo
+    where id = auth.uid();
+  end if;
+end;
+$$;
+
+grant execute on function public.guardar_config_obs(text, text, text, text) to authenticated;
+
+create function public.borrar_config_obs()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  update public.profiles
+  set
+    obs_websocket_url = null,
+    obs_websocket_password = null,
+    obs_escena_bracket = null,
+    obs_escena_en_vivo = null
+  where id = auth.uid();
+end;
+$$;
+
+grant execute on function public.borrar_config_obs() to authenticated;
+
+-- Devuelve la config de OBS de quien llama, con la contraseña ya
+-- descifrada -- es la única función de toda la base que entrega esa
+-- contraseña en texto plano, y solo puede devolver la propia
+-- (auth.uid() está fijo adentro, no es un parámetro).
+create function public.obtener_config_obs()
+returns table (
+  obs_websocket_url text,
+  obs_websocket_password text,
+  obs_escena_bracket text,
+  obs_escena_en_vivo text
+)
+language plpgsql
+security definer
+set search_path = public, vault
+as $$
+declare
+  v_password_cifrada text;
+begin
+  select p.obs_websocket_url, p.obs_websocket_password, p.obs_escena_bracket, p.obs_escena_en_vivo
+  into obs_websocket_url, v_password_cifrada, obs_escena_bracket, obs_escena_en_vivo
+  from public.profiles p
+  where p.id = auth.uid();
+
+  if v_password_cifrada is not null then
+    obs_websocket_password := pgp_sym_decrypt(decode(v_password_cifrada, 'base64'), public._clave_cifrado_obs());
+  end if;
+
+  return next;
+end;
+$$;
+
+grant execute on function public.obtener_config_obs() to authenticated;
+
+-- ------------------------------------------------------------
+-- Tiempo real para disparar el cambio de escena: el navegador del
+-- caster necesita enterarse de los cambios de clan_wars (y de sus
+-- partidas individuales) sin recargar la página, igual que
+-- guerra_razas (migración 102).
+--
+-- "replica identity full" en clan_wars es necesario para poder
+-- distinguir una transición real de estado (por ejemplo, de
+-- 'aceptada' a 'en_curso') del resto de los campos que cambian todo
+-- el tiempo en la misma fila (visto bueno del lineup, confirmaciones,
+-- etc.) -- sin esto, el payload de Realtime no trae el valor ANTERIOR
+-- de la fila, y el navegador no podría saber si el estado realmente
+-- cambió o si fue otra columna la que se actualizó.
+--
+-- Nota de alcance: clan_wars_select_propio (más arriba) solo deja ver
+-- la fila al capitán o dueño de alguno de los dos equipos -- un
+-- jugador raso del equipo, sin ese rol, no recibe el cambio en tiempo
+-- real (la RLS de Realtime es la misma que la de una consulta normal),
+-- así que en la práctica esta función solo sirve para un caster que
+-- además sea capitán o dueño de su propio equipo.
+-- ------------------------------------------------------------
+alter table public.clan_wars replica identity full;
+
+alter publication supabase_realtime add table public.clan_wars;
+alter publication supabase_realtime add table public.clan_war_matches;
+alter publication supabase_realtime add table public.clan_war_wtl_sets;
+
+-- ------------------------------------------------------------
+-- Migración 103b: corrige un error real encontrado en la prueba en
+-- vivo -- guardar_config_obs() y obtener_config_obs() fallaban con
+-- "function pgp_sym_encrypt(text, text) does not exist". pgcrypto
+-- queda instalado en el esquema "extensions" en este proyecto (no en
+-- "public"), y el "set search_path = public, vault" de esas dos
+-- funciones no lo incluía -- se agrega acá.
+-- ------------------------------------------------------------
+
+create or replace function public.guardar_config_obs(
+  p_url text,
+  p_password text,
+  p_escena_bracket text,
+  p_escena_en_vivo text
+)
+returns void
+language plpgsql
+security definer
+set search_path = public, vault, extensions
+as $$
+begin
+  if p_password is not null and p_password <> '' then
+    update public.profiles
+    set
+      obs_websocket_url = p_url,
+      obs_websocket_password = encode(pgp_sym_encrypt(p_password, public._clave_cifrado_obs()), 'base64'),
+      obs_escena_bracket = p_escena_bracket,
+      obs_escena_en_vivo = p_escena_en_vivo
+    where id = auth.uid();
+  else
+    update public.profiles
+    set
+      obs_websocket_url = p_url,
+      obs_escena_bracket = p_escena_bracket,
+      obs_escena_en_vivo = p_escena_en_vivo
+    where id = auth.uid();
+  end if;
+end;
+$$;
+
+create or replace function public.obtener_config_obs()
+returns table (
+  obs_websocket_url text,
+  obs_websocket_password text,
+  obs_escena_bracket text,
+  obs_escena_en_vivo text
+)
+language plpgsql
+security definer
+set search_path = public, vault, extensions
+as $$
+declare
+  v_password_cifrada text;
+begin
+  select p.obs_websocket_url, p.obs_websocket_password, p.obs_escena_bracket, p.obs_escena_en_vivo
+  into obs_websocket_url, v_password_cifrada, obs_escena_bracket, obs_escena_en_vivo
+  from public.profiles p
+  where p.id = auth.uid();
+
+  if v_password_cifrada is not null then
+    obs_websocket_password := pgp_sym_decrypt(decode(v_password_cifrada, 'base64'), public._clave_cifrado_obs());
+  end if;
+
+  return next;
+end;
+$$;
+
+-- ------------------------------------------------------------
+-- Migración 104: solicitudes de unión a un equipo -- hasta ahora la
+-- única forma de sumarse a un clan era que el líder invitara a un
+-- jugador puntual, o que el jugador ya tuviera el código de
+-- invitación de memoria. Esto agrega el camino inverso: cualquier
+-- jugador sin equipo puede pedir unirse desde la ficha pública de
+-- cualquier clan, quedando pendiente de que el dueño o un capitán lo
+-- acepte o lo rechace -- mismo espíritu que team_invitations, pero
+-- iniciado por el jugador en vez de por el equipo.
+-- ------------------------------------------------------------
+
+create table public.team_join_requests (
+  id uuid primary key default gen_random_uuid(),
+  team_id uuid not null references public.teams (id) on delete cascade,
+  solicitante_id uuid not null references public.profiles (id) on delete cascade,
+  status text not null default 'pendiente' check (status in ('pendiente', 'aceptada', 'rechazada')),
+  created_at timestamptz not null default now()
+);
+
+-- Mientras tenga una solicitud pendiente a ESTE equipo, no puede
+-- mandar otra -- igual que team_invitations_pendiente_unica, pero
+-- puede volver a pedir más adelante si esta se rechaza.
+create unique index team_join_requests_pendiente_unica
+  on public.team_join_requests (team_id, solicitante_id)
+  where (status = 'pendiente');
+
+alter table public.team_join_requests enable row level security;
+
+-- A diferencia de team_invitations_select (que solo deja ver al
+-- owner), acá también puede verlas cualquier capitán -- así lo pidió
+-- el organizador para esta función nueva.
+create policy "team_join_requests_select"
+  on public.team_join_requests for select
+  to authenticated
+  using (
+    solicitante_id = auth.uid()
+    or public.es_capitan_o_dueno(team_id)
+  );
+
+grant select on public.team_join_requests to authenticated;
+
+-- Sin política de insert/update para authenticated a propósito --
+-- igual que team_invitations, toda escritura pasa por las tres
+-- funciones de abajo, security definer.
+
+create or replace function public.solicitar_union_equipo(p_team_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if public.esta_suspendido() then
+    raise exception 'Tu cuenta está suspendida.';
+  end if;
+
+  if not public.cuenta_validada_ok() then
+    raise exception 'Tu cuenta todavía no está validada -- completa nick, país, región y Battle.net en tu perfil.';
+  end if;
+
+  if not exists (select 1 from public.teams where id = p_team_id and not disuelto) then
+    raise exception 'Ese equipo no existe.';
+  end if;
+
+  if exists (select 1 from public.team_members where user_id = auth.uid()) then
+    raise exception 'Ya perteneces a un equipo.';
+  end if;
+
+  if exists (
+    select 1 from public.team_join_requests
+    where team_id = p_team_id and solicitante_id = auth.uid() and status = 'pendiente'
+  ) then
+    raise exception 'Ya tienes una solicitud pendiente para este equipo.';
+  end if;
+
+  insert into public.team_join_requests (team_id, solicitante_id)
+  values (p_team_id, auth.uid());
+end;
+$$;
+
+grant execute on function public.solicitar_union_equipo(uuid) to authenticated;
+
+create or replace function public.aceptar_solicitud_union(p_request_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_solicitud record;
+  v_disuelto boolean;
+begin
+  select * into v_solicitud from public.team_join_requests where id = p_request_id for update;
+
+  if v_solicitud is null then
+    raise exception 'Esa solicitud no existe.';
+  end if;
+
+  if not public.es_capitan_o_dueno(v_solicitud.team_id) then
+    raise exception 'Solo el dueño o un capitán del equipo puede aceptar esta solicitud.';
+  end if;
+
+  if v_solicitud.status <> 'pendiente' then
+    raise exception 'Esta solicitud ya no está pendiente.';
+  end if;
+
+  select disuelto into v_disuelto from public.teams where id = v_solicitud.team_id;
+  if v_disuelto then
+    raise exception 'Ese equipo ya no existe.';
+  end if;
+
+  begin
+    insert into public.team_members (team_id, user_id, roles)
+    values (v_solicitud.team_id, v_solicitud.solicitante_id, array['jugador']::text[]);
+  exception
+    when unique_violation then
+      raise exception 'Ese jugador ya pertenece a un equipo.';
+  end;
+
+  update public.team_join_requests set status = 'aceptada' where id = p_request_id;
+end;
+$$;
+
+grant execute on function public.aceptar_solicitud_union(uuid) to authenticated;
+
+create or replace function public.rechazar_solicitud_union(p_request_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_solicitud record;
+begin
+  select * into v_solicitud from public.team_join_requests where id = p_request_id for update;
+
+  if v_solicitud is null then
+    raise exception 'Esa solicitud no existe.';
+  end if;
+
+  if not public.es_capitan_o_dueno(v_solicitud.team_id) then
+    raise exception 'Solo el dueño o un capitán del equipo puede rechazar esta solicitud.';
+  end if;
+
+  if v_solicitud.status <> 'pendiente' then
+    raise exception 'Esta solicitud ya no está pendiente.';
+  end if;
+
+  update public.team_join_requests set status = 'rechazada' where id = p_request_id;
+end;
+$$;
+
+grant execute on function public.rechazar_solicitud_union(uuid) to authenticated;
+
+-- ------------------------------------------------------------
+-- Contador de notificaciones (migración 096): se agrega el término de
+-- solicitudes de unión pendientes para cualquier equipo del que sea
+-- dueño o capitán -- mismo criterio que el resto de los términos, solo
+-- cuenta lo que espera MI acción.
+-- ------------------------------------------------------------
+create or replace function public.notificaciones_pendientes_count()
+returns integer
+language sql
+security definer
+stable
+set search_path = public
+as $$
+  select
+    (
+      select count(*)::integer from public.team_invitations
+      where invited_user_id = auth.uid() and status = 'pendiente'
+    )
+    +
+    (
+      select count(*)::integer from public.torneo_invitaciones_equipo ti
+      where ti.status = 'pendiente' and public.es_capitan_o_dueno(ti.equipo_id)
+    )
+    +
+    public.retos_clan_war_pendientes_count()
+    +
+    (
+      select count(*)::integer
+      from public.clan_war_reschedules r
+      join public.clan_wars cw on cw.id = r.clan_war_id
+      where r.status = 'pendiente'
+        and (
+          (cw.challenger_team_id = r.propuesto_por and public.es_capitan_o_dueno(cw.challenged_team_id))
+          or (cw.challenged_team_id = r.propuesto_por and public.es_capitan_o_dueno(cw.challenger_team_id))
+        )
+    )
+    +
+    (
+      select count(*)::integer from public.titulos_padre_hijo
+      where status = 'pendiente' and tipo = 'jugador' and retado_id = auth.uid()
+    )
+    +
+    (
+      select count(*)::integer from public.titulos_padre_hijo
+      where status = 'pendiente' and tipo = 'clan' and public.es_capitan_o_dueno(retado_id)
+    )
+    +
+    (
+      select count(*)::integer from public.team_join_requests
+      where status = 'pendiente' and public.es_capitan_o_dueno(team_id)
+    );
+$$;
+
+grant execute on function public.notificaciones_pendientes_count() to authenticated;

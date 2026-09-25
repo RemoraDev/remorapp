@@ -5,6 +5,8 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
 import { SearchProvider } from "./context/SearchContext";
 import Header from "./components/Header";
+import ObsController from "./components/ObsController";
+import ActualizacionDesktop from "./components/ActualizacionDesktop";
 import BottomNav from "./components/BottomNav";
 
 // Cada página se carga en su propio chunk (React.lazy) en vez de ir todas
@@ -34,6 +36,8 @@ const AyudaPage = lazy(() => import("./pages/AyudaPage"));
 const RankingPage = lazy(() => import("./pages/RankingPage"));
 const ClanWarsSchedulePage = lazy(() => import("./pages/ClanWarsSchedulePage"));
 const ClanWarLineupPublicoPage = lazy(() => import("./pages/ClanWarLineupPublicoPage"));
+const GuerraDeRazasPage = lazy(() => import("./pages/GuerraDeRazasPage"));
+const InstalarCelularPage = lazy(() => import("./pages/InstalarCelularPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
@@ -71,6 +75,8 @@ function AppContent() {
     <SearchProvider>
       <div className="app-shell">
         <Header />
+        <ObsController />
+        <ActualizacionDesktop />
         {profile?.suspendido && (
           <div className="suspended-banner">
             Tu cuenta está suspendida. Algunas acciones (crear torneos, inscribirte) no están
@@ -101,6 +107,8 @@ function AppContent() {
               <Route path="/ranking" element={<RankingPage />} />
               <Route path="/calendario" element={<ClanWarsSchedulePage />} />
               <Route path="/clan-war/:id" element={<ClanWarLineupPublicoPage />} />
+              <Route path="/guerra-razas/:id" element={<GuerraDeRazasPage />} />
+              <Route path="/instalar-celular" element={<InstalarCelularPage />} />
               {/* La Tienda se descartó por completo -- la ruta se mantiene
                   únicamente para redirigir a Inicio a quien tenga un
                   enlace o marcador viejo, en vez de mostrar una página

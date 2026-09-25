@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -42,6 +42,7 @@ import type {
   ClanWarStatus,
   FondoLineup,
   TeamAmistadStatus,
+  TeamJoinRequestRow,
   TeamRow,
   TemaEquipo,
   TemporadaRow,
@@ -643,6 +644,19 @@ export default function TeamDetailPage() {
   const [errorAmistadDirecta, setErrorAmistadDirecta] = useState<string | null>(null);
   const [amistadDirectaEnviada, setAmistadDirectaEnviada] = useState(false);
 
+  // --- Solicitudes de unión al equipo (migración 104) -- camino
+  // inverso a la invitación: el jugador sin equipo pide sumarse desde
+  // la ficha pública, el dueño o un capitán acepta o rechaza desde
+  // Editar jugadores. ---
+  const [miSolicitudEquipo, setMiSolicitudEquipo] = useState<TeamJoinRequestRow | null>(null);
+  const [enviandoSolicitudUnion, setEnviandoSolicitudUnion] = useState(false);
+  const [errorSolicitudUnion, setErrorSolicitudUnion] = useState<string | null>(null);
+  const [solicitudesUnionRecibidas, setSolicitudesUnionRecibidas] = useState<
+    (TeamJoinRequestRow & { nick: string | null; uniqueId: string | null })[]
+  >([]);
+  const [respondiendoSolicitudUnionId, setRespondiendoSolicitudUnionId] = useState<string | null>(null);
+  const [erroresResponderSolicitudUnion, setErroresResponderSolicitudUnion] = useState<Record<string, string>>({});
+
   const [respondiendoReto, setRespondiendoReto] = useState<string | null>(null);
   const [erroresResponderReto, setErroresResponderReto] = useState<Record<string, string>>({});
   const [motivoRechazoPorReto, setMotivoRechazoPorReto] = useState<Record<string, ClanWarMotivoRechazo | "">>({});
@@ -736,6 +750,54 @@ export default function TeamDetailPage() {
     }
     obtenerEquipoDelUsuario(user.id).then(setMiEquipoPropio);
   }, [user]);
+
+  // Mi propia solicitud a ESTE equipo, si la tengo -- para no mostrar
+  // de nuevo el botón "Solicitar unirme" mientras sigue pendiente (o
+  // ya fue respondida) sin tener que recargar la página.
+  useEffect(() => {
+    if (!user || !equipo) {
+      setMiSolicitudEquipo(null);
+      return;
+    }
+    supabase
+      .from("team_join_requests")
+      .select("id, team_id, solicitante_id, status, created_at")
+      .eq("team_id", equipo.id)
+      .eq("solicitante_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setMiSolicitudEquipo(data));
+  }, [user, equipo]);
+
+  // Solicitudes pendientes recibidas por ESTE equipo -- la propia RLS
+  // (team_join_requests_select) deja la lista vacía si quien mira no
+  // es dueño ni capitán, así que no hace falta repetir ese chequeo acá.
+  const cargarSolicitudesUnion = useCallback(async () => {
+    if (!equipo) return;
+    const { data } = await supabase
+      .from("team_join_requests")
+      .select("id, team_id, solicitante_id, status, created_at, profiles(nick, unique_id)")
+      .eq("team_id", equipo.id)
+      .eq("status", "pendiente")
+      .order("created_at", { ascending: true });
+
+    setSolicitudesUnionRecibidas(
+      (data ?? []).map((s) => ({
+        id: s.id,
+        team_id: s.team_id,
+        solicitante_id: s.solicitante_id,
+        status: s.status,
+        created_at: s.created_at,
+        nick: (s.profiles as unknown as { nick: string | null } | null)?.nick ?? null,
+        uniqueId: (s.profiles as unknown as { unique_id: string | null } | null)?.unique_id ?? null,
+      }))
+    );
+  }, [equipo]);
+
+  useEffect(() => {
+    cargarSolicitudesUnion();
+  }, [cargarSolicitudesUnion]);
   // Se recalcula cada 30 segundos -- así la ventana de check-in
   // aparece sola cuando corresponde, sin que haga falta recargar la
   // página a mano.
@@ -2992,6 +3054,61 @@ export default function TeamDetailPage() {
     setBusquedaNick("");
   };
 
+  // --- Solicitudes de unión al equipo (migración 104) ---
+  const handleSolicitarUnion = async () => {
+    setEnviandoSolicitudUnion(true);
+    setErrorSolicitudUnion(null);
+
+    const { error } = await supabase.rpc("solicitar_union_equipo", { p_team_id: equipo.id });
+
+    setEnviandoSolicitudUnion(false);
+
+    if (error) {
+      setErrorSolicitudUnion(error.message);
+      return;
+    }
+
+    setMiSolicitudEquipo({
+      id: "",
+      team_id: equipo.id,
+      solicitante_id: user!.id,
+      status: "pendiente",
+      created_at: new Date().toISOString(),
+    });
+  };
+
+  const handleAceptarSolicitudUnion = async (requestId: string) => {
+    setRespondiendoSolicitudUnionId(requestId);
+    setErroresResponderSolicitudUnion((prev) => ({ ...prev, [requestId]: "" }));
+
+    const { error } = await supabase.rpc("aceptar_solicitud_union", { p_request_id: requestId });
+
+    setRespondiendoSolicitudUnionId(null);
+
+    if (error) {
+      setErroresResponderSolicitudUnion((prev) => ({ ...prev, [requestId]: error.message }));
+      return;
+    }
+
+    await Promise.all([cargarSolicitudesUnion(), cargar()]);
+  };
+
+  const handleRechazarSolicitudUnion = async (requestId: string) => {
+    setRespondiendoSolicitudUnionId(requestId);
+    setErroresResponderSolicitudUnion((prev) => ({ ...prev, [requestId]: "" }));
+
+    const { error } = await supabase.rpc("rechazar_solicitud_union", { p_request_id: requestId });
+
+    setRespondiendoSolicitudUnionId(null);
+
+    if (error) {
+      setErroresResponderSolicitudUnion((prev) => ({ ...prev, [requestId]: error.message }));
+      return;
+    }
+
+    await cargarSolicitudesUnion();
+  };
+
   // --- Mercenarios y alianzas (migración 047) ---
   const handleBuscarMercenario = async (event: FormEvent) => {
     event.preventDefault();
@@ -3518,6 +3635,40 @@ export default function TeamDetailPage() {
                 </>
               );
             })()}
+          </div>
+        )}
+
+        {/* Camino inverso a la invitación (migración 104): un jugador
+            sin equipo pide unirse a ESTE, en vez de esperar que el
+            líder lo invite o tener el código de memoria. Solo tiene
+            sentido para alguien sin equipo propio -- por eso es
+            mutuamente excluyente con la caja de solicitud de amistad
+            de arriba (esa es para dueños de OTRO equipo). */}
+        {user && !miEquipoPropio && (
+          <div className="team-friend-request-box">
+            {!profile?.cuenta_validada ? (
+              <p className="tournament-card-meta">
+                Completa tu perfil (nick, país, región y Battle.net) para poder solicitar unirte a un
+                equipo.
+              </p>
+            ) : miSolicitudEquipo?.status === "pendiente" ? (
+              <p className="tournament-card-meta">Solicitud enviada -- esperando respuesta del líder.</p>
+            ) : (
+              <>
+                {errorSolicitudUnion && <div className="form-error">{errorSolicitudUnion}</div>}
+                {miSolicitudEquipo?.status === "rechazada" && (
+                  <p className="tournament-card-meta">Tu solicitud anterior fue rechazada.</p>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={enviandoSolicitudUnion}
+                  onClick={handleSolicitarUnion}
+                >
+                  {enviandoSolicitudUnion ? "Enviando..." : "Solicitar unirme a este equipo"}
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -4110,6 +4261,42 @@ export default function TeamDetailPage() {
 
               {errorInvestigacion && <div className="form-error">{errorInvestigacion}</div>}
               {investigacion && <InvestigacionJugadorPanel investigacion={investigacion} />}
+
+              {/* Solicitudes de unión (migración 104): camino inverso a
+                  "Invitar jugador" de arriba -- acá el jugador pidió
+                  sumarse solo, y el dueño o un capitán decide. */}
+              <h3 className="detail-subtitle">Solicitudes recibidas</h3>
+              {solicitudesUnionRecibidas.length === 0 ? (
+                <p className="detail-empty">Nadie pidió unirse a este equipo por ahora.</p>
+              ) : (
+                <div className="detail-participant-list">
+                  {solicitudesUnionRecibidas.map((s) => (
+                    <div key={s.id} className="detail-participant-item">
+                      {s.nick ?? "Jugador"}
+                      {s.uniqueId && <span className="profile-nick-id">#{s.uniqueId}</span>}
+                      {erroresResponderSolicitudUnion[s.id] && (
+                        <div className="form-error">{erroresResponderSolicitudUnion[s.id]}</div>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={respondiendoSolicitudUnionId === s.id}
+                        onClick={() => handleAceptarSolicitudUnion(s.id)}
+                      >
+                        {respondiendoSolicitudUnionId === s.id ? "Procesando..." : "Aceptar"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={respondiendoSolicitudUnionId === s.id}
+                        onClick={() => handleRechazarSolicitudUnion(s.id)}
+                      >
+                        Rechazar
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <h3 className="detail-subtitle">Miembros del equipo</h3>
               {errorQuitar && <div className="form-error">{errorQuitar}</div>}

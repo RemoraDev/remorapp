@@ -193,6 +193,13 @@ export interface Profile {
   // del header se apagan solos -- un anillo de color sólido rodeando
   // una forma transparente se ve raro.
   avatar_transparente: boolean;
+  // Migración 103: control remoto de OBS -- obs_websocket_password NO
+  // aparece acá a propósito, nunca tiene grant de select (ver
+  // obtener_config_obs() en la base): la única forma de leerla, ya
+  // descifrada, es esa RPC, y solo devuelve la propia del que llama.
+  obs_websocket_url: string | null;
+  obs_escena_bracket: string | null;
+  obs_escena_en_vivo: string | null;
 }
 
 export type BordeHeader = "negro" | "cyan" | "amarillo" | "verde";

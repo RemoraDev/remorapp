@@ -124,6 +124,17 @@ export default function CreateTournamentPage() {
   // Partido por el tercer lugar (migración 046) -- mismo gate que la
   // etapa de grupos.
   const [tieneTercerLugar, setTieneTercerLugar] = useState(false);
+  // Migración 101: solo tiene sentido en eliminación doble -- el
+  // default (true) es el comportamiento de siempre de
+  // avanzar_ganador_doble(), esto solo agrega la opción de desactivarlo.
+  const [granFinalConReset, setGranFinalConReset] = useState(true);
+
+  // Migración 102: "Guerra de Razas" -- marcador en vivo aparte, con
+  // temática StarCraft II (Protoss/Terran/Zerg), independiente del
+  // propio bracket del torneo. Si se activa, se crea una fila en
+  // guerra_razas por cada torneo que resulte de este formulario (una
+  // liga con varias divisiones marcadas genera uno por división).
+  const [activarGuerraRazas, setActivarGuerraRazas] = useState(false);
 
   // Formato de liga "First Stand" (migración 057).
   const [formatoLiga, setFormatoLiga] = useState(false);
@@ -498,6 +509,7 @@ export default function CreateTournamentPage() {
             ? Number(avanzanPorGrupo)
             : null,
       tiene_tercer_lugar: modo === "eliminacion_simple" && !formatoLiga && tieneTercerLugar,
+      gran_final_con_reset: modo === "eliminacion_doble" ? granFinalConReset : true,
       formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
       puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
       formato_clan_war: modo === "eliminacion_simple" && formatoLiga && formato === "3v3" ? formatoClanWar : "simple",
@@ -549,6 +561,16 @@ export default function CreateTournamentPage() {
         // No bloquea la creación del torneo si falla la temporada --
         // el torneo ya existe, solo faltaría crearla a mano después.
         if (temporadaError) console.error("Error creando la temporada:", temporadaError);
+      }
+
+      if (activarGuerraRazas) {
+        const { error: guerraError } = await supabase.from("guerra_razas").insert({
+          tournament_id: torneo.id,
+          creado_por: user.id,
+        });
+        // Tampoco bloquea la creación del torneo -- si falla, el
+        // organizador puede activarla después a mano.
+        if (guerraError) console.error("Error creando Guerra de Razas:", guerraError);
       }
     }
 
@@ -870,12 +892,46 @@ export default function CreateTournamentPage() {
             </div>
 
             {modo === "eliminacion_doble" && (
-              <p className="form-hint">
-                Este modo necesita exactamente 4, 8, 16 o 32 confirmados al cerrar el check-in -- no
-                admite bye. Si te faltan o te sobran para llegar a la potencia de 2 más cercana, vas a
-                tener que esperar a que se sumen o dar de baja a alguno antes de generar la llave.
-              </p>
+              <>
+                <p className="form-hint">
+                  Este modo necesita exactamente 4, 8, 16 o 32 confirmados al cerrar el check-in -- no
+                  admite bye. Si te faltan o te sobran para llegar a la potencia de 2 más cercana, vas a
+                  tener que esperar a que se sumen o dar de baja a alguno antes de generar la llave.
+                </p>
+                <div className="form-group">
+                  <label className="form-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={granFinalConReset}
+                      onChange={(e) => setGranFinalConReset(e.target.checked)}
+                    />
+                    Gran Final con partido de reset
+                  </label>
+                  <p className="form-hint">
+                    Si el campeón de la llave de perdedores le gana la Gran Final al campeón invicto de
+                    la llave de ganadores, se juega un partido extra para desempatar de verdad (esa fue
+                    su primera derrota del torneo). Desmárcalo para que la Gran Final sea un partido
+                    único, sin revancha.
+                  </p>
+                </div>
+              </>
             )}
+
+            <div className="form-group">
+              <label className="form-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={activarGuerraRazas}
+                  onChange={(e) => setActivarGuerraRazas(e.target.checked)}
+                />
+                Activar Guerra de Razas
+              </label>
+              <p className="form-hint">
+                Agrega un marcador en vivo aparte, con temática StarCraft II (Protoss/Terran/Zerg),
+                para llevar el puntaje y los jugadores destacados por raza durante el evento. Se
+                configura después desde la ficha del torneo.
+              </p>
+            </div>
 
             {modo === "suizo" && (
               <div className="form-group">

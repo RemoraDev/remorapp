@@ -82,6 +82,19 @@ export interface TeamInvitationRow {
   created_at: string;
 }
 
+// Solicitud de unión a un equipo (migración 104): camino inverso a
+// team_invitations -- acá es el jugador sin equipo quien pide
+// sumarse, y el dueño o un capitán acepta o rechaza. Distinto del
+// código de invitación (que suma directo, sin pedir permiso) y de
+// invitar_jugador() (que sale del equipo hacia el jugador).
+export interface TeamJoinRequestRow {
+  id: string;
+  team_id: string;
+  solicitante_id: string;
+  status: InvitationStatus;
+  created_at: string;
+}
+
 export type TeamKickMotivo = "expulsado" | "renuncia";
 
 export interface TeamKickLogRow {
