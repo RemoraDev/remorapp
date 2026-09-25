@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { Home, Newspaper, BarChart3, User } from "lucide-react";
+import { Home, Users, BarChart3, User } from "lucide-react";
 import FanMenu from "./FanMenu";
 import { useAuth } from "../context/AuthContext";
 
@@ -36,12 +36,15 @@ export default function BottomNav() {
           <span>Inicio</span>
         </NavLink>
 
-        {/* Delfin Mode se eliminó por completo (chat de equipo y la
-            estructura de voz con LiveKit) -- Noticias vuelve a tener
-            ícono propio en la barra, en el lugar que dejó. */}
-        <NavLink to="/news" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <Newspaper />
-          <span>Noticias</span>
+        {/* "Equipos" reemplaza a Noticias en la barra inferior: lleva
+            SIEMPRE al buscador general de equipos (/equipos), nunca
+            directo al equipo propio -- eso sigue siendo "Mi equipo" en
+            el abanico central (ver FanMenu.tsx), un destino distinto a
+            propósito. Noticias sigue viva dentro de Inicio, ahora sin
+            ícono propio en la barra. */}
+        <NavLink to="/equipos" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <Users />
+          <span>Equipos</span>
         </NavLink>
 
         <div className="bottom-nav-center">

@@ -1,12 +1,9 @@
 import { Smartphone, Monitor } from "lucide-react";
 
 // URL estable en GitHub Releases: apunta siempre al instalador de la
-// ÚLTIMA versión publicada, sin importar el número de versión --
-// depende de que cada publicación suba el archivo con este mismo
-// nombre exacto (ver la guía de publicación en supabase/../README, o
-// el resumen que se le dio al organizador). Mientras no exista
-// todavía ninguna versión publicada, este link da 404 -- esperado
-// hasta la primera publicación real.
+// ÚLTIMA versión publicada (hoy, v0.1.0), sin importar el número de
+// versión -- depende de que cada publicación futura suba el archivo
+// con este mismo nombre exacto (ver docs/publicar-version-escritorio.md).
 const URL_INSTALADOR_WINDOWS = "https://github.com/RemoraDev/remorapp/releases/latest/download/RemorApp-Setup.exe";
 
 // Sección "Instalá RemorApp en tu dispositivo", debajo del resto de
