@@ -290,14 +290,26 @@
   box-sizing: border-box;
 }
 
+/* Migración 106: la app se comporta como una aplicación de escritorio
+   real -- la ventana/página completa NUNCA hace scroll (ni vertical ni
+   horizontal). "height: 100%" encadenado desde html hasta #root fija
+   el alto exacto del viewport; el overflow:hidden de acá abajo es la
+   base de esa regla, y cada página hace scroll adentro de <main> (ver
+   ".app-shell" y "main" más abajo), nunca a nivel de body. */
 html,
 body,
 #root {
   height: 100%;
+  overflow: hidden;
 }
 
 body {
   margin: 0;
+  /* 100dvh sobrepisa a 100vh en los navegadores que lo entienden (así
+     se respeta la altura real visible en celular, sin la barra de
+     direcciones contada de más); los que no lo entienden simplemente
+     ignoran esta línea y se quedan con el 100% de arriba. */
+  height: 100dvh;
   background-color: var(--color-bg);
   background-image: radial-gradient(circle at 15% 0%, rgba(var(--h-accent-rgb), 0.08), transparent 45%),
     radial-gradient(circle at 85% 20%, rgba(var(--h-accent-rgb), 0.06), transparent 40%);
@@ -343,7 +355,31 @@ input[type="radio"] {
 /* ---------- Layout ---------- */
 
 .app-shell {
-  min-height: 100vh;
+  /* Columna flex de altura fija: DesktopTitleBar/Header/ObsController/
+     avisos quedan arriba con su tamaño natural, <main> es el único
+     hijo que crece y hace scroll (flex: 1 + overflow-y: auto de
+     abajo), y .bottom-nav sigue flotando encima (position: fixed, ver
+     esa regla), sin formar parte de este flujo. */
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+main {
+  flex: 1;
+  /* Sin esto, un hijo flex con contenido más alto que el espacio
+     disponible no se achica -- crece igual (min-height:auto es el
+     default) y el overflow-y de abajo nunca llega a activarse. Es EL
+     detalle que hace que este patrón funcione. */
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  /* Reemplaza el padding-bottom que antes tenía .app-shell: ahora que
+     quien hace scroll es <main> (no la página completa), el espacio
+     para que .bottom-nav (position: fixed) no tape el final del
+     contenido tiene que vivir acá. */
   padding-bottom: calc(var(--nav-height) + 24px);
 }
 
@@ -6568,9 +6604,14 @@ html.es-escritorio .header {
    sutil, solo en escritorio. El header y la barra inferior siguen
    ocupando el ancho completo a propósito (así se ven la mayoría de
    las apps nativas: la barra de herramientas va de borde a borde, el
-   contenido queda con aire alrededor). */
+   contenido queda con aire alrededor). Propiedades individuales (no
+   el shorthand "padding") para no pisar el padding-bottom que main ya
+   trae por defecto -- el espacio para que .bottom-nav no tape el
+   final del contenido (ver la regla "main" más arriba). */
 html.es-escritorio main {
-  padding: 1.25rem 1.5rem 0;
+  padding-top: 1.25rem;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
 }
 
 /* Scroll fino y discreto, estilo apps nativas modernas -- Tauri usa
