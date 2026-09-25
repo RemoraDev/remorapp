@@ -29,12 +29,17 @@ interface FanItem {
 // "Torneos" se sumó acá al reordenar la barra inferior (Torneos salió
 // de ahí, Voice ocupó ese lugar) -- mismo destino de siempre, solo
 // cambió de menú. "Torneos inscritos" pasó a llamarse "Mis torneos"
-// (mismo destino).
+// (mismo destino). "Chat" es nuevo (migración 105, chat de líderes) --
+// ocupa el espacio que quedó libre acá mismo cuando "Mi perfil" se
+// movió al header; la propia página de destino (/chat-lideres) decide
+// si el usuario califica hoy o no, este botón lleva ahí sin importar
+// el resultado.
 const FAN_ITEMS: FanItem[] = [
   { key: "torneos", label: "Torneos", requiresAuth: false },
   { key: "torneos-inscritos", label: "Mis torneos", requiresAuth: true },
   { key: "mi-equipo", label: "Mi equipo", requiresAuth: true },
   { key: "checkin", label: "Check-in", requiresAuth: true },
+  { key: "chat", label: "Chat", requiresAuth: true },
   { key: "ayuda", label: "Ayuda", requiresAuth: false },
 ];
 
@@ -76,6 +81,12 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
 
     if (item.key === "ayuda") {
       navigate("/ayuda");
+      onClose();
+      return;
+    }
+
+    if (item.key === "chat") {
+      navigate("/chat-lideres");
       onClose();
       return;
     }

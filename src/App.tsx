@@ -39,6 +39,7 @@ const ClanWarsSchedulePage = lazy(() => import("./pages/ClanWarsSchedulePage"));
 const ClanWarLineupPublicoPage = lazy(() => import("./pages/ClanWarLineupPublicoPage"));
 const GuerraDeRazasPage = lazy(() => import("./pages/GuerraDeRazasPage"));
 const InstalarCelularPage = lazy(() => import("./pages/InstalarCelularPage"));
+const ChatLideresPage = lazy(() => import("./pages/ChatLideresPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const RegisterPage = lazy(() => import("./pages/RegisterPage"));
 const ForgotPasswordPage = lazy(() => import("./pages/ForgotPasswordPage"));
@@ -111,6 +112,7 @@ function AppContent() {
               <Route path="/clan-war/:id" element={<ClanWarLineupPublicoPage />} />
               <Route path="/guerra-razas/:id" element={<GuerraDeRazasPage />} />
               <Route path="/instalar-celular" element={<InstalarCelularPage />} />
+              <Route path="/chat-lideres" element={<ChatLideresPage />} />
               {/* La Tienda se descartó por completo -- la ruta se mantiene
                   únicamente para redirigir a Inicio a quien tenga un
                   enlace o marcador viejo, en vez de mostrar una página

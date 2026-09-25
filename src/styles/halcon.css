@@ -6594,3 +6594,241 @@ html.es-escritorio ::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.28);
   background-clip: content-box;
 }
+
+/* ==========================================================================
+   Chat de líderes (migración 105) -- grupal y privados, mismo lenguaje
+   visual que el resto de la app (form-input, btn-primary, tarjetas
+   oscuras), sin componentes nuevos de framework.
+   ========================================================================== */
+
+.chat-lideres-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.chat-lideres-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.5rem;
+}
+
+.chat-lideres-tab {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.chat-lideres-tab:hover {
+  color: var(--color-text);
+}
+
+.chat-lideres-tab.is-active {
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+}
+
+.chat-lideres-grupal,
+.chat-lideres-privado-hilo,
+.chat-lideres-privados-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-lideres-mensajes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 26rem;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-panel);
+  padding: 0.85rem;
+}
+
+.chat-lideres-mensaje {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.chat-lideres-avatar {
+  width: 2.25rem;
+  height: 2.25rem;
+  object-fit: cover;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.chat-lideres-mensaje-cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.chat-lideres-mensaje-cabecera {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.chat-lideres-mensaje-nick {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.chat-lideres-mensaje-hora {
+  font-size: 0.72rem;
+  color: var(--color-text-faint);
+}
+
+.chat-lideres-mensaje-texto {
+  font-size: 0.9rem;
+  color: var(--color-text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.chat-lideres-silenciar-btn {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--color-text-faint);
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.chat-lideres-mensaje:hover .chat-lideres-silenciar-btn {
+  opacity: 1;
+}
+
+.chat-lideres-silenciar-btn:hover {
+  color: var(--color-accent);
+}
+
+.chat-lideres-form {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chat-lideres-form .form-input {
+  flex: 1;
+}
+
+.chat-lideres-silenciados-toggle {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.chat-lideres-silenciados-toggle:hover {
+  color: var(--color-accent);
+}
+
+.chat-lideres-silenciados-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.85rem;
+}
+
+.chat-lideres-silenciado-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+}
+
+.chat-lideres-resultados,
+.chat-lideres-conversaciones-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.chat-lideres-resultado-item,
+.chat-lideres-conversacion-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.75rem;
+  cursor: pointer;
+  text-align: left;
+  color: var(--color-text);
+  transition: border-color 0.15s ease;
+}
+
+.chat-lideres-resultado-item:hover,
+.chat-lideres-conversacion-item:hover {
+  border-color: var(--color-accent);
+}
+
+.chat-lideres-conversacion-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-lideres-conversacion-nick {
+  font-weight: 700;
+  font-size: 0.88rem;
+}
+
+.chat-lideres-conversacion-preview {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-lideres-badge {
+  flex-shrink: 0;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.35rem;
+}
+
+.chat-lideres-volver {
+  align-self: flex-start;
+}
+
+.chat-lideres-privado-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+}
