@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
+import Carrusel from "../components/Carrusel";
 import { COUNTRY_OPTIONS } from "../types/profile";
 import type { Country, LinkTransmision } from "../types/profile";
 import type { SkinAvatarClave } from "../types/skins";
@@ -234,8 +235,12 @@ export default function PlayerDetailPage() {
   // usarse acá.
   const claseForma = "avatar-shape-cuadrado";
 
-  return (
-    <section className="section section-page">
+  // Migración 110: la vitrina pública pasa a ser un carrusel de 2
+  // páginas -- "Perfil" (banner, identidad, bio, info) y "Panel", esta
+  // última solo cuando quien mira es el dueño de este perfil (no tiene
+  // sentido mostrar accesos de gestión a un visitante cualquiera).
+  const paginaPerfil = (
+    <>
       <div className="player-detail-banner-wrap">
         {perfil.bannerUrl ? (
           <img src={perfil.bannerUrl} alt="" className="player-detail-banner" />
@@ -336,7 +341,11 @@ export default function PlayerDetailPage() {
           )}
         </div>
       </div>
+    </>
+  );
 
+  const paginaPanel = (
+    <>
       {/* Panel de control: solo cuando el usuario ve su propio perfil,
           nunca en el de otra persona. Mismo patrón visual que el de
           /equipos/:tag, pero acá cada opción es un acceso directo a
@@ -413,6 +422,20 @@ export default function PlayerDetailPage() {
           </Link>
         </div>
       )}
-    </section>
+    </>
+  );
+
+  const paginas =
+    user?.id === perfil.id
+      ? [
+          { key: "perfil", contenido: paginaPerfil },
+          { key: "panel", contenido: paginaPanel },
+        ]
+      : [{ key: "perfil", contenido: paginaPerfil }];
+
+  return (
+    <div className="perfil-carrusel-page">
+      <Carrusel paginas={paginas} />
+    </div>
   );
 }

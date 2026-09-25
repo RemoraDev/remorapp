@@ -386,6 +386,32 @@ export default function AdminPage() {
   const [cargandoMovimientos, setCargandoMovimientos] = useState(true);
   const [errorMovimientos, setErrorMovimientos] = useState<string | null>(null);
 
+  // --- Estadísticas generales (migración 110): se mudan acá desde
+  // Inicio -- ya no deben ocupar espacio prioritario en esa página,
+  // pero siguen siendo útiles para quien administra la plataforma.
+  const [statsGenerales, setStatsGenerales] = useState<{
+    usuarios: number;
+    torneosActivos: number;
+    torneosFinalizados: number;
+  } | null>(null);
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from("profiles").select("id", { count: "exact", head: true }),
+      supabase
+        .from("tournaments")
+        .select("*", { count: "exact", head: true })
+        .in("estado", ["abierto", "en_curso"]),
+      supabase.from("tournaments").select("*", { count: "exact", head: true }).eq("estado", "finalizado"),
+    ]).then(([usuariosRes, activosRes, finalizadosRes]) => {
+      setStatsGenerales({
+        usuarios: usuariosRes.count ?? 0,
+        torneosActivos: activosRes.count ?? 0,
+        torneosFinalizados: finalizadosRes.count ?? 0,
+      });
+    });
+  }, []);
+
   useEffect(() => {
     if (!user) {
       setCargandoDueno(false);
@@ -1696,6 +1722,22 @@ export default function AdminPage() {
                   Revisar
                 </button>
               )}
+            </div>
+          </div>
+
+          <h3 className="detail-subtitle">Estadísticas generales</h3>
+          <div className="admin-resumen-grid">
+            <div className="admin-resumen-card">
+              <p className="admin-resumen-card-numero">{statsGenerales?.usuarios ?? "…"}</p>
+              <p className="admin-resumen-card-label">Usuarios registrados</p>
+            </div>
+            <div className="admin-resumen-card">
+              <p className="admin-resumen-card-numero">{statsGenerales?.torneosActivos ?? "…"}</p>
+              <p className="admin-resumen-card-label">Torneos activos</p>
+            </div>
+            <div className="admin-resumen-card">
+              <p className="admin-resumen-card-numero">{statsGenerales?.torneosFinalizados ?? "…"}</p>
+              <p className="admin-resumen-card-label">Torneos finalizados</p>
             </div>
           </div>
 

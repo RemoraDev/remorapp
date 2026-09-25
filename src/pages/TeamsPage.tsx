@@ -148,103 +148,110 @@ export default function TeamsPage() {
   };
 
   return (
-    <section className="section section-page">
-      <div className="section-head">
-        <h1 className="section-title">Equipos</h1>
-        {/* Bug corregido: este botón se mostraba siempre, incluso a
-            quien ya pertenece a un equipo ("un jugador, un equipo") --
-            equipoActual ya se calculaba más arriba (se usa en
-            handleUnirse) pero nunca se consultaba acá. */}
-        {equipoActual ? (
-          <Link
-            to={equipoActual.teamTag ? `/equipos/${equipoActual.teamTag}` : "/equipos"}
-            className="btn btn-primary"
-          >
-            Mi equipo
-          </Link>
-        ) : (
-          <Link to="/equipos/crear" className="btn btn-primary">
-            Crear equipo
-          </Link>
-        )}
-      </div>
-
-      <form className="team-join-box" onSubmit={handleUnirse}>
-        <div className="form-group">
-          <label className="form-label" htmlFor="team-codigo">
-            ¿Tienes un código de invitación?
-          </label>
-          <div className="team-join-row">
-            <input
-              id="team-codigo"
-              className="form-input"
-              type="text"
-              maxLength={6}
-              placeholder="Código de 6 caracteres"
-              value={codigo}
-              onChange={(e) => setCodigo(e.target.value.toUpperCase())}
-            />
-            <button type="submit" className="btn btn-ghost" disabled={uniendose || !user}>
-              {uniendose ? "Uniendo..." : "Unirme"}
-            </button>
-          </div>
+    <div className="equipos-page-fijo">
+      <div className="equipos-page-header">
+        <div className="section-head">
+          <h1 className="section-title">Equipos</h1>
+          {/* Bug corregido: este botón se mostraba siempre, incluso a
+              quien ya pertenece a un equipo ("un jugador, un equipo") --
+              equipoActual ya se calculaba más arriba (se usa en
+              handleUnirse) pero nunca se consultaba acá. */}
+          {equipoActual ? (
+            <Link
+              to={equipoActual.teamTag ? `/equipos/${equipoActual.teamTag}` : "/equipos"}
+              className="btn btn-primary"
+            >
+              Mi equipo
+            </Link>
+          ) : (
+            <Link to="/equipos/crear" className="btn btn-primary">
+              Crear equipo
+            </Link>
+          )}
         </div>
-        {!user && <p className="tournament-card-meta">Inicia sesión para unirte con un código.</p>}
-        {errorCodigo && <div className="form-error">{errorCodigo}</div>}
-      </form>
 
-      <div className="team-search-bar">
-        <input
-          className="form-input"
-          type="text"
-          placeholder="Buscar por nombre, tag o Nick#ID del dueño"
-          value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)}
-        />
-        <select
-          className="form-select"
-          value={regionFiltro}
-          onChange={(e) => setRegionFiltro(e.target.value as Sc2Region | "")}
-        >
-          <option value="">Todos los servidores</option>
-          {SC2_REGION_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {cargando && <p className="tournament-card-meta">Cargando equipos...</p>}
-      {!cargando && equiposFiltrados.length === 0 && (
-        <p className="tournament-card-meta">No hay equipos que calcen con esa búsqueda.</p>
-      )}
-
-      <div className="team-grid">
-        {equiposFiltrados.map((equipo) => (
-          <Link key={equipo.id} to={`/equipos/${equipo.tag}`} className="team-card">
-            {equipo.logo_url ? (
-              <img src={equipo.logo_url} alt={equipo.name} className="team-card-logo" />
-            ) : (
-              <div className="team-card-logo team-card-logo-placeholder">{equipo.tag.charAt(0)}</div>
-            )}
-            <div className="team-card-info">
-              <p className="team-card-name">{equipo.name}</p>
-              <p className="team-card-tag">[{equipo.tag}]</p>
-              <div className="team-card-regions">
-                {equipo.sc2_regions.map((region) => (
-                  <span key={region} className="badge badge-format">
-                    {SC2_REGION_OPTIONS.find((o) => o.value === region)?.label ?? region}
-                  </span>
-                ))}
-              </div>
-              <p className="team-card-meta">
-                {equipo.memberCount} {equipo.memberCount === 1 ? "miembro" : "miembros"}
-              </p>
+        <form className="team-join-box" onSubmit={handleUnirse}>
+          <div className="form-group">
+            <label className="form-label" htmlFor="team-codigo">
+              ¿Tienes un código de invitación?
+            </label>
+            <div className="team-join-row">
+              <input
+                id="team-codigo"
+                className="form-input"
+                type="text"
+                maxLength={6}
+                placeholder="Código de 6 caracteres"
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value.toUpperCase())}
+              />
+              <button type="submit" className="btn btn-ghost" disabled={uniendose || !user}>
+                {uniendose ? "Uniendo..." : "Unirme"}
+              </button>
             </div>
-          </Link>
-        ))}
+          </div>
+          {!user && <p className="tournament-card-meta">Inicia sesión para unirte con un código.</p>}
+          {errorCodigo && <div className="form-error">{errorCodigo}</div>}
+        </form>
+
+        <div className="team-search-bar">
+          <input
+            className="form-input"
+            type="text"
+            placeholder="Buscar por nombre, tag o Nick#ID del dueño"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+          />
+          <select
+            className="form-select"
+            value={regionFiltro}
+            onChange={(e) => setRegionFiltro(e.target.value as Sc2Region | "")}
+          >
+            <option value="">Todos los servidores</option>
+            {SC2_REGION_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
-    </section>
+
+      {/* Migración 110: título y controles fijos arriba (bloque de
+          arriba), solo esta lista tiene scroll propio -- la página
+          completa nunca se mueve. */}
+      <div className="equipos-lista-scroll">
+        {cargando && <p className="tournament-card-meta">Cargando equipos...</p>}
+        {!cargando && equiposFiltrados.length === 0 && (
+          <p className="tournament-card-meta">No hay equipos que calcen con esa búsqueda.</p>
+        )}
+
+        <div className="team-grid">
+          {equiposFiltrados.map((equipo) => (
+            <Link key={equipo.id} to={`/equipos/${equipo.tag}`} className="team-card">
+              {equipo.logo_url ? (
+                <img src={equipo.logo_url} alt={equipo.name} className="team-card-logo" />
+              ) : (
+                <div className="team-card-logo team-card-logo-placeholder">{equipo.tag.charAt(0)}</div>
+              )}
+              <div className="team-card-info">
+                <p className="team-card-name">{equipo.name}</p>
+                <p className="team-card-tag">[{equipo.tag}]</p>
+                <div className="team-card-regions">
+                  {equipo.sc2_regions.map((region) => (
+                    <span key={region} className="badge badge-format">
+                      {SC2_REGION_OPTIONS.find((o) => o.value === region)?.label ?? region}
+                    </span>
+                  ))}
+                </div>
+                <p className="team-card-meta">
+                  {equipo.memberCount} {equipo.memberCount === 1 ? "miembro" : "miembros"}
+                </p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

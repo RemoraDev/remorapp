@@ -666,95 +666,6 @@ main {
   color: var(--color-accent);
 }
 
-/* ---------- Hero ---------- */
-
-.hero {
-  position: relative;
-  max-width: 72rem;
-  margin: 0 auto;
-  padding: 3.5rem 1.25rem 4rem;
-  text-align: center;
-}
-
-/* Contenido por encima del panal decorativo (que es z-index: 0). */
-.hero-content {
-  position: relative;
-  z-index: 1;
-}
-
-/* Panal a los costados: mismo componente que la barra de navegación,
-   pero sin el brillo animado — acá es solo textura fija, sutil y
-   detrás de todo el contenido. */
-.hero-hex {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  /* Porcentaje del ancho de .hero (que es el "contenedor posicionado"
-     más cercano), no píxeles fijos: así nunca pasa del 12% por lado,
-     ni siquiera en una pantalla angosta de 320-375px. */
-  width: 12%;
-  z-index: 0;
-  opacity: 0.05;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.hero-hex-izq {
-  left: 0;
-}
-
-.hero-hex-der {
-  right: 0;
-}
-
-.hero-title {
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 2.5rem;
-  line-height: 1.15;
-  color: var(--color-text);
-  margin: 0;
-}
-
-.hero-title-gaming {
-  color: var(--color-accent);
-}
-
-/* ---------- Barra de estadísticas de Inicio ---------- */
-
-.stats-bar {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 2.5rem;
-  padding: 2rem 1.25rem;
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.stats-bar-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.25rem;
-  min-width: 8rem;
-}
-
-.stats-bar-number {
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 2.25rem;
-  color: var(--color-accent);
-  font-variant-numeric: tabular-nums;
-}
-
-.stats-bar-label {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--color-text-muted);
-}
-
 /* ---------- Noticias dentro de Inicio ---------- */
 
 .home-news-section {
@@ -819,40 +730,6 @@ main {
   margin: 0;
   color: var(--color-text-muted);
   white-space: pre-wrap;
-}
-
-.hero-phrase {
-  max-width: 34rem;
-  margin: 1.25rem auto 0;
-  /* Reserva alto para 2 líneas: las frases varían bastante de largo, y
-     sin esto el botón de abajo "saltaría" cada vez que cambia. */
-  min-height: 3em;
-  color: var(--color-text-muted);
-  font-size: 1rem;
-  font-style: italic;
-  line-height: 1.5;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.hero-phrase.visible {
-  opacity: 1;
-}
-
-.hero-cta {
-  margin-top: 2rem;
-}
-
-@media (min-width: 640px) {
-  .hero {
-    padding-top: 5rem;
-  }
-  .hero-title {
-    font-size: 3.75rem;
-  }
-  .hero-phrase {
-    font-size: 1.125rem;
-  }
 }
 
 /* ---------- Secciones genéricas ---------- */
@@ -6901,4 +6778,122 @@ html.es-escritorio ::-webkit-scrollbar-thumb:hover {
 .guerra-razas-eliminar-btn,
 .eliminar-torneo-btn {
   margin-top: 2rem;
+}
+
+/* ==========================================================================
+   Carrusel horizontal (migración 110) -- Inicio y Mi perfil. Ocupa
+   exactamente el alto disponible de <main> (height: 100%, resuelto
+   porque main ya tiene una altura definida vía flex: 1 -- ver la
+   regla "main" más arriba), así que ni <main> ni la página completa
+   necesitan hacer scroll para esta vista: el scroll vertical, si hace
+   falta, vive DENTRO de cada página del carrusel, y el horizontal es
+   el propio carrusel (scroll-snap nativo).
+   ========================================================================== */
+
+.home-carrusel-page,
+.perfil-carrusel-page {
+  height: 100%;
+}
+
+.carrusel-wrap {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.carrusel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.carrusel::-webkit-scrollbar {
+  display: none;
+}
+
+.carrusel-pagina {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  scroll-snap-align: start;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 1.25rem 1.25rem 1.5rem;
+  box-sizing: border-box;
+}
+
+.carrusel-controles {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--color-border);
+}
+
+.carrusel-flecha {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  color: var(--color-text);
+  flex-shrink: 0;
+}
+
+.carrusel-flecha:disabled {
+  opacity: 0.35;
+}
+
+.carrusel-puntos {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.carrusel-punto {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  border: none;
+  padding: 0;
+  background: var(--color-border);
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.carrusel-punto.activo {
+  background: var(--color-accent);
+  transform: scale(1.3);
+}
+
+/* Migración 110: /equipos con título y controles fijos, solo la lista
+   de equipos hace scroll -- mismo principio del carrusel (altura
+   definida por <main>, ver esa regla), pero acá es un solo bloque
+   fijo + un bloque con scroll en vez de páginas horizontales. */
+.equipos-page-fijo {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.25rem 0;
+  box-sizing: border-box;
+}
+
+.equipos-page-header {
+  flex-shrink: 0;
+}
+
+.equipos-lista-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 1.5rem;
 }

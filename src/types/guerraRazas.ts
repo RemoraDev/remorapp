@@ -20,6 +20,23 @@ export const RAZAS_GUERRA: { value: RazaGuerra; label: string }[] = [
   { value: "zerg", label: "Zerg" },
 ];
 
+// Migración 110: a quién se le aplica el brillo neón ("ninguno" es el
+// default, sin efecto) y con qué color.
+export type EfectoNeon = "ninguno" | "ganador" | "todas";
+export type EfectoNeonColor = "cyan" | "magenta" | "dorado";
+
+export const EFECTO_NEON_OPTIONS: { value: EfectoNeon; label: string }[] = [
+  { value: "ninguno", label: "Sin efecto" },
+  { value: "ganador", label: "Solo la raza que va ganando" },
+  { value: "todas", label: "Las 3 razas" },
+];
+
+export const EFECTO_NEON_COLOR_OPTIONS: { value: EfectoNeonColor; label: string }[] = [
+  { value: "cyan", label: "Cian" },
+  { value: "magenta", label: "Magenta" },
+  { value: "dorado", label: "Dorado" },
+];
+
 export interface GuerraRazasRow {
   id: string;
   tournament_id: string;
@@ -31,6 +48,8 @@ export interface GuerraRazasRow {
   imagen_terran_url: string | null;
   imagen_zerg_url: string | null;
   creado_en: string;
+  efecto_neon: EfectoNeon;
+  efecto_neon_color: EfectoNeonColor;
 }
 
 export interface GuerraRazasJugadorRow {

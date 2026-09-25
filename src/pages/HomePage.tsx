@@ -1,26 +1,25 @@
-import Hero from "../components/Hero";
-import StatsBar from "../components/StatsBar";
+import Carrusel from "../components/Carrusel";
 import ProximasClanWars from "../components/ProximasClanWars";
 import NewsSection from "../components/NewsSection";
 import InstalarRemorApp from "../components/InstalarRemorApp";
 
-// Inicio se achicó a propósito: solo el Hero (título, países, CTA y el
-// panal decorativo). "Torneo destacado" y "Torneos activos" salieron de
-// acá; el bloque de la comisión del 5% se movió a /torneos, arriba de
-// la grilla (ver TournamentsPage.tsx). La barra de estadísticas es la
-// única incorporación desde entonces -- tres conteos simples, sin
-// ningún sistema de presencia en tiempo real. Noticias se sumó acá
-// debajo (salió de la barra inferior, ya no tiene ícono propio).
-// Clan Wars próximas (migración 059) se suma entre las dos -- contenido
-// urgente/accionable, antes de Noticias.
+// Migración 110: Inicio pasa a ser un carrusel de 3 páginas
+// deslizables (Noticias / Próximas Clan Wars / Instalar RemorApp), sin
+// scroll vertical de página completa -- ver Carrusel.tsx. Se sacan de
+// acá el título "Bienvenidos a RemorApp Gaming" + frase + botón "Mi
+// perfil" (Hero.tsx, eliminado -- redundante con el header) y la barra
+// de usuarios/torneos (StatsBar.tsx, eliminado -- se mudó al Panel de
+// Administración, pestaña "Resumen").
 export default function HomePage() {
   return (
-    <>
-      <Hero />
-      <StatsBar />
-      <ProximasClanWars />
-      <NewsSection />
-      <InstalarRemorApp />
-    </>
+    <div className="home-carrusel-page">
+      <Carrusel
+        paginas={[
+          { key: "noticias", contenido: <NewsSection /> },
+          { key: "clanwars", contenido: <ProximasClanWars /> },
+          { key: "instalar", contenido: <InstalarRemorApp /> },
+        ]}
+      />
+    </div>
   );
 }

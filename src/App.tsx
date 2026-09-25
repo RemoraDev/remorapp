@@ -8,6 +8,7 @@ import Header from "./components/Header";
 import DesktopTitleBar from "./components/DesktopTitleBar";
 import ObsController from "./components/ObsController";
 import ActualizacionDesktop from "./components/ActualizacionDesktop";
+import ActualizacionWeb from "./components/ActualizacionWeb";
 import BottomNav from "./components/BottomNav";
 
 // Cada página se carga en su propio chunk (React.lazy) en vez de ir todas
@@ -80,6 +81,7 @@ function AppContent() {
         <Header />
         <ObsController />
         <ActualizacionDesktop />
+        <ActualizacionWeb />
         {profile?.suspendido && (
           <div className="suspended-banner">
             Tu cuenta está suspendida. Algunas acciones (crear torneos, inscribirte) no están

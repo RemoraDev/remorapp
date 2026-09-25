@@ -7,10 +7,14 @@ import { useAuth } from "../context/AuthContext";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import {
   CATEGORIAS_GUERRA,
+  EFECTO_NEON_COLOR_OPTIONS,
+  EFECTO_NEON_OPTIONS,
   RAZAS_GUERRA,
 } from "../types/guerraRazas";
 import type {
   CategoriaGuerra,
+  EfectoNeon,
+  EfectoNeonColor,
   GuerraRazasJugadorRow,
   GuerraRazasRow,
   RazaGuerra,
@@ -67,6 +71,7 @@ export default function GuerraDeRazasPage() {
     zerg: "",
   });
   const [agregando, setAgregando] = useState<RazaGuerra | null>(null);
+  const [guardandoEfecto, setGuardandoEfecto] = useState(false);
 
   const cargarDatos = useCallback(async () => {
     if (!id) return;
@@ -233,6 +238,23 @@ export default function GuerraDeRazasPage() {
     }
   };
 
+  // Migración 110: brillo neón -- se guarda directo en guerra_razas
+  // (mismo mecanismo que las imágenes de mascota, sin RPC propia: la
+  // política de update ya no distingue por columna). transform/
+  // opacity/filter únicamente (ver .guerra-razas-neon-activo en
+  // halcon.css), sin imágenes pesadas ni reflow.
+  const handleCambiarEfecto = async (cambios: Partial<Pick<GuerraRazasRow, "efecto_neon" | "efecto_neon_color">>) => {
+    if (!guerra) return;
+    setGuardandoEfecto(true);
+    const { error } = await supabase.from("guerra_razas").update(cambios).eq("id", guerra.id);
+    setGuardandoEfecto(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setGuerra((g) => (g ? { ...g, ...cambios } : g));
+  };
+
   const handleAgregarJugador = async (raza: RazaGuerra) => {
     if (!guerra) return;
     const nombre = nombresNuevos[raza].trim();
@@ -276,9 +298,15 @@ export default function GuerraDeRazasPage() {
         <div className="guerra-razas-franja" />
       </header>
 
-      <div className="guerra-razas-badge-fila">
-        {esOrganizador ? (
-          vistaPrevia ? (
+      {/* Migración 110: ningún indicador técnico (ni "Modo edición" ni
+          "Solo lectura -- en vivo") debe llegar a la audiencia -- se
+          pensó para compartir por OBS, tiene que verse como un
+          marcador limpio. Por eso todo este bloque queda condicionado
+          a esOrganizador: un visitante cualquiera nunca ejecuta esta
+          rama, no es un simple "ocultar con CSS". */}
+      {esOrganizador && (
+        <div className="guerra-razas-badge-fila">
+          {vistaPrevia ? (
             <span className="guerra-razas-badge guerra-razas-badge-lectura">
               Solo lectura — en vivo (vista previa)
               <button type="button" className="guerra-razas-badge-boton" onClick={() => setVistaPrevia(false)}>
@@ -292,11 +320,9 @@ export default function GuerraDeRazasPage() {
                 Vista previa modo lector
               </button>
             </span>
-          )
-        ) : (
-          <span className="guerra-razas-badge guerra-razas-badge-lectura">Solo lectura — en vivo</span>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div className="guerra-razas-podio">
         {RAZAS_GUERRA.map(({ value: raza, label }) => {
