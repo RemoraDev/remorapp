@@ -34,13 +34,15 @@ const CAMPO_IMAGEN: Record<RazaGuerra, "imagen_protoss_url" | "imagen_terran_url
   zerg: "imagen_zerg_url",
 };
 
-// Migración 102: "Guerra de Razas" -- marcador en vivo con temática
-// StarCraft II (Protoss/Terran/Zerg), complemento opcional de un
-// torneo. El organizador (guerra.creado_por) edita puntaje, imágenes
-// de mascota y jugadores destacados; cualquier otra persona con el
-// link ve los mismos cambios en vivo por Realtime, sin ningún control
-// de edición visible. El propio organizador puede alternar a "Vista
-// previa modo lector" para ver exactamente lo que ve el resto.
+// Migración 102, independizado en la 106: "Race War" -- marcador en
+// vivo con temática StarCraft II (Protoss/Terran/Zerg). Evento propio,
+// no un complemento de un torneo (crear_race_war() arma por dentro un
+// torneo oculto solo como anfitrión técnico -- ver esa migración). El
+// organizador (guerra.creado_por) edita puntaje, imágenes de mascota y
+// jugadores destacados; cualquier otra persona con el link ve los
+// mismos cambios en vivo por Realtime, sin ningún control de edición
+// visible. El propio organizador puede alternar a "Vista previa modo
+// lector" para ver exactamente lo que ve el resto.
 export default function GuerraDeRazasPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -137,7 +139,7 @@ export default function GuerraDeRazasPage() {
         <Link to="/" className="guerra-razas-volver">
           ← Volver a Inicio
         </Link>
-        <div className="form-error">No se encontró esta Guerra de Razas.</div>
+        <div className="form-error">No se encontró este Race War.</div>
       </section>
     );
   }
@@ -249,7 +251,7 @@ export default function GuerraDeRazasPage() {
       </Link>
 
       <header className="guerra-razas-header">
-        <h1 className="guerra-razas-titulo">Guerra de Razas</h1>
+        <h1 className="guerra-razas-titulo">Race War</h1>
         <div className="guerra-razas-franja" />
       </header>
 

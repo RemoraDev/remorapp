@@ -129,13 +129,6 @@ export default function CreateTournamentPage() {
   // avanzar_ganador_doble(), esto solo agrega la opción de desactivarlo.
   const [granFinalConReset, setGranFinalConReset] = useState(true);
 
-  // Migración 102: "Guerra de Razas" -- marcador en vivo aparte, con
-  // temática StarCraft II (Protoss/Terran/Zerg), independiente del
-  // propio bracket del torneo. Si se activa, se crea una fila en
-  // guerra_razas por cada torneo que resulte de este formulario (una
-  // liga con varias divisiones marcadas genera uno por división).
-  const [activarGuerraRazas, setActivarGuerraRazas] = useState(false);
-
   // Formato de liga "First Stand" (migración 057).
   const [formatoLiga, setFormatoLiga] = useState(false);
   const [puntosVictoria21, setPuntosVictoria21] = useState("3");
@@ -563,15 +556,6 @@ export default function CreateTournamentPage() {
         if (temporadaError) console.error("Error creando la temporada:", temporadaError);
       }
 
-      if (activarGuerraRazas) {
-        const { error: guerraError } = await supabase.from("guerra_razas").insert({
-          tournament_id: torneo.id,
-          creado_por: user.id,
-        });
-        // Tampoco bloquea la creación del torneo -- si falla, el
-        // organizador puede activarla después a mano.
-        if (guerraError) console.error("Error creando Guerra de Razas:", guerraError);
-      }
     }
 
     setLoading(false);
@@ -916,22 +900,6 @@ export default function CreateTournamentPage() {
                 </div>
               </>
             )}
-
-            <div className="form-group">
-              <label className="form-checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={activarGuerraRazas}
-                  onChange={(e) => setActivarGuerraRazas(e.target.checked)}
-                />
-                Activar Guerra de Razas
-              </label>
-              <p className="form-hint">
-                Agrega un marcador en vivo aparte, con temática StarCraft II (Protoss/Terran/Zerg),
-                para llevar el puntaje y los jugadores destacados por raza durante el evento. Se
-                configura después desde la ficha del torneo.
-              </p>
-            </div>
 
             {modo === "suizo" && (
               <div className="form-group">

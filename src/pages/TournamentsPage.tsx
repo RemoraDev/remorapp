@@ -1,12 +1,37 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
 import TournamentListCard from "../components/TournamentListCard";
 import type { TournamentRow } from "../types/tournaments";
 
 export default function TournamentsPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const [torneos, setTorneos] = useState<TournamentRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creandoRaceWar, setCreandoRaceWar] = useState(false);
+
+  // Migración 106: Race War es un evento independiente, no un
+  // complemento de un torneo -- un solo click alcanza (crear_race_war()
+  // arma por dentro un torneo oculto como anfitrión técnico, invisible
+  // en este listado porque queda con publico = false) y entra directo
+  // a la página del marcador.
+  const handleCrearRaceWar = async () => {
+    if (!user) {
+      navigate("/login");
+      return;
+    }
+    setCreandoRaceWar(true);
+    const { data, error } = await supabase.rpc("crear_race_war");
+    setCreandoRaceWar(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    navigate(`/guerra-razas/${data}`);
+  };
 
   useEffect(() => {
     // Solo torneos públicos y abiertos. Los privados existen en la
@@ -36,9 +61,14 @@ export default function TournamentsPage() {
     <section className="section section-page">
       <div className="section-head">
         <h1 className="section-title">Torneos</h1>
-        <Link to="/tournaments/create" className="btn btn-primary">
-          Crear torneo
-        </Link>
+        <div className="tournaments-head-actions">
+          <button type="button" className="btn btn-ghost" onClick={handleCrearRaceWar} disabled={creandoRaceWar}>
+            {creandoRaceWar ? "Creando..." : "Crear Race War"}
+          </button>
+          <Link to="/tournaments/create" className="btn btn-primary">
+            Crear torneo
+          </Link>
+        </div>
       </div>
 
       <p className="tournament-card-meta">

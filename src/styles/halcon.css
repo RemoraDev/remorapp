@@ -874,6 +874,15 @@ main {
   margin-bottom: 1rem;
 }
 
+/* Migración 106: dos acciones juntas en /tournaments ("Crear Race
+   War" + "Crear torneo") -- envueltas para que se apilen en celular
+   en vez de forzar el ancho de .section-head. */
+.tournaments-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
 .section-title {
   font-family: var(--font-display);
   font-weight: 700;
@@ -5996,8 +6005,9 @@ body.overlay-obs {
 }
 
 /* ------------------------------------------------------------
-   Guerra de Razas (migración 102): marcador en vivo con temática
-   StarCraft II. Fondo espacial (mismo campo de estrellas de
+   Race War (antes "Guerra de Razas", migración 102, independizado en
+   la 106): marcador en vivo con temática StarCraft II. Fondo espacial
+   (mismo campo de estrellas de
    .tournament-bracket-wrap[data-fondo-bracket="campo_estrellas"]),
    título metálico, podio de 3 razas siempre lado a lado (el orden
    visual lo decide React vía "order", no un reordenamiento del DOM,

@@ -3,7 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
-import { Trophy, Medal, Download, Swords } from "lucide-react";
+import { Trophy, Medal, Download } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -538,28 +538,6 @@ export default function TournamentDetailPage() {
   useEffect(() => {
     cargarTorneo();
   }, [cargarTorneo]);
-
-  // Migración 102: "Guerra de Razas" -- si este torneo tiene un
-  // marcador activado, se muestra el link a cualquiera (organizador o
-  // no), la propia página de Guerra de Razas resuelve el modo edición
-  // vs. solo lectura según quién esté mirando.
-  const [guerraRazasId, setGuerraRazasId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!id) return;
-    let cancelado = false;
-    supabase
-      .from("guerra_razas")
-      .select("id")
-      .eq("tournament_id", id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!cancelado) setGuerraRazasId(data?.id ?? null);
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, [id]);
 
   // Se carga aparte porque no depende del torneo recargándose cada vez
   // (inscribir gente, generar la llave, etc.) -- solo del usuario
@@ -1669,16 +1647,6 @@ export default function TournamentDetailPage() {
           <p className="featured-stat-value">{formatFecha(torneo.fecha_inicio)}</p>
         </div>
       </div>
-
-      {/* Migración 102: link a "Guerra de Razas", visible para
-          cualquiera (no solo el organizador) -- es un marcador en vivo
-          para compartir, la propia página decide si quien entra puede
-          editar o solo mirar. */}
-      {guerraRazasId && (
-        <Link to={`/guerra-razas/${guerraRazasId}`} className="btn btn-ghost btn-block guerra-razas-link">
-          <Swords className="icon-inline" aria-hidden="true" /> Ver Guerra de Razas
-        </Link>
-      )}
 
       {/* Vencimiento automático de torneos sin actividad (migración
           095): visible solo para el organizador -- si el torneo lleva
