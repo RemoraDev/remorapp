@@ -64,6 +64,7 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
   const [cargando, setCargando] = useState(true);
   const [generando, setGenerando] = useState(false);
   const [finalizando, setFinalizando] = useState(false);
+  const [rehaciendo, setRehaciendo] = useState(false);
   const [guardandoResultado, setGuardandoResultado] = useState<Pairing | null>(null);
   const [archivoParaRecortar, setArchivoParaRecortar] = useState<{ raza: RazaGuerra; file: File } | null>(null);
   const [subiendoImagen, setSubiendoImagen] = useState<RazaGuerra | null>(null);
@@ -135,6 +136,42 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
       return;
     }
     setEncuentro((prev) => (prev ? { ...prev, [PAIRINGS.find((p) => p.value === pairing)!.campo]: resultado } : prev));
+  };
+
+  // Un encuentro sin finalizar queda con sus 3 jugadores fijos desde
+  // que se generó -- si el organizador cambia después la estrella de
+  // "elegido" en Marcador, este encuentro abierto no se entera solo.
+  // "Rehacer" lo borra (todavía no repartió ningún punto) y genera uno
+  // nuevo, que sí toma a los jugadores elegidos actuales.
+  const handleRehacer = async () => {
+    if (!encuentro) return;
+    if (
+      !window.confirm(
+        "¿Rehacer este encuentro con los jugadores elegidos actuales? Se pierden la imagen y los resultados cargados en este encuentro sin finalizar."
+      )
+    )
+      return;
+    setRehaciendo(true);
+    const { error: errorEliminar } = await supabase.rpc("eliminar_encuentro_guerra_razas", {
+      p_encuentro_id: encuentro.id,
+    });
+    if (errorEliminar) {
+      setRehaciendo(false);
+      toast.error(errorEliminar.message);
+      return;
+    }
+    const { error: errorGenerar } = await supabase.rpc("generar_encuentro_guerra_razas", {
+      p_guerra_id: guerra.id,
+      p_categoria: categoria,
+    });
+    setRehaciendo(false);
+    if (errorGenerar) {
+      toast.error(errorGenerar.message);
+      await cargarEncuentro();
+      return;
+    }
+    toast.success("Encuentro rehecho con los jugadores elegidos actuales.");
+    await cargarEncuentro();
   };
 
   const handleFinalizar = async () => {
@@ -322,6 +359,18 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
           onClick={handleFinalizar}
         >
           {finalizando ? "Finalizando..." : "Finalizar encuentro"}
+        </button>
+      )}
+
+      {modoEdicionActivo && (
+        <button
+          type="button"
+          className="btn btn-ghost btn-block"
+          disabled={rehaciendo || finalizando}
+          onClick={handleRehacer}
+          title="Úsalo si cambiaste la estrella de 'elegido' en Marcador y este encuentro todavía muestra a los jugadores anteriores"
+        >
+          {rehaciendo ? "Rehaciendo..." : "Rehacer con los jugadores elegidos actuales"}
         </button>
       )}
 

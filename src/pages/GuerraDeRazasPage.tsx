@@ -327,13 +327,37 @@ export default function GuerraDeRazasPage() {
 
   const handleEliminarJugador = async (jugadorId: string) => {
     const { error } = await supabase.from("guerra_razas_jugadores").delete().eq("id", jugadorId);
-    if (error) toast.error(error.message);
+    if (error) {
+      toast.error(
+        error.code === "23503"
+          ? "No se puede eliminar: este jugador ya participó en un Enfrentamiento y su historial de puntos debe conservarse."
+          : error.message
+      );
+    }
   };
 
+  // Solo puede haber un jugador "elegido" a la vez por raza y categoría
+  // -- es el que toma generar_encuentro_guerra_razas() para el próximo
+  // Enfrentamiento. Al marcar uno nuevo, se desmarca cualquier otro de
+  // la misma raza/categoría para evitar ambigüedad.
   const handleToggleElegido = async (jugador: GuerraRazasJugadorRow) => {
+    const nuevoValor = !jugador.elegido;
+    if (nuevoValor) {
+      const { error: errorDesmarcar } = await supabase
+        .from("guerra_razas_jugadores")
+        .update({ elegido: false })
+        .eq("guerra_id", jugador.guerra_id)
+        .eq("categoria", jugador.categoria)
+        .eq("raza", jugador.raza)
+        .neq("id", jugador.id);
+      if (errorDesmarcar) {
+        toast.error(errorDesmarcar.message);
+        return;
+      }
+    }
     const { error } = await supabase
       .from("guerra_razas_jugadores")
-      .update({ elegido: !jugador.elegido })
+      .update({ elegido: nuevoValor })
       .eq("id", jugador.id);
     if (error) toast.error(error.message);
   };
