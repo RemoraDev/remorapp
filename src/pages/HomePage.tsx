@@ -21,11 +21,12 @@ function partirEnGrupos<T>(items: T[], tamaño: number): T[][] {
 
 // Migración 110: Inicio pasa a ser un carrusel deslizable (Noticias /
 // Próximas Clan Wars / Instalar RemorApp), sin scroll vertical de
-// página completa -- ver Carrusel.tsx. Se sacan de acá el título
-// "Bienvenidos a RemorApp Gaming" + frase + botón "Mi perfil"
-// (Hero.tsx, eliminado -- redundante con el header) y la barra de
-// usuarios/torneos (StatsBar.tsx, eliminado -- se mudó al Panel de
-// Administración, pestaña "Resumen").
+// página completa -- ver Carrusel.tsx. Se saca de acá la frase
+// rotativa y el botón "Mi perfil" (Hero.tsx, eliminado -- redundante
+// con el header) y la barra de usuarios/torneos (StatsBar.tsx,
+// eliminado -- se mudó al Panel de Administración, pestaña "Resumen").
+// El título "Bienvenidos a RemorApp Gaming" sí se mantiene, como
+// encabezado fijo arriba del carrusel (no como una página más).
 //
 // La página de Noticias NO es fija: si todavía no hay ninguna
 // publicación cargada, HomePage ni siquiera la incluye en el
@@ -61,6 +62,9 @@ export default function HomePage() {
 
   return (
     <div className="home-carrusel-page">
+      <h1 className="home-bienvenida-titulo">
+        Bienvenidos a RemorApp<span className="home-bienvenida-gaming"> Gaming</span>
+      </h1>
       <Carrusel
         paginas={[
           ...paginasNoticias,

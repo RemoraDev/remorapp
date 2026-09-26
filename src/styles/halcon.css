@@ -6997,8 +6997,37 @@ html.es-escritorio .escritorio-chat-fijo {
   height: 100%;
 }
 
+/* Solo Inicio tiene un encabezado fijo ("Bienvenidos a RemorApp
+   Gaming") antes del carrusel -- se vuelve columna flex para que ese
+   título ocupe su alto natural y el carrusel se quede con el resto
+   (ver ".carrusel-wrap" más abajo, que ya trae flex:1 + min-height:0
+   para este caso). En /jugador (Mi perfil), donde el carrusel sigue
+   siendo el único hijo, esto no cambia nada. */
+.home-carrusel-page {
+  display: flex;
+  flex-direction: column;
+}
+
+.home-bienvenida-titulo {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 1.25rem 1.25rem 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.6rem;
+  line-height: 1.15;
+  color: var(--color-text);
+}
+
+.home-bienvenida-gaming {
+  color: var(--color-accent);
+}
+
 .carrusel-wrap {
   height: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
 }
