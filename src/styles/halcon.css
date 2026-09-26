@@ -6200,6 +6200,93 @@ body.overlay-obs {
   border-color: var(--color-accent);
 }
 
+/* Migración 110: editor de efectos (brillo neón), exclusivo del
+   organizador en modo edición. */
+.guerra-razas-efecto-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem;
+}
+
+.guerra-razas-efecto-opciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.guerra-razas-color-swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  cursor: pointer;
+  padding: 0;
+}
+
+.guerra-razas-color-swatch.selected {
+  border-color: var(--color-text);
+}
+
+/* Brillo neón elegible por el organizador (migración 110) --
+   transform/opacity/filter únicamente, sin imágenes pesadas ni
+   reflow, mismo criterio que el resto de los efectos de esta página.
+   Distinto del anillo de energía de arriba (siempre activo en la raza
+   puntera, colores fijos por raza): este es opt-in y del mismo color
+   para toda la Race War, elegido por el organizador. */
+.guerra-razas-color-swatch.guerra-razas-neon-cyan,
+img.guerra-razas-neon-activo.guerra-razas-neon-cyan {
+  background-color: #22d3ee;
+}
+.guerra-razas-color-swatch.guerra-razas-neon-magenta,
+img.guerra-razas-neon-activo.guerra-razas-neon-magenta {
+  background-color: #ec4899;
+}
+.guerra-razas-color-swatch.guerra-razas-neon-dorado,
+img.guerra-razas-neon-activo.guerra-razas-neon-dorado {
+  background-color: #eab308;
+}
+
+.guerra-razas-neon-activo.guerra-razas-neon-cyan {
+  animation: guerra-razas-neon-pulso-cyan 2.2s ease-in-out infinite;
+}
+.guerra-razas-neon-activo.guerra-razas-neon-magenta {
+  animation: guerra-razas-neon-pulso-magenta 2.2s ease-in-out infinite;
+}
+.guerra-razas-neon-activo.guerra-razas-neon-dorado {
+  animation: guerra-razas-neon-pulso-dorado 2.2s ease-in-out infinite;
+}
+
+@keyframes guerra-razas-neon-pulso-cyan {
+  0%, 100% { filter: drop-shadow(0 0 6px #22d3ee) drop-shadow(0 0 12px #22d3ee); opacity: 1; }
+  50% { filter: drop-shadow(0 0 12px #22d3ee) drop-shadow(0 0 22px #22d3ee); opacity: 0.9; }
+}
+@keyframes guerra-razas-neon-pulso-magenta {
+  0%, 100% { filter: drop-shadow(0 0 6px #ec4899) drop-shadow(0 0 12px #ec4899); opacity: 1; }
+  50% { filter: drop-shadow(0 0 12px #ec4899) drop-shadow(0 0 22px #ec4899); opacity: 0.9; }
+}
+@keyframes guerra-razas-neon-pulso-dorado {
+  0%, 100% { filter: drop-shadow(0 0 6px #eab308) drop-shadow(0 0 12px #eab308); opacity: 1; }
+  50% { filter: drop-shadow(0 0 12px #eab308) drop-shadow(0 0 22px #eab308); opacity: 0.9; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .guerra-razas-neon-activo {
+    animation: none !important;
+  }
+  .guerra-razas-neon-activo.guerra-razas-neon-cyan {
+    filter: drop-shadow(0 0 10px #22d3ee) !important;
+  }
+  .guerra-razas-neon-activo.guerra-razas-neon-magenta {
+    filter: drop-shadow(0 0 10px #ec4899) !important;
+  }
+  .guerra-razas-neon-activo.guerra-razas-neon-dorado {
+    filter: drop-shadow(0 0 10px #eab308) !important;
+  }
+}
+
 /* 3 columnas (una por raza) siempre lado a lado -- min-width: 0 en la
    grilla y en cada columna, más el nombre truncado, evitan el scroll
    horizontal forzado en pantallas angostas que pedía la consigna. */

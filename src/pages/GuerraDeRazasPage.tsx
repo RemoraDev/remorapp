@@ -324,10 +324,51 @@ export default function GuerraDeRazasPage() {
         </div>
       )}
 
+      {modoEdicionActivo && (
+        <div className="guerra-razas-efecto-panel">
+          <p className="form-label">Efecto de brillo</p>
+          <div className="guerra-razas-efecto-opciones">
+            {EFECTO_NEON_OPTIONS.map((opcion) => (
+              <button
+                key={opcion.value}
+                type="button"
+                className={`guerra-razas-tab ${guerra.efecto_neon === opcion.value ? "selected" : ""}`}
+                disabled={guardandoEfecto}
+                onClick={() => handleCambiarEfecto({ efecto_neon: opcion.value as EfectoNeon })}
+              >
+                {opcion.label}
+              </button>
+            ))}
+          </div>
+          {guerra.efecto_neon !== "ninguno" && (
+            <div className="guerra-razas-efecto-opciones">
+              {EFECTO_NEON_COLOR_OPTIONS.map((opcion) => (
+                <button
+                  key={opcion.value}
+                  type="button"
+                  className={`guerra-razas-color-swatch guerra-razas-neon-${opcion.value} ${
+                    guerra.efecto_neon_color === opcion.value ? "selected" : ""
+                  }`}
+                  disabled={guardandoEfecto}
+                  onClick={() => handleCambiarEfecto({ efecto_neon_color: opcion.value as EfectoNeonColor })}
+                  aria-label={opcion.label}
+                  title={opcion.label}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="guerra-razas-podio">
         {RAZAS_GUERRA.map(({ value: raza, label }) => {
           const esPrimero = ranking[0] === raza;
           const imagenUrl = guerra[CAMPO_IMAGEN[raza]] || IMAGEN_DEFAULT[raza];
+          // Migración 110: "ganador" solo prende en la raza primera del
+          // podio, "todas" prende siempre -- el color es el mismo para
+          // toda la Race War, no por raza.
+          const neonActivo =
+            guerra.efecto_neon === "todas" || (guerra.efecto_neon === "ganador" && esPrimero);
           return (
             <div
               key={raza}
@@ -338,7 +379,13 @@ export default function GuerraDeRazasPage() {
             >
               <div className="guerra-razas-mascota-wrap">
                 {esPrimero && <div className="guerra-razas-anillo-energia" aria-hidden="true" />}
-                <img src={imagenUrl} alt={`Mascota ${label}`} className="guerra-razas-mascota-img" />
+                <img
+                  src={imagenUrl}
+                  alt={`Mascota ${label}`}
+                  className={`guerra-razas-mascota-img ${
+                    neonActivo ? `guerra-razas-neon-activo guerra-razas-neon-${guerra.efecto_neon_color}` : ""
+                  }`}
+                />
               </div>
               <p className="guerra-razas-podio-nombre-raza">{label}</p>
               <p className="guerra-razas-puntos">{guerra[CAMPO_PUNTOS[raza]]}</p>
