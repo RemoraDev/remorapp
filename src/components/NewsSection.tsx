@@ -1,48 +1,28 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "../lib/supabaseClient";
 import { formatFecha } from "../lib/formatters";
 
-interface NoticiaPreview {
+export interface NoticiaPreview {
   id: string;
   titulo: string;
   createdAt: string;
 }
 
-// Sección de Noticias dentro de Inicio -- una vista previa corta de
-// las últimas 3, el listado completo vive en /news (que ahora también
-// tiene su propio ícono en la barra inferior).
-export default function NewsSection() {
-  const [noticias, setNoticias] = useState<NoticiaPreview[]>([]);
-  const [cargando, setCargando] = useState(true);
+interface Props {
+  noticias?: NoticiaPreview[];
+  cargando?: boolean;
+}
 
-  useEffect(() => {
-    supabase
-      .from("noticias")
-      .select("id, titulo, created_at")
-      .order("created_at", { ascending: false })
-      .limit(3)
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("Error cargando noticias:", error);
-        } else {
-          setNoticias((data ?? []).map((n) => ({ id: n.id, titulo: n.titulo, createdAt: n.created_at })));
-        }
-        setCargando(false);
-      });
-  }, []);
-
+// Página de Noticias dentro del carrusel de Inicio -- HomePage.tsx hace
+// la carga y arma un grupo de a NOTICIAS_POR_PAGINA por página de
+// carrusel. Si no hay ninguna noticia cargada, HomePage directamente no
+// incluye esta página en el carrusel (no tiene sentido mostrar un
+// slide vacío que dice "todavía no hay noticias").
+export default function NewsSection({ noticias = [], cargando = false }: Props) {
   return (
     <section className="home-news-section">
       <h2 className="detail-subtitle">Noticias</h2>
       {cargando && <p className="tournament-card-meta">Cargando...</p>}
-      {!cargando && noticias.length === 0 && (
-        <p className="tournament-card-meta">
-          Todavía no hay publicaciones cargadas. Acá van a aparecer las novedades de la comunidad y
-          de los torneos de RemorApp.
-        </p>
-      )}
-      {noticias.length > 0 && (
+      {!cargando && (
         <ul className="home-news-preview-list">
           {noticias.map((n) => (
             <li key={n.id}>
