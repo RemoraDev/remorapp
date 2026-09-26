@@ -6235,17 +6235,21 @@ body.overlay-obs {
    reflow, mismo criterio que el resto de los efectos de esta página.
    Distinto del anillo de energía de arriba (siempre activo en la raza
    puntera, colores fijos por raza): este es opt-in y del mismo color
-   para toda la Race War, elegido por el organizador. */
-.guerra-razas-color-swatch.guerra-razas-neon-cyan,
-img.guerra-razas-neon-activo.guerra-razas-neon-cyan {
+   para toda la Race War, elegido por el organizador.
+   IMPORTANTE: background-color acá es SOLO para el botoncito selector
+   de color (un círculo de muestra, se ve bien relleno) -- el ícono
+   real (img.guerra-razas-neon-activo) nunca debe llevar esta regla,
+   solo el filter: drop-shadow() de la animación de abajo. Antes las
+   dos cosas compartían el mismo selector, así que el ícono quedaba
+   tapado por un cuadrado de color sólido en vez de mostrar un brillo
+   -- bug real reportado por el usuario, visible en capturas. */
+.guerra-razas-color-swatch.guerra-razas-neon-cyan {
   background-color: #22d3ee;
 }
-.guerra-razas-color-swatch.guerra-razas-neon-magenta,
-img.guerra-razas-neon-activo.guerra-razas-neon-magenta {
+.guerra-razas-color-swatch.guerra-razas-neon-magenta {
   background-color: #ec4899;
 }
-.guerra-razas-color-swatch.guerra-razas-neon-dorado,
-img.guerra-razas-neon-activo.guerra-razas-neon-dorado {
+.guerra-razas-color-swatch.guerra-razas-neon-dorado {
   background-color: #eab308;
 }
 
