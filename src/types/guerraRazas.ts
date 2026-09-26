@@ -61,3 +61,53 @@ export interface GuerraRazasJugadorRow {
   elegido: boolean;
   creado_en: string;
 }
+
+// Migración 111: "Enfrentamiento" y "Tabla de Posiciones", conectadas
+// por el concepto de ciclo -- ver el comentario largo en
+// migration_111_race_war_ciclos_enfrentamiento.sql.
+
+export type ResultadoBo3 = "2-0" | "2-1" | "1-2" | "0-2";
+
+export const RESULTADO_BO3_OPTIONS: { value: ResultadoBo3; label: string }[] = [
+  { value: "2-0", label: "2-0" },
+  { value: "2-1", label: "2-1" },
+  { value: "1-2", label: "1-2" },
+  { value: "0-2", label: "0-2" },
+];
+
+export interface GuerraRazasCicloRow {
+  id: string;
+  guerra_id: string;
+  categoria: CategoriaGuerra;
+  numero_ciclo_actual: number;
+  duracion_ciclo_actual: number;
+  encuentros_jugados_en_ciclo: number;
+}
+
+export interface GuerraRazasEncuentroRow {
+  id: string;
+  guerra_id: string;
+  categoria: CategoriaGuerra;
+  jugador_protoss_id: string;
+  jugador_terran_id: string;
+  jugador_zerg_id: string;
+  imagen_protoss_url: string | null;
+  imagen_terran_url: string | null;
+  imagen_zerg_url: string | null;
+  resultado_protoss_terran: ResultadoBo3 | null;
+  resultado_terran_zerg: ResultadoBo3 | null;
+  resultado_protoss_zerg: ResultadoBo3 | null;
+  finalizado: boolean;
+  numero_ciclo: number;
+  creado_en: string;
+}
+
+export interface GuerraRazasPuntosJugadorRow {
+  id: string;
+  guerra_id: string;
+  categoria: CategoriaGuerra;
+  jugador_id: string;
+  numero_ciclo: number;
+  puntos: number;
+  creado_en: string;
+}

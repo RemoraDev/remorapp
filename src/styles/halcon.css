@@ -6984,3 +6984,140 @@ html.es-escritorio ::-webkit-scrollbar-thumb:hover {
   -webkit-overflow-scrolling: touch;
   padding-bottom: 1.5rem;
 }
+
+/* ==========================================================================
+   Race War: "Enfrentamiento" y "Tabla de Posiciones" (migración 111)
+   ========================================================================== */
+
+.guerra-razas-secciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 1.5rem 0 1rem;
+}
+
+/* Indicativo visual, no bloqueante: ya jugó un encuentro este ciclo. */
+.guerra-razas-jugador-ya-jugo {
+  opacity: 0.5;
+}
+
+.guerra-razas-enfrentamiento {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 0 2rem;
+}
+
+.guerra-razas-triangulo {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem 1rem;
+  max-width: 28rem;
+  width: 100%;
+}
+
+.guerra-razas-triangulo-nodo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  text-align: center;
+}
+
+.guerra-razas-triangulo-arriba {
+  grid-column: 1 / span 2;
+  justify-self: center;
+}
+
+.guerra-razas-triangulo-abajo-izq {
+  grid-column: 1;
+}
+
+.guerra-razas-triangulo-abajo-der {
+  grid-column: 2;
+}
+
+.guerra-razas-triangulo-img {
+  width: 5.5rem;
+  height: 5.5rem;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
+}
+
+.guerra-razas-triangulo-jugador {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.guerra-razas-resultados {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+  max-width: 24rem;
+}
+
+.guerra-razas-resultado-fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.guerra-razas-resultado-titulo {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.guerra-razas-resultado-valor {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-accent);
+}
+
+.guerra-razas-tabla-posiciones {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 0 2rem;
+  max-width: 30rem;
+  margin: 0 auto;
+}
+
+.guerra-razas-tabla-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.guerra-razas-tabla-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.guerra-razas-tabla-posicion {
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-text-faint);
+  min-width: 1.5rem;
+}
+
+.guerra-razas-tabla-puntos {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-accent);
+}

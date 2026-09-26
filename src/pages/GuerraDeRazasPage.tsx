@@ -5,6 +5,8 @@ import { Plus, Star, Trash2, Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
+import GuerraRazasEnfrentamiento from "../components/GuerraRazasEnfrentamiento";
+import GuerraRazasTablaPosiciones from "../components/GuerraRazasTablaPosiciones";
 import {
   CATEGORIAS_GUERRA,
   EFECTO_NEON_COLOR_OPTIONS,
@@ -73,6 +75,15 @@ export default function GuerraDeRazasPage() {
   const [agregando, setAgregando] = useState<RazaGuerra | null>(null);
   const [guardandoEfecto, setGuardandoEfecto] = useState(false);
 
+  // Migración 111: "Enfrentamiento" y "Tabla de Posiciones", nuevas
+  // secciones dentro de la misma página -- Marcador sigue siendo el
+  // default.
+  const [seccionActiva, setSeccionActiva] = useState<"marcador" | "enfrentamiento" | "tabla">("marcador");
+  // Jugadores que ya jugaron un encuentro finalizado en el ciclo
+  // ACTUAL de la categoría activa -- solo un indicativo visual (gris)
+  // en Marcador, no bloquea que se les vuelva a elegir.
+  const [yaJugaronEsteCiclo, setYaJugaronEsteCiclo] = useState<Set<string>>(new Set());
+
   const cargarDatos = useCallback(async () => {
     if (!id) return;
     const [{ data: guerraData }, { data: jugadoresData }] = await Promise.all([
@@ -92,6 +103,32 @@ export default function GuerraDeRazasPage() {
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
+
+  // Migración 111: quién ya jugó (tiene puntos guardados) en el ciclo
+  // ACTUAL de la categoría activa -- se recalcula al cambiar de
+  // categoría y cada vez que Realtime avisa un cambio relevante (ver
+  // el efecto de abajo).
+  const cargarYaJugaron = useCallback(async () => {
+    if (!id) return;
+    const { data: cicloData } = await supabase
+      .from("guerra_razas_ciclos")
+      .select("numero_ciclo_actual")
+      .eq("guerra_id", id)
+      .eq("categoria", categoriaActiva)
+      .maybeSingle();
+    const numeroCiclo = cicloData?.numero_ciclo_actual ?? 1;
+    const { data: puntosData } = await supabase
+      .from("guerra_razas_puntos_jugador")
+      .select("jugador_id")
+      .eq("guerra_id", id)
+      .eq("categoria", categoriaActiva)
+      .eq("numero_ciclo", numeroCiclo);
+    setYaJugaronEsteCiclo(new Set((puntosData ?? []).map((p) => p.jugador_id as string)));
+  }, [id, categoriaActiva]);
+
+  useEffect(() => {
+    cargarYaJugaron();
+  }, [cargarYaJugaron]);
 
   // Realtime (mismo patrón que supabase.channel().on("postgres_changes", ...)
   // -- no había ningún ejemplo vivo en el frontend para copiar, así que
@@ -124,13 +161,27 @@ export default function GuerraDeRazasPage() {
           }
         }
       )
+      // Migración 111: cualquier fila nueva de puntos, o un ciclo que
+      // avanza, puede cambiar quién "ya jugó" en Marcador -- se
+      // recarga directo de la base en vez de tratar de reconstruir el
+      // set a mano acá.
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "guerra_razas_puntos_jugador", filter: `guerra_id=eq.${guerra.id}` },
+        () => cargarYaJugaron()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "guerra_razas_ciclos", filter: `guerra_id=eq.${guerra.id}` },
+        () => cargarYaJugaron()
+      )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guerra?.id]);
+  }, [guerra?.id, categoriaActiva]);
 
   if (cargando) {
     return (
@@ -360,6 +411,61 @@ export default function GuerraDeRazasPage() {
         </div>
       )}
 
+      {/* Migración 111: "Enfrentamiento" y "Tabla de Posiciones" viven
+          en la misma página que Marcador -- misma categoría activa
+          compartida entre las 3, elegida más abajo. */}
+      <div className="guerra-razas-secciones">
+        <button
+          type="button"
+          className={`guerra-razas-tab ${seccionActiva === "marcador" ? "selected" : ""}`}
+          onClick={() => setSeccionActiva("marcador")}
+        >
+          Marcador
+        </button>
+        <button
+          type="button"
+          className={`guerra-razas-tab ${seccionActiva === "enfrentamiento" ? "selected" : ""}`}
+          onClick={() => setSeccionActiva("enfrentamiento")}
+        >
+          Enfrentamiento
+        </button>
+        <button
+          type="button"
+          className={`guerra-razas-tab ${seccionActiva === "tabla" ? "selected" : ""}`}
+          onClick={() => setSeccionActiva("tabla")}
+        >
+          Tabla de Posiciones
+        </button>
+      </div>
+
+      <div className="guerra-razas-tabs">
+        {CATEGORIAS_GUERRA.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            className={`guerra-razas-tab ${categoriaActiva === value ? "selected" : ""}`}
+            onClick={() => setCategoriaActiva(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {seccionActiva === "enfrentamiento" && (
+        <GuerraRazasEnfrentamiento
+          guerra={guerra}
+          categoria={categoriaActiva}
+          jugadores={jugadores}
+          esOrganizador={esOrganizador}
+        />
+      )}
+
+      {seccionActiva === "tabla" && (
+        <GuerraRazasTablaPosiciones guerraId={guerra.id} categoria={categoriaActiva} jugadores={jugadores} />
+      )}
+
+      {seccionActiva === "marcador" && (
+      <>
       <div className="guerra-razas-podio">
         {RAZAS_GUERRA.map(({ value: raza, label }) => {
           const esPrimero = ranking[0] === raza;
@@ -448,19 +554,6 @@ export default function GuerraDeRazasPage() {
         />
       )}
 
-      <div className="guerra-razas-tabs">
-        {CATEGORIAS_GUERRA.map(({ value, label }) => (
-          <button
-            key={value}
-            type="button"
-            className={`guerra-razas-tab ${categoriaActiva === value ? "selected" : ""}`}
-            onClick={() => setCategoriaActiva(value)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       <div className="guerra-razas-columnas">
         {RAZAS_GUERRA.map(({ value: raza, label }) => {
           const jugadoresColumna = jugadores.filter((j) => j.categoria === categoriaActiva && j.raza === raza);
@@ -477,7 +570,10 @@ export default function GuerraDeRazasPage() {
               {jugadoresColumna.map((jugador) => (
                 <div
                   key={jugador.id}
-                  className={`guerra-razas-jugador-fila ${jugador.elegido ? "guerra-razas-jugador-elegido" : ""}`}
+                  className={`guerra-razas-jugador-fila ${jugador.elegido ? "guerra-razas-jugador-elegido" : ""} ${
+                    yaJugaronEsteCiclo.has(jugador.id) ? "guerra-razas-jugador-ya-jugo" : ""
+                  }`}
+                  title={yaJugaronEsteCiclo.has(jugador.id) ? "Ya jugó un encuentro este ciclo" : undefined}
                 >
                   <span className="guerra-razas-jugador-nombre">{jugador.nombre}</span>
                   {modoEdicionActivo ? (
@@ -537,6 +633,8 @@ export default function GuerraDeRazasPage() {
           );
         })}
       </div>
+      </>
+      )}
 
       {esOrganizador && (
         <button
