@@ -6,6 +6,8 @@ import { useTheme } from "./context/ThemeContext";
 import { SearchProvider } from "./context/SearchContext";
 import Header from "./components/Header";
 import DesktopTitleBar from "./components/DesktopTitleBar";
+import EscritorioColumnaLateral from "./components/EscritorioColumnaLateral";
+import EscritorioColumnaDerecha from "./components/EscritorioColumnaDerecha";
 import ObsController from "./components/ObsController";
 import ActualizacionDesktop from "./components/ActualizacionDesktop";
 import ActualizacionWeb from "./components/ActualizacionWeb";
@@ -88,45 +90,56 @@ function AppContent() {
             disponibles.
           </div>
         )}
-        <main>
-          <Suspense fallback={<PageFallback />}>
-            <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/tournaments" element={<TournamentsPage />} />
-              <Route path="/tournaments/create" element={<CreateTournamentPage />} />
-              <Route path="/tournaments/history" element={<TournamentHistoryPage />} />
-              <Route path="/torneos-historicos" element={<HistoricalTournamentsPage />} />
-              <Route path="/sala-de-la-fama" element={<HallOfFamePage />} />
-              <Route path="/jugador/:nick/:uniqueId" element={<PlayerDetailPage />} />
-              <Route path="/tournaments/inscritos" element={<MyTournamentsPage />} />
-              <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
-              <Route path="/perfil" element={<ProfilePage />} />
-              <Route path="/admin" element={<AdminPage />} />
-              <Route path="/staff" element={<StaffPage />} />
-              <Route path="/pruebas/lineup/:clanWarId" element={<PruebasLineupObservarPage />} />
-              <Route path="/equipos" element={<TeamsPage />} />
-              <Route path="/equipos/crear" element={<CreateTeamPage />} />
-              <Route path="/equipos/:tag" element={<TeamDetailPage />} />
-              <Route path="/news" element={<NewsPage />} />
-              <Route path="/ayuda" element={<AyudaPage />} />
-              <Route path="/ranking" element={<RankingPage />} />
-              <Route path="/calendario" element={<ClanWarsSchedulePage />} />
-              <Route path="/clan-war/:id" element={<ClanWarLineupPublicoPage />} />
-              <Route path="/guerra-razas/:id" element={<GuerraDeRazasPage />} />
-              <Route path="/instalar-celular" element={<InstalarCelularPage />} />
-              <Route path="/chat-lideres" element={<ChatLideresPage />} />
-              {/* La Tienda se descartó por completo -- la ruta se mantiene
-                  únicamente para redirigir a Inicio a quien tenga un
-                  enlace o marcador viejo, en vez de mostrar una página
-                  rota. */}
-              <Route path="/store" element={<Navigate to="/" replace />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-            </Routes>
-          </Suspense>
-        </main>
+        {/* Migración 11X: en la versión de escritorio (Tauri),
+            ".escritorio-cuerpo" pasa a ser una fila de 3 columnas (ver
+            halcon.css) -- en la web normal y en celular sigue siendo un
+            simple contenedor de paso, <main> es su único hijo real (las
+            dos columnas se auto-ocultan, ver el "if (!esEscritorio)
+            return null" de cada una), así que el layout y el scroll de
+            siempre quedan intactos ahí. */}
+        <div className="escritorio-cuerpo">
+          <EscritorioColumnaLateral />
+          <main>
+            <Suspense fallback={<PageFallback />}>
+              <Routes>
+                <Route path="/" element={<HomePage />} />
+                <Route path="/tournaments" element={<TournamentsPage />} />
+                <Route path="/tournaments/create" element={<CreateTournamentPage />} />
+                <Route path="/tournaments/history" element={<TournamentHistoryPage />} />
+                <Route path="/torneos-historicos" element={<HistoricalTournamentsPage />} />
+                <Route path="/sala-de-la-fama" element={<HallOfFamePage />} />
+                <Route path="/jugador/:nick/:uniqueId" element={<PlayerDetailPage />} />
+                <Route path="/tournaments/inscritos" element={<MyTournamentsPage />} />
+                <Route path="/tournaments/:id" element={<TournamentDetailPage />} />
+                <Route path="/perfil" element={<ProfilePage />} />
+                <Route path="/admin" element={<AdminPage />} />
+                <Route path="/staff" element={<StaffPage />} />
+                <Route path="/pruebas/lineup/:clanWarId" element={<PruebasLineupObservarPage />} />
+                <Route path="/equipos" element={<TeamsPage />} />
+                <Route path="/equipos/crear" element={<CreateTeamPage />} />
+                <Route path="/equipos/:tag" element={<TeamDetailPage />} />
+                <Route path="/news" element={<NewsPage />} />
+                <Route path="/ayuda" element={<AyudaPage />} />
+                <Route path="/ranking" element={<RankingPage />} />
+                <Route path="/calendario" element={<ClanWarsSchedulePage />} />
+                <Route path="/clan-war/:id" element={<ClanWarLineupPublicoPage />} />
+                <Route path="/guerra-razas/:id" element={<GuerraDeRazasPage />} />
+                <Route path="/instalar-celular" element={<InstalarCelularPage />} />
+                <Route path="/chat-lideres" element={<ChatLideresPage />} />
+                {/* La Tienda se descartó por completo -- la ruta se mantiene
+                    únicamente para redirigir a Inicio a quien tenga un
+                    enlace o marcador viejo, en vez de mostrar una página
+                    rota. */}
+                <Route path="/store" element={<Navigate to="/" replace />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
+              </Routes>
+            </Suspense>
+          </main>
+          <EscritorioColumnaDerecha />
+        </div>
         <BottomNav />
         {/* Migración 098: notificaciones flotantes (sonner) -- arriba a la
             derecha para no chocar con la barra de navegación inferior,

@@ -6621,6 +6621,121 @@ html.es-escritorio ::-webkit-scrollbar-thumb:hover {
   background-clip: content-box;
 }
 
+/* ------------------------------------------------------------
+   Layout de 3 columnas, exclusivo de la versión de escritorio (Tauri):
+   columna izquierda y derecha decorativas (patrón de estrellas --
+   misma técnica que .tournament-bracket-wrap[data-fondo-bracket=
+   "campo_estrellas"] -- + el isotipo de RemorApp), con la derecha
+   reemplazada por el chat de líderes FIJO para quien califica (ver
+   EscritorioColumnaDerecha.tsx). En la web normal y en celular,
+   ".escritorio-cuerpo" es un simple contenedor de paso -- las dos
+   columnas nunca se montan ahí (cada componente se auto-oculta antes
+   de este CSS siquiera importar), así que <main> sigue siendo su
+   único hijo real y el layout/scroll de siempre no se altera. */
+.escritorio-cuerpo {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+html.es-escritorio .escritorio-cuerpo {
+  flex-direction: row;
+}
+
+/* Sin esto, un <main> con contenido ancho empuja la fila entera y las
+   columnas laterales quedan corridas fuera de pantalla -- mismo motivo
+   que "min-height: 0" en la regla de "main" de más arriba, pero para
+   el eje horizontal de una fila en vez del vertical de una columna. */
+html.es-escritorio .escritorio-cuerpo > main {
+  min-width: 0;
+}
+
+.escritorio-columna-lateral {
+  display: none;
+}
+
+html.es-escritorio .escritorio-columna-lateral {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 2rem;
+  flex-shrink: 0;
+  width: 84px;
+  background-color: var(--color-bg);
+  background-image: radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(1px 1px at 40% 72%, rgba(255, 255, 255, 0.65), transparent 60%),
+    radial-gradient(1.5px 1.5px at 70% 32%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(1px 1px at 85% 88%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.5px 1.5px at 25% 92%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(1px 1px at 55% 12%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(1px 1px at 95% 45%, rgba(255, 255, 255, 0.6), transparent 60%);
+  background-size: 120px 120px;
+}
+
+html.es-escritorio .escritorio-columna-izquierda {
+  border-right: 1px solid var(--color-border);
+}
+
+html.es-escritorio .escritorio-columna-derecha {
+  border-left: 1px solid var(--color-border);
+}
+
+html.es-escritorio .escritorio-columna-lateral .logo-mark {
+  width: 30px;
+  height: 30px;
+}
+
+.escritorio-chat-fijo {
+  display: none;
+}
+
+html.es-escritorio .escritorio-chat-fijo {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 320px;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-left: 1px solid var(--color-border);
+  background: var(--color-panel);
+  overflow: hidden;
+}
+
+.escritorio-chat-fijo-tabs {
+  flex-shrink: 0;
+}
+
+.escritorio-chat-fijo-cuerpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  /* .bottom-nav sigue siendo position:fixed de borde a borde por
+     encima de todo (ver esa regla) -- sin este espacio, el formulario
+     de enviar mensaje queda tapado (y sus clics interceptados) detrás
+     de la barra inferior. Mismo cálculo que usa <main> más arriba. */
+  padding-bottom: calc(var(--nav-height) + 16px);
+}
+
+/* Dentro del panel fijo, la lista de mensajes crece para ocupar todo
+   el alto disponible -- en /chat-lideres (la página completa) se queda
+   en un "max-height: 26rem" porque ahí el resto de la página también
+   scrollea; acá es al revés, este panel entero ES lo que scrollea. */
+.escritorio-chat-fijo-cuerpo .chat-lideres-grupal,
+.escritorio-chat-fijo-cuerpo .chat-lideres-privado-hilo,
+.escritorio-chat-fijo-cuerpo .chat-lideres-privados-lista {
+  flex: 1;
+  min-height: 0;
+}
+
+.escritorio-chat-fijo-cuerpo .chat-lideres-mensajes {
+  flex: 1;
+  max-height: none;
+}
+
 /* ==========================================================================
    Chat de líderes (migración 105) -- grupal y privados, mismo lenguaje
    visual que el resto de la app (form-input, btn-primary, tarjetas
