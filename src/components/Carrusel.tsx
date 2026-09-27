@@ -17,8 +17,8 @@ export interface CarruselHandle {
 
 // Carrusel horizontal genérico (Inicio y Mi perfil, migración 110):
 // scroll-snap nativo del navegador, sin ninguna librería de gestos --
-// funciona con el dedo en celular y con las flechas/puntos en
-// escritorio (sin pantalla táctil). Cada página es 100% del ancho y
+// funciona con el dedo en celular y con las flechas en escritorio (sin
+// pantalla táctil). Cada página es 100% del ancho y
 // 100% del alto disponible; si el contenido de una página es más alto
 // que ese espacio, esa página hace scroll vertical PROPIA (overflow-y
 // acá adentro), sin que la ventana ni <main> se muevan -- ver
@@ -75,19 +75,6 @@ const Carrusel = forwardRef<CarruselHandle, CarruselProps>(function Carrusel({ p
           >
             <ChevronLeft size={18} />
           </button>
-
-          <div className="carrusel-puntos">
-            {paginas.map((p, i) => (
-              <button
-                key={p.key}
-                type="button"
-                className={`carrusel-punto ${i === indiceActivo ? "activo" : ""}`}
-                onClick={() => irAPagina(i)}
-                aria-label={`Ir a la página ${i + 1}`}
-                aria-current={i === indiceActivo}
-              />
-            ))}
-          </div>
 
           <button
             type="button"

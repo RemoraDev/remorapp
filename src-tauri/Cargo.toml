@@ -1,6 +1,6 @@
 [package]
 name = "remorapp"
-version = "0.1.2"
+version = "0.1.3"
 description = "RemorApp -- gestor de torneos y clanes de StarCraft II"
 authors = ["RemoraDev"]
 license = ""
@@ -25,3 +25,11 @@ tauri = { version = "2.11.6", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2.12.0"
 tauri-plugin-process = "2.3.1"
+
+# Mismo crate y versión que ya usa tauri internamente para Windows (ver
+# su Cargo.toml, sección [target."cfg(windows)".dependencies.windows])
+# -- cargo unifica las features entre ambas dependencias sin duplicar
+# nada ni generar conflicto de versiones. Se usa solo para pintar de
+# negro la barra de título nativa (DwmSetWindowAttribute), ver lib.rs.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }

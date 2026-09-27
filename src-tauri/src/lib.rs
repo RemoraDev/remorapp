@@ -1,3 +1,35 @@
+#[cfg(target_os = "windows")]
+use tauri::Manager;
+
+// Windows deja el color de la barra de título nativa a criterio del
+// tema del sistema -- en modo oscuro suele salir gris carbón, no el
+// negro casi puro del resto de la app (--color-bg: #06070a), y se
+// nota como una costura de color entre la barra y el contenido. Se
+// fuerza a negro puro con la API de DWM (Windows 11), la única forma
+// de tocar ese color sin sacar la barra nativa por completo (ver el
+// comentario largo que tenía DesktopTitleBar.tsx sobre por qué se
+// prefirió conservarla en vez de reimplementar mover/redimensionar a
+// mano). Si la API no está disponible (Windows 10, por ejemplo) el
+// resultado del intento simplemente se descarta -- la barra queda con
+// el gris de siempre, no rompe nada.
+#[cfg(target_os = "windows")]
+fn pintar_titlebar_negro(window: &tauri::WebviewWindow) {
+  use windows::Win32::Foundation::COLORREF;
+  use windows::Win32::Graphics::Dwm::{DwmSetWindowAttribute, DWMWA_CAPTION_COLOR};
+
+  if let Ok(hwnd) = window.hwnd() {
+    let color = COLORREF(0x00000000);
+    unsafe {
+      let _ = DwmSetWindowAttribute(
+        hwnd,
+        DWMWA_CAPTION_COLOR,
+        &color as *const COLORREF as *const core::ffi::c_void,
+        std::mem::size_of::<COLORREF>() as u32,
+      );
+    }
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
@@ -17,6 +49,12 @@ pub fn run() {
             .build(),
         )?;
       }
+
+      #[cfg(target_os = "windows")]
+      if let Some(window) = app.get_webview_window("main") {
+        pintar_titlebar_negro(&window);
+      }
+
       Ok(())
     })
     .run(tauri::generate_context!())

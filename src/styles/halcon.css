@@ -355,7 +355,7 @@ input[type="radio"] {
 /* ---------- Layout ---------- */
 
 .app-shell {
-  /* Columna flex de altura fija: DesktopTitleBar/Header/ObsController/
+  /* Columna flex de altura fija: DesktopClaseHtml/Header/ObsController/
      avisos quedan arriba con su tamaño natural, <main> es el único
      hijo que crece y hace scroll (flex: 1 + overflow-y: auto de
      abajo), y .bottom-nav sigue flotando encima (position: fixed, ver
@@ -6559,48 +6559,14 @@ body.overlay-obs {
 /* ------------------------------------------------------------
    Versión de escritorio (Tauri): todo lo de acá vive bajo
    html.es-escritorio, una clase que SOLO se agrega cuando la app
-   corre dentro de Tauri (ver DesktopTitleBar.tsx) -- la web normal en
+   corre dentro de Tauri (ver DesktopClaseHtml.tsx) -- la web normal en
    el navegador nunca tiene esa clase, así que ninguna de estas reglas
-   la afecta ahí.
+   la afecta ahí. Antes había acá una franja de marca propia justo
+   debajo de la barra de título nativa de Windows -- se sacó (el
+   nombre "RemorApp" quedaba repetido 3 veces seguidas: la barra
+   nativa, esta franja, y el logo del header). .header vuelve a quedar
+   pegado arriba de todo, como en la web normal.
    ------------------------------------------------------------ */
-
-/* Franja de marca fija, justo debajo de la barra de título NATIVA de
-   Windows (se mantiene esa, ver el comentario largo en
-   DesktopTitleBar.tsx) -- .header sigue siendo sticky, pero ahora
-   pegado debajo de esta franja en vez de pegado arriba de todo. */
-.app-titlebar-escritorio {
-  position: sticky;
-  top: 0;
-  /* Por debajo de .modal-backdrop (60) a propósito, igual que .header
-     -- un modal sigue tapando todo lo demás. Por encima de .header
-     (50), que va justo debajo de esta franja. */
-  z-index: 55;
-  height: 36px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  padding: 0 1rem;
-  background: #05060a;
-  border-bottom: 1px solid var(--color-border);
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.app-titlebar-escritorio-logo {
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #ffffff;
-}
-
-.app-titlebar-escritorio-accent {
-  color: var(--color-accent);
-}
-
-html.es-escritorio .header {
-  top: 36px;
-}
 
 /* El contenido no queda pegado a los bordes de la ventana -- margen
    sutil, solo en escritorio. El header y la barra inferior siguen
@@ -6640,10 +6606,10 @@ html.es-escritorio ::-webkit-scrollbar-thumb:hover {
 
 /* ------------------------------------------------------------
    Layout de 3 columnas, exclusivo de la versión de escritorio (Tauri):
-   columna izquierda y derecha decorativas (patrón de estrellas --
-   misma técnica que .tournament-bracket-wrap[data-fondo-bracket=
-   "campo_estrellas"] -- + el isotipo de RemorApp), con la derecha
-   reemplazada por el chat de líderes FIJO para quien califica (ver
+   columna izquierda y derecha decorativas (panal de hexágonos --
+   HexPattern.tsx, el mismo que usaba el Hero de Inicio -- + el isotipo
+   de RemorApp), con la derecha reemplazada por el chat de líderes FIJO
+   para quien califica (ver
    EscritorioColumnaDerecha.tsx). En la web normal y en celular,
    ".escritorio-cuerpo" es un simple contenedor de paso -- las dos
    columnas nunca se montan ahí (cada componente se auto-oculta antes
@@ -6674,6 +6640,7 @@ html.es-escritorio .escritorio-cuerpo > main {
 }
 
 html.es-escritorio .escritorio-columna-lateral {
+  position: relative;
   display: flex;
   align-items: flex-start;
   justify-content: center;
@@ -6681,14 +6648,20 @@ html.es-escritorio .escritorio-columna-lateral {
   flex-shrink: 0;
   width: 84px;
   background-color: var(--color-bg);
-  background-image: radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
-    radial-gradient(1px 1px at 40% 72%, rgba(255, 255, 255, 0.65), transparent 60%),
-    radial-gradient(1.5px 1.5px at 70% 32%, rgba(255, 255, 255, 0.8), transparent 60%),
-    radial-gradient(1px 1px at 85% 88%, rgba(255, 255, 255, 0.55), transparent 60%),
-    radial-gradient(1.5px 1.5px at 25% 92%, rgba(255, 255, 255, 0.7), transparent 60%),
-    radial-gradient(1px 1px at 55% 12%, rgba(255, 255, 255, 0.5), transparent 60%),
-    radial-gradient(1px 1px at 95% 45%, rgba(255, 255, 255, 0.6), transparent 60%);
-  background-size: 120px 120px;
+  overflow: hidden;
+}
+
+/* Panal de hexágonos (mismo HexPattern.tsx que ya usaba el Hero de
+   Inicio) -- de borde a borde, detrás del logo (z-index: 0 implícito,
+   el logo no tiene position así que ya queda por encima en el orden
+   normal del documento). */
+.escritorio-columna-hex {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.12;
+  pointer-events: none;
 }
 
 html.es-escritorio .escritorio-columna-izquierda {
@@ -7193,27 +7166,6 @@ html.es-escritorio .escritorio-chat-fijo {
 
 .carrusel-flecha:disabled {
   opacity: 0.35;
-}
-
-.carrusel-puntos {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.carrusel-punto {
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 999px;
-  border: none;
-  padding: 0;
-  background: var(--color-border);
-  transition: background 0.15s ease, transform 0.15s ease;
-}
-
-.carrusel-punto.activo {
-  background: var(--color-accent);
-  transform: scale(1.3);
 }
 
 /* Migración 110: /equipos con título y controles fijos, solo la lista

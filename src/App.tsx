@@ -5,7 +5,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
 import { SearchProvider } from "./context/SearchContext";
 import Header from "./components/Header";
-import DesktopTitleBar from "./components/DesktopTitleBar";
+import DesktopClaseHtml from "./components/DesktopClaseHtml";
 import EscritorioColumnaLateral from "./components/EscritorioColumnaLateral";
 import EscritorioColumnaDerecha from "./components/EscritorioColumnaDerecha";
 import ObsController from "./components/ObsController";
@@ -79,7 +79,7 @@ function AppContent() {
   return (
     <SearchProvider>
       <div className="app-shell">
-        <DesktopTitleBar />
+        <DesktopClaseHtml />
         <Header />
         <ObsController />
         <ActualizacionDesktop />

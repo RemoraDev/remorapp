@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import Logo from "./Logo";
+import HexPattern from "./HexPattern";
 
 // Columna izquierda del layout de 3 columnas de escritorio (Tauri) --
-// puramente decorativa (patrón de estrellas + isotipo de RemorApp),
-// ver App.tsx y halcon.css (".escritorio-cuerpo"). Nunca se monta en
-// la web normal ni en celular: isTauri() se revisa en un useEffect
-// (no directo en el render), mismo patrón que DesktopTitleBar.tsx.
+// puramente decorativa (panal de hexágonos + isotipo de RemorApp,
+// mismo HexPattern.tsx que usaba el Hero de Inicio antes de que se
+// reemplazara por el carrusel), ver App.tsx y halcon.css
+// (".escritorio-cuerpo"). Nunca se monta en la web normal ni en
+// celular: isTauri() se revisa en un useEffect (no directo en el
+// render), mismo patrón que DesktopClaseHtml.tsx.
 export default function EscritorioColumnaLateral() {
   const [esEscritorio, setEsEscritorio] = useState(false);
 
@@ -18,6 +21,7 @@ export default function EscritorioColumnaLateral() {
 
   return (
     <div className="escritorio-columna-lateral escritorio-columna-izquierda" aria-hidden="true">
+      <HexPattern id="escritorio-hex-izq" className="hex-pattern escritorio-columna-hex" />
       <Logo />
     </div>
   );
