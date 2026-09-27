@@ -2966,6 +2966,52 @@ main {
   );
 }
 
+/* Editor del lineup en la página pública del evento (migración 123):
+   botón "Editar" moderno, visible solo para capitán/dueño de alguno de
+   los dos equipos (lineup_editor_clan_war() se lo confirma al backend
+   -- si falla, el botón directamente no se renderiza). */
+.clan-war-editor-wrap {
+  margin-top: 1.5rem;
+}
+
+.clan-war-editor-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid rgba(var(--h-accent-rgb), 0.4);
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.22), rgba(var(--h-accent-rgb), 0.06));
+  color: var(--color-text);
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.clan-war-editor-toggle:hover {
+  box-shadow: var(--shadow-accent);
+}
+
+.clan-war-editor-toggle:active {
+  transform: scale(0.97);
+}
+
+.clan-war-editor-wrap .clan-war-lineup-room {
+  margin-top: 1rem;
+}
+
+/* Sin fondo elegido (data-fondo-lineup="ninguno" no matchea el
+   selector de arriba, que lo excluye a propósito) -- igual necesita
+   una tarjeta visible para no flotar sin borde en medio de la página. */
+.clan-war-editor-wrap .clan-war-lineup-room:not([data-fondo-lineup]),
+.clan-war-editor-wrap .clan-war-lineup-room[data-fondo-lineup="ninguno"] {
+  padding: 1.25rem 1rem 1rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
 /* Mini-render del fondo en el selector -- misma caja chica que
    .bracket-fondo-preview, clase propia para no compartir selector. */
 .lineup-fondo-preview {

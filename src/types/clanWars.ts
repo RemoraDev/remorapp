@@ -1,3 +1,5 @@
+import type { FondoLineup } from "./teams";
+
 // Fila devuelta por clan_wars_proximas() (migración 059, extendida en
 // la 064 con liga_nombre/division_nombre y en la 066 con status y los
 // datos de revelación del lineup): versión pública de una Clan War
@@ -51,7 +53,7 @@ export interface LineupPublicoClanWar {
   // Migración 067: fondo de imagen (catalogo_fondos_lineup) tiene
   // prioridad sobre el clásico cuando está presente -- son mutuamente
   // excluyentes, ver cambiar_fondo_lineup_cw()/cambiar_fondo_lineup_imagen_cw().
-  fondo_clasico: "ninguno" | "campo_estrellas" | "nebulosa" | "constelacion" | "vortice";
+  fondo_clasico: FondoLineup;
   fondo_imagen_url: string | null;
   lineup_challenger: LineupPublicoJugador[] | null;
   lineup_challenged: LineupPublicoJugador[] | null;
@@ -64,4 +66,66 @@ export interface FondoLineupImagen {
   nombre: string;
   image_url: string;
   created_at: string;
+}
+
+// Devuelto por lineup_editor_clan_war() (migración 123): todo lo que
+// necesita el editor de la página pública del evento (/clan-war/:id)
+// para el capitán/dueño que llama -- mi lado del lineup completo, más
+// el roster elegible y los temporales para el formulario de "agregar".
+// Del lado rival solo trae posición + si esa posición ya tiene a
+// alguien anotado, nunca el nombre, salvo que lineup_revelado sea true.
+export interface LineupEditorJugadorElegible {
+  jugador_id: string;
+  nombre: string;
+  es_mercenario: boolean;
+  es_aliado: boolean;
+}
+
+export interface LineupEditorTemporal {
+  id: string;
+  nick_temporal: string;
+}
+
+export interface LineupEditorEntryPropio {
+  id: string;
+  nombre: string;
+  posicion: 1 | 2 | 3 | null;
+  es_temporal: boolean;
+  es_suplente: boolean;
+  link_verificacion: string | null;
+}
+
+// Del lado rival, antes de revelarse: nombre/es_temporal/link_verificacion
+// vienen en null aunque la fila exista -- solo posicion/es_suplente son
+// siempre reales (así se sabe "ocupado" sin saber quién).
+export interface LineupEditorEntryRival {
+  posicion: 1 | 2 | 3 | null;
+  es_suplente: boolean;
+  nombre: string | null;
+  es_temporal: boolean | null;
+  link_verificacion: string | null;
+}
+
+export interface LineupEditorClanWar {
+  mi_team_id: string;
+  soy_challenger: boolean;
+  rival_team_id: string;
+  rival_nombre: string;
+  formato: "simple" | "wtl";
+  status: string;
+  es_de_torneo: boolean;
+  jugadores_por_set: number;
+  fondo_lineup: FondoLineup;
+  fondo_lineup_imagen_id: string | null;
+  fecha_hora_cet: string;
+  lineup_plazo_extendido_hasta: string | null;
+  ventana_revelacion_minutos: number;
+  lineup_revelado: boolean;
+  lineup_aprobado: boolean;
+  mi_visto_bueno: boolean;
+  visto_bueno_rival: boolean;
+  roster_elegible: LineupEditorJugadorElegible[];
+  temporales_propios: LineupEditorTemporal[];
+  lineup_propio: LineupEditorEntryPropio[];
+  lineup_rival: LineupEditorEntryRival[];
 }

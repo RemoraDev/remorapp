@@ -65,7 +65,6 @@ import PercentBar from "../components/PercentBar";
 import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
 import TitulosActivosList from "../components/TitulosActivosList";
 import LogrosClanWarList from "../components/LogrosClanWarList";
-import LineupFondoPicker from "../components/LineupFondoPicker";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const BANNER_MAX_BYTES = 3 * 1024 * 1024;
@@ -239,16 +238,6 @@ interface MiembroRoster {
   esMercenario?: boolean;
 }
 
-// Migración 047: opción elegible para el lineup -- miembro propio,
-// mercenario propio, o miembro/mercenario del equipo aliado (con
-// alianza aprobada para la temporada del reto).
-interface JugadorElegibleLineup {
-  jugadorId: string;
-  nombre: string;
-  esMercenario: boolean;
-  esAliado: boolean;
-}
-
 // Migración 047: mercenario fichado por este equipo, con el nombre
 // del jugador y de la temporada ya resueltos para mostrar.
 interface MercenarioConNombres {
@@ -296,6 +285,10 @@ interface InvitacionTorneoEquipoConNombre {
   createdAt: string;
 }
 
+// Lineup de Clan War (migración 037): sigue haciendo falta más allá de
+// la etapa de armado (que se mudó a /clan-war/:id) -- el check-in
+// (reemplazar_jugador_lineup) y la elección del ACE en formato WTL
+// leen esta misma lista de nombres/posiciones.
 interface LineupEntry {
   id: string;
   nombre: string;
@@ -618,11 +611,6 @@ export default function TeamDetailPage() {
   const [temporadas, setTemporadas] = useState<TemporadaRow[]>([]);
   const [mercenariosPropios, setMercenariosPropios] = useState<MercenarioConNombres[]>([]);
   const [alianzasPropias, setAlianzasPropias] = useState<AlianzaConNombres[]>([]);
-  // A quién puede poner un capitán en el lineup de cada reto activo --
-  // incluye mercenario propio y, con alianza aprobada, el roster del
-  // equipo aliado. Solo se completa para retos con temporadaId; sin
-  // eso, el <select> del lineup sigue usando `miembros` directamente.
-  const [elegiblesPorReto, setElegiblesPorReto] = useState<Record<string, JugadorElegibleLineup[]>>({});
 
   const [temporadaFichaje, setTemporadaFichaje] = useState("");
   const [busquedaMercenario, setBusquedaMercenario] = useState("");
@@ -691,34 +679,16 @@ export default function TeamDetailPage() {
   // los DOS equipos -- el rival para el check-in, y los dos para
   // elegir jugadores al agregar una partida.
   const [rosterPorTeamId, setRosterPorTeamId] = useState<Record<string, MiembroRoster[]>>({});
-  // --- Lineup de Clan War (migración 037): paso previo al check-in ---
+  // Lineup de Clan War (migración 037): ver el comentario de
+  // LineupEntry más arriba -- sigue haciendo falta para el check-in y
+  // la elección del ACE, aunque el armado en sí se mudó a /clan-war/:id.
   const [lineupPorReto, setLineupPorReto] = useState<Record<string, { propio: LineupEntry[]; rival: LineupEntry[] }>>(
     {}
   );
-  const [jugadorLineupNuevo, setJugadorLineupNuevo] = useState<Record<string, string>>({});
-  const [linkLineupNuevo, setLinkLineupNuevo] = useState<Record<string, string>>({});
-  // Formato WTL (migración 042): posición (1/2/3) elegida para el
-  // próximo jugador que se agregue al lineup.
-  const [posicionLineupNuevo, setPosicionLineupNuevo] = useState<Record<string, string>>({});
-  // Migración 089: anotar al jugador nuevo como suplente en vez de
-  // titular -- sin límite de cantidad, sin pedir posición.
-  const [esSuplenteLineupNuevo, setEsSuplenteLineupNuevo] = useState<Record<string, boolean>>({});
   // Migración 089: reemplazo de un jugador reportado por un suplente.
   const [suplenteElegidoPorTitular, setSuplenteElegidoPorTitular] = useState<Record<string, string>>({});
   const [reemplazandoLineup, setReemplazandoLineup] = useState<string | null>(null);
   const [erroresReemplazo, setErroresReemplazo] = useState<Record<string, string>>({});
-  const [agregandoLineup, setAgregandoLineup] = useState<string | null>(null);
-  const [quitandoLineup, setQuitandoLineup] = useState<string | null>(null);
-  const [erroresLineup, setErroresLineup] = useState<Record<string, string>>({});
-  const [confirmandoLineup, setConfirmandoLineup] = useState<string | null>(null);
-  const [erroresConfirmarLineup, setErroresConfirmarLineup] = useState<Record<string, string>>({});
-  // Migración 091: cantidad de jugadores por lado de un reto directo
-  // (Clan War Amistosa incluida) -- editable en cualquier momento
-  // mientras el reto no esté cerrado, a diferencia de una Clan War
-  // vinculada a un torneo (esa la define el torneo).
-  const [jugadoresPorSetEditado, setJugadoresPorSetEditado] = useState<Record<string, string>>({});
-  const [guardandoJugadoresPorSet, setGuardandoJugadoresPorSet] = useState<string | null>(null);
-  const [erroresJugadoresPorSet, setErroresJugadoresPorSet] = useState<Record<string, string>>({});
   const [reportesPorReto, setReportesPorReto] = useState<Record<string, ReporteConNombres[]>>({});
   const [partidasPorReto, setPartidasPorReto] = useState<Record<string, PartidaConNombres[]>>({});
   // Formato WTL (migración 042): 3 sets Bo2, ACE si el marcador global
@@ -1510,41 +1480,32 @@ export default function TeamDetailPage() {
           // pidan el mismo perfil faltante dos veces, o que una lea el
           // acumulador antes de que otra, ya en curso, lo haya
           // completado.
-          if (retosConTemporada.length > 0) {
-            const elegiblesTmp: Record<string, JugadorElegibleLineup[]> = {};
-            for (const r of retosConTemporada) {
-              const miTeamIdReto = r.challengerTeamId === equipoData.id ? r.challengerTeamId : r.challengedTeamId;
-              const { data: elegiblesData, error: elegiblesError } = await supabase.rpc("roster_elegible_cw", {
-                p_team_id: miTeamIdReto,
-                p_temporada_id: r.temporadaId,
-              });
-              if (elegiblesError || !elegiblesData) continue;
+          // Nota: la gestión del lineup (armar_lineup_cw) se mudó a la
+          // página pública del evento (/clan-war/:id) -- este loop ya
+          // no arma elegiblesPorReto, pero sigue haciendo falta para
+          // completar nombrePorUserId con mercenarios/aliados que no
+          // son miembros directos, ya que jugadorChallenger/ChallengedNombre
+          // (partidas y sets WTL, más abajo) los necesita resueltos.
+          for (const r of retosConTemporada) {
+            const miTeamIdReto = r.challengerTeamId === equipoData.id ? r.challengerTeamId : r.challengedTeamId;
+            const { data: elegiblesData, error: elegiblesError } = await supabase.rpc("roster_elegible_cw", {
+              p_team_id: miTeamIdReto,
+              p_temporada_id: r.temporadaId,
+            });
+            if (elegiblesError || !elegiblesData) continue;
 
-              const idsFaltantes = (elegiblesData as { jugador_id: string }[])
-                .map((e) => e.jugador_id)
-                .filter((id) => !nombrePorUserId[id]);
-              if (idsFaltantes.length > 0) {
-                const { data: perfilesFaltantes } = await supabase
-                  .from("profiles")
-                  .select("id, nick, unique_id")
-                  .in("id", idsFaltantes);
-                for (const pf of perfilesFaltantes ?? []) {
-                  nombrePorUserId[pf.id] = pf.nick ? `${pf.nick}#${pf.unique_id}` : "Jugador de RemorApp";
-                }
+            const idsFaltantes = (elegiblesData as { jugador_id: string }[])
+              .map((e) => e.jugador_id)
+              .filter((id) => !nombrePorUserId[id]);
+            if (idsFaltantes.length > 0) {
+              const { data: perfilesFaltantes } = await supabase
+                .from("profiles")
+                .select("id, nick, unique_id")
+                .in("id", idsFaltantes);
+              for (const pf of perfilesFaltantes ?? []) {
+                nombrePorUserId[pf.id] = pf.nick ? `${pf.nick}#${pf.unique_id}` : "Jugador de RemorApp";
               }
-
-              elegiblesTmp[r.id] = (elegiblesData as { jugador_id: string; es_mercenario: boolean; es_aliado: boolean }[]).map(
-                (e) => ({
-                  jugadorId: e.jugador_id,
-                  nombre: nombrePorUserId[e.jugador_id] ?? "Jugador de RemorApp",
-                  esMercenario: e.es_mercenario,
-                  esAliado: e.es_aliado,
-                })
-              );
             }
-            setElegiblesPorReto(elegiblesTmp);
-          } else {
-            setElegiblesPorReto({});
           }
 
           const retoIds = activos.map((r) => r.id);
@@ -2445,41 +2406,6 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
-  const handleAgregarLineup = async (retoId: string) => {
-    const seleccion = jugadorLineupNuevo[retoId];
-    if (!seleccion) {
-      setErroresLineup((prev) => ({ ...prev, [retoId]: "Selecciona un jugador." }));
-      return;
-    }
-    const [tipo, id] = seleccion.split(":");
-
-    setAgregandoLineup(retoId);
-    setErroresLineup((prev) => ({ ...prev, [retoId]: "" }));
-
-    const { error } = await supabase.rpc("armar_lineup_cw", {
-      p_clan_war_id: retoId,
-      p_accion: "agregar",
-      p_jugador_id: tipo === "real" ? id : null,
-      p_jugador_temporal_id: tipo === "temp" ? id : null,
-      p_link_verificacion: linkLineupNuevo[retoId]?.trim() || null,
-      p_posicion: posicionLineupNuevo[retoId] ? Number(posicionLineupNuevo[retoId]) : null,
-      p_es_suplente: !!esSuplenteLineupNuevo[retoId],
-    });
-
-    setAgregandoLineup(null);
-
-    if (error) {
-      setErroresLineup((prev) => ({ ...prev, [retoId]: error.message }));
-      return;
-    }
-
-    setJugadorLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
-    setLinkLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
-    setPosicionLineupNuevo((prev) => ({ ...prev, [retoId]: "" }));
-    setEsSuplenteLineupNuevo((prev) => ({ ...prev, [retoId]: false }));
-    await cargar();
-  };
-
   // Migración 089: reemplaza a un jugador reportado por un suplente
   // ya anotado del mismo equipo -- solo lo puede hacer el capitán/dueño
   // del equipo DEL JUGADOR REPORTADO, y solo mientras la Clan War siga
@@ -2676,67 +2602,6 @@ export default function TeamDetailPage() {
 
     if (error) {
       setErroresExtension((prev) => ({ ...prev, [retoId]: error.message }));
-      return;
-    }
-
-    await cargar();
-  };
-
-  const handleQuitarLineup = async (retoId: string, lineupId: string) => {
-    setQuitandoLineup(lineupId);
-    setErroresLineup((prev) => ({ ...prev, [retoId]: "" }));
-
-    const { error } = await supabase.rpc("armar_lineup_cw", {
-      p_clan_war_id: retoId,
-      p_accion: "quitar",
-      p_lineup_id: lineupId,
-    });
-
-    setQuitandoLineup(null);
-
-    if (error) {
-      setErroresLineup((prev) => ({ ...prev, [retoId]: error.message }));
-      return;
-    }
-
-    await cargar();
-  };
-
-  const handleCambiarJugadoresPorSet = async (retoId: string) => {
-    const valor = Number(jugadoresPorSetEditado[retoId]);
-    if (!valor || valor < 1) {
-      setErroresJugadoresPorSet((prev) => ({ ...prev, [retoId]: "Tiene que ser al menos 1." }));
-      return;
-    }
-
-    setGuardandoJugadoresPorSet(retoId);
-    setErroresJugadoresPorSet((prev) => ({ ...prev, [retoId]: "" }));
-
-    const { error } = await supabase.rpc("cambiar_jugadores_por_set_cw", {
-      p_clan_war_id: retoId,
-      p_jugadores_por_set: valor,
-    });
-
-    setGuardandoJugadoresPorSet(null);
-
-    if (error) {
-      setErroresJugadoresPorSet((prev) => ({ ...prev, [retoId]: error.message }));
-      return;
-    }
-
-    await cargar();
-  };
-
-  const handleConfirmarLineup = async (retoId: string) => {
-    setConfirmandoLineup(retoId);
-    setErroresConfirmarLineup((prev) => ({ ...prev, [retoId]: "" }));
-
-    const { error } = await supabase.rpc("confirmar_lineup_cw", { p_clan_war_id: retoId });
-
-    setConfirmandoLineup(null);
-
-    if (error) {
-      setErroresConfirmarLineup((prev) => ({ ...prev, [retoId]: error.message }));
       return;
     }
 
@@ -4611,33 +4476,20 @@ export default function TeamDetailPage() {
                     // "check-in" recién se habilita cuando los dos
                     // capitanes dieron su visto bueno.
                     const lineupAprobado = r.lineupVistoBuenoChallenger && r.lineupVistoBuenoChallenged;
-                    const miVistoBuenoLineup = soyChallenger
-                      ? r.lineupVistoBuenoChallenger
-                      : r.lineupVistoBuenoChallenged;
-                    const vistoBuenoLineupRival = soyChallenger
-                      ? r.lineupVistoBuenoChallenged
-                      : r.lineupVistoBuenoChallenger;
                     // Plazo de edición del lineup (migración 066): 30
                     // minutos antes del inicio, o hasta la extensión
                     // aprobada -- una vez vencido, armar_lineup_cw() ya
                     // lo rechaza en la base, esto de acá solo oculta el
-                    // formulario y ofrece pedir una extensión. El
-                    // lineup del rival se revela con el mismo criterio
-                    // que revelado_lineup_cw() en la base: ambos vistos
-                    // buenos, o plazo vencido -- así la sección de abajo
-                    // puede distinguir "está oculto" de "está vacío de
-                    // verdad".
+                    // formulario y ofrece pedir una extensión.
                     const vencioPlazoLineup = vencioPlazoEdicionLineup(
                       r.fechaHoraCet,
                       r.lineupPlazoExtendidoHasta,
                       ahora,
                       r.ventanaRevelacionMinutos
                     );
-                    const lineupRevelado = lineupAprobado || vencioPlazoLineup;
                     const extension = extensionPorReto[r.id] ?? null;
                     const yoPropuseExtension = extension?.propuestoPor === equipo.id;
                     const lineupDeReto = lineupPorReto[r.id] ?? { propio: [], rival: [] };
-                    const temporalesPropiosDisponibles = jugadoresTemporales.filter((t) => !t.reemplazadoPorId);
                     const roster = rosterPorTeamId[rivalTeamId] ?? [];
                     const rosterChallenger = rosterPorTeamId[r.challengerTeamId] ?? [];
                     const rosterChallenged = rosterPorTeamId[r.challengedTeamId] ?? [];
@@ -4925,262 +4777,18 @@ export default function TeamDetailPage() {
                             Intervenido por administración de la plataforma
                           </p>
                         )}
-                        {/* El fondo se puede elegir en cualquier momento mientras la
-                            Clan War siga aceptada o en curso -- no hace falta esperar a
-                            terminar de armar el lineup, y sigue disponible después de
-                            aprobarlo (así el caster puede elegirlo recién cuando ya
-                            están definidos los jugadores). */}
-                        <LineupFondoPicker
-                          clanWarId={r.id}
-                          fondo={r.fondoLineup}
-                          fondoImagenId={r.fondoLineupImagenId}
-                          onCambio={cargar}
-                        />
-                        {/* Migración 091: solo para un reto directo (sin
-                            torneo detrás) -- ahí la cantidad de jugadores
-                            por lado la define el propio torneo, no se
-                            edita desde acá. */}
-                        {!r.esDeTorneo && (
-                          <div className="form-group">
-                            <label className="form-label" htmlFor={`jugadores-por-set-${r.id}`}>
-                              Cantidad de jugadores por lado
-                            </label>
-                            <input
-                              id={`jugadores-por-set-${r.id}`}
-                              className="form-input"
-                              type="number"
-                              min={1}
-                              value={jugadoresPorSetEditado[r.id] ?? String(r.jugadoresPorSet)}
-                              onChange={(e) =>
-                                setJugadoresPorSetEditado((prev) => ({ ...prev, [r.id]: e.target.value }))
-                              }
-                            />
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={guardandoJugadoresPorSet === r.id}
-                              onClick={() => handleCambiarJugadoresPorSet(r.id)}
-                            >
-                              {guardandoJugadoresPorSet === r.id ? "Guardando..." : "Actualizar cantidad"}
-                            </button>
-                            {erroresJugadoresPorSet[r.id] && (
-                              <div className="form-error">{erroresJugadoresPorSet[r.id]}</div>
-                            )}
-                            <p className="form-hint">
-                              Al ser una Clan War amistosa, se puede subir o bajar en cualquier momento --
-                              no hace falta que los dos capitanes se pongan de acuerdo de nuevo con el
-                              lineup.
-                            </p>
-                          </div>
+                        {/* Corrección: el fondo, la cantidad de jugadores por lado, el
+                            armado del lineup y el visto bueno se mudaron a la página
+                            pública del evento (/clan-war/:id) -- ahí lo gestiona
+                            cualquiera de los dos capitanes, con el lineup del rival
+                            visible en cuanto pone jugadores (sin nombre hasta que
+                            ambos den el visto bueno). Acá solo queda un acceso directo. */}
+                        {!lineupAprobado && (
+                          <Link to={`/clan-war/${r.id}`} className="btn btn-primary">
+                            Gestionar lineup, fondo y visto bueno
+                          </Link>
                         )}
-                        {!lineupAprobado ? (
-                          <>
-                            <h5 className="detail-subtitle">Lineup: tu equipo</h5>
-                            {erroresLineup[r.id] && <div className="form-error">{erroresLineup[r.id]}</div>}
-                            {lineupDeReto.propio.length === 0 ? (
-                              <p className="detail-empty">Todavía no agregaste jugadores al lineup.</p>
-                            ) : (
-                              <div className="detail-participant-list">
-                                {lineupDeReto.propio.map((entry) => (
-                                  <div key={entry.id} className="detail-participant-item">
-                                    {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
-                                    {entry.nombre}
-                                    {entry.esTemporal && <span className="team-temp-badge">Temporal</span>}
-                                    {entry.esSuplente && <span className="team-temp-badge">Suplente</span>}
-                                    {entry.linkVerificacion && (
-                                      <a
-                                        href={entry.linkVerificacion}
-                                        target="_blank"
-                                        rel="noreferrer noopener"
-                                        className="btn-link"
-                                      >
-                                        Verificación
-                                      </a>
-                                    )}
-                                    {!vencioPlazoLineup && (
-                                      <button
-                                        type="button"
-                                        className="btn btn-ghost"
-                                        disabled={quitandoLineup === entry.id}
-                                        onClick={() => handleQuitarLineup(r.id, entry.id)}
-                                      >
-                                        {quitandoLineup === entry.id ? "Quitando..." : "Quitar"}
-                                      </button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            {vencioPlazoLineup ? (
-                              <p className="form-hint">
-                                El plazo para seguir editando tu lineup ya venció -- ver "Extensión del plazo de
-                                lineup" más arriba para pedir más tiempo.
-                              </p>
-                            ) : (
-                              <>
-                                <div className="form-group">
-                                  <label className="form-label" htmlFor={`lineup-jugador-${r.id}`}>
-                                    Agregar jugador
-                                  </label>
-                                  <select
-                                    id={`lineup-jugador-${r.id}`}
-                                    className="form-select"
-                                    value={jugadorLineupNuevo[r.id] ?? ""}
-                                    onChange={(e) =>
-                                      setJugadorLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                    }
-                                  >
-                                    <option value="">Selecciona un jugador</option>
-                                    {/* Migración 047: con una temporada asignada
-                                        a este reto, se ofrece el roster
-                                        elegible completo (miembros + mercenario
-                                        propio + roster del equipo aliado si hay
-                                        alianza aprobada), no solo `miembros` --
-                                        sin temporada, comportamiento idéntico a
-                                        siempre. */}
-                                    {(elegiblesPorReto[r.id] ??
-                                      miembros.map((m) => ({
-                                        jugadorId: m.userId,
-                                        nombre: m.nick ? `${m.nick}${m.uniqueId ? `#${m.uniqueId}` : ""}` : "Jugador de RemorApp",
-                                        esMercenario: false,
-                                        esAliado: false,
-                                      }))
-                                    ).map((op) => (
-                                      <option key={`real:${op.jugadorId}`} value={`real:${op.jugadorId}`}>
-                                        {op.nombre}
-                                        {op.esMercenario ? " (Mercenario)" : ""}
-                                        {op.esAliado ? " (Aliado)" : ""}
-                                      </option>
-                                    ))}
-                                    {/* Formato WTL: solo admite temporales
-                                        cuando el reto NO pertenece a una
-                                        temporada de torneo -- con temporada,
-                                        el MMR de equipos por posición exige
-                                        un jugador real (ver armar_lineup_cw()
-                                        en la base, migración 120). */}
-                                    {(r.formato !== "wtl" || !r.temporadaId) &&
-                                      temporalesPropiosDisponibles.map((t) => (
-                                        <option key={`temp:${t.id}`} value={`temp:${t.id}`}>
-                                          {t.nickTemporal} (Temporal)
-                                        </option>
-                                      ))}
-                                  </select>
-                                </div>
-                                <div className="form-group">
-                                  <label className="form-checkbox-label">
-                                    <input
-                                      type="checkbox"
-                                      checked={!!esSuplenteLineupNuevo[r.id]}
-                                      onChange={(e) =>
-                                        setEsSuplenteLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.checked }))
-                                      }
-                                    />
-                                    Es suplente
-                                  </label>
-                                  <p className="form-hint">
-                                    Un suplente se anota igual, sin ocupar ninguna de las posiciones que se van a
-                                    jugar -- sirve para reemplazar a un titular si el rival reporta un problema.
-                                  </p>
-                                </div>
-                                {r.formato === "wtl" && !esSuplenteLineupNuevo[r.id] && (
-                                  <div className="form-group">
-                                    <label className="form-label" htmlFor={`lineup-posicion-${r.id}`}>
-                                      Posición (1 a {r.jugadoresPorSet})
-                                    </label>
-                                    <select
-                                      id={`lineup-posicion-${r.id}`}
-                                      className="form-select"
-                                      value={posicionLineupNuevo[r.id] ?? ""}
-                                      onChange={(e) =>
-                                        setPosicionLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                      }
-                                    >
-                                      <option value="">Selecciona la posición</option>
-                                      {Array.from({ length: r.jugadoresPorSet }, (_, i) => i + 1).map((pos) => (
-                                        <option key={pos} value={pos}>
-                                          Posición {pos}
-                                        </option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                )}
-                                <div className="form-group">
-                                  <label className="form-label" htmlFor={`lineup-link-${r.id}`}>
-                                    Link de verificación (opcional)
-                                  </label>
-                                  <input
-                                    id={`lineup-link-${r.id}`}
-                                    className="form-input"
-                                    type="text"
-                                    placeholder="https://sc2pulse.nephest.com/..."
-                                    value={linkLineupNuevo[r.id] ?? ""}
-                                    onChange={(e) =>
-                                      setLinkLineupNuevo((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                    }
-                                  />
-                                </div>
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost"
-                                  disabled={agregandoLineup === r.id}
-                                  onClick={() => handleAgregarLineup(r.id)}
-                                >
-                                  {agregandoLineup === r.id ? "Agregando..." : "Agregar al lineup"}
-                                </button>
-                              </>
-                            )}
-
-                            <h5 className="detail-subtitle">Lineup de {rivalNombre}</h5>
-                            {!lineupRevelado ? (
-                              <p className="detail-empty">
-                                Todavía no se reveló -- se revela cuando ambos equipos den el visto bueno, o
-                                cuando venza el plazo de edición.
-                              </p>
-                            ) : lineupDeReto.rival.length === 0 ? (
-                              <p className="detail-empty">{rivalNombre} todavía no armó su lineup.</p>
-                            ) : (
-                              <div className="detail-participant-list">
-                                {lineupDeReto.rival.map((entry) => (
-                                  <div key={entry.id} className="detail-participant-item">
-                                    {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
-                                    {entry.nombre}
-                                    {entry.esTemporal && <span className="team-temp-badge">Temporal</span>}
-                                    {entry.esSuplente && <span className="team-temp-badge">Suplente</span>}
-                                    {entry.linkVerificacion && (
-                                      <a
-                                        href={entry.linkVerificacion}
-                                        target="_blank"
-                                        rel="noreferrer noopener"
-                                        className="btn-link"
-                                      >
-                                        Verificación
-                                      </a>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-
-                            <p className="tournament-card-meta">
-                              Tu visto bueno: {miVistoBuenoLineup ? "Confirmado" : "Pendiente"} · Visto bueno de{" "}
-                              {rivalNombre}: {vistoBuenoLineupRival ? "Confirmado" : "Pendiente"}
-                            </p>
-                            {erroresConfirmarLineup[r.id] && (
-                              <div className="form-error">{erroresConfirmarLineup[r.id]}</div>
-                            )}
-                            {!miVistoBuenoLineup && (
-                              <button
-                                type="button"
-                                className="btn btn-primary"
-                                disabled={confirmandoLineup === r.id || lineupDeReto.propio.length === 0}
-                                onClick={() => handleConfirmarLineup(r.id)}
-                              >
-                                {confirmandoLineup === r.id ? "Confirmando..." : "Dar el visto bueno al lineup"}
-                              </button>
-                            )}
-                          </>
-                        ) : !dentroVentana ? (
+                        {!lineupAprobado ? null : !dentroVentana ? (
                           <p className="tournament-card-meta">
                             Lineup aprobado por los dos capitanes. El check-in se abre 15 minutos antes de la
                             hora del reto.
