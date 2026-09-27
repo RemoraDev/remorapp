@@ -3,7 +3,6 @@ import { isTauri } from "@tauri-apps/api/core";
 import useChatFijoEscritorio from "../hooks/useChatFijoEscritorio";
 import ChatGrupalLideres from "./ChatGrupalLideres";
 import ChatPrivadosLideres from "./ChatPrivadosLideres";
-import Logo from "./Logo";
 import HexPattern from "./HexPattern";
 
 type PestanaChat = "grupal" | "privados";
@@ -29,7 +28,6 @@ export default function EscritorioColumnaDerecha() {
     return (
       <div className="escritorio-columna-lateral escritorio-columna-derecha" aria-hidden="true">
         <HexPattern id="escritorio-hex-der" className="hex-pattern escritorio-columna-hex" />
-        <Logo />
       </div>
     );
   }

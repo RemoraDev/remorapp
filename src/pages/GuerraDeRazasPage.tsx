@@ -320,6 +320,7 @@ export default function GuerraDeRazasPage() {
     setAgregando(null);
     if (error) {
       toast.error(error.message);
+      await cargarDatos();
       return;
     }
     setNombresNuevos((prev) => ({ ...prev, [raza]: "" }));
@@ -330,6 +331,17 @@ export default function GuerraDeRazasPage() {
   // (no es historial real, nunca repartió puntos) antes de borrarlo --
   // si de verdad participó en un encuentro ya finalizado, la llave
   // foránea sigue bloqueando el borrado a propósito.
+  //
+  // Corrección: bug reportado de un "jugador fantasma" -- un clic
+  // repetido (o el eco de Realtime tardando) podía dejar en pantalla
+  // un jugador que la base ya había borrado, mostrando "Ese jugador no
+  // existe" al intentar sacarlo de nuevo, sin poder volver a
+  // seleccionarlo ni eliminarlo. Dos cambios: (1) al eliminar con
+  // éxito, se saca de la lista local al toque, sin esperar el eco de
+  // Realtime (que igual sigue llegando para el resto de quienes miran
+  // la página); (2) si la base dice que el jugador ya no existe (o
+  // cualquier otro error), se vuelve a traer la lista completa desde
+  // la base en vez de dejar la fila fantasma visible.
   const handleEliminarJugador = async (jugadorId: string) => {
     const { error } = await supabase.rpc("eliminar_jugador_guerra_razas", { p_jugador_id: jugadorId });
     if (error) {
@@ -338,13 +350,19 @@ export default function GuerraDeRazasPage() {
           ? "No se puede eliminar: este jugador ya participó en un Enfrentamiento finalizado y su historial de puntos debe conservarse."
           : error.message
       );
+      await cargarDatos();
+      return;
     }
+    setJugadores((prev) => prev.filter((j) => j.id !== jugadorId));
   };
 
   // Solo puede haber un jugador "elegido" a la vez por raza y categoría
   // -- es el que toma generar_encuentro_guerra_razas() para el próximo
   // Enfrentamiento. Al marcar uno nuevo, se desmarca cualquier otro de
-  // la misma raza/categoría para evitar ambigüedad.
+  // la misma raza/categoría para evitar ambigüedad. Igual que en
+  // handleEliminarJugador: se actualiza la lista local al toque en vez
+  // de esperar el eco de Realtime, y ante cualquier error se resincroniza
+  // toda la lista contra la base, no se deja un cambio a medias.
   const handleToggleElegido = async (jugador: GuerraRazasJugadorRow) => {
     const nuevoValor = !jugador.elegido;
     if (nuevoValor) {
@@ -357,6 +375,7 @@ export default function GuerraDeRazasPage() {
         .neq("id", jugador.id);
       if (errorDesmarcar) {
         toast.error(errorDesmarcar.message);
+        await cargarDatos();
         return;
       }
     }
@@ -364,7 +383,20 @@ export default function GuerraDeRazasPage() {
       .from("guerra_razas_jugadores")
       .update({ elegido: nuevoValor })
       .eq("id", jugador.id);
-    if (error) toast.error(error.message);
+    if (error) {
+      toast.error(error.message);
+      await cargarDatos();
+      return;
+    }
+    setJugadores((prev) =>
+      prev.map((j) => {
+        if (j.id === jugador.id) return { ...j, elegido: nuevoValor };
+        if (nuevoValor && j.guerra_id === jugador.guerra_id && j.categoria === jugador.categoria && j.raza === jugador.raza) {
+          return { ...j, elegido: false };
+        }
+        return j;
+      })
+    );
   };
 
   return (

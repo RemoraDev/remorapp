@@ -18,7 +18,10 @@ export interface CarruselHandle {
 // Carrusel horizontal genérico (Inicio y Mi perfil, migración 110):
 // scroll-snap nativo del navegador, sin ninguna librería de gestos --
 // funciona con el dedo en celular y con las flechas en escritorio (sin
-// pantalla táctil). Cada página es 100% del ancho y
+// pantalla táctil). Las flechas flotan a los costados del carrusel
+// (position: absolute, ver halcon.css) -- antes vivían en una barra
+// propia debajo del contenido, que solo restaba espacio sin aportar
+// nada. Cada página es 100% del ancho y
 // 100% del alto disponible; si el contenido de una página es más alto
 // que ese espacio, esa página hace scroll vertical PROPIA (overflow-y
 // acá adentro), sin que la ventana ni <main> se muevan -- ver
@@ -65,10 +68,10 @@ const Carrusel = forwardRef<CarruselHandle, CarruselProps>(function Carrusel({ p
       </div>
 
       {paginas.length > 1 && (
-        <div className="carrusel-controles">
+        <>
           <button
             type="button"
-            className="carrusel-flecha"
+            className="carrusel-flecha carrusel-flecha-izq"
             onClick={() => irAPagina(indiceActivo - 1)}
             disabled={indiceActivo === 0}
             aria-label="Página anterior"
@@ -78,14 +81,14 @@ const Carrusel = forwardRef<CarruselHandle, CarruselProps>(function Carrusel({ p
 
           <button
             type="button"
-            className="carrusel-flecha"
+            className="carrusel-flecha carrusel-flecha-der"
             onClick={() => irAPagina(indiceActivo + 1)}
             disabled={indiceActivo === paginas.length - 1}
             aria-label="Página siguiente"
           >
             <ChevronRight size={18} />
           </button>
-        </div>
+        </>
       )}
     </div>
   );
