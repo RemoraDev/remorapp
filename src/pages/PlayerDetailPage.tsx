@@ -21,6 +21,12 @@ interface PerfilPublico {
   uniqueId: string;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  // Migración 128: foto propia de la tarjeta de presentación de
+  // escritorio -- distinta del avatar (avatarUrl), que sigue siendo el
+  // de siempre (header, menús, todo el resto de la app). Null hasta
+  // que el usuario suba una; mientras tanto la tarjeta muestra el
+  // avatar normal como respaldo (ver fotoPresentacionMostrada).
+  fotoPresentacionUrl: string | null;
   bio: string | null;
   country: Country | null;
   esCaster: boolean;
@@ -78,7 +84,7 @@ function tituloMasRelevante(
 // "Editar mis datos" en el menú del avatar (ver ProfilePage.tsx).
 export default function PlayerDetailPage() {
   const { nick, uniqueId } = useParams<{ nick: string; uniqueId: string }>();
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile } = useAuth();
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
   const [skinAvatarClave, setSkinAvatarClave] = useState<SkinAvatarClave | null>(null);
@@ -89,68 +95,66 @@ export default function PlayerDetailPage() {
   const [notFound, setNotFound] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
 
-  // Edición rápida de foto desde la tarjeta de presentación de
-  // escritorio (migración 124): sin texto ni botón de "Guardar" --
-  // elegís el archivo, ajustás el recorte, y se sube sola. Mismo
-  // storage/columna que la edición completa de ProfilePage.tsx
-  // (Configuración > Apariencia > Subir avatar), solo que sin esa
-  // vuelta -- pensada para el pequeño lápiz sobre el avatar.
-  const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
-  const avatarInputRef = useRef<HTMLInputElement | null>(null);
-  const [archivoParaRecortarAvatar, setArchivoParaRecortarAvatar] = useState<File | null>(null);
-  const [subiendoAvatar, setSubiendoAvatar] = useState(false);
-  const [errorAvatar, setErrorAvatar] = useState<string | null>(null);
+  // Edición rápida de la foto de presentación desde la tarjeta de
+  // escritorio (migraciones 124 y 128): sin texto ni botón de
+  // "Guardar" -- elegís el archivo, ajustás el recorte, y se sube
+  // sola. Va a su propia columna (foto_presentacion_url), separada del
+  // avatar de siempre -- este botón nunca toca avatar_url.
+  const FOTO_PRESENTACION_MAX_BYTES = 2 * 1024 * 1024;
+  const fotoPresentacionInputRef = useRef<HTMLInputElement | null>(null);
+  const [archivoParaRecortarFotoPresentacion, setArchivoParaRecortarFotoPresentacion] = useState<File | null>(null);
+  const [subiendoFotoPresentacion, setSubiendoFotoPresentacion] = useState(false);
+  const [errorFotoPresentacion, setErrorFotoPresentacion] = useState<string | null>(null);
 
-  const handleAvatarFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFotoPresentacionFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
-    setErrorAvatar(null);
+    setErrorFotoPresentacion(null);
     event.target.value = "";
     if (!archivo) return;
-    if (archivo.size > AVATAR_MAX_BYTES) {
-      setErrorAvatar("La foto no puede pesar más de 2MB.");
+    if (archivo.size > FOTO_PRESENTACION_MAX_BYTES) {
+      setErrorFotoPresentacion("La foto no puede pesar más de 2MB.");
       return;
     }
-    setArchivoParaRecortarAvatar(archivo);
+    setArchivoParaRecortarFotoPresentacion(archivo);
   };
 
-  const handleConfirmarRecorteAvatar = async (recorte: Blob, tieneTransparencia: boolean) => {
-    setArchivoParaRecortarAvatar(null);
+  const handleConfirmarRecorteFotoPresentacion = async (recorte: Blob) => {
+    setArchivoParaRecortarFotoPresentacion(null);
     if (!user) return;
 
-    setSubiendoAvatar(true);
-    setErrorAvatar(null);
+    setSubiendoFotoPresentacion(true);
+    setErrorFotoPresentacion(null);
 
     try {
       const extension = recorte.type === "image/png" ? "png" : "jpg";
-      const ruta = `${user.id}/${Date.now()}-avatar.${extension}`;
+      const ruta = `${user.id}/${Date.now()}-presentacion.${extension}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
         .upload(ruta, recorte, { contentType: recorte.type });
 
       if (uploadError) {
-        setErrorAvatar("No se pudo subir la foto: " + uploadError.message);
+        setErrorFotoPresentacion("No se pudo subir la foto: " + uploadError.message);
         return;
       }
 
-      const avatarUrl = supabase.storage.from("avatars").getPublicUrl(ruta).data.publicUrl;
+      const fotoPresentacionUrl = supabase.storage.from("avatars").getPublicUrl(ruta).data.publicUrl;
 
       const { error: updateError } = await supabase
         .from("profiles")
-        .update({ avatar_url: avatarUrl, avatar_transparente: tieneTransparencia })
+        .update({ foto_presentacion_url: fotoPresentacionUrl })
         .eq("id", user.id);
 
       if (updateError) {
-        setErrorAvatar(updateError.message);
+        setErrorFotoPresentacion(updateError.message);
         return;
       }
 
-      setPerfil((prev) => (prev ? { ...prev, avatarUrl, avatarTransparente: tieneTransparencia } : prev));
-      await refreshProfile();
+      setPerfil((prev) => (prev ? { ...prev, fotoPresentacionUrl } : prev));
     } catch {
-      setErrorAvatar("No se pudo procesar la foto, prueba con otra imagen.");
+      setErrorFotoPresentacion("No se pudo procesar la foto, prueba con otra imagen.");
     } finally {
-      setSubiendoAvatar(false);
+      setSubiendoFotoPresentacion(false);
     }
   };
 
@@ -163,7 +167,7 @@ export default function PlayerDetailPage() {
       const { data, error } = await supabase
         .from("profiles")
         .select(
-          "id, nick, unique_id, avatar_url, banner_url, bio, country, es_caster, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, skin_avatar_activa, borde_basico_activo, borde_grosor, avatar_transparente"
+          "id, nick, unique_id, avatar_url, banner_url, foto_presentacion_url, bio, country, es_caster, horario_stream, links_transmision, liga_1v1, mmr_1v1, nivel_1v1, banca_rota, skin_avatar_activa, borde_basico_activo, borde_grosor, avatar_transparente"
         )
         .eq("nick", nick)
         .eq("unique_id", uniqueId)
@@ -181,6 +185,7 @@ export default function PlayerDetailPage() {
         uniqueId: data.unique_id,
         avatarUrl: data.avatar_url,
         bannerUrl: data.banner_url,
+        fotoPresentacionUrl: data.foto_presentacion_url,
         bio: data.bio,
         country: data.country,
         esCaster: data.es_caster,
@@ -308,23 +313,27 @@ export default function PlayerDetailPage() {
   // sentido mostrar accesos de gestión a un visitante cualquiera).
   const esMiPropioPerfil = user?.id === perfil.id;
 
-  const inputArchivoAvatar = esMiPropioPerfil && (
+  // Sin foto de presentación propia todavía: la tarjeta muestra el
+  // avatar normal como respaldo, nunca queda vacía.
+  const fotoPresentacionMostrada = perfil.fotoPresentacionUrl ?? perfil.avatarUrl;
+
+  const inputArchivoFotoPresentacion = esMiPropioPerfil && (
     <input
-      ref={avatarInputRef}
+      ref={fotoPresentacionInputRef}
       type="file"
       accept="image/*"
       className="visually-hidden"
-      onChange={handleAvatarFileChange}
+      onChange={handleFotoPresentacionFileChange}
     />
   );
 
-  const recortadorAvatar = archivoParaRecortarAvatar && (
+  const recortadorFotoPresentacion = archivoParaRecortarFotoPresentacion && (
     <RecortadorImagenModal
-      archivo={archivoParaRecortarAvatar}
+      archivo={archivoParaRecortarFotoPresentacion}
       aspecto={1}
-      titulo="Ajustar foto de perfil"
-      onConfirmar={handleConfirmarRecorteAvatar}
-      onCancelar={() => setArchivoParaRecortarAvatar(null)}
+      titulo="Ajustar foto de presentación"
+      onConfirmar={handleConfirmarRecorteFotoPresentacion}
+      onCancelar={() => setArchivoParaRecortarFotoPresentacion(null)}
     />
   );
 
@@ -443,13 +452,15 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
-      {/* Vista de escritorio (migración 124): banner a la mitad de
-          ancho con el botón de Panel de control al lado (en vez de
-          abajo de todo), y una tarjeta de presentación centrada
-          (foto -- editable con el lápiz si es tu propio perfil --,
-          nombre, país, equipo y transmisión) con la descripción
-          personal aparte, a la derecha. Reemplaza al modelo de arriba
-          -- nunca se muestran los dos a la vez. */}
+      {/* Vista de escritorio (migraciones 124 y 128): banner a la mitad
+          de ancho con el avatar de siempre superpuesto en su esquina
+          (igual que en la vista móvil de arriba) y el botón de Panel
+          de control al lado. Debajo, dos cajas horizontales apiladas:
+          la tarjeta de presentación (foto propia -- editable con el
+          lápiz si es tu propio perfil, distinta del avatar --, nombre,
+          país, equipo y transmisión) y, abajo, la descripción
+          personal. Reemplaza al modelo de arriba -- nunca se muestran
+          los dos a la vez. */}
       <div className="player-detail-vista-escritorio">
         <div className="player-detail-escritorio-top">
           <div className="player-detail-banner-wrap player-detail-escritorio-banner-wrap">
@@ -458,19 +469,7 @@ export default function PlayerDetailPage() {
             ) : (
               <div className="player-detail-banner player-detail-banner-placeholder" />
             )}
-          </div>
-          {esMiPropioPerfil && (
-            <div className="player-detail-escritorio-panel-btn">
-              <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
-                {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="player-detail-escritorio-main">
-          <div className="player-detail-escritorio-card">
-            <div className={`player-detail-escritorio-avatar-wrap ${claseForma}`}>
+            <div className={`player-detail-avatar-overlap ${claseForma}`}>
               <AvatarSkin
                 clave={perfil.avatarTransparente ? null : skinAvatarClave}
                 bordeColor={perfil.avatarTransparente ? null : bordeBasicoColorHex}
@@ -484,39 +483,61 @@ export default function PlayerDetailPage() {
                   forma="cuadrado"
                 />
               </AvatarSkin>
+            </div>
+          </div>
+          {esMiPropioPerfil && (
+            <div className="player-detail-escritorio-panel-btn">
+              <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
+                {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="player-detail-escritorio-main">
+          <div className="player-detail-escritorio-card">
+            <div className="player-detail-escritorio-foto-wrap">
+              <Avatar
+                url={fotoPresentacionMostrada}
+                nombre={perfil.nick}
+                className="player-detail-avatar"
+                forma="cuadrado"
+              />
               {esMiPropioPerfil && (
                 <button
                   type="button"
-                  className="player-detail-avatar-edit-btn"
-                  onClick={() => avatarInputRef.current?.click()}
-                  disabled={subiendoAvatar}
-                  aria-label="Cambiar foto de perfil"
-                  title="Cambiar foto de perfil"
+                  className="player-detail-foto-presentacion-edit-btn"
+                  onClick={() => fotoPresentacionInputRef.current?.click()}
+                  disabled={subiendoFotoPresentacion}
+                  aria-label="Cambiar foto de presentación"
+                  title="Cambiar foto de presentación"
                 >
                   <Pencil size={14} />
                 </button>
               )}
             </div>
-            {errorAvatar && <div className="form-error">{errorAvatar}</div>}
 
-            <h1 className="section-title">
-              {perfil.nick}
-              <span className="profile-nick-id">#{perfil.uniqueId}</span>
-            </h1>
-            {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
-            {perfil.razaPrincipal && (
-              <span className="liga-badge">
-                Raza: {perfil.razaPrincipal}
-                {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
-              </span>
-            )}
-            {perfil.country && (
-              <p className="tournament-card-meta">
-                País: {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
-              </p>
-            )}
-            {bloqueEquipo}
-            {bloqueTransmision}
+            <div className="player-detail-escritorio-card-info">
+              {errorFotoPresentacion && <div className="form-error">{errorFotoPresentacion}</div>}
+              <h1 className="section-title">
+                {perfil.nick}
+                <span className="profile-nick-id">#{perfil.uniqueId}</span>
+              </h1>
+              {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
+              {perfil.razaPrincipal && (
+                <span className="liga-badge">
+                  Raza: {perfil.razaPrincipal}
+                  {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
+                </span>
+              )}
+              {perfil.country && (
+                <p className="tournament-card-meta">
+                  País: {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
+                </p>
+              )}
+              {bloqueEquipo}
+              {bloqueTransmision}
+            </div>
           </div>
 
           <div className="player-detail-escritorio-bio">
@@ -530,8 +551,8 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
-      {inputArchivoAvatar}
-      {recortadorAvatar}
+      {inputArchivoFotoPresentacion}
+      {recortadorFotoPresentacion}
     </>
   );
 

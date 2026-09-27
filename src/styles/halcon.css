@@ -2026,40 +2026,52 @@ html.es-escritorio .player-detail-vista-escritorio {
   flex-shrink: 0;
 }
 
+/* Migración 128: ya no son dos columnas lado a lado -- son dos cajas
+   horizontales apiladas, cada una ocupando todo el ancho disponible
+   (tarjeta de presentación arriba, descripción abajo). */
 .player-detail-escritorio-main {
-  display: grid;
-  grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 1.5rem;
-  align-items: start;
 }
 
 .player-detail-escritorio-card {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  text-align: center;
-  gap: 0.5rem;
-  padding: 2rem 1.5rem 1.75rem;
+  gap: 1.5rem;
+  padding: 1.5rem 1.75rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background: linear-gradient(180deg, rgba(var(--h-accent-rgb), 0.08), transparent 40%), var(--color-panel);
 }
 
-.player-detail-escritorio-avatar-wrap {
-  position: relative;
-  margin-bottom: 0.5rem;
+.player-detail-escritorio-card-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
-.player-detail-escritorio-avatar-wrap .player-detail-avatar {
+/* Foto de presentación (migración 128): propia de esta tarjeta,
+   distinta del avatar de siempre -- el avatar sigue en su lugar de
+   siempre, superpuesto en la esquina del banner (ver
+   .player-detail-avatar-overlap). */
+.player-detail-escritorio-foto-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.player-detail-escritorio-foto-wrap .player-detail-avatar {
   width: 8rem;
   height: 8rem;
 }
 
 /* El lápiz de editar foto -- corrección: nada de texto ni mensaje de
-   "subir foto", solo este botón circular sobre la esquina del avatar,
+   "subir foto", solo este botón circular sobre la esquina de la foto,
    que abre directo el selector de archivo + recorte. Solo se renderiza
    cuando quien mira es el dueño del perfil. */
-.player-detail-avatar-edit-btn {
+.player-detail-foto-presentacion-edit-btn {
   position: absolute;
   right: -0.35rem;
   bottom: -0.35rem;
@@ -2076,12 +2088,12 @@ html.es-escritorio .player-detail-vista-escritorio {
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
-.player-detail-avatar-edit-btn:hover {
+.player-detail-foto-presentacion-edit-btn:hover {
   transform: scale(1.08);
   box-shadow: var(--shadow-accent);
 }
 
-.player-detail-avatar-edit-btn:disabled {
+.player-detail-foto-presentacion-edit-btn:disabled {
   opacity: 0.6;
   cursor: wait;
 }
@@ -2091,16 +2103,21 @@ html.es-escritorio .player-detail-vista-escritorio {
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background: var(--color-panel);
-  min-height: 12rem;
 }
 
 .player-detail-escritorio-bio .team-detail-description {
   margin-top: 0.5rem;
 }
 
-@media (max-width: 900px) {
-  html.es-escritorio .player-detail-escritorio-main {
-    grid-template-columns: 1fr;
+@media (max-width: 640px) {
+  .player-detail-escritorio-card {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .player-detail-escritorio-card-info {
+    align-items: center;
   }
 }
 
