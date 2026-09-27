@@ -30,6 +30,7 @@ type Tab =
   | "marcosavatar"
   | "disputas"
   | "reportes"
+  | "chatsprivados"
   | "alianzas"
   | "pruebas"
   | "actividad";
@@ -55,6 +56,7 @@ const GRUPOS_NAV: { titulo: string; tabs: { value: Tab; label: string; soloDueno
     tabs: [
       { value: "disputas", label: "Disputas de resultado" },
       { value: "reportes", label: "Reportes al staff" },
+      { value: "chatsprivados", label: "Chats privados" },
     ],
   },
   {
@@ -110,6 +112,28 @@ interface ReporteConNombre {
   resuelto: boolean;
   resueltoPorNombre: string | null;
   resueltoEn: string | null;
+}
+
+// Migración 118: una fila por conversación (no por mensaje) --
+// admin_listar_conversaciones_privadas() en la base ya agrupa por par
+// de usuarios y trae el último mensaje + el total.
+interface ConversacionPrivadaAdminRow {
+  usuarioAId: string;
+  usuarioANick: string | null;
+  usuarioBId: string;
+  usuarioBNick: string | null;
+  ultimoMensaje: string;
+  ultimoMensajeEn: string;
+  cantidadMensajes: number;
+}
+
+interface MensajePrivadoAdminRow {
+  id: string;
+  deUsuarioId: string;
+  deNick: string | null;
+  paraUsuarioId: string;
+  contenido: string;
+  createdAt: string;
 }
 
 // Corrección: lista completa de equipos (no solo el resultado de una
@@ -327,6 +351,18 @@ export default function AdminPage() {
   const [verReportesResueltos, setVerReportesResueltos] = useState(false);
   const [resolviendoReporte, setResolviendoReporte] = useState<string | null>(null);
   const [erroresResolverReporte, setErroresResolverReporte] = useState<Record<string, string>>({});
+
+  // --- Chats privados (migración 118): auditoría de conversaciones
+  // del chat de líderes -- para revisar denuncias de trampa entre
+  // líderes de clan. Se carga recién al entrar a la pestaña, no de
+  // entrada como el resto (no hace falta pedirlo en cada visita al
+  // panel si nadie mira esta pestaña). ---
+  const [conversacionesPrivadas, setConversacionesPrivadas] = useState<ConversacionPrivadaAdminRow[]>([]);
+  const [cargandoConversaciones, setCargandoConversaciones] = useState(false);
+  const [errorConversaciones, setErrorConversaciones] = useState<string | null>(null);
+  const [conversacionAbierta, setConversacionAbierta] = useState<ConversacionPrivadaAdminRow | null>(null);
+  const [mensajesConversacion, setMensajesConversacion] = useState<MensajePrivadoAdminRow[]>([]);
+  const [cargandoMensajesConversacion, setCargandoMensajesConversacion] = useState(false);
 
   // --- Alianzas pendientes de aprobación (migración 047) ---
   const [alianzas, setAlianzas] = useState<AlianzaPendienteConNombres[]>([]);
@@ -673,6 +709,79 @@ export default function AdminPage() {
     cargarReportes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [esAdmin]);
+
+  // Migración 118: recién se pide al entrar a la pestaña -- ver el
+  // comentario junto al useState de más arriba.
+  const cargarConversacionesPrivadas = async () => {
+    setCargandoConversaciones(true);
+    setErrorConversaciones(null);
+    const { data, error } = await supabase.rpc("admin_listar_conversaciones_privadas");
+    if (error) {
+      setErrorConversaciones(error.message);
+      setCargandoConversaciones(false);
+      return;
+    }
+    const filas = (data ?? []) as {
+      usuario_a_id: string;
+      usuario_a_nick: string | null;
+      usuario_b_id: string;
+      usuario_b_nick: string | null;
+      ultimo_mensaje: string;
+      ultimo_mensaje_en: string;
+      cantidad_mensajes: number;
+    }[];
+    setConversacionesPrivadas(
+      filas.map((c) => ({
+        usuarioAId: c.usuario_a_id,
+        usuarioANick: c.usuario_a_nick,
+        usuarioBId: c.usuario_b_id,
+        usuarioBNick: c.usuario_b_nick,
+        ultimoMensaje: c.ultimo_mensaje,
+        ultimoMensajeEn: c.ultimo_mensaje_en,
+        cantidadMensajes: c.cantidad_mensajes,
+      }))
+    );
+    setCargandoConversaciones(false);
+  };
+
+  useEffect(() => {
+    if (!esAdmin || tab !== "chatsprivados") return;
+    cargarConversacionesPrivadas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [esAdmin, tab]);
+
+  const handleAbrirConversacionPrivada = async (conversacion: ConversacionPrivadaAdminRow) => {
+    setConversacionAbierta(conversacion);
+    setCargandoMensajesConversacion(true);
+    const { data, error } = await supabase.rpc("admin_ver_conversacion_privada", {
+      p_usuario_a: conversacion.usuarioAId,
+      p_usuario_b: conversacion.usuarioBId,
+    });
+    if (error) {
+      setErrorConversaciones(error.message);
+      setCargandoMensajesConversacion(false);
+      return;
+    }
+    const filasMensajes = (data ?? []) as {
+      id: string;
+      de_usuario_id: string;
+      de_nick: string | null;
+      para_usuario_id: string;
+      contenido: string;
+      created_at: string;
+    }[];
+    setMensajesConversacion(
+      filasMensajes.map((m) => ({
+        id: m.id,
+        deUsuarioId: m.de_usuario_id,
+        deNick: m.de_nick,
+        paraUsuarioId: m.para_usuario_id,
+        contenido: m.contenido,
+        createdAt: m.created_at,
+      }))
+    );
+    setCargandoMensajesConversacion(false);
+  };
 
   useEffect(() => {
     if (!esAdmin) return;
@@ -2458,6 +2567,67 @@ export default function AdminPage() {
               </>
             );
           })()}
+        </div>
+      )}
+
+      {tab === "chatsprivados" && (
+        <div className="admin-panel">
+          <p className="tournament-card-meta">
+            Todas las conversaciones privadas del chat de líderes quedan guardadas para siempre --
+            esta vista es para revisar denuncias de trampa, sobre todo entre líderes de clan.
+          </p>
+          {errorConversaciones && <div className="form-error">{errorConversaciones}</div>}
+
+          {conversacionAbierta ? (
+            <div className="admin-conversacion-privada">
+              <button type="button" className="btn-link" onClick={() => setConversacionAbierta(null)}>
+                ← Volver a la lista
+              </button>
+              <h3 className="detail-subtitle">
+                {conversacionAbierta.usuarioANick ?? "Jugador"} ↔ {conversacionAbierta.usuarioBNick ?? "Jugador"}
+              </h3>
+              {cargandoMensajesConversacion ? (
+                <p className="tournament-card-meta">Cargando conversación...</p>
+              ) : (
+                <div className="admin-conversacion-privada-mensajes">
+                  {mensajesConversacion.map((m) => (
+                    <div key={m.id} className="admin-conversacion-privada-mensaje">
+                      <span className="admin-conversacion-privada-mensaje-autor">{m.deNick ?? "Jugador"}</span>
+                      <span className="admin-conversacion-privada-mensaje-fecha">{formatFecha(m.createdAt)}</span>
+                      <p className="admin-conversacion-privada-mensaje-texto">{m.contenido}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {cargandoConversaciones && <p className="tournament-card-meta">Cargando conversaciones...</p>}
+              {!cargandoConversaciones && conversacionesPrivadas.length === 0 && (
+                <p className="tournament-card-meta">Todavía no hay ninguna conversación privada registrada.</p>
+              )}
+              <div className="admin-list">
+                {conversacionesPrivadas.map((c) => (
+                  <button
+                    type="button"
+                    key={`${c.usuarioAId}-${c.usuarioBId}`}
+                    className="admin-row admin-row-clicable"
+                    onClick={() => handleAbrirConversacionPrivada(c)}
+                  >
+                    <div className="admin-row-info">
+                      <p className="admin-row-title">
+                        {c.usuarioANick ?? "Jugador"} ↔ {c.usuarioBNick ?? "Jugador"}
+                      </p>
+                      <p className="admin-row-meta">
+                        {c.cantidadMensajes} mensajes · último: {formatFecha(c.ultimoMensajeEn)}
+                      </p>
+                      <p className="admin-row-meta">"{c.ultimoMensaje}"</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

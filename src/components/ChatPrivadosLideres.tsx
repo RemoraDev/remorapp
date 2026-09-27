@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
@@ -33,6 +33,11 @@ function avatarDe(destino: Destino): string | null {
 // no vale la pena la complejidad de ir mezclando el estado a mano.
 export default function ChatPrivadosLideres() {
   const { user } = useAuth();
+  // Mismo motivo que en ChatGrupalLideres.tsx: en escritorio este
+  // componente puede llegar a montarse dos veces a la vez (panel fijo
+  // + página completa), y un nombre de canal fijo hacía chocar a la
+  // segunda instancia con la primera y crashear toda la app.
+  const idInstancia = useId();
   const [conversaciones, setConversaciones] = useState<ConversacionPrivadaLider[]>([]);
   const [cargando, setCargando] = useState(true);
   const [conversacionAbierta, setConversacionAbierta] = useState<Destino | null>(null);
@@ -92,7 +97,7 @@ export default function ChatPrivadosLideres() {
   useEffect(() => {
     if (!user) return;
     const canal = supabase
-      .channel("chat-lideres-privados")
+      .channel(`chat-lideres-privados-${idInstancia}`)
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "mensajes_privados_lideres" },
@@ -118,7 +123,7 @@ export default function ChatPrivadosLideres() {
     return () => {
       supabase.removeChannel(canal);
     };
-  }, [user, recargarConversaciones]);
+  }, [user, recargarConversaciones, idInstancia]);
 
   useEffect(() => {
     listaRef.current?.scrollTo({ top: listaRef.current.scrollHeight });

@@ -44,6 +44,20 @@ export async function estaHabilitadoChatLideres(): Promise<boolean> {
   return data === true;
 }
 
+// Migración 118: alguien que NO califica en general para el chat de
+// líderes puede tener una conversación privada activa igual, si un
+// admin/staff/dueño le escribió primero -- se usa en ChatLideresPage
+// para decidir si se muestra, aunque sea, la pestaña de Mensajes
+// privados.
+export async function tengoConversacionPrivadaActiva(): Promise<boolean> {
+  const { data, error } = await supabase.rpc("tengo_conversacion_privada_activa");
+  if (error) {
+    console.error("Error consultando tengo_conversacion_privada_activa:", error);
+    return false;
+  }
+  return data === true;
+}
+
 export async function buscarLideresChat(query: string): Promise<LiderBusqueda[]> {
   const { data, error } = await supabase.rpc("buscar_lideres_chat", { p_query: query });
   if (error) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
@@ -35,6 +35,15 @@ const LIMITE_MENSAJES = 80;
 // consistente con lo que la base ya está devolviendo.
 export default function ChatGrupalLideres() {
   const { user } = useAuth();
+  // Migración: en escritorio este componente puede llegar a montarse
+  // DOS veces a la vez (el panel de chat fijo de la columna derecha +
+  // la página completa /chat-lideres, si alguien navega ahí de
+  // casualidad) -- un nombre de canal fijo hacía que la segunda
+  // instancia chocara con la primera ("cannot add postgres_changes
+  // callbacks... after subscribe()"), tiraba una excepción sin capturar
+  // y crasheaba toda la app (pantalla en negro, reportado por el
+  // usuario). useId() da un sufijo estable y único por instancia.
+  const idInstancia = useId();
   const [mensajes, setMensajes] = useState<MensajeConAutor[]>([]);
   const [cargando, setCargando] = useState(true);
   const [texto, setTexto] = useState("");
@@ -71,7 +80,7 @@ export default function ChatGrupalLideres() {
   // de que llegue acá, no hace falta repetirlo del lado del cliente.
   useEffect(() => {
     const canal = supabase
-      .channel("chat-lideres-grupal")
+      .channel(`chat-lideres-grupal-${idInstancia}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "mensajes_lideres" }, async (payload) => {
         const nuevo = payload.new as MensajeLider;
         const { data } = await supabase
@@ -86,7 +95,7 @@ export default function ChatGrupalLideres() {
     return () => {
       supabase.removeChannel(canal);
     };
-  }, []);
+  }, [idInstancia]);
 
   useEffect(() => {
     listaRef.current?.scrollTo({ top: listaRef.current.scrollHeight });

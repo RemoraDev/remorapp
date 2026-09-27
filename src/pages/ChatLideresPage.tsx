@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { estaHabilitadoChatLideres } from "../lib/chatLideres";
+import { estaHabilitadoChatLideres, tengoConversacionPrivadaActiva } from "../lib/chatLideres";
 import ChatGrupalLideres from "../components/ChatGrupalLideres";
 import ChatPrivadosLideres from "../components/ChatPrivadosLideres";
 
@@ -11,10 +11,18 @@ type PestanaChat = "grupal" | "privados";
 // que se entra a esta página (esta_habilitado_chat_lideres() no es un
 // logro guardado), así que alguien que hoy califica y mañana no,
 // simplemente deja de poder abrir esto la próxima vez que lo intente.
+//
+// Migración 118: alguien que NO califica en general puede, aun así,
+// tener una conversación privada activa -- porque un admin/staff/dueño
+// le escribió primero (ver la política de insert en la base). En ese
+// caso se muestra SOLO la pestaña de Mensajes privados, sin Chat
+// grupal ni la posibilidad de iniciar conversaciones nuevas (el
+// buscador de buscar_lideres_chat() ya le devuelve vacío igual).
 export default function ChatLideresPage() {
   const { user, loading } = useAuth();
   const [verificando, setVerificando] = useState(true);
   const [habilitado, setHabilitado] = useState(false);
+  const [conversacionActiva, setConversacionActiva] = useState(false);
   const [pestana, setPestana] = useState<PestanaChat>("grupal");
 
   useEffect(() => {
@@ -23,8 +31,10 @@ export default function ChatLideresPage() {
       return;
     }
     setVerificando(true);
-    estaHabilitadoChatLideres().then((valor) => {
-      setHabilitado(valor);
+    Promise.all([estaHabilitadoChatLideres(), tengoConversacionPrivadaActiva()]).then(([hab, conv]) => {
+      setHabilitado(hab);
+      setConversacionActiva(conv);
+      setPestana(hab ? "grupal" : "privados");
       setVerificando(false);
     });
   }, [user]);
@@ -50,7 +60,7 @@ export default function ChatLideresPage() {
     );
   }
 
-  if (!habilitado) {
+  if (!habilitado && !conversacionActiva) {
     return (
       <section className="page-placeholder">
         <h1>Chat de líderes</h1>
@@ -63,22 +73,24 @@ export default function ChatLideresPage() {
     <section className="section section-page chat-lideres-page">
       <h1 className="section-title">Chat de líderes</h1>
 
-      <div className="chat-lideres-tabs">
-        <button
-          type="button"
-          className={`chat-lideres-tab ${pestana === "grupal" ? "is-active" : ""}`}
-          onClick={() => setPestana("grupal")}
-        >
-          Chat grupal
-        </button>
-        <button
-          type="button"
-          className={`chat-lideres-tab ${pestana === "privados" ? "is-active" : ""}`}
-          onClick={() => setPestana("privados")}
-        >
-          Mensajes privados
-        </button>
-      </div>
+      {habilitado && (
+        <div className="chat-lideres-tabs">
+          <button
+            type="button"
+            className={`chat-lideres-tab ${pestana === "grupal" ? "is-active" : ""}`}
+            onClick={() => setPestana("grupal")}
+          >
+            Chat grupal
+          </button>
+          <button
+            type="button"
+            className={`chat-lideres-tab ${pestana === "privados" ? "is-active" : ""}`}
+            onClick={() => setPestana("privados")}
+          >
+            Mensajes privados
+          </button>
+        </div>
+      )}
 
       {pestana === "grupal" ? <ChatGrupalLideres /> : <ChatPrivadosLideres />}
     </section>
