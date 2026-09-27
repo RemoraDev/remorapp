@@ -52,14 +52,11 @@ function EquipoHeader({
 }) {
   return (
     <div className={`lineup-card-equipo lineup-card-equipo-${lado}`}>
-      {equipo.logo_url ? (
-        <>
-          <img src={equipo.logo_url} alt="" className="lineup-card-logo" />
-          <span className="lineup-card-equipo-nombre">{equipo.nombre}</span>
-        </>
-      ) : (
-        <span className="lineup-card-equipo-generico">{lado === "challenger" ? "TEAM 1" : "TEAM 2"}</span>
-      )}
+      {/* Corrección: sin logo, antes se mostraba un placeholder genérico
+          ("TEAM 1"/"TEAM 2") en vez del nombre real del equipo, que sí
+          estaba disponible -- el logo es opcional, el nombre no. */}
+      {equipo.logo_url && <img src={equipo.logo_url} alt="" className="lineup-card-logo" />}
+      <span className="lineup-card-equipo-nombre">{equipo.nombre}</span>
     </div>
   );
 }

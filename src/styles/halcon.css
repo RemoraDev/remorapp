@@ -2991,13 +2991,6 @@ main {
   white-space: nowrap;
 }
 
-.lineup-card-equipo-generico {
-  font-weight: 800;
-  font-size: 1.35rem;
-  letter-spacing: 0.06em;
-  color: #e2e8f0;
-}
-
 .lineup-card-brand {
   flex-shrink: 0;
   font-size: 0.8rem;

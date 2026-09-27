@@ -55,6 +55,17 @@ export default function ClanWarLineupPublicoPage() {
           ) : (
             <TarjetaLineupClanWar datos={datos} />
           )}
+
+          {/* Corrección: esta es la vista pública/de espectador -- no
+              tenía ningún aviso de dónde ir a cargar jugadores, caster o
+              jugadores temporales, así que capitanes que llegaban acá
+              desde la notificación de la Clan War no encontraban cómo
+              gestionar nada. La gestión vive en la ficha del propio
+              equipo, no acá. */}
+          <p className="tournament-card-meta" style={{ marginTop: "1rem" }}>
+            ¿Sos capitán o dueño de uno de los dos equipos? Gestioná el lineup, el caster y los jugadores
+            temporales desde la ficha de tu equipo → Panel de control → Eventos.
+          </p>
         </>
       )}
     </section>

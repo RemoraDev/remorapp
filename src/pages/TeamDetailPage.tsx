@@ -5059,10 +5059,13 @@ export default function TeamDetailPage() {
                                         {op.esAliado ? " (Aliado)" : ""}
                                       </option>
                                     ))}
-                                    {/* Formato WTL: solo jugadores reales, sin
-                                        temporales -- ver el comentario en
-                                        armar_lineup_cw() en la base. */}
-                                    {r.formato !== "wtl" &&
+                                    {/* Formato WTL: solo admite temporales
+                                        cuando el reto NO pertenece a una
+                                        temporada de torneo -- con temporada,
+                                        el MMR de equipos por posición exige
+                                        un jugador real (ver armar_lineup_cw()
+                                        en la base, migración 120). */}
+                                    {(r.formato !== "wtl" || !r.temporadaId) &&
                                       temporalesPropiosDisponibles.map((t) => (
                                         <option key={`temp:${t.id}`} value={`temp:${t.id}`}>
                                           {t.nickTemporal} (Temporal)
@@ -5379,8 +5382,13 @@ export default function TeamDetailPage() {
                             esperar este paso), ese estado podía durar
                             muy poco. Se amplía a "en_curso" para que
                             el organizador siga pudiendo corregir el
-                            dato después de que arrancó. */}
-                        {soyChallenger && (r.status === "aceptada" || r.status === "en_curso") && (
+                            dato después de que arrancó.
+                            Migración 120: antes solo lo veía el equipo
+                            challenger -- el challenged (el que acepta
+                            el reto) no tenía forma de cargar el caster
+                            ni el link de transmisión, ni para leerlo
+                            editable. Se abre a los dos lados. */}
+                        {(r.status === "aceptada" || r.status === "en_curso") && (
                           <>
                             <h5 className="detail-subtitle">Datos de transmisión</h5>
                             {erroresTransmision[r.id] && (
@@ -5446,13 +5454,15 @@ export default function TeamDetailPage() {
                           </>
                         )}
 
-                        {!soyChallenger && (r.casterNombre || r.casterLink || r.tieneDelay !== null) && (
-                          <p className="tournament-card-meta">
-                            {r.casterNombre && <>Caster: {r.casterNombre} </>}
-                            {r.casterLink && <>({r.casterLink}) </>}
-                            {r.tieneDelay !== null && <>· {r.tieneDelay ? "Con delay" : "Sin delay"}</>}
-                          </p>
-                        )}
+                        {r.status !== "aceptada" &&
+                          r.status !== "en_curso" &&
+                          (r.casterNombre || r.casterLink || r.tieneDelay !== null) && (
+                            <p className="tournament-card-meta">
+                              {r.casterNombre && <>Caster: {r.casterNombre} </>}
+                              {r.casterLink && <>({r.casterLink}) </>}
+                              {r.tieneDelay !== null && <>· {r.tieneDelay ? "Con delay" : "Sin delay"}</>}
+                            </p>
+                          )}
 
                         {r.status === "en_curso" && (
                           <>
