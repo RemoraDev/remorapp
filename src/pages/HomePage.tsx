@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Carrusel from "../components/Carrusel";
+import type { CarruselHandle } from "../components/Carrusel";
+import HomePortada from "../components/HomePortada";
 import ProximasClanWars from "../components/ProximasClanWars";
 import NewsSection from "../components/NewsSection";
 import type { NoticiaPreview } from "../components/NewsSection";
@@ -7,8 +9,8 @@ import InstalarRemorApp from "../components/InstalarRemorApp";
 import { supabase } from "../lib/supabaseClient";
 
 const NOTICIAS_POR_PAGINA = 3;
-// Tope de noticias a traer para Inicio -- 3 páginas de carrusel como
-// máximo; el listado completo, sin tope, vive en /news.
+// Tope de noticias a traer para Inicio -- 3 en la portada + 2 páginas
+// extra de 3 como máximo; el listado completo, sin tope, vive en /news.
 const TOPE_NOTICIAS_EN_INICIO = 9;
 
 function partirEnGrupos<T>(items: T[], tamaño: number): T[][] {
@@ -19,22 +21,16 @@ function partirEnGrupos<T>(items: T[], tamaño: number): T[][] {
   return grupos;
 }
 
-// Migración 110: Inicio pasa a ser un carrusel deslizable (Noticias /
-// Próximas Clan Wars / Instalar RemorApp), sin scroll vertical de
-// página completa -- ver Carrusel.tsx. Se saca de acá la frase
-// rotativa y el botón "Mi perfil" (Hero.tsx, eliminado -- redundante
-// con el header) y la barra de usuarios/torneos (StatsBar.tsx,
-// eliminado -- se mudó al Panel de Administración, pestaña "Resumen").
-// El título "Bienvenidos a RemorApp Gaming" sí se mantiene, como
-// encabezado fijo arriba del carrusel (no como una página más).
-//
-// La página de Noticias NO es fija: si todavía no hay ninguna
-// publicación cargada, HomePage ni siquiera la incluye en el
-// carrusel (mostrar un slide vacío no aporta nada). Si hay más de
-// NOTICIAS_POR_PAGINA, se reparten en varias páginas de carrusel en
-// vez de truncarse a una sola vista previa.
+// Inicio es un carrusel deslizable, sin scroll vertical de página
+// completa -- ver Carrusel.tsx. La primera página es la portada
+// (HomePortada.tsx): título "Bienvenidos a RemorApp Gaming" + hasta 3
+// noticias destacadas (si hay) + botón "Ver próximos eventos", que
+// salta directo a la página de Clan Wars próximas del mismo carrusel
+// (sin cambiar de ruta). Si hay MÁS de 3 noticias, el resto se reparte
+// en páginas de Noticias aparte, a continuación de la portada.
 export default function HomePage() {
   const [noticias, setNoticias] = useState<NoticiaPreview[] | null>(null);
+  const carruselRef = useRef<CarruselHandle>(null);
 
   useEffect(() => {
     supabase
@@ -52,22 +48,32 @@ export default function HomePage() {
       });
   }, []);
 
-  const paginasNoticias =
-    noticias === null
-      ? [{ key: "noticias-cargando", contenido: <NewsSection cargando /> }]
-      : partirEnGrupos(noticias, NOTICIAS_POR_PAGINA).map((grupo, indice) => ({
-          key: `noticias-${indice}`,
-          contenido: <NewsSection noticias={grupo} />,
-        }));
+  const noticiasDestacadas = (noticias ?? []).slice(0, NOTICIAS_POR_PAGINA);
+  const noticiasRestantes = (noticias ?? []).slice(NOTICIAS_POR_PAGINA);
+  const paginasNoticiasExtra = partirEnGrupos(noticiasRestantes, NOTICIAS_POR_PAGINA).map((grupo, indice) => ({
+    key: `noticias-extra-${indice}`,
+    contenido: <NewsSection noticias={grupo} />,
+  }));
+
+  // La portada siempre es la página 0 -- las páginas de noticias extra
+  // (si las hay) van justo después, y recién ahí "Clan Wars próximas".
+  const indiceClanWars = 1 + paginasNoticiasExtra.length;
 
   return (
     <div className="home-carrusel-page">
-      <h1 className="home-bienvenida-titulo">
-        Bienvenidos a RemorApp<span className="home-bienvenida-gaming"> Gaming</span>
-      </h1>
       <Carrusel
+        ref={carruselRef}
         paginas={[
-          ...paginasNoticias,
+          {
+            key: "portada",
+            contenido: (
+              <HomePortada
+                noticiasDestacadas={noticiasDestacadas}
+                onVerProximosEventos={() => carruselRef.current?.irAPagina(indiceClanWars)}
+              />
+            ),
+          },
+          ...paginasNoticiasExtra,
           { key: "clanwars", contenido: <ProximasClanWars /> },
           { key: "instalar", contenido: <InstalarRemorApp /> },
         ]}

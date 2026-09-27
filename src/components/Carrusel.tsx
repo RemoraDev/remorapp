@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -11,6 +11,10 @@ interface CarruselProps {
   paginas: PaginaCarrusel[];
 }
 
+export interface CarruselHandle {
+  irAPagina: (indice: number) => void;
+}
+
 // Carrusel horizontal genérico (Inicio y Mi perfil, migración 110):
 // scroll-snap nativo del navegador, sin ninguna librería de gestos --
 // funciona con el dedo en celular y con las flechas/puntos en
@@ -19,7 +23,13 @@ interface CarruselProps {
 // que ese espacio, esa página hace scroll vertical PROPIA (overflow-y
 // acá adentro), sin que la ventana ni <main> se muevan -- ver
 // .carrusel-pagina en halcon.css.
-export default function Carrusel({ paginas }: CarruselProps) {
+//
+// forwardRef + useImperativeHandle (portada de Inicio): un botón
+// dentro de una página del carrusel ("Ver próximos eventos") necesita
+// poder mandar al carrusel a otra página puntual -- irAPagina() ya
+// existía adentro nada más, acá se expone hacia afuera sin cambiar en
+// nada el uso sin ref que ya tenía Mi perfil.
+const Carrusel = forwardRef<CarruselHandle, CarruselProps>(function Carrusel({ paginas }, ref) {
   const contenedorRef = useRef<HTMLDivElement>(null);
   const [indiceActivo, setIndiceActivo] = useState(0);
 
@@ -28,6 +38,8 @@ export default function Carrusel({ paginas }: CarruselProps) {
     if (!contenedor) return;
     contenedor.scrollTo({ left: i * contenedor.clientWidth, behavior: "smooth" });
   };
+
+  useImperativeHandle(ref, () => ({ irAPagina }), []);
 
   useEffect(() => {
     const contenedor = contenedorRef.current;
@@ -90,4 +102,6 @@ export default function Carrusel({ paginas }: CarruselProps) {
       )}
     </div>
   );
-}
+});
+
+export default Carrusel;
