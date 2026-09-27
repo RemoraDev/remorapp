@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { MessageSquare, Users, BarChart3, User } from "lucide-react";
+import { MessageSquare, Users, BarChart3, User, Home } from "lucide-react";
 import FanMenu from "./FanMenu";
 import { useAuth } from "../context/AuthContext";
+import useChatFijoEscritorio from "../hooks/useChatFijoEscritorio";
 
 // Migración 098: los 4 íconos de la barra inferior eran SVG a mano,
 // uno por uno -- se reemplazan por lucide-react (mismo trazo de 2px,
@@ -22,6 +23,11 @@ export default function BottomNav() {
   // vez que se toca el botón central; se saca sola al terminar, vía
   // onAnimationEnd, no con un temporizador en JS.
   const [presionado, setPresionado] = useState(false);
+  // En escritorio, para quien ya ve el chat de líderes FIJO en la
+  // columna derecha (líder de clan/staff/dueño), el botón "Chat" de
+  // acá abajo no cumple ninguna función -- pasa a mostrar "Inicio" en
+  // su lugar, ver useChatFijoEscritorio.ts.
+  const chatFijoVisible = useChatFijoEscritorio();
 
   const handleCentralClick = () => {
     setFanOpen((open) => !open);
@@ -35,11 +41,21 @@ export default function BottomNav() {
             ícono fijo acá, en el lugar que tenía "Inicio" -- Inicio ya
             no tiene ícono propio en la barra, queda accesible desde el
             logo "RemorApp" del header (Header.tsx ya lo lleva a "/"),
-            para que no se quede sin ningún camino de vuelta. */}
-        <NavLink to="/chat-lideres" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <MessageSquare />
-          <span>Chat</span>
-        </NavLink>
+            para que no se quede sin ningún camino de vuelta. Excepción:
+            en escritorio, quien ya ve el chat fijo en la columna
+            derecha no necesita este botón para nada -- ahí vuelve a
+            ser "Inicio" (chatFijoVisible, ver más arriba). */}
+        {chatFijoVisible ? (
+          <NavLink to="/" end className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+            <Home />
+            <span>Inicio</span>
+          </NavLink>
+        ) : (
+          <NavLink to="/chat-lideres" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+            <MessageSquare />
+            <span>Chat</span>
+          </NavLink>
+        )}
 
         {/* "Equipos" reemplaza a Noticias en la barra inferior: lleva
             SIEMPRE al buscador general de equipos (/equipos), nunca

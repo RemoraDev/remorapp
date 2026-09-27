@@ -1565,6 +1565,66 @@ main {
   min-width: 0;
 }
 
+/* Migración 118: fila de .admin-row usada como <button> (lista de
+   conversaciones privadas, clic para abrir) -- reset de los defaults
+   de <button> encima del look normal de .admin-row. */
+.admin-row-clicable {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.admin-row-clicable:hover {
+  border-color: var(--color-accent);
+}
+
+.admin-conversacion-privada {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-conversacion-privada-mensajes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  max-height: 32rem;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-panel);
+  padding: 0.85rem;
+}
+
+.admin-conversacion-privada-mensaje {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.admin-conversacion-privada-mensaje-autor {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--color-text);
+}
+
+.admin-conversacion-privada-mensaje-fecha {
+  font-size: 0.72rem;
+  color: var(--color-text-faint);
+}
+
+.admin-conversacion-privada-mensaje-texto {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
 .admin-row-title {
   font-family: var(--font-display);
   font-weight: 700;
@@ -6685,7 +6745,7 @@ html.es-escritorio .escritorio-chat-fijo {
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  width: 320px;
+  width: 400px;
   gap: 0.75rem;
   padding: 1rem;
   border-left: 1px solid var(--color-border);
@@ -6738,32 +6798,42 @@ html.es-escritorio .escritorio-chat-fijo {
   gap: 1rem;
 }
 
+/* Rediseño (reportado como "poco moderno" en su versión anterior,
+   pill sólida cyan con texto negro): track translúcido + chip de
+   vidrio con degradé sutil y el mismo --shadow-accent que ya usan los
+   bordes/skins de avatar en el resto de la app, en vez de un relleno
+   plano. */
 .chat-lideres-tabs {
   display: flex;
-  gap: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
-  padding-bottom: 0.5rem;
+  gap: 0.3rem;
+  padding: 0.3rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
 .chat-lideres-tab {
+  flex: 1;
   border: none;
   background: transparent;
   color: var(--color-text-muted);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   padding: 0.5rem 0.9rem;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
 }
 
 .chat-lideres-tab:hover {
   color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .chat-lideres-tab.is-active {
-  color: var(--color-on-accent);
-  background: var(--color-accent);
+  color: var(--color-text);
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.32), rgba(var(--h-accent-rgb), 0.1));
+  box-shadow: var(--shadow-accent);
 }
 
 .chat-lideres-grupal,

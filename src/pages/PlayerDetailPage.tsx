@@ -425,17 +425,21 @@ export default function PlayerDetailPage() {
     </>
   );
 
-  const paginas =
-    user?.id === perfil.id
-      ? [
-          { key: "perfil", contenido: paginaPerfil },
-          { key: "panel", contenido: paginaPanel },
-        ]
-      : [{ key: "perfil", contenido: paginaPerfil }];
+  // El Panel de control y el Panel de Administración van en la MISMA
+  // página que el resto del perfil -- antes vivían en una segunda
+  // página del carrusel, pero había espacio de sobra para sumarlos
+  // acá abajo, y así se evita el scroll lateral en el perfil propio
+  // (paginaPanel ya no renderiza nada cuando no es el perfil propio).
+  const pagina = (
+    <>
+      {paginaPerfil}
+      {paginaPanel}
+    </>
+  );
 
   return (
     <div className="perfil-carrusel-page">
-      <Carrusel paginas={paginas} />
+      <Carrusel paginas={[{ key: "perfil", contenido: pagina }]} />
     </div>
   );
 }
