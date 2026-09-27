@@ -11,20 +11,20 @@ interface TorneoRespaldo {
   fecha_inicio: string;
 }
 
-const formatoHora = new Intl.DateTimeFormat("es-CL", { timeStyle: "short" });
+export const formatoHora = new Intl.DateTimeFormat("es-CL", { timeStyle: "short" });
 
 function esMismoDiaLocal(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
-function yaComenzo(cw: ClanWarProxima, ahora: Date): boolean {
+export function yaComenzo(cw: ClanWarProxima, ahora: Date): boolean {
   return cw.status === "en_curso" || new Date(cw.fecha_hora_cet).getTime() <= ahora.getTime();
 }
 
 // Se actualiza sola cada minuto -- alcanza para un contador en "Xh
 // Ymin" (no hace falta granularidad de segundos), sin depender de
 // tiempo real por websockets, tal como se pidió.
-function useAhora(intervaloMs: number): Date {
+export function useAhora(intervaloMs: number): Date {
   const [ahora, setAhora] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setAhora(new Date()), intervaloMs);
@@ -33,7 +33,7 @@ function useAhora(intervaloMs: number): Date {
   return ahora;
 }
 
-function formatearCuentaRegresiva(objetivo: Date, ahora: Date): string {
+export function formatearCuentaRegresiva(objetivo: Date, ahora: Date): string {
   const diffMs = objetivo.getTime() - ahora.getTime();
   if (diffMs <= 0) return "En curso";
   const totalMin = Math.floor(diffMs / 60000);
@@ -42,7 +42,7 @@ function formatearCuentaRegresiva(objetivo: Date, ahora: Date): string {
   return horas > 0 ? `Comienza en ${horas}h ${minutos}min` : `Comienza en ${minutos}min`;
 }
 
-function LogoEquipo({ nombre, tag, logoUrl }: { nombre: string; tag: string; logoUrl: string | null }) {
+export function LogoEquipo({ nombre, tag, logoUrl }: { nombre: string; tag: string; logoUrl: string | null }) {
   return logoUrl ? (
     <img src={logoUrl} alt={nombre} className="clan-war-card-logo" />
   ) : (

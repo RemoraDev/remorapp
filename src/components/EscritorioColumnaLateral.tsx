@@ -20,6 +20,7 @@ export default function EscritorioColumnaLateral() {
 
   return (
     <div className="escritorio-columna-lateral escritorio-columna-izquierda" aria-hidden="true">
+      <div className="escritorio-columna-glow" />
       <HexPattern id="escritorio-hex-izq" className="hex-pattern escritorio-columna-hex" />
     </div>
   );

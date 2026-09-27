@@ -4072,10 +4072,10 @@ main {
 
 .fan-menu-item-hex polygon {
   fill: var(--h-surface-2);
-  stroke: rgba(var(--h-accent-rgb), 0.45);
+  stroke: rgba(var(--h-accent-rgb), 0.6);
   stroke-width: 1.5;
   vector-effect: non-scaling-stroke;
-  transition: stroke 0.15s ease, filter 0.15s ease;
+  transition: fill 0.15s ease, stroke 0.15s ease, stroke-width 0.15s ease, filter 0.15s ease;
 }
 
 .fan-menu-item-label {
@@ -4094,9 +4094,15 @@ main {
   color: var(--h-accent);
 }
 
+/* Corrección: antes solo cambiaba el trazo + un drop-shadow sutil --
+   se nota poco. Ahora también se enciende el relleno del hexágono
+   (antes siempre transparente), así el "prendido" es inequívoco
+   incluso si el drop-shadow pasara desapercibido. */
 .fan-menu-item:not(.disabled):hover .fan-menu-item-hex polygon {
+  fill: rgba(var(--h-accent-rgb), 0.16);
   stroke: var(--h-accent);
-  filter: drop-shadow(0 0 6px rgba(var(--h-accent-rgb), 0.65));
+  stroke-width: 2;
+  filter: drop-shadow(0 0 8px rgba(var(--h-accent-rgb), 0.75));
 }
 
 .fan-menu-item.disabled {
@@ -6763,56 +6769,6 @@ body.overlay-obs {
 }
 
 /* ------------------------------------------------------------
-   "Instalá RemorApp en tu dispositivo" (Inicio). Dos tarjetas
-   siempre lado a lado, incluso en mobile -- min-width: 0 más flex-wrap
-   evita el scroll horizontal forzado si el texto no entra.
-   ------------------------------------------------------------ */
-.home-instalar-section {
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: 1.5rem 1.25rem 2.5rem;
-  text-align: center;
-}
-
-.instalar-cards {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1.25rem;
-}
-
-.instalar-card {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 1.25rem 1rem;
-  border-radius: var(--radius-lg);
-  background: var(--color-card);
-  border: 1px solid var(--color-border);
-  color: var(--color-text);
-  text-decoration: none;
-  transition: border-color 0.2s ease, transform 0.2s ease;
-}
-
-.instalar-card:hover {
-  border-color: var(--color-accent);
-  transform: translateY(-2px);
-}
-
-.instalar-card-titulo {
-  margin: 0.25rem 0 0;
-  font-weight: 600;
-}
-
-.instalar-card-desc {
-  margin: 0;
-  font-size: 0.8rem;
-  color: var(--color-text-muted);
-}
-
-/* ------------------------------------------------------------
    Versión de escritorio (Tauri): todo lo de acá vive bajo
    html.es-escritorio, una clase que SOLO se agrega cuando la app
    corre dentro de Tauri (ver DesktopClaseHtml.tsx) -- la web normal en
@@ -6899,9 +6855,27 @@ html.es-escritorio .escritorio-columna-lateral {
   position: relative;
   display: block;
   flex-shrink: 0;
-  width: 84px;
+  /* Corrección: 84px + opacidad 0.14 se sentía casi invisible, muy
+     lejos del resto del estilo "halcon" del resto de la app -- se
+     ensancha y se suma un resplandor de acento propio, además del
+     panal más marcado de abajo. */
+  width: 140px;
   background-color: var(--color-bg);
   overflow: hidden;
+}
+
+.escritorio-columna-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+html.es-escritorio .escritorio-columna-izquierda .escritorio-columna-glow {
+  background: radial-gradient(120% 60% at 100% 50%, rgba(var(--h-accent-rgb), 0.16), transparent 70%);
+}
+
+html.es-escritorio .escritorio-columna-derecha .escritorio-columna-glow {
+  background: radial-gradient(120% 60% at 0% 50%, rgba(var(--h-accent-rgb), 0.16), transparent 70%);
 }
 
 /* Panal de hexágonos (mismo HexPattern.tsx que ya usaba el Hero de
@@ -6914,18 +6888,28 @@ html.es-escritorio .escritorio-columna-lateral {
   inset: 0;
   width: 100%;
   height: 100%;
-  opacity: 0.14;
+  opacity: 0.32;
   pointer-events: none;
 }
 
 html.es-escritorio .escritorio-columna-izquierda .escritorio-columna-hex {
-  mask-image: linear-gradient(to right, black 0%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to right, black 0%, transparent 100%);
+  mask-image: linear-gradient(to right, black 0%, black 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 0%, black 55%, transparent 100%);
 }
 
 html.es-escritorio .escritorio-columna-derecha .escritorio-columna-hex {
-  mask-image: linear-gradient(to left, black 0%, transparent 100%);
-  -webkit-mask-image: linear-gradient(to left, black 0%, transparent 100%);
+  mask-image: linear-gradient(to left, black 0%, black 55%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to left, black 0%, black 55%, transparent 100%);
+}
+
+/* Línea de acento en el borde interior, contra <main> -- lee como un
+   panel de HUD bien delimitado en vez de una franja que se apaga. */
+html.es-escritorio .escritorio-columna-izquierda {
+  border-right: 1px solid rgba(var(--h-accent-rgb), 0.25);
+}
+
+html.es-escritorio .escritorio-columna-derecha {
+  border-left: 1px solid rgba(var(--h-accent-rgb), 0.25);
 }
 
 html.es-escritorio .escritorio-columna-lateral .logo-mark {
@@ -7170,11 +7154,17 @@ html.es-escritorio .escritorio-chat-fijo {
   grid-template-columns: repeat(6, 1fr);
   gap: 0.2rem;
   width: 15rem;
+  max-height: 11rem;
+  overflow-y: auto;
   padding: 0.5rem;
-  background: var(--color-panel);
-  border: 1px solid var(--color-border);
+  /* Corrección: se leía "flotando" sobre los mensajes de arriba, sin
+     separación clara -- fondo opaco reforzado + borde de acento bien
+     visible + sombra más marcada para que se note como una tarjeta
+     propia, contenida, y no como algo suelto encima del chat. */
+  background: var(--h-surface-2);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.45);
   border-radius: var(--radius-lg);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), var(--shadow-accent);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), var(--shadow-accent);
 }
 
 .emoji-picker-item {
@@ -7341,17 +7331,36 @@ html.es-escritorio .escritorio-chat-fijo {
   gap: 1.25rem;
 }
 
-/* Resplandor sutil detrás del título -- un solo radial-gradient fijo,
-   sin animación ni imágenes pesadas, mismo criterio que el fondo de
-   <body> (radial-gradient con --h-accent-rgb). */
+/* Resplandor detrás del título -- corrección: se pide un estilo
+   "gaming" más marcado, un solo radial-gradient fijo sigue alcanzando
+   (sin animación ni imágenes pesadas), pero más grande e intenso que
+   antes. */
 .home-portada-glow {
   position: absolute;
-  top: -10%;
+  top: -14%;
   left: 50%;
   transform: translateX(-50%);
-  width: min(90%, 640px);
-  height: 320px;
-  background: radial-gradient(ellipse at center, rgba(var(--h-accent-rgb), 0.16), transparent 70%);
+  width: min(100%, 760px);
+  height: 380px;
+  background: radial-gradient(ellipse at center, rgba(var(--h-accent-rgb), 0.24), transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Líneas horizontales sutilísimas encima del fondo -- referencia
+   directa a un HUD/scanline de juego, sin costo de imagen (repeating-
+   linear-gradient puro). Muy tenue a propósito: es textura, no un
+   elemento que compita con el contenido. */
+.home-portada-scanlines {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(var(--h-accent-rgb), 0.035) 0px,
+    rgba(var(--h-accent-rgb), 0.035) 1px,
+    transparent 1px,
+    transparent 3px
+  );
   pointer-events: none;
   z-index: 0;
 }
@@ -7362,13 +7371,16 @@ html.es-escritorio .escritorio-chat-fijo {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 900;
-  font-size: clamp(1.75rem, 4vw + 1rem, 3rem);
+  font-size: clamp(1.9rem, 4.5vw + 1rem, 3.4rem);
   line-height: 1.15;
+  letter-spacing: 0.01em;
   color: var(--color-text);
+  text-shadow: 0 0 28px rgba(var(--h-accent-rgb), 0.35);
 }
 
 .home-portada-titulo-accent {
   color: var(--color-accent);
+  text-shadow: 0 0 22px rgba(var(--h-accent-rgb), 0.7);
 }
 
 .home-portada-franja {
@@ -7450,89 +7462,201 @@ html.es-escritorio .escritorio-chat-fijo {
   margin-top: 0.5rem;
 }
 
-/* Tarjeta "descargar para PC" de la portada -- corrección: la portada
-   se sentía muy vacía debajo del botón de eventos, sin ningún
-   elemento visual propio. Glow + borde de acento en vez de una imagen
-   pesada, mismo lenguaje visual que el resto de la app (--shadow-accent,
-   ya usado en las pestañas del chat de líderes y en los chips de nivel). */
-.home-portada-descargar-pc {
+/* Evento destacado (el más inminente, Clan War en vivo o próxima) --
+   tarjeta "héroe" propia, con el mismo lenguaje que .clan-war-card
+   (badge, VS, cuenta regresiva) pero a mayor escala, con su propio
+   resplandor de borde para que la portada no se sienta muerta. */
+.home-evento-destacado-link {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  max-width: 34rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.home-evento-destacado {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 34rem;
+  padding: 1.1rem 1.4rem 1.3rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.35);
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.14), transparent 65%), var(--color-panel);
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.home-evento-destacado-glow {
+  position: absolute;
+  inset: -40% -10% auto -10%;
+  height: 140%;
+  background: radial-gradient(ellipse at top, rgba(var(--h-accent-rgb), 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+.es-clickeable {
+  cursor: pointer;
+}
+
+.home-evento-destacado-link:hover .es-clickeable {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+  transform: translateY(-2px);
+}
+
+.home-evento-destacado-etiqueta {
+  position: relative;
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+  margin-bottom: 0.75rem;
+}
+
+.home-evento-destacado-cuerpo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.home-evento-destacado-equipo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.home-evento-destacado-equipo .clan-war-card-logo,
+.home-evento-destacado-equipo .clan-war-card-logo-placeholder {
+  width: 3.25rem;
+  height: 3.25rem;
+}
+
+.home-evento-destacado-tag {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.home-evento-destacado-centro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+
+.home-evento-destacado-vs {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: 1.3rem;
+  color: var(--color-text-muted);
+}
+
+.home-evento-destacado-categoria {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-text-faint);
+  white-space: nowrap;
+}
+
+.home-evento-destacado-footer {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* Sección "Llevate RemorApp a cualquier dispositivo": antes vivía
+   partida en dos lugares (una tarjeta acá solo de PC, más una página
+   vieja aparte del carrusel con las dos) -- ahora una sola grilla acá,
+   con las dos opciones (celular/PC) del mismo estilo. */
+.home-instalar-moderno {
   position: relative;
   z-index: 1;
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
   width: 100%;
   max-width: 34rem;
-  margin-top: 2rem;
-  padding: 1.1rem 1.4rem;
+  margin-top: 1.5rem;
+}
+
+.home-instalar-moderno-card {
+  flex: 1 1 14rem;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 1rem 1.2rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
-  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.1), transparent 60%), var(--color-panel);
+  background: var(--color-panel);
   text-align: left;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
-.home-portada-descargar-pc:hover {
+.home-instalar-moderno-card:hover {
   border-color: var(--color-accent);
   box-shadow: var(--shadow-accent);
+  transform: translateY(-2px);
 }
 
-.home-portada-descargar-pc-icono {
+.home-instalar-moderno-card-destacada {
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.12), transparent 65%), var(--color-panel);
+  border-color: rgba(var(--h-accent-rgb), 0.35);
+}
+
+.home-instalar-moderno-icono {
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 3.25rem;
-  height: 3.25rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: var(--radius-md);
   background: rgba(var(--h-accent-rgb), 0.14);
   color: var(--color-accent);
 }
 
-.home-portada-descargar-pc-texto {
+.home-instalar-moderno-texto {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.2rem;
   min-width: 0;
-  flex: 1;
 }
 
-.home-portada-descargar-pc-titulo {
+.home-instalar-moderno-titulo {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   color: var(--color-text);
 }
 
-.home-portada-descargar-pc-desc {
-  font-size: 0.78rem;
+.home-instalar-moderno-desc {
+  font-size: 0.76rem;
   color: var(--color-text-muted);
-}
-
-.home-portada-descargar-pc-boton {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.55rem 0.9rem;
-  border-radius: var(--radius-md);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
-  font-weight: 700;
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
-
-@media (max-width: 560px) {
-  .home-portada-descargar-pc {
-    flex-direction: column;
-    text-align: center;
-  }
-
-  .home-portada-descargar-pc-texto {
-    align-items: center;
-    text-align: center;
-  }
 }
 
 .carrusel {

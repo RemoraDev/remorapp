@@ -5,7 +5,6 @@ import HomePortada from "../components/HomePortada";
 import ProximasClanWars from "../components/ProximasClanWars";
 import NewsSection from "../components/NewsSection";
 import type { NoticiaPreview } from "../components/NewsSection";
-import InstalarRemorApp from "../components/InstalarRemorApp";
 import { supabase } from "../lib/supabaseClient";
 
 const NOTICIAS_POR_PAGINA = 3;
@@ -75,7 +74,6 @@ export default function HomePage() {
           },
           ...paginasNoticiasExtra,
           { key: "clanwars", contenido: <ProximasClanWars /> },
-          { key: "instalar", contenido: <InstalarRemorApp /> },
         ]}
       />
     </div>

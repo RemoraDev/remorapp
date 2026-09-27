@@ -32,6 +32,7 @@ export default function EscritorioColumnaDerecha() {
   if (modo === null) {
     return (
       <div className="escritorio-columna-lateral escritorio-columna-derecha" aria-hidden="true">
+        <div className="escritorio-columna-glow" />
         <HexPattern id="escritorio-hex-der" className="hex-pattern escritorio-columna-hex" />
       </div>
     );
