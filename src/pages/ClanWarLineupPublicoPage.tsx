@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
@@ -39,7 +39,16 @@ export default function ClanWarLineupPublicoPage() {
   const [guardandoJugadoresPorSet, setGuardandoJugadoresPorSet] = useState(false);
   const [errorJugadoresPorSet, setErrorJugadoresPorSet] = useState<string | null>(null);
 
+  // Buscador de jugador con autocompletado (migración 126): jugadorNuevo
+  // guarda la selección real ("real:<id>" o "temp:<id>", mismo formato
+  // de siempre para armar_lineup_cw()); busquedaJugador es solo el
+  // texto que se ve en el input mientras se escribe/filtra.
+  const [busquedaJugador, setBusquedaJugador] = useState("");
   const [jugadorNuevo, setJugadorNuevo] = useState("");
+  const [mostrarSugerencias, setMostrarSugerencias] = useState(false);
+  const [creandoTemporal, setCreandoTemporal] = useState(false);
+  const [errorTemporal, setErrorTemporal] = useState<string | null>(null);
+  const buscadorJugadorRef = useRef<HTMLDivElement | null>(null);
   const [posicionNueva, setPosicionNueva] = useState("");
   const [linkNuevo, setLinkNuevo] = useState("");
   const [esSuplenteNuevo, setEsSuplenteNuevo] = useState(false);
@@ -118,6 +127,17 @@ export default function ClanWarLineupPublicoPage() {
     }
   }, [editor, streamInicializado]);
 
+  useEffect(() => {
+    if (!mostrarSugerencias) return;
+    const handleClickFuera = (e: MouseEvent) => {
+      if (buscadorJugadorRef.current && !buscadorJugadorRef.current.contains(e.target as Node)) {
+        setMostrarSugerencias(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickFuera);
+    return () => document.removeEventListener("mousedown", handleClickFuera);
+  }, [mostrarSugerencias]);
+
   const recargarTodo = async () => {
     await Promise.all([cargarPublico(), cargarEditor()]);
   };
@@ -174,10 +194,38 @@ export default function ClanWarLineupPublicoPage() {
     }
 
     setJugadorNuevo("");
+    setBusquedaJugador("");
     setLinkNuevo("");
     setPosicionNueva("");
     setEsSuplenteNuevo(false);
     await recargarTodo();
+  };
+
+  // Migración 126: si lo que se escribió no matchea a nadie del
+  // roster, se puede crear un jugador temporal con ese mismo nick al
+  // vuelo -- crear_jugador_temporal() devuelve el id nuevo directo, así
+  // que ya queda seleccionado sin tener que buscarlo de nuevo.
+  const handleCrearTemporal = async (nick: string) => {
+    if (!editor) return;
+    setCreandoTemporal(true);
+    setErrorTemporal(null);
+
+    const { data: nuevoId, error: rpcError } = await supabase.rpc("crear_jugador_temporal", {
+      p_team_id: editor.mi_team_id,
+      p_nick_temporal: nick,
+    });
+
+    setCreandoTemporal(false);
+
+    if (rpcError || !nuevoId) {
+      setErrorTemporal(rpcError?.message ?? "No se pudo crear el jugador temporal.");
+      return;
+    }
+
+    await cargarEditor();
+    setJugadorNuevo(`temp:${nuevoId}`);
+    setBusquedaJugador(nick);
+    setMostrarSugerencias(false);
   };
 
   const handleQuitar = async (lineupId: string) => {
@@ -246,6 +294,36 @@ export default function ClanWarLineupPublicoPage() {
     : false;
 
   const puedeGestionar = !!editor && (editor.status === "aceptada" || editor.status === "en_curso");
+
+  // Buscador de jugador (migración 126): roster elegible + temporales
+  // ya creados, todos en una sola lista para filtrar por nick a medida
+  // que se escribe. Formato WTL sin temporada admite temporales (ver
+  // el comentario de más abajo, migración 120); con temporada, ni
+  // siquiera se ofrecen como sugerencia.
+  const opcionesJugador = editor
+    ? [
+        ...editor.roster_elegible.map((op) => ({
+          tipo: "real" as const,
+          id: op.jugador_id,
+          nombre: op.nombre,
+          extra: op.es_mercenario ? " (Mercenario)" : op.es_aliado ? " (Aliado)" : "",
+        })),
+        ...(editor.formato !== "wtl" || !editor.es_de_torneo
+          ? editor.temporales_propios.map((t) => ({
+              tipo: "temp" as const,
+              id: t.id,
+              nombre: t.nick_temporal,
+              extra: " (Temporal)",
+            }))
+          : []),
+      ]
+    : [];
+  const sugerenciasJugador = busquedaJugador.trim()
+    ? opcionesJugador.filter((o) => o.nombre.toLowerCase().includes(busquedaJugador.trim().toLowerCase()))
+    : opcionesJugador;
+  const hayCoincidenciaExacta = opcionesJugador.some(
+    (o) => o.nombre.toLowerCase() === busquedaJugador.trim().toLowerCase()
+  );
 
   return (
     <section className="section section-page">
@@ -420,36 +498,64 @@ export default function ClanWarLineupPublicoPage() {
                     </p>
                   ) : (
                     <>
-                      <div className="form-group">
+                      <div className="form-group jugador-buscador-wrap" ref={buscadorJugadorRef}>
                         <label className="form-label" htmlFor="editor-lineup-jugador">
                           Agregar jugador
                         </label>
-                        <select
+                        <input
                           id="editor-lineup-jugador"
-                          className="form-select"
-                          value={jugadorNuevo}
-                          onChange={(e) => setJugadorNuevo(e.target.value)}
-                        >
-                          <option value="">Selecciona un jugador</option>
-                          {editor.roster_elegible.map((op) => (
-                            <option key={`real:${op.jugador_id}`} value={`real:${op.jugador_id}`}>
-                              {op.nombre}
-                              {op.es_mercenario ? " (Mercenario)" : ""}
-                              {op.es_aliado ? " (Aliado)" : ""}
-                            </option>
-                          ))}
-                          {/* Formato WTL: solo admite temporales cuando el
-                              reto NO pertenece a una temporada de torneo --
-                              con temporada, el MMR de equipos por posición
-                              exige un jugador real (ver armar_lineup_cw()
-                              en la base, migración 120). */}
-                          {(editor.formato !== "wtl" || !editor.es_de_torneo) &&
-                            editor.temporales_propios.map((t) => (
-                              <option key={`temp:${t.id}`} value={`temp:${t.id}`}>
-                                {t.nick_temporal} (Temporal)
-                              </option>
+                          className="form-input"
+                          type="text"
+                          autoComplete="off"
+                          placeholder="Escribe el nick de tu equipo..."
+                          value={busquedaJugador}
+                          onChange={(e) => {
+                            setBusquedaJugador(e.target.value);
+                            setJugadorNuevo("");
+                            setMostrarSugerencias(true);
+                          }}
+                          onFocus={() => setMostrarSugerencias(true)}
+                        />
+                        {mostrarSugerencias && (
+                          <div className="jugador-buscador-sugerencias">
+                            {sugerenciasJugador.length === 0 && !busquedaJugador.trim() && (
+                              <p className="jugador-buscador-vacio">Escribe para buscar en tu equipo.</p>
+                            )}
+                            {sugerenciasJugador.map((op) => (
+                              <button
+                                key={`${op.tipo}:${op.id}`}
+                                type="button"
+                                className="jugador-buscador-sugerencia"
+                                onClick={() => {
+                                  setJugadorNuevo(`${op.tipo}:${op.id}`);
+                                  setBusquedaJugador(op.nombre);
+                                  setMostrarSugerencias(false);
+                                }}
+                              >
+                                {op.nombre}
+                                {op.extra}
+                              </button>
                             ))}
-                        </select>
+                            {/* Migración 126: si lo que se escribió no
+                                coincide con nadie del roster, se ofrece
+                                crearlo como jugador temporal al vuelo --
+                                sin salir del formulario ni ir a otra
+                                pantalla a crearlo primero. */}
+                            {busquedaJugador.trim().length >= 3 && !hayCoincidenciaExacta && (
+                              <button
+                                type="button"
+                                className="jugador-buscador-sugerencia jugador-buscador-crear"
+                                disabled={creandoTemporal}
+                                onClick={() => handleCrearTemporal(busquedaJugador.trim())}
+                              >
+                                {creandoTemporal
+                                  ? "Creando..."
+                                  : `+ Crear jugador temporal "${busquedaJugador.trim()}"`}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {errorTemporal && <div className="form-error">{errorTemporal}</div>}
                       </div>
                       <div className="form-group">
                         <label className="form-checkbox-label">
