@@ -33,7 +33,7 @@ interface FanItem {
 // mudó a un ícono fijo en la barra inferior (migración 109, en el
 // lugar que tenía "Inicio") -- ver BottomNav.tsx.
 const FAN_ITEMS: FanItem[] = [
-  { key: "torneos", label: "Torneos", requiresAuth: false },
+  { key: "torneos", label: "Eventos", requiresAuth: false },
   { key: "torneos-inscritos", label: "Mis torneos", requiresAuth: true },
   { key: "mi-equipo", label: "Mi equipo", requiresAuth: true },
   { key: "checkin", label: "Check-in", requiresAuth: true },

@@ -4396,6 +4396,49 @@ main {
   color: var(--color-text);
 }
 
+/* Corrección: reemplaza a los 3 botones gigantes apilados (Lista de
+   Jugadores/Líderes de clan/Logros) -- mismo criterio visual "chip de
+   vidrio" que ya usan las pestañas del chat de líderes (ver
+   .chat-lideres-tabs), reutilizado acá para que toda la app hable el
+   mismo idioma de pestañas en vez de definir uno nuevo. */
+.team-info-tabs {
+  display: flex;
+  gap: 0.3rem;
+  padding: 0.3rem;
+  margin: 1rem 0;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.team-info-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 0.6rem 0.9rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.team-info-tab:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.team-info-tab.is-active {
+  color: var(--color-text);
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.32), rgba(var(--h-accent-rgb), 0.1));
+  box-shadow: var(--shadow-accent);
+}
+
 /* Botón "Eliminar equipo" (irreversible), separado del resto de
    "Editar equipo" con un borde de aviso arriba. */
 .team-panel-danger-zone {
@@ -7197,6 +7240,91 @@ html.es-escritorio .escritorio-chat-fijo {
   align-items: center;
   gap: 0.5rem;
   margin-top: 0.5rem;
+}
+
+/* Tarjeta "descargar para PC" de la portada -- corrección: la portada
+   se sentía muy vacía debajo del botón de eventos, sin ningún
+   elemento visual propio. Glow + borde de acento en vez de una imagen
+   pesada, mismo lenguaje visual que el resto de la app (--shadow-accent,
+   ya usado en las pestañas del chat de líderes y en los chips de nivel). */
+.home-portada-descargar-pc {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  max-width: 34rem;
+  margin-top: 2rem;
+  padding: 1.1rem 1.4rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.1), transparent 60%), var(--color-panel);
+  text-align: left;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.home-portada-descargar-pc:hover {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+}
+
+.home-portada-descargar-pc-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: var(--radius-md);
+  background: rgba(var(--h-accent-rgb), 0.14);
+  color: var(--color-accent);
+}
+
+.home-portada-descargar-pc-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.home-portada-descargar-pc-titulo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-text);
+}
+
+.home-portada-descargar-pc-desc {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.home-portada-descargar-pc-boton {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius-md);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 700;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .home-portada-descargar-pc {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .home-portada-descargar-pc-texto {
+    align-items: center;
+    text-align: center;
+  }
 }
 
 .carrusel {

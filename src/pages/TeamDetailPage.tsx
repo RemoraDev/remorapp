@@ -529,7 +529,11 @@ export default function TeamDetailPage() {
   // clan/Logros), independientes del Panel de control de arriba (ese
   // es de gestión, exclusivo de dueño/capitán -- esto es solo
   // organización de información pública, visible para cualquiera).
-  const [seccionPublica, setSeccionPublica] = useState<"jugadores" | "lideres" | "logros" | null>(null);
+  // Corrección: pasa de 3 botones gigantes apilados (con un estado
+  // "null" que mostraba el menú y ocultaba el contenido) a pestañas
+  // horizontales siempre visibles, "jugadores" por defecto -- mismo
+  // criterio visual que las pestañas del chat de líderes.
+  const [seccionPublica, setSeccionPublica] = useState<"jugadores" | "lideres" | "logros">("jugadores");
 
   // Acceso rápido desde "Check-in" en el abanico: ?panel=eventos abre
   // el Panel de control directo en Gestor de eventos, para no tener
@@ -3575,19 +3579,13 @@ export default function TeamDetailPage() {
           ) : (
             <div className="team-detail-logo team-card-logo-placeholder">{equipo.tag.charAt(0)}</div>
           )}
-          {/* Los equipos no tienen "nivel" propio -- ese concepto es
-              solo de MMR 1v1 individual (ver calcular_nivel() en la
-              base). Como insignia de esquina se usa solo el nombre de
-              la liga (no "liga · MMR" completo, como en LigaBadge): ese
-              texto es demasiado largo para una insignia chica sobre un
-              logo de 4.5rem y se salía de la pantalla. El MMR exacto
-              igual se sigue viendo, en el texto de la barra de
-              progreso, justo debajo. */}
-          <span
-            className={`nivel-badge nivel-badge-corner ${equipo.banca_rota ? "nivel-badge-banca-rota" : ""}`}
-          >
-            {equipo.liga}
-          </span>
+          {/* Corrección: se saca la insignia de liga/MMR del equipo (el
+              ranking de equipos por liga se eliminó como concepto de
+              producto) -- se conserva solo el aviso de banca rota, que
+              es un estado económico distinto, no un nivel de liga. */}
+          {equipo.banca_rota && (
+            <span className="nivel-badge nivel-badge-corner nivel-badge-banca-rota">Banca rota</span>
+          )}
         </div>
       </div>
 
@@ -3729,37 +3727,35 @@ export default function TeamDetailPage() {
 
       {/* Reorganización: la información pública que antes iba toda
           junta (roster completo con estadísticas, líderes mezclados
-          adentro, títulos aparte) ahora se agrupa en 3 accesos, mismo
-          patrón visual que el Panel de control (team-panel-menu). */}
-      {seccionPublica === null ? (
-        <div className="team-panel-menu">
-          <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("jugadores")}>
-            <span className="team-panel-menu-item-title">
-              <Users className="icon-inline" />
-              Lista de Jugadores
-            </span>
-            <span className="team-panel-menu-item-desc">Nick#ID, liga y raza de cada miembro</span>
-          </button>
-          <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("lideres")}>
-            <span className="team-panel-menu-item-title">
-              <Crown className="icon-inline" />
-              Líderes de clan
-            </span>
-            <span className="team-panel-menu-item-desc">Dueño y capitanes</span>
-          </button>
-          <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPublica("logros")}>
-            <span className="team-panel-menu-item-title">
-              <Award className="icon-inline" />
-              Logros
-            </span>
-            <span className="team-panel-menu-item-desc">Títulos Padre/Hijo del equipo</span>
-          </button>
-        </div>
-      ) : (
-        <button type="button" className="team-panel-back" onClick={() => setSeccionPublica(null)}>
-          ← Volver
+          adentro, títulos aparte) se agrupa en 3 pestañas -- antes eran
+          3 botones gigantes apilados, uno por fila; ahora es una sola
+          barra angosta, mismo criterio visual que el chat de líderes. */}
+      <div className="team-info-tabs">
+        <button
+          type="button"
+          className={`team-info-tab ${seccionPublica === "jugadores" ? "is-active" : ""}`}
+          onClick={() => setSeccionPublica("jugadores")}
+        >
+          <Users className="icon-inline" />
+          Jugadores
         </button>
-      )}
+        <button
+          type="button"
+          className={`team-info-tab ${seccionPublica === "lideres" ? "is-active" : ""}`}
+          onClick={() => setSeccionPublica("lideres")}
+        >
+          <Crown className="icon-inline" />
+          Líderes
+        </button>
+        <button
+          type="button"
+          className={`team-info-tab ${seccionPublica === "logros" ? "is-active" : ""}`}
+          onClick={() => setSeccionPublica("logros")}
+        >
+          <Award className="icon-inline" />
+          Logros
+        </button>
+      </div>
 
       {seccionPublica === "jugadores" && (
         <div className="detail-participant-list">
