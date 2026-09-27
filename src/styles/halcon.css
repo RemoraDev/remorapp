@@ -1971,6 +1971,139 @@ main {
   color: var(--color-text-muted);
 }
 
+/* Utilidad estándar: oculta visualmente un elemento sin sacarlo del
+   flujo accesible (lectores de pantalla lo siguen viendo) -- el input
+   de archivo real detrás del lápiz de editar foto. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- Vitrina de jugador en escritorio (migración 124) ----------
+   Reemplaza el modelo de banner+avatar superpuesto+info apilada, SOLO
+   en escritorio (html.es-escritorio): banner a la mitad de ancho con
+   el botón de Panel de control al lado, y una tarjeta de presentación
+   centrada (foto editable con el lápiz, nombre, país, equipo,
+   transmisión) con la descripción personal aparte, a la derecha.
+   Nunca se muestran las dos vistas a la vez. */
+.player-detail-vista-escritorio {
+  display: none;
+}
+
+html.es-escritorio .player-detail-vista-movil {
+  display: none;
+}
+
+html.es-escritorio .player-detail-vista-escritorio {
+  display: block;
+}
+
+.player-detail-escritorio-top {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.player-detail-escritorio-banner-wrap {
+  flex: 0 1 50%;
+  margin-bottom: 0;
+}
+
+.player-detail-escritorio-banner-wrap .player-detail-banner,
+.player-detail-escritorio-banner-wrap .player-detail-banner-placeholder {
+  aspect-ratio: 3 / 1;
+}
+
+.player-detail-escritorio-panel-btn {
+  flex-shrink: 0;
+}
+
+.player-detail-escritorio-main {
+  display: grid;
+  grid-template-columns: minmax(0, 26rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.player-detail-escritorio-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+  padding: 2rem 1.5rem 1.75rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: linear-gradient(180deg, rgba(var(--h-accent-rgb), 0.08), transparent 40%), var(--color-panel);
+}
+
+.player-detail-escritorio-avatar-wrap {
+  position: relative;
+  margin-bottom: 0.5rem;
+}
+
+.player-detail-escritorio-avatar-wrap .player-detail-avatar {
+  width: 8rem;
+  height: 8rem;
+}
+
+/* El lápiz de editar foto -- corrección: nada de texto ni mensaje de
+   "subir foto", solo este botón circular sobre la esquina del avatar,
+   que abre directo el selector de archivo + recorte. Solo se renderiza
+   cuando quien mira es el dueño del perfil. */
+.player-detail-avatar-edit-btn {
+  position: absolute;
+  right: -0.35rem;
+  bottom: -0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-detail-avatar-edit-btn:hover {
+  transform: scale(1.08);
+  box-shadow: var(--shadow-accent);
+}
+
+.player-detail-avatar-edit-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.player-detail-escritorio-bio {
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  min-height: 12rem;
+}
+
+.player-detail-escritorio-bio .team-detail-description {
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 900px) {
+  html.es-escritorio .player-detail-escritorio-main {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Insignia de nivel (jugador) o de liga+MMR (equipo, que no tiene
    nivel propio) superpuesta en la esquina inferior derecha del avatar
    o logo grande -- mismo espíritu que el "sello" de portada+foto de

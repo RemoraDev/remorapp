@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { BarChart3, Award, History, Settings, Shield } from "lucide-react";
+import { BarChart3, Award, History, Settings, Shield, Pencil } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import Carrusel from "../components/Carrusel";
+import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { COUNTRY_OPTIONS } from "../types/profile";
 import type { Country, LinkTransmision } from "../types/profile";
 import type { SkinAvatarClave } from "../types/skins";
@@ -76,7 +78,7 @@ function tituloMasRelevante(
 // "Editar mis datos" en el menú del avatar (ver ProfilePage.tsx).
 export default function PlayerDetailPage() {
   const { nick, uniqueId } = useParams<{ nick: string; uniqueId: string }>();
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
   const [skinAvatarClave, setSkinAvatarClave] = useState<SkinAvatarClave | null>(null);
@@ -86,6 +88,71 @@ export default function PlayerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
+
+  // Edición rápida de foto desde la tarjeta de presentación de
+  // escritorio (migración 124): sin texto ni botón de "Guardar" --
+  // elegís el archivo, ajustás el recorte, y se sube sola. Mismo
+  // storage/columna que la edición completa de ProfilePage.tsx
+  // (Configuración > Apariencia > Subir avatar), solo que sin esa
+  // vuelta -- pensada para el pequeño lápiz sobre el avatar.
+  const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+  const [archivoParaRecortarAvatar, setArchivoParaRecortarAvatar] = useState<File | null>(null);
+  const [subiendoAvatar, setSubiendoAvatar] = useState(false);
+  const [errorAvatar, setErrorAvatar] = useState<string | null>(null);
+
+  const handleAvatarFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const archivo = event.target.files?.[0] ?? null;
+    setErrorAvatar(null);
+    event.target.value = "";
+    if (!archivo) return;
+    if (archivo.size > AVATAR_MAX_BYTES) {
+      setErrorAvatar("La foto no puede pesar más de 2MB.");
+      return;
+    }
+    setArchivoParaRecortarAvatar(archivo);
+  };
+
+  const handleConfirmarRecorteAvatar = async (recorte: Blob, tieneTransparencia: boolean) => {
+    setArchivoParaRecortarAvatar(null);
+    if (!user) return;
+
+    setSubiendoAvatar(true);
+    setErrorAvatar(null);
+
+    try {
+      const extension = recorte.type === "image/png" ? "png" : "jpg";
+      const ruta = `${user.id}/${Date.now()}-avatar.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(ruta, recorte, { contentType: recorte.type });
+
+      if (uploadError) {
+        setErrorAvatar("No se pudo subir la foto: " + uploadError.message);
+        return;
+      }
+
+      const avatarUrl = supabase.storage.from("avatars").getPublicUrl(ruta).data.publicUrl;
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl, avatar_transparente: tieneTransparencia })
+        .eq("id", user.id);
+
+      if (updateError) {
+        setErrorAvatar(updateError.message);
+        return;
+      }
+
+      setPerfil((prev) => (prev ? { ...prev, avatarUrl, avatarTransparente: tieneTransparencia } : prev));
+      await refreshProfile();
+    } catch {
+      setErrorAvatar("No se pudo procesar la foto, prueba con otra imagen.");
+    } finally {
+      setSubiendoAvatar(false);
+    }
+  };
 
   useEffect(() => {
     const cargarPerfilPublico = async () => {
@@ -239,119 +306,232 @@ export default function PlayerDetailPage() {
   // páginas -- "Perfil" (banner, identidad, bio, info) y "Panel", esta
   // última solo cuando quien mira es el dueño de este perfil (no tiene
   // sentido mostrar accesos de gestión a un visitante cualquiera).
+  const esMiPropioPerfil = user?.id === perfil.id;
+
+  const inputArchivoAvatar = esMiPropioPerfil && (
+    <input
+      ref={avatarInputRef}
+      type="file"
+      accept="image/*"
+      className="visually-hidden"
+      onChange={handleAvatarFileChange}
+    />
+  );
+
+  const recortadorAvatar = archivoParaRecortarAvatar && (
+    <RecortadorImagenModal
+      archivo={archivoParaRecortarAvatar}
+      aspecto={1}
+      titulo="Ajustar foto de perfil"
+      onConfirmar={handleConfirmarRecorteAvatar}
+      onCancelar={() => setArchivoParaRecortarAvatar(null)}
+    />
+  );
+
+  const bloqueTransmision = perfil.esCaster && (
+    <>
+      <h3 className="detail-subtitle">Transmisión</h3>
+      {perfil.linksTransmision.length === 0 ? (
+        <p className="detail-empty">Todavía no agregó links de transmisión.</p>
+      ) : (
+        <div className="detail-map-list">
+          {perfil.linksTransmision.map((link, indice) => (
+            <a
+              key={`${link.plataforma}-${indice}`}
+              href={link.url}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="badge badge-format"
+            >
+              {link.plataforma}
+            </a>
+          ))}
+        </div>
+      )}
+      {perfil.horarioStream && <p className="tournament-card-meta">Horario habitual: {perfil.horarioStream}</p>}
+    </>
+  );
+
+  const bloqueEquipo = equipoActual && (
+    <Link to={`/equipos/${equipoActual.tag}`} className="ranking-clan-link">
+      {equipoActual.logoUrl ? (
+        <img src={equipoActual.logoUrl} alt="" className="player-detail-equipo-actual-logo" />
+      ) : (
+        <span className="player-detail-equipo-actual-logo player-detail-equipo-actual-logo-placeholder">
+          {equipoActual.tag.charAt(0)}
+        </span>
+      )}
+      {equipoActual.name}
+    </Link>
+  );
+
   const paginaPerfil = (
     <>
-      <div className="player-detail-banner-wrap">
-        {perfil.bannerUrl ? (
-          <img src={perfil.bannerUrl} alt="" className="player-detail-banner" />
-        ) : (
-          <div className="player-detail-banner player-detail-banner-placeholder" />
-        )}
-        <div className={`player-detail-avatar-overlap ${claseForma}`}>
-          <AvatarSkin
-            clave={perfil.avatarTransparente ? null : skinAvatarClave}
-            bordeColor={perfil.avatarTransparente ? null : bordeBasicoColorHex}
-            bordeGrosor={perfil.bordeGrosor}
-            forma="cuadrado"
-          >
-            <Avatar
-              url={perfil.avatarUrl}
-              nombre={perfil.nick}
-              className="player-detail-avatar"
+      {/* Vista normal (web/celular): banner ancho con el avatar
+          superpuesto, sin editar nada desde acá -- eso sigue viviendo
+          en Configuración. Se oculta por completo en escritorio (ver
+          la vista propia más abajo). */}
+      <div className="player-detail-vista-movil">
+        <div className="player-detail-banner-wrap">
+          {perfil.bannerUrl ? (
+            <img src={perfil.bannerUrl} alt="" className="player-detail-banner" />
+          ) : (
+            <div className="player-detail-banner player-detail-banner-placeholder" />
+          )}
+          <div className={`player-detail-avatar-overlap ${claseForma}`}>
+            <AvatarSkin
+              clave={perfil.avatarTransparente ? null : skinAvatarClave}
+              bordeColor={perfil.avatarTransparente ? null : bordeBasicoColorHex}
+              bordeGrosor={perfil.bordeGrosor}
               forma="cuadrado"
-            />
-          </AvatarSkin>
-        </div>
-      </div>
-
-      <div className="player-detail-header">
-        <div>
-          <h1 className="section-title">
-            {perfil.nick}
-            <span className="profile-nick-id">#{perfil.uniqueId}</span>
-          </h1>
-          {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
-          {perfil.razaPrincipal && (
-            <span className="liga-badge">
-              Raza: {perfil.razaPrincipal}
-              {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
-            </span>
-          )}
-        </div>
-
-        {/* Mismo criterio que /equipos/:tag: el botón vivía pegado
-            abajo de todo -- pasa a la altura del nombre, a la
-            derecha. El contenido desplegable sigue más abajo. */}
-        {user?.id === perfil.id && (
-          <div className="team-panel-toggle-header">
-            <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
-              {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
-            </button>
+            >
+              <Avatar
+                url={perfil.avatarUrl}
+                nombre={perfil.nick}
+                className="player-detail-avatar"
+                forma="cuadrado"
+              />
+            </AvatarSkin>
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* La bio va acá, inmediatamente debajo del Nick#ID y antes de
-          Estadísticas -- no al final de la página. */}
-      {perfil.bio && <p className="team-detail-description">{perfil.bio}</p>}
+        <div className="player-detail-header">
+          <div>
+            <h1 className="section-title">
+              {perfil.nick}
+              <span className="profile-nick-id">#{perfil.uniqueId}</span>
+            </h1>
+            {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
+            {perfil.razaPrincipal && (
+              <span className="liga-badge">
+                Raza: {perfil.razaPrincipal}
+                {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
+              </span>
+            )}
+          </div>
 
-      {/* Dos columnas: a la izquierda, país + Equipo actual (+
-          Transmisión si es caster); a la derecha, la tarjeta agrupada
-          de barras verticales. En pantallas angostas se apilan, la
-          izquierda arriba. */}
-      <div className="player-detail-stats-row">
-        <div className="player-detail-info-column">
-          {perfil.country && (
-            <p className="tournament-card-meta">
-              País: {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
-            </p>
-          )}
-
-          {/* Compacta, en una sola línea (logo chico + nombre), no la
-              tarjeta grande .team-card de antes -- esa ocupaba
-              demasiado espacio y no dejaba lugar para el resto de los
-              datos de esta columna. Mismo logo chico que ya se usa en
-              el Ranking (RankingPage.tsx). */}
-          {equipoActual && (
-            <Link to={`/equipos/${equipoActual.tag}`} className="ranking-clan-link">
-              {equipoActual.logoUrl ? (
-                <img src={equipoActual.logoUrl} alt="" className="player-detail-equipo-actual-logo" />
-              ) : (
-                <span className="player-detail-equipo-actual-logo player-detail-equipo-actual-logo-placeholder">
-                  {equipoActual.tag.charAt(0)}
-                </span>
-              )}
-              {equipoActual.name}
-            </Link>
-          )}
-
-          {perfil.esCaster && (
-            <>
-              <h3 className="detail-subtitle">Transmisión</h3>
-              {perfil.linksTransmision.length === 0 ? (
-                <p className="detail-empty">Todavía no agregó links de transmisión.</p>
-              ) : (
-                <div className="detail-map-list">
-                  {perfil.linksTransmision.map((link, indice) => (
-                    <a
-                      key={`${link.plataforma}-${indice}`}
-                      href={link.url}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                      className="badge badge-format"
-                    >
-                      {link.plataforma}
-                    </a>
-                  ))}
-                </div>
-              )}
-              {perfil.horarioStream && (
-                <p className="tournament-card-meta">Horario habitual: {perfil.horarioStream}</p>
-              )}
-            </>
+          {/* Mismo criterio que /equipos/:tag: el botón vivía pegado
+              abajo de todo -- pasa a la altura del nombre, a la
+              derecha. El contenido desplegable sigue más abajo. */}
+          {esMiPropioPerfil && (
+            <div className="team-panel-toggle-header">
+              <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
+                {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
+              </button>
+            </div>
           )}
         </div>
+
+        {/* La bio va acá, inmediatamente debajo del Nick#ID y antes de
+            Estadísticas -- no al final de la página. */}
+        {perfil.bio && <p className="team-detail-description">{perfil.bio}</p>}
+
+        {/* Dos columnas: a la izquierda, país + Equipo actual (+
+            Transmisión si es caster); a la derecha, la tarjeta agrupada
+            de barras verticales. En pantallas angostas se apilan, la
+            izquierda arriba. */}
+        <div className="player-detail-stats-row">
+          <div className="player-detail-info-column">
+            {perfil.country && (
+              <p className="tournament-card-meta">
+                País: {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
+              </p>
+            )}
+            {bloqueEquipo}
+            {bloqueTransmision}
+          </div>
+        </div>
       </div>
+
+      {/* Vista de escritorio (migración 124): banner a la mitad de
+          ancho con el botón de Panel de control al lado (en vez de
+          abajo de todo), y una tarjeta de presentación centrada
+          (foto -- editable con el lápiz si es tu propio perfil --,
+          nombre, país, equipo y transmisión) con la descripción
+          personal aparte, a la derecha. Reemplaza al modelo de arriba
+          -- nunca se muestran los dos a la vez. */}
+      <div className="player-detail-vista-escritorio">
+        <div className="player-detail-escritorio-top">
+          <div className="player-detail-banner-wrap player-detail-escritorio-banner-wrap">
+            {perfil.bannerUrl ? (
+              <img src={perfil.bannerUrl} alt="" className="player-detail-banner" />
+            ) : (
+              <div className="player-detail-banner player-detail-banner-placeholder" />
+            )}
+          </div>
+          {esMiPropioPerfil && (
+            <div className="player-detail-escritorio-panel-btn">
+              <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
+                {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="player-detail-escritorio-main">
+          <div className="player-detail-escritorio-card">
+            <div className={`player-detail-escritorio-avatar-wrap ${claseForma}`}>
+              <AvatarSkin
+                clave={perfil.avatarTransparente ? null : skinAvatarClave}
+                bordeColor={perfil.avatarTransparente ? null : bordeBasicoColorHex}
+                bordeGrosor={perfil.bordeGrosor}
+                forma="cuadrado"
+              >
+                <Avatar
+                  url={perfil.avatarUrl}
+                  nombre={perfil.nick}
+                  className="player-detail-avatar"
+                  forma="cuadrado"
+                />
+              </AvatarSkin>
+              {esMiPropioPerfil && (
+                <button
+                  type="button"
+                  className="player-detail-avatar-edit-btn"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={subiendoAvatar}
+                  aria-label="Cambiar foto de perfil"
+                  title="Cambiar foto de perfil"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+            </div>
+            {errorAvatar && <div className="form-error">{errorAvatar}</div>}
+
+            <h1 className="section-title">
+              {perfil.nick}
+              <span className="profile-nick-id">#{perfil.uniqueId}</span>
+            </h1>
+            {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
+            {perfil.razaPrincipal && (
+              <span className="liga-badge">
+                Raza: {perfil.razaPrincipal}
+                {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
+              </span>
+            )}
+            {perfil.country && (
+              <p className="tournament-card-meta">
+                País: {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
+              </p>
+            )}
+            {bloqueEquipo}
+            {bloqueTransmision}
+          </div>
+
+          <div className="player-detail-escritorio-bio">
+            <h3 className="detail-subtitle">Descripción</h3>
+            {perfil.bio ? (
+              <p className="team-detail-description">{perfil.bio}</p>
+            ) : (
+              <p className="detail-empty">Todavía no escribió una descripción personal.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {inputArchivoAvatar}
+      {recortadorAvatar}
     </>
   );
 
