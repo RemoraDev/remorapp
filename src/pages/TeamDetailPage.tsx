@@ -802,12 +802,6 @@ export default function TeamDetailPage() {
   const [reportando, setReportando] = useState<string | null>(null);
   const [erroresReportar, setErroresReportar] = useState<Record<string, string>>({});
 
-  const [casterNombrePorReto, setCasterNombrePorReto] = useState<Record<string, string>>({});
-  const [casterLinkPorReto, setCasterLinkPorReto] = useState<Record<string, string>>({});
-  const [tieneDelayPorReto, setTieneDelayPorReto] = useState<Record<string, string>>({});
-  const [guardandoTransmision, setGuardandoTransmision] = useState<string | null>(null);
-  const [erroresTransmision, setErroresTransmision] = useState<Record<string, string>>({});
-
   // --- Panel de control: Clan Wars, partidas individuales y cierre ---
   const [jugadorChallengerPorReto, setJugadorChallengerPorReto] = useState<Record<string, string>>({});
   const [jugadorChallengedPorReto, setJugadorChallengedPorReto] = useState<Record<string, string>>({});
@@ -2660,38 +2654,6 @@ export default function TeamDetailPage() {
 
     setJugadorReportadoPorReto((prev) => ({ ...prev, [retoId]: "" }));
     setMotivoReportePorReto((prev) => ({ ...prev, [retoId]: "" }));
-    await cargar();
-  };
-
-  const handleCompletarTransmision = async (event: FormEvent, retoId: string) => {
-    event.preventDefault();
-    setGuardandoTransmision(retoId);
-    setErroresTransmision((prev) => ({ ...prev, [retoId]: "" }));
-
-    const tieneDelayTexto = tieneDelayPorReto[retoId];
-    if (tieneDelayTexto !== "si" && tieneDelayTexto !== "no") {
-      setErroresTransmision((prev) => ({
-        ...prev,
-        [retoId]: "Tienes que definir si la transmisión tiene delay o no.",
-      }));
-      setGuardandoTransmision(null);
-      return;
-    }
-
-    const { error } = await supabase.rpc("completar_datos_transmision", {
-      p_clan_war_id: retoId,
-      p_caster_nombre: casterNombrePorReto[retoId] ?? null,
-      p_caster_link: casterLinkPorReto[retoId] ?? null,
-      p_tiene_delay: tieneDelayTexto === "si",
-    });
-
-    setGuardandoTransmision(null);
-
-    if (error) {
-      setErroresTransmision((prev) => ({ ...prev, [retoId]: error.message }));
-      return;
-    }
-
     await cargar();
   };
 
@@ -4977,94 +4939,18 @@ export default function TeamDetailPage() {
                         )}
                         </div>
 
-                        {/* Migración 088: antes solo se podía editar
-                            mientras el reto estaba "aceptada" -- con
-                            las Clan Wars de un fixture arrancando
-                            solas apenas se confirma el check-in (sin
-                            esperar este paso), ese estado podía durar
-                            muy poco. Se amplía a "en_curso" para que
-                            el organizador siga pudiendo corregir el
-                            dato después de que arrancó.
-                            Migración 120: antes solo lo veía el equipo
-                            challenger -- el challenged (el que acepta
-                            el reto) no tenía forma de cargar el caster
-                            ni el link de transmisión, ni para leerlo
-                            editable. Se abre a los dos lados. */}
-                        {(r.status === "aceptada" || r.status === "en_curso") && (
-                          <>
-                            <h5 className="detail-subtitle">Datos de transmisión</h5>
-                            {erroresTransmision[r.id] && (
-                              <div className="form-error">{erroresTransmision[r.id]}</div>
-                            )}
-                            <form className="auth-form" onSubmit={(e) => handleCompletarTransmision(e, r.id)}>
-                              <div className="form-group">
-                                <label className="form-label" htmlFor={`caster-nombre-${r.id}`}>
-                                  Nombre del caster (opcional)
-                                </label>
-                                <input
-                                  id={`caster-nombre-${r.id}`}
-                                  className="form-input"
-                                  type="text"
-                                  value={casterNombrePorReto[r.id] ?? r.casterNombre ?? ""}
-                                  onChange={(e) =>
-                                    setCasterNombrePorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                  }
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" htmlFor={`caster-link-${r.id}`}>
-                                  Link de la transmisión (opcional)
-                                </label>
-                                <input
-                                  id={`caster-link-${r.id}`}
-                                  className="form-input"
-                                  type="text"
-                                  value={casterLinkPorReto[r.id] ?? r.casterLink ?? ""}
-                                  onChange={(e) =>
-                                    setCasterLinkPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                  }
-                                />
-                              </div>
-                              <div className="form-group">
-                                <label className="form-label" htmlFor={`tiene-delay-${r.id}`}>
-                                  ¿Tiene delay?
-                                </label>
-                                <select
-                                  id={`tiene-delay-${r.id}`}
-                                  className="form-select"
-                                  value={
-                                    tieneDelayPorReto[r.id] ??
-                                    (r.tieneDelay === null ? "" : r.tieneDelay ? "si" : "no")
-                                  }
-                                  onChange={(e) =>
-                                    setTieneDelayPorReto((prev) => ({ ...prev, [r.id]: e.target.value }))
-                                  }
-                                >
-                                  <option value="">Selecciona una opción</option>
-                                  <option value="si">Sí</option>
-                                  <option value="no">No</option>
-                                </select>
-                              </div>
-                              <button
-                                type="submit"
-                                className="btn btn-ghost btn-block"
-                                disabled={guardandoTransmision === r.id}
-                              >
-                                {guardandoTransmision === r.id ? "Guardando..." : "Guardar datos de transmisión"}
-                              </button>
-                            </form>
-                          </>
+                        {/* Corrección (migración 125): el stream ahora es
+                            propio de cada equipo (antes un solo campo
+                            compartido) y se carga directo en el lobby del
+                            evento, junto con el resto de la gestión del
+                            lineup -- ya no tiene una edición propia acá. */}
+                        {(r.casterNombre || r.casterLink || r.tieneDelay !== null) && (
+                          <p className="tournament-card-meta">
+                            {r.casterNombre && <>Caster: {r.casterNombre} </>}
+                            {r.casterLink && <>({r.casterLink}) </>}
+                            {r.tieneDelay !== null && <>· {r.tieneDelay ? "Con delay" : "Sin delay"}</>}
+                          </p>
                         )}
-
-                        {r.status !== "aceptada" &&
-                          r.status !== "en_curso" &&
-                          (r.casterNombre || r.casterLink || r.tieneDelay !== null) && (
-                            <p className="tournament-card-meta">
-                              {r.casterNombre && <>Caster: {r.casterNombre} </>}
-                              {r.casterLink && <>({r.casterLink}) </>}
-                              {r.tieneDelay !== null && <>· {r.tieneDelay ? "Con delay" : "Sin delay"}</>}
-                            </p>
-                          )}
 
                         {r.status === "en_curso" && (
                           <>

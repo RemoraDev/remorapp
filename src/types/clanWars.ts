@@ -50,6 +50,13 @@ export interface LineupPublicoClanWar {
   challenged: { nombre: string; tag: string; logo_url: string | null };
   caster_nombre: string | null;
   caster_link: string | null;
+  // Migración 125: stream propio de cada equipo (reemplaza al campo
+  // compartido caster_nombre/caster_link para la gestión diaria) --
+  // null cuando ese equipo no cargó nada, se muestra solo en ese caso.
+  challenger_stream_link: string | null;
+  challenger_stream_delay: boolean | null;
+  challenged_stream_link: string | null;
+  challenged_stream_delay: boolean | null;
   // Migración 067: fondo de imagen (catalogo_fondos_lineup) tiene
   // prioridad sobre el clásico cuando está presente -- son mutuamente
   // excluyentes, ver cambiar_fondo_lineup_cw()/cambiar_fondo_lineup_imagen_cw().
@@ -124,6 +131,13 @@ export interface LineupEditorClanWar {
   lineup_aprobado: boolean;
   mi_visto_bueno: boolean;
   visto_bueno_rival: boolean;
+  // Migración 125: stream propio -- editable acá mismo; el del rival
+  // es de solo lectura (visible siempre para el editor, a diferencia
+  // de la tarjeta pública, que lo omite si no está cargado).
+  mi_stream_link: string | null;
+  mi_stream_delay: boolean | null;
+  rival_stream_link: string | null;
+  rival_stream_delay: boolean | null;
   roster_elegible: LineupEditorJugadorElegible[];
   temporales_propios: LineupEditorTemporal[];
   lineup_propio: LineupEditorEntryPropio[];

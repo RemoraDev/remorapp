@@ -3227,11 +3227,39 @@ html.es-escritorio .player-detail-vista-escritorio {
   flex-shrink: 0;
 }
 
+.lineup-card-equipo-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.lineup-card-equipo-challenged .lineup-card-equipo-texto {
+  align-items: flex-end;
+}
+
 .lineup-card-equipo-nombre {
   font-weight: 700;
   font-size: 1rem;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Stream propio de cada equipo (migración 125) -- chip chico, mismo
+   acento cyan que el resto de la app, debajo del nombre. */
+.lineup-card-equipo-stream {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(var(--h-accent-rgb), 0.4);
+  background: rgba(var(--h-accent-rgb), 0.1);
+  color: var(--color-accent);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-decoration: none;
   white-space: nowrap;
 }
 

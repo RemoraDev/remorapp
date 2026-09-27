@@ -50,6 +50,15 @@ export default function ClanWarLineupPublicoPage() {
   const [confirmando, setConfirmando] = useState(false);
   const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null);
 
+  // Stream propio de cada equipo (migración 125): se inicializa una
+  // sola vez con lo que ya tenía cargado, para no pisar lo que el
+  // usuario está tipeando en cada refresco de recargarTodo().
+  const [streamLinkEditado, setStreamLinkEditado] = useState("");
+  const [streamDelayEditado, setStreamDelayEditado] = useState(false);
+  const [streamInicializado, setStreamInicializado] = useState(false);
+  const [guardandoStream, setGuardandoStream] = useState(false);
+  const [errorStream, setErrorStream] = useState<string | null>(null);
+
   const cargarPublico = useCallback(async () => {
     if (!id) return;
     const { data, error: rpcError } = await supabase.rpc("lineup_publico_clan_war", { p_clan_war_id: id });
@@ -100,6 +109,14 @@ export default function ClanWarLineupPublicoPage() {
       .maybeSingle()
       .then(({ data }) => setFondoImagenUrl(data?.image_url ?? null));
   }, [editor?.fondo_lineup_imagen_id]);
+
+  useEffect(() => {
+    if (editor && !streamInicializado) {
+      setStreamLinkEditado(editor.mi_stream_link ?? "");
+      setStreamDelayEditado(!!editor.mi_stream_delay);
+      setStreamInicializado(true);
+    }
+  }, [editor, streamInicializado]);
 
   const recargarTodo = async () => {
     await Promise.all([cargarPublico(), cargarEditor()]);
@@ -199,6 +216,26 @@ export default function ClanWarLineupPublicoPage() {
     await recargarTodo();
   };
 
+  const handleGuardarStream = async () => {
+    setGuardandoStream(true);
+    setErrorStream(null);
+
+    const { error: rpcError } = await supabase.rpc("actualizar_stream_equipo_cw", {
+      p_clan_war_id: id,
+      p_stream_link: streamLinkEditado.trim() || null,
+      p_tiene_delay: streamDelayEditado,
+    });
+
+    setGuardandoStream(false);
+
+    if (rpcError) {
+      setErrorStream(rpcError.message);
+      return;
+    }
+
+    await recargarTodo();
+  };
+
   const vencioPlazo = editor
     ? vencioPlazoEdicionLineup(
         editor.fecha_hora_cet,
@@ -255,12 +292,60 @@ export default function ClanWarLineupPublicoPage() {
                       : undefined
                   }
                 >
+                  {/* Corrección: onCambio solo refrescaba cargarEditor()
+                      (el fondo previsualizado acá adentro) -- la tarjeta
+                      real de arriba (TarjetaLineupClanWar) usa los datos
+                      de lineup_publico_clan_war(), una consulta aparte,
+                      así que el cambio de fondo nunca le llegaba. */}
                   <LineupFondoPicker
                     clanWarId={id!}
                     fondo={editor.fondo_lineup}
                     fondoImagenId={editor.fondo_lineup_imagen_id}
-                    onCambio={cargarEditor}
+                    onCambio={recargarTodo}
                   />
+
+                  {/* Stream propio de cada equipo (migración 125): cada
+                      capitán carga el suyo acá mismo, sin pisar el del
+                      rival -- antes esto ni existía en el lobby, solo en
+                      la ficha del equipo, y encima era un único campo
+                      compartido entre los dos lados. */}
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="editor-stream-link">
+                      Tu stream (opcional)
+                    </label>
+                    <input
+                      id="editor-stream-link"
+                      className="form-input"
+                      type="text"
+                      placeholder="https://twitch.tv/tu_canal"
+                      value={streamLinkEditado}
+                      onChange={(e) => setStreamLinkEditado(e.target.value)}
+                    />
+                    <label className="form-checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={streamDelayEditado}
+                        onChange={(e) => setStreamDelayEditado(e.target.checked)}
+                      />
+                      Tiene delay
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={guardandoStream}
+                      onClick={handleGuardarStream}
+                    >
+                      {guardandoStream ? "Guardando..." : "Guardar stream"}
+                    </button>
+                    {errorStream && <div className="form-error">{errorStream}</div>}
+                    <p className="form-hint">
+                      {editor.rival_stream_link
+                        ? `Stream de ${editor.rival_nombre}: ${editor.rival_stream_link}${
+                            editor.rival_stream_delay ? " (con delay)" : ""
+                          }`
+                        : `${editor.rival_nombre} todavía no cargó su stream.`}
+                    </p>
+                  </div>
 
                   {!editor.es_de_torneo && (
                     <div className="form-group">

@@ -46,9 +46,13 @@ function RazaBadge({ raza, lado }: { raza: LineupPublicoJugador["raza"]; lado: "
 function EquipoHeader({
   equipo,
   lado,
+  streamLink,
+  streamDelay,
 }: {
   equipo: { nombre: string; tag: string; logo_url: string | null };
   lado: "challenger" | "challenged";
+  streamLink: string | null;
+  streamDelay: boolean | null;
 }) {
   return (
     <div className={`lineup-card-equipo lineup-card-equipo-${lado}`}>
@@ -56,7 +60,17 @@ function EquipoHeader({
           ("TEAM 1"/"TEAM 2") en vez del nombre real del equipo, que sí
           estaba disponible -- el logo es opcional, el nombre no. */}
       {equipo.logo_url && <img src={equipo.logo_url} alt="" className="lineup-card-logo" />}
-      <span className="lineup-card-equipo-nombre">{equipo.nombre}</span>
+      <div className="lineup-card-equipo-texto">
+        <span className="lineup-card-equipo-nombre">{equipo.nombre}</span>
+        {/* Migración 125: stream propio de cada equipo -- solo se
+            muestra al público si ese equipo lo cargó, nunca un mensaje
+            de "sin stream". */}
+        {streamLink && (
+          <a href={streamLink} target="_blank" rel="noreferrer noopener" className="lineup-card-equipo-stream">
+            Stream{streamDelay ? " (con delay)" : ""}
+          </a>
+        )}
+      </div>
     </div>
   );
 }
@@ -79,9 +93,19 @@ export default function TarjetaLineupClanWar({ datos }: { datos: LineupPublicoCl
     >
       <div className="lineup-card-overlay">
         <div className="lineup-card-header">
-          <EquipoHeader equipo={datos.challenger} lado="challenger" />
+          <EquipoHeader
+            equipo={datos.challenger}
+            lado="challenger"
+            streamLink={datos.challenger_stream_link}
+            streamDelay={datos.challenger_stream_delay}
+          />
           <span className="lineup-card-brand">RemorApp</span>
-          <EquipoHeader equipo={datos.challenged} lado="challenged" />
+          <EquipoHeader
+            equipo={datos.challenged}
+            lado="challenged"
+            streamLink={datos.challenged_stream_link}
+            streamDelay={datos.challenged_stream_delay}
+          />
         </div>
 
         <div className="lineup-card-filas">
