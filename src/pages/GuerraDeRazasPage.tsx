@@ -325,12 +325,17 @@ export default function GuerraDeRazasPage() {
     setNombresNuevos((prev) => ({ ...prev, [raza]: "" }));
   };
 
+  // Migración 117: eliminar_jugador_guerra_razas() limpia primero
+  // cualquier encuentro SIN finalizar que referencie a este jugador
+  // (no es historial real, nunca repartió puntos) antes de borrarlo --
+  // si de verdad participó en un encuentro ya finalizado, la llave
+  // foránea sigue bloqueando el borrado a propósito.
   const handleEliminarJugador = async (jugadorId: string) => {
-    const { error } = await supabase.from("guerra_razas_jugadores").delete().eq("id", jugadorId);
+    const { error } = await supabase.rpc("eliminar_jugador_guerra_razas", { p_jugador_id: jugadorId });
     if (error) {
       toast.error(
         error.code === "23503"
-          ? "No se puede eliminar: este jugador ya participó en un Enfrentamiento y su historial de puntos debe conservarse."
+          ? "No se puede eliminar: este jugador ya participó en un Enfrentamiento finalizado y su historial de puntos debe conservarse."
           : error.message
       );
     }
