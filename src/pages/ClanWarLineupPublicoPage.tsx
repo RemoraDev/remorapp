@@ -7,6 +7,7 @@ import { formatFecha } from "../lib/formatters";
 import { vencioPlazoEdicionLineup } from "../lib/clanWars";
 import TarjetaLineupClanWar from "../components/TarjetaLineupClanWar";
 import LineupFondoPicker from "../components/LineupFondoPicker";
+import EstructuraLineupPicker from "../components/EstructuraLineupPicker";
 import type { LineupEditorClanWar, LineupPublicoClanWar } from "../types/clanWars";
 
 // Vista pública del lineup de una Clan War (migración 066, con la
@@ -33,6 +34,10 @@ export default function ClanWarLineupPublicoPage() {
 
   const [editor, setEditor] = useState<LineupEditorClanWar | null>(null);
   const [mostrarEditor, setMostrarEditor] = useState(false);
+  // "Look" (migración 127): sub-pestañas de apariencia dentro del panel
+  // -- Fondo (ya existía) y Estructura (maqueta de la tarjeta), ambas
+  // separadas del resto de la gestión (lineup, stream, visto bueno).
+  const [seccionLook, setSeccionLook] = useState<"fondo" | "estructura">("fondo");
   const [fondoImagenUrl, setFondoImagenUrl] = useState<string | null>(null);
 
   const [jugadoresPorSetEditado, setJugadoresPorSetEditado] = useState("");
@@ -357,7 +362,7 @@ export default function ClanWarLineupPublicoPage() {
                 onClick={() => setMostrarEditor((v) => !v)}
               >
                 <Pencil className="icon-inline" />
-                {mostrarEditor ? "Cerrar editor" : "Editar"}
+                {mostrarEditor ? "Cerrar Look" : "Look"}
               </button>
 
               {mostrarEditor && (
@@ -370,17 +375,46 @@ export default function ClanWarLineupPublicoPage() {
                       : undefined
                   }
                 >
-                  {/* Corrección: onCambio solo refrescaba cargarEditor()
-                      (el fondo previsualizado acá adentro) -- la tarjeta
-                      real de arriba (TarjetaLineupClanWar) usa los datos
-                      de lineup_publico_clan_war(), una consulta aparte,
-                      así que el cambio de fondo nunca le llegaba. */}
-                  <LineupFondoPicker
-                    clanWarId={id!}
-                    fondo={editor.fondo_lineup}
-                    fondoImagenId={editor.fondo_lineup_imagen_id}
-                    onCambio={recargarTodo}
-                  />
+                  {/* "Look" (migración 127): apariencia de la tarjeta,
+                      separado del resto de la gestión -- Fondo (ya
+                      existía) y Estructura (maqueta), en sub-pestañas. */}
+                  <div className="team-info-tabs clan-war-look-tabs">
+                    <button
+                      type="button"
+                      className={`team-info-tab ${seccionLook === "fondo" ? "is-active" : ""}`}
+                      onClick={() => setSeccionLook("fondo")}
+                    >
+                      Fondo
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-info-tab ${seccionLook === "estructura" ? "is-active" : ""}`}
+                      onClick={() => setSeccionLook("estructura")}
+                    >
+                      Estructura
+                    </button>
+                  </div>
+
+                  {seccionLook === "fondo" ? (
+                    /* Corrección: onCambio solo refrescaba cargarEditor()
+                       (el fondo previsualizado acá adentro) -- la
+                       tarjeta real de arriba (TarjetaLineupClanWar) usa
+                       los datos de lineup_publico_clan_war(), una
+                       consulta aparte, así que el cambio de fondo nunca
+                       le llegaba. */
+                    <LineupFondoPicker
+                      clanWarId={id!}
+                      fondo={editor.fondo_lineup}
+                      fondoImagenId={editor.fondo_lineup_imagen_id}
+                      onCambio={recargarTodo}
+                    />
+                  ) : (
+                    <EstructuraLineupPicker
+                      clanWarId={id!}
+                      estructura={editor.estructura_lineup}
+                      onCambio={recargarTodo}
+                    />
+                  )}
 
                   {/* Stream propio de cada equipo (migración 125): cada
                       capitán carga el suyo acá mismo, sin pisar el del

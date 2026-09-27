@@ -1,5 +1,11 @@
 import type { FondoLineup } from "./teams";
 
+// Migración 127: maqueta con la que se arma la tarjeta del lineup --
+// "clasico" (equipos lado a lado, una fila por enfrentamiento) o
+// "cascada" (un equipo arriba en fila horizontal, marcador grande al
+// centro, el otro equipo abajo). Ver TarjetaLineupClanWar.tsx.
+export type EstructuraLineup = "clasico" | "cascada";
+
 // Fila devuelta por clan_wars_proximas() (migración 059, extendida en
 // la 064 con liga_nombre/division_nombre y en la 066 con status y los
 // datos de revelación del lineup): versión pública de una Clan War
@@ -62,6 +68,7 @@ export interface LineupPublicoClanWar {
   // excluyentes, ver cambiar_fondo_lineup_cw()/cambiar_fondo_lineup_imagen_cw().
   fondo_clasico: FondoLineup;
   fondo_imagen_url: string | null;
+  estructura: EstructuraLineup;
   lineup_challenger: LineupPublicoJugador[] | null;
   lineup_challenged: LineupPublicoJugador[] | null;
 }
@@ -124,6 +131,7 @@ export interface LineupEditorClanWar {
   jugadores_por_set: number;
   fondo_lineup: FondoLineup;
   fondo_lineup_imagen_id: string | null;
+  estructura_lineup: EstructuraLineup;
   fecha_hora_cet: string;
   lineup_plazo_extendido_hasta: string | null;
   ventana_revelacion_minutos: number;
