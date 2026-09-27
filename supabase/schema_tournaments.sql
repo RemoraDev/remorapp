@@ -19510,3 +19510,383 @@ end;
 $$;
 
 grant execute on function public.eliminar_encuentro_guerra_razas(uuid) to authenticated;
+
+
+-- ------------------------------------------------------------
+-- Migración 114: hoy cualquier usuario que crea un "torneo por ligas"
+-- y lo termina con un clan/jugador campeón mete ese resultado directo
+-- en el Ranking de clanes y el Ranking de jugadores públicos, sin
+-- ningún control -- reportado por el usuario: "cualquiera que hace una
+-- liga puede meter eso ahí". Se agrega una aprobación manual: solo
+-- torneos por ligas (liga_id is not null) marcados aprobado_para_ranking
+-- por el staff, un admin o el dueño de la plataforma cuentan para
+-- cualquiera de los dos rankings.
+--
+-- Default false para TODOS los torneos, incluidos los que ya existen
+-- -- de ahora en más los dos rankings quedan vacíos hasta que el staff
+-- revise y apruebe manualmente los torneos por ligas que considere
+-- importantes, desde el Panel de Administración ("Torneos").
+--
+-- Los torneos 1v1 SIN liga (amistosos, uno contra otro sin división)
+-- no se tocan: siguen sumando victorias al Ranking de jugadores igual
+-- que antes -- el problema reportado es específico de "ligas", no de
+-- cualquier torneo 1v1.
+-- ------------------------------------------------------------
+
+alter table public.tournaments
+  add column aprobado_para_ranking boolean not null default false;
+
+create or replace function public.admin_aprobar_torneo_ranking(p_tournament_id uuid, p_aprobado boolean)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not (public.is_admin() or public.es_staff() or public.es_dueno_plataforma()) then
+    raise exception 'Solo el staff, un admin o el dueño de la plataforma puede aprobar un torneo para el ranking.';
+  end if;
+
+  if not exists (select 1 from public.tournaments where id = p_tournament_id) then
+    raise exception 'Ese torneo no existe.';
+  end if;
+
+  update public.tournaments set aprobado_para_ranking = p_aprobado where id = p_tournament_id;
+end;
+$$;
+
+grant execute on function public.admin_aprobar_torneo_ranking(uuid, boolean) to authenticated;
+
+create or replace function public.ranking_clanes(p_liga_id uuid default null, p_division_id uuid default null)
+returns table (
+  team_id uuid,
+  team_name text,
+  team_tag text,
+  logo_url text,
+  torneos_ganados bigint
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select
+    t.id as team_id,
+    t.name as team_name,
+    t.tag as team_tag,
+    t.logo_url,
+    count(tn.id) as torneos_ganados
+  from public.teams t
+  join public.tournament_participants tp on tp.team_id = t.id
+  join public.tournaments tn
+    on tn.id = tp.tournament_id
+    and tn.campeon_participant_id = tp.id
+    and tn.estado = 'finalizado'
+    and tn.aprobado_para_ranking
+    and (
+      (p_liga_id is null and tn.liga_id is not null)
+      or (
+        p_liga_id is not null
+        and tn.liga_id = p_liga_id
+        and (p_division_id is null or tn.division_id = p_division_id)
+      )
+    )
+  where not t.disuelto
+  group by t.id, t.name, t.tag, t.logo_url
+  order by torneos_ganados desc, t.name asc;
+$$;
+
+create or replace function public.ranking_jugadores()
+returns table (
+  jugador_id uuid,
+  nick text,
+  unique_id text,
+  liga text,
+  raza_principal text,
+  team_id uuid,
+  team_name text,
+  team_tag text,
+  team_logo_url text,
+  victorias bigint
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with victorias_bracket_1v1 as (
+    select tp.user_id as jugador_id, count(*) as cnt
+    from public.bracket_matches bm
+    join public.tournaments t on t.id = bm.tournament_id
+    join public.tournament_participants tp on tp.id = bm.winner_id
+    where t.formato = '1v1'
+      and bm.status = 'jugado'
+      and bm.participant1_id is not null
+      and bm.participant2_id is not null
+      and tp.user_id is not null
+      and (t.liga_id is null or t.aprobado_para_ranking)
+    group by tp.user_id
+  ),
+  victorias_grupos_1v1 as (
+    select tp.user_id as jugador_id, count(*) as cnt
+    from public.tournament_group_matches gm
+    join public.tournament_groups g on g.id = gm.group_id
+    join public.tournaments t on t.id = g.tournament_id
+    join public.tournament_participants tp on tp.id = gm.ganador_id
+    where t.formato = '1v1'
+      and gm.status = 'jugado'
+      and tp.user_id is not null
+      and (t.liga_id is null or t.aprobado_para_ranking)
+    group by tp.user_id
+  ),
+  victorias_cw_simple as (
+    select ganador_id as jugador_id, count(*) as cnt
+    from public.clan_war_matches
+    where status = 'jugado' and ganador_id is not null
+    group by ganador_id
+  ),
+  victorias_wtl as (
+    select jugador_id, count(*) as cnt
+    from (
+      select jugador_challenger_id as jugador_id
+      from public.clan_war_wtl_sets
+      where status = 'jugado' and mapas_ganados_challenger > mapas_ganados_challenged
+      union all
+      select jugador_challenged_id as jugador_id
+      from public.clan_war_wtl_sets
+      where status = 'jugado' and mapas_ganados_challenged > mapas_ganados_challenger
+    ) w
+    group by jugador_id
+  ),
+  totales as (
+    select jugador_id, sum(cnt) as victorias
+    from (
+      select * from victorias_bracket_1v1
+      union all
+      select * from victorias_grupos_1v1
+      union all
+      select * from victorias_cw_simple
+      union all
+      select * from victorias_wtl
+    ) todas
+    group by jugador_id
+  )
+  select
+    p.id as jugador_id,
+    p.nick,
+    p.unique_id,
+    p.liga_1v1 as liga,
+    pj.datos ->> 'raza_principal' as raza_principal,
+    tm.team_id,
+    te.name as team_name,
+    te.tag as team_tag,
+    te.logo_url as team_logo_url,
+    tot.victorias
+  from totales tot
+  join public.profiles p on p.id = tot.jugador_id
+  left join public.catalogo_juegos cj on cj.nombre = 'StarCraft II'
+  left join public.perfiles_juego pj on pj.user_id = p.id and pj.juego_id = cj.id
+  left join public.team_members tm on tm.user_id = p.id
+  left join public.teams te on te.id = tm.team_id
+  where not p.suspendido
+  order by tot.victorias desc, p.nick asc nulls last;
+$$;
+
+grant execute on function public.ranking_jugadores() to anon, authenticated;
+
+
+-- ------------------------------------------------------------
+-- Migración 115: dos bugs reales en el buscador de clanes para
+-- proponer una Clan War Amistosa (CreateTournamentPage.tsx), ambos
+-- confirmados en vivo contra la base real:
+--
+-- 1) El buscador anterior era un filtro .ilike() directo del cliente
+-- -- sin normalizar acentos/caracteres especiales, así que un clan con
+-- un nombre estilizado como "ØLD SCHOOL REBØRN" (Ø en vez de O) nunca
+-- aparece si alguien busca con la letra normal ("old school"), que es
+-- la forma más natural de escribirla en un teclado común. Se
+-- reemplaza por esta función, que compara con unaccent() de los dos
+-- lados (mismo criterio que el filtro de lenguaje inapropiado).
+--
+-- 2) Una vez elegido un clan, el campo de búsqueda muestra
+-- "Nombre [TAG]" (formateado) en vez del texto tipeado -- si el
+-- navegador ofrece esa cadena como autocompletado (la recuerda de una
+-- selección anterior) y el usuario la vuelve a elegir, se dispara una
+-- nueva búsqueda con ese texto formateado completo, que nunca va a
+-- coincidir con ningún nombre o tag real (ninguno de los dos incluye
+-- corchetes) -- se ve como "No encontré ningún clan público con ese
+-- nombre o tag" para un clan que sí existe. Se corrige en el frontend
+-- con autoComplete="off" en ese campo (ver CreateTournamentPage.tsx).
+-- ------------------------------------------------------------
+
+create or replace function public.buscar_equipos_publicos_cw(p_query text, p_excluir_team_id uuid default null)
+returns table (
+  id uuid,
+  name text,
+  tag text
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select t.id, t.name, t.tag
+  from public.teams t
+  where t.is_public
+    and not t.disuelto
+    and not t.banca_rota
+    and (p_excluir_team_id is null or t.id <> p_excluir_team_id)
+    and (
+      unaccent(lower(t.name)) ilike '%' || unaccent(lower(p_query)) || '%'
+      or unaccent(lower(t.tag)) ilike '%' || unaccent(lower(p_query)) || '%'
+    )
+  order by t.name
+  limit 10;
+$$;
+
+grant execute on function public.buscar_equipos_publicos_cw(text, uuid) to authenticated;
+
+
+-- ------------------------------------------------------------
+-- Migración 116: corrige un agujero de seguridad real que quedó
+-- abierto en la migración 114.
+--
+-- tournaments tiene "grant insert, update on public.tournaments to
+-- authenticated" de tabla completa (sin lista de columnas), y
+-- tournaments_update_organizador (RLS) deja al organizador tocar
+-- CUALQUIER columna de su propio torneo, sin restricción -- ver el
+-- comentario largo junto a esa política ("sin restricción de qué
+-- columnas puede tocar ni en qué estado"). Como en Postgres un revoke
+-- de columna NO recorta un grant de tabla completa (son entradas
+-- independientes -- ver el comentario de la migración 017, junto al
+-- grant de profiles), agregar la columna aprobado_para_ranking sin
+-- nada más dejaba a CUALQUIER organizador aprobar su propio torneo
+-- para el ranking con un simple .update() directo, sin pasar nunca
+-- por admin_aprobar_torneo_ranking() -- exactamente lo que la
+-- migración 114 quería impedir.
+--
+-- Se protege con el mismo patrón que ya usa profiles para es_admin/
+-- suspendido: un trigger BEFORE UPDATE que revierte en silencio
+-- cualquier cambio a esta columna si quien llama no es staff, admin
+-- ni el dueño de la plataforma -- así el resto de un guardado del
+-- organizador (fecha, cupos, etc.) sigue funcionando normal, solo este
+-- campo puntual queda protegido.
+-- ------------------------------------------------------------
+
+create or replace function public.proteger_aprobado_para_ranking()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if new.aprobado_para_ranking is distinct from old.aprobado_para_ranking
+     and not (public.is_admin() or public.es_staff() or public.es_dueno_plataforma()) then
+    new.aprobado_para_ranking := old.aprobado_para_ranking;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists before_update_proteger_aprobado_ranking on public.tournaments;
+
+create trigger before_update_proteger_aprobado_ranking
+  before update on public.tournaments
+  for each row execute function public.proteger_aprobado_para_ranking();
+
+
+-- ------------------------------------------------------------
+-- Migración 117: SNK (un jugador de prueba) quedó imposible de
+-- eliminar aunque "todavía no jugó nada" -- la migración 111 dejó la
+-- llave foránea de guerra_razas_encuentros.jugador_*_id SIN on delete
+-- cascade a propósito, para proteger el historial real, pero eso
+-- también bloquea a un jugador que solo quedó referenciado por un
+-- encuentro generado y JAMÁS finalizado (sin resultados cargados, sin
+-- puntos repartidos) -- no hay ningún historial ahí que proteger.
+--
+-- eliminar_jugador_guerra_razas() reemplaza al delete directo de la
+-- tabla: antes de borrar al jugador, limpia cualquier encuentro SIN
+-- FINALIZAR que lo referencie (en cualquiera de las 3 razas, no
+-- necesariamente en la propia -- por si el organizador cambió de raza
+-- a un jugador con un encuentro generado a medias). Si el jugador
+-- sigue sin poder borrarse después de esa limpieza, es porque
+-- realmente participó en un encuentro YA FINALIZADO -- ahí sí se
+-- respeta el bloqueo (la llave foránea sigue sin cascada para eso).
+--
+-- De paso, se redeclara eliminar_encuentro_guerra_razas() por si la
+-- migración 113 no se llegó a correr todavía -- create or replace es
+-- seguro de aplicar de nuevo aunque ya exista.
+-- ------------------------------------------------------------
+
+create or replace function public.eliminar_encuentro_guerra_razas(p_encuentro_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_enc record;
+begin
+  select ge.* into v_enc
+  from public.guerra_razas_encuentros ge
+  join public.guerra_razas g on g.id = ge.guerra_id
+  where ge.id = p_encuentro_id and g.creado_por = auth.uid()
+  for update of ge;
+
+  if v_enc is null then
+    raise exception 'No tienes permiso sobre este encuentro, o no existe.';
+  end if;
+  if v_enc.finalizado then
+    raise exception 'Un encuentro ya finalizado no se puede deshacer -- sus puntos ya se repartieron.';
+  end if;
+
+  delete from public.guerra_razas_encuentros where id = p_encuentro_id;
+end;
+$$;
+
+grant execute on function public.eliminar_encuentro_guerra_razas(uuid) to authenticated;
+
+create or replace function public.eliminar_jugador_guerra_razas(p_jugador_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_jugador record;
+  v_creador_id uuid;
+begin
+  select gj.* into v_jugador
+  from public.guerra_razas_jugadores gj
+  where gj.id = p_jugador_id
+  for update of gj;
+
+  if v_jugador is null then
+    raise exception 'Ese jugador no existe.';
+  end if;
+
+  select creado_por into v_creador_id from public.guerra_razas where id = v_jugador.guerra_id;
+  if v_creador_id is null or v_creador_id <> auth.uid() then
+    raise exception 'Solo el organizador puede eliminar jugadores.';
+  end if;
+
+  -- Limpia cualquier encuentro SIN finalizar que lo referencie, en
+  -- cualquiera de las 3 razas -- no representa historial real, nunca
+  -- se repartieron puntos por él.
+  delete from public.guerra_razas_encuentros
+  where guerra_id = v_jugador.guerra_id
+    and not finalizado
+    and (
+      jugador_protoss_id = p_jugador_id
+      or jugador_terran_id = p_jugador_id
+      or jugador_zerg_id = p_jugador_id
+    );
+
+  -- Si el jugador participó en un encuentro YA finalizado, esto sigue
+  -- fallando por la llave foránea (a propósito: eso sí es historial
+  -- real, no se toca).
+  delete from public.guerra_razas_jugadores where id = p_jugador_id;
+end;
+$$;
+
+grant execute on function public.eliminar_jugador_guerra_razas(uuid) to authenticated;

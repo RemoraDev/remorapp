@@ -240,6 +240,7 @@ export default function AdminPage() {
   const [errorTorneosTodos, setErrorTorneosTodos] = useState<string | null>(null);
   const [filtroTorneos, setFiltroTorneos] = useState("");
   const [eliminandoTorneoId, setEliminandoTorneoId] = useState<string | null>(null);
+  const [aprobandoRankingId, setAprobandoRankingId] = useState<string | null>(null);
 
   // Migración 095: admin_extender_plazo_torneo() -- mueve fecha_inicio
   // de un torneo puntual más allá del límite normal de 60 días.
@@ -1216,6 +1217,31 @@ export default function AdminPage() {
     setTorneos((prev) => prev.filter((t) => t.id !== torneo.id));
   };
 
+  // Migración 114: solo torneos por ligas (liga_id no nulo) aprobados a
+  // mano por el staff/admin/dueño cuentan para el Ranking de clanes y
+  // de jugadores -- ver admin_aprobar_torneo_ranking() en la base.
+  const handleToggleAprobadoRanking = async (torneo: TorneoAdminRow) => {
+    const nuevoValor = !torneo.aprobado_para_ranking;
+    setAprobandoRankingId(torneo.id);
+    setErrorTorneosTodos(null);
+
+    const { error } = await supabase.rpc("admin_aprobar_torneo_ranking", {
+      p_tournament_id: torneo.id,
+      p_aprobado: nuevoValor,
+    });
+
+    setAprobandoRankingId(null);
+
+    if (error) {
+      setErrorTorneosTodos(error.message);
+      return;
+    }
+
+    setTorneosTodos((prev) =>
+      prev.map((t) => (t.id === torneo.id ? { ...t, aprobado_para_ranking: nuevoValor } : t))
+    );
+  };
+
   // Migración 095: extiende fecha_inicio de un torneo puntual más allá
   // del límite normal de 60 días -- admin_extender_plazo_torneo() (en
   // la base) es la que de verdad verifica is_admin()/es_dueno_plataforma()
@@ -1816,6 +1842,27 @@ export default function AdminPage() {
                         Candidato a eliminación desde {formatFecha(t.candidato_eliminacion_desde)} (se
                         borra a los 7 días de esa marca si sigue sin actividad).
                       </p>
+                    )}
+                    {/* Migración 114: solo torneos por ligas (liga_id no
+                        nulo) pueden aprobarse para el Ranking de clanes
+                        y de jugadores -- un torneo amistoso 1v1 sin
+                        liga no necesita esta aprobación, sigue sumando
+                        victorias como siempre. */}
+                    {t.liga_id && (
+                      <button
+                        type="button"
+                        className={`btn btn-ghost admin-row-aprobar-ranking ${
+                          t.aprobado_para_ranking ? "is-aprobado" : ""
+                        }`}
+                        disabled={aprobandoRankingId === t.id}
+                        onClick={() => handleToggleAprobadoRanking(t)}
+                      >
+                        {aprobandoRankingId === t.id
+                          ? "Guardando..."
+                          : t.aprobado_para_ranking
+                            ? "✓ Aprobado para el ranking (clic para quitar)"
+                            : "Aprobar para el ranking"}
+                      </button>
                     )}
                     {/* Migración 095: extiende fecha_inicio más allá del
                         límite normal de 60 días para este torneo puntual. */}

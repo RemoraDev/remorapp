@@ -109,6 +109,12 @@ export interface TournamentRow {
   // liga_id (validado en la base por un trigger).
   liga_id: string | null;
   division_id: string | null;
+  // Migración 114: solo cuenta para el Ranking de clanes/jugadores si
+  // liga_id no es null Y esta columna está en true -- el staff, un
+  // admin o el dueño de la plataforma la aprueban a mano desde el
+  // Panel de Administración (pestaña "Torneos"). Default false,
+  // incluso para torneos ya existentes.
+  aprobado_para_ranking: boolean;
   // Migración 069: Suizo -- si el organizador no la fija a mano al
   // crear el torneo, generar_torneo_suizo() la calcula sola.
   swiss_rondas_totales: number | null;

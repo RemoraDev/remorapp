@@ -297,7 +297,12 @@ export default function CreateTournamentPage() {
   // Buscador de clanes públicos para invitar a la Clan War Amistosa --
   // mismo criterio de "equipo público" que usa /equipos (is_public y
   // no disuelto), excluyendo mi propio equipo y los que están en
-  // banca rota (proponer_clan_war() los rechazaría igual).
+  // banca rota (proponer_clan_war() los rechazaría igual). Migración
+  // 115: se cambia el .ilike() directo del cliente por
+  // buscar_equipos_publicos_cw(), que normaliza acentos/caracteres
+  // especiales con unaccent() -- un clan estilizado como "ØLD SCHOOL
+  // REBØRN" antes no aparecía si se buscaba con la letra normal ("old
+  // school"), el modo más natural de escribirlo en un teclado común.
   useEffect(() => {
     const termino = cwBusqueda.trim();
     if (termino.length < 2) {
@@ -308,15 +313,10 @@ export default function CreateTournamentPage() {
     setCwBuscando(true);
     const timeout = setTimeout(() => {
       supabase
-        .from("teams")
-        .select("id, name, tag")
-        .eq("is_public", true)
-        .eq("disuelto", false)
-        .eq("banca_rota", false)
-        .or(`name.ilike.%${termino}%,tag.ilike.%${termino}%`)
-        .neq("id", miEquipo?.team_id ?? "00000000-0000-0000-0000-000000000000")
-        .order("name")
-        .limit(10)
+        .rpc("buscar_equipos_publicos_cw", {
+          p_query: termino,
+          p_excluir_team_id: miEquipo?.team_id ?? null,
+        })
         .then(({ data, error: buscarError }) => {
           if (cancelado) return;
           if (buscarError) console.error("Error buscando equipos:", buscarError);
@@ -731,6 +731,7 @@ export default function CreateTournamentPage() {
                   className="form-input"
                   type="text"
                   placeholder="Busca por nombre o tag..."
+                  autoComplete="off"
                   value={cwEquipoElegido ? `${cwEquipoElegido.name} [${cwEquipoElegido.tag}]` : cwBusqueda}
                   onChange={(e) => {
                     setCwEquipoElegido(null);

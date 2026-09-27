@@ -1589,6 +1589,19 @@ main {
   margin-top: 0.5rem;
 }
 
+/* Migración 114: aprobar/quitar un torneo por ligas del Ranking de
+   clanes y de jugadores -- verde cuando ya está aprobado, mismo tono
+   que otros estados "activo/confirmado" de esta página. */
+.admin-row-aprobar-ranking {
+  margin-top: 0.5rem;
+  align-self: flex-start;
+}
+
+.admin-row-aprobar-ranking.is-aprobado {
+  color: #4ade80;
+  border: 1px solid #4ade80;
+}
+
 .admin-row-actions {
   display: flex;
   align-items: center;
