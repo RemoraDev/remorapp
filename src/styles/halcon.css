@@ -570,6 +570,71 @@ main {
   border: 2px solid var(--color-bg);
 }
 
+/* Estado de presencia (migración 121): punto de color en la esquina
+   inferior del avatar del header -- disponible/ausente/ocupado,
+   elegido a mano desde el menú. El borde propio (color de fondo)
+   lo separa del avatar para que se lea bien incluso sobre una foto
+   clara. */
+.header-avatar-estado {
+  position: absolute;
+  bottom: -0.05rem;
+  right: -0.05rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg);
+}
+
+.header-user-menu-label {
+  padding: 0.3rem 0.7rem 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.header-estado-presencia-opciones {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0 0.2rem;
+}
+
+.header-estado-presencia-opcion {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.header-estado-presencia-opcion:hover {
+  background: rgba(var(--h-accent-rgb), 0.08);
+  color: var(--color-text);
+}
+
+.header-estado-presencia-opcion.is-activo {
+  color: var(--color-text);
+  background: rgba(var(--h-accent-rgb), 0.12);
+}
+
+.header-estado-presencia-punto {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 /* Catcher transparente para detectar el click afuera del menú y
    cerrarlo -- portal a document.body por el mismo motivo que el menú
    de abanico de la barra inferior: .header tiene backdrop-filter, que
@@ -4460,6 +4525,15 @@ main {
   box-shadow: var(--shadow-accent);
 }
 
+/* Corrección: al activar una pestaña, el ícono solo pasaba de gris
+   apagado a blanco (heredaba color vía currentColor) -- un cambio
+   demasiado sutil. Ahora también se tiñe del color de acento con un
+   resplandor propio, para que "se prenda" de forma bien visible. */
+.team-info-tab.is-active .icon-inline {
+  color: rgb(var(--h-accent-rgb));
+  filter: drop-shadow(0 0 4px rgba(var(--h-accent-rgb), 0.7));
+}
+
 /* Botón "Eliminar equipo" (irreversible), separado del resto de
    "Editar equipo" con un borde de aviso arriba. */
 .team-panel-danger-zone {
@@ -7010,6 +7084,67 @@ html.es-escritorio .escritorio-chat-fijo {
 
 .chat-lideres-form .form-input {
   flex: 1;
+}
+
+/* Selector de emojis del chat de líderes -- botón que despliega una
+   tarjeta con una grilla de emojis clásicos, con el mismo lenguaje
+   visual (vidrio + resplandor de acento) del resto del chat. */
+.emoji-picker-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.emoji-picker-toggle {
+  height: 100%;
+  min-width: 2.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.emoji-picker-toggle:hover {
+  background: rgba(var(--h-accent-rgb), 0.12);
+  box-shadow: var(--shadow-accent);
+}
+
+.emoji-picker-toggle:active {
+  transform: scale(0.94);
+}
+
+.emoji-picker-panel {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.2rem;
+  width: 15rem;
+  padding: 0.5rem;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), var(--shadow-accent);
+}
+
+.emoji-picker-item {
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 0.35rem;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+.emoji-picker-item:hover {
+  background: rgba(var(--h-accent-rgb), 0.18);
+  transform: scale(1.15);
 }
 
 .chat-lideres-silenciados-toggle {

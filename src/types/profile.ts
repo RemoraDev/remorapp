@@ -200,9 +200,23 @@ export interface Profile {
   obs_websocket_url: string | null;
   obs_escena_bracket: string | null;
   obs_escena_en_vivo: string | null;
+  // Migración 121: estado de presencia manual, elegido por el propio
+  // usuario desde el menú del avatar del header -- pensado para más
+  // adelante mostrar el estado en el chat de líderes. "Desconectado" no
+  // es un valor de esta columna: se infiere en el cliente cuando no hay
+  // sesión activa, nunca se guarda en la base.
+  estado_presencia: EstadoPresencia;
 }
 
 export type BordeHeader = "negro" | "cyan" | "amarillo" | "verde";
+
+export type EstadoPresencia = "disponible" | "ausente" | "ocupado";
+
+export const ESTADO_PRESENCIA_OPTIONS: { value: EstadoPresencia; label: string; colorHex: string }[] = [
+  { value: "disponible", label: "Disponible", colorHex: "#4ade80" },
+  { value: "ausente", label: "Ausente", colorHex: "#facc15" },
+  { value: "ocupado", label: "Ocupado", colorHex: "#f87171" },
+];
 
 export const BORDE_HEADER_OPTIONS: { value: BordeHeader; label: string; colorHex: string }[] = [
   { value: "negro", label: "Negro", colorHex: "#000000" },

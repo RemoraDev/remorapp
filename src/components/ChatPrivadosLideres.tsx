@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "./Avatar";
+import EmojiPicker from "./EmojiPicker";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import { buscarLideresChat, marcarConversacionLeida, obtenerConversacionesChatLideres } from "../lib/chatLideres";
 import type { ConversacionPrivadaLider, LiderBusqueda, MensajePrivadoLider } from "../lib/chatLideres";
@@ -229,6 +230,7 @@ export default function ChatPrivadosLideres() {
           ))}
         </div>
         <form className="chat-lideres-form" onSubmit={handleEnviar}>
+          <EmojiPicker onSelect={(emoji) => setTexto((t) => t + emoji)} />
           <input
             type="text"
             className="form-input"

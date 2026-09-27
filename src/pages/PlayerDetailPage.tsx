@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { BarChart3, Award, History, Settings } from "lucide-react";
+import { BarChart3, Award, History, Settings, Shield } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
@@ -278,6 +278,17 @@ export default function PlayerDetailPage() {
             </span>
           )}
         </div>
+
+        {/* Mismo criterio que /equipos/:tag: el botón vivía pegado
+            abajo de todo -- pasa a la altura del nombre, a la
+            derecha. El contenido desplegable sigue más abajo. */}
+        {user?.id === perfil.id && (
+          <div className="team-panel-toggle-header">
+            <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
+              {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* La bio va acá, inmediatamente debajo del Nick#ID y antes de
@@ -350,76 +361,67 @@ export default function PlayerDetailPage() {
           nunca en el de otra persona. Mismo patrón visual que el de
           /equipos/:tag, pero acá cada opción es un acceso directo a
           una sección de ProfilePage.tsx (esta página se mantiene de
-          solo lectura, sin ningún formulario propio). */}
-      {user?.id === perfil.id && (
+          solo lectura, sin ningún formulario propio). El botón para
+          abrirlo/cerrarlo vive a la altura del nombre (ver el header
+          más arriba) -- acá solo queda el contenido desplegable. */}
+      {user?.id === perfil.id && panelAbierto && (
         <div className="team-control-panel-wrap">
-          {/* Migración 092: sin btn-block -- se veía como una barra que
-              ocupaba todo el ancho, en vez de un botón normal. */}
-          <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
-            {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
-          </button>
-
-          {panelAbierto && (
-            <div className="team-leader-panel">
-              {/* Reorganización: 4 accesos, en línea con el Panel de
-                  control de ProfilePage.tsx (esta página se mantiene de
-                  solo lectura, acá solo se navega con ?tab=). "Editar
-                  datos" y "Editar datos de juego" ya no son accesos
-                  sueltos -- viven dentro de Configuración. */}
-              <div className="team-panel-menu">
-                <Link to="/perfil?tab=estadisticas" className="team-panel-menu-item">
+          <div className="team-leader-panel">
+            {/* Reorganización: 4 accesos, en línea con el Panel de
+                control de ProfilePage.tsx (esta página se mantiene de
+                solo lectura, acá solo se navega con ?tab=). "Editar
+                datos" y "Editar datos de juego" ya no son accesos
+                sueltos -- viven dentro de Configuración. */}
+            <div className="team-panel-menu">
+              <Link to="/perfil?tab=estadisticas" className="team-panel-menu-item">
+                <span className="team-panel-menu-item-title">
+                  <BarChart3 className="icon-inline" />
+                  Estadísticas
+                </span>
+                <span className="team-panel-menu-item-desc">
+                  Valentía del jugador y Responsabilidad en Torneos y Clan War
+                </span>
+              </Link>
+              <Link to="/perfil?tab=logros" className="team-panel-menu-item">
+                <span className="team-panel-menu-item-title">
+                  <Award className="icon-inline" />
+                  Logros
+                </span>
+                <span className="team-panel-menu-item-desc">
+                  Títulos por nivel y el gestor de títulos Padre/Hijo
+                </span>
+              </Link>
+              <Link to="/perfil?tab=historial" className="team-panel-menu-item">
+                <span className="team-panel-menu-item-title">
+                  <History className="icon-inline" />
+                  Historial de eventos
+                </span>
+                <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que jugaste</span>
+              </Link>
+              <Link to="/perfil?tab=configuracion" className="team-panel-menu-item">
+                <span className="team-panel-menu-item-title">
+                  <Settings className="icon-inline" />
+                  Configuración
+                </span>
+                <span className="team-panel-menu-item-desc">
+                  Editar datos, transmisión, apariencia, juegos e idioma
+                </span>
+              </Link>
+              {/* Corrección: "Panel de Administración" vivía como un
+                  botón grande aparte, debajo del Panel de control --
+                  pasa a ser un acceso más dentro del mismo menú, solo
+                  visible para es_admin mirando el propio perfil. */}
+              {profile?.es_admin && (
+                <Link to="/admin" className="team-panel-menu-item">
                   <span className="team-panel-menu-item-title">
-                    <BarChart3 className="icon-inline" />
-                    Estadísticas
+                    <Shield className="icon-inline" />
+                    Panel de Administración
                   </span>
-                  <span className="team-panel-menu-item-desc">
-                    Valentía del jugador y Responsabilidad en Torneos y Clan War
-                  </span>
+                  <span className="team-panel-menu-item-desc">Gestión de la plataforma</span>
                 </Link>
-                <Link to="/perfil?tab=logros" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">
-                    <Award className="icon-inline" />
-                    Logros
-                  </span>
-                  <span className="team-panel-menu-item-desc">
-                    Títulos por nivel y el gestor de títulos Padre/Hijo
-                  </span>
-                </Link>
-                <Link to="/perfil?tab=historial" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">
-                    <History className="icon-inline" />
-                    Historial de eventos
-                  </span>
-                  <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que jugaste</span>
-                </Link>
-                <Link to="/perfil?tab=configuracion" className="team-panel-menu-item">
-                  <span className="team-panel-menu-item-title">
-                    <Settings className="icon-inline" />
-                    Configuración
-                  </span>
-                  <span className="team-panel-menu-item-desc">
-                    Editar datos, transmisión, apariencia, juegos e idioma
-                  </span>
-                </Link>
-              </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Panel de Administración: acceso completamente separado del
-          Panel de control -- uno es la gestión personal como jugador,
-          el otro es el poder del dueño de la plataforma sobre TODA
-          ella, así que no vive anidado dentro del otro. Solo visible
-          para es_admin, mirando el propio perfil. Sin btn-block, mismo
-          criterio que el botón de "Panel de control" de acá arriba --
-          los dos deben verse del mismo porte, no uno como barra
-          completa y el otro como botón normal. */}
-      {user?.id === perfil.id && profile?.es_admin && (
-        <div className="team-control-panel-wrap">
-          <Link to="/admin" className="btn btn-primary">
-            Panel de Administración
-          </Link>
+          </div>
         </div>
       )}
     </>

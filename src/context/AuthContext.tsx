@@ -54,11 +54,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Títulos Padre/Hijo (migración 026): mismo patrón, barrido global
     // -- un título vencido deja de mostrarse como activo.
     await supabase.rpc("expirar_titulos_vencidos");
+    // Jugadores temporales (migración 121): mismo patrón otra vez --
+    // barrido global de los que llevan 30+ días sin usarse en ningún
+    // lineup, sin esperar un cron.
+    await supabase.rpc("eliminar_jugadores_temporales_vencidos");
 
     const { data, error } = await supabase
       .from("profiles")
       .select(
-        "id, nombre, perfil_tipo, es_caster, es_admin, es_staff, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, gran_maestro_alcanzado_en, avatar_url, avatar_forma, banner_url, bio, links_transmision, horario_stream, cuenta_validada, suspendido, skin_avatar_activa, borde_basico_activo, borde_grosor, borde_header, avatar_transparente, obs_websocket_url, obs_escena_bracket, obs_escena_en_vivo"
+        "id, nombre, perfil_tipo, es_caster, es_admin, es_staff, nick, unique_id, country, sc2_region, sc2_id, liga, mmr_1v1, mmr_equipos, banca_rota, nivel_1v1, liga_1v1, liga_equipos, valentia_jugador, responsabilidad_cw, responsabilidad_torneos, poco_confiable, gran_maestro_alcanzado_en, avatar_url, avatar_forma, banner_url, bio, links_transmision, horario_stream, cuenta_validada, suspendido, skin_avatar_activa, borde_basico_activo, borde_grosor, borde_header, avatar_transparente, obs_websocket_url, obs_escena_bracket, obs_escena_en_vivo, estado_presencia"
       )
       .eq("id", userId)
       .single();
@@ -128,6 +132,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => listener.subscription.unsubscribe();
   }, [cargarPerfil]);
+
+  // Corrección: invitacionesPendientes (el contador del header, que
+  // incluye retos de Clan War recibidos) solo se recalculaba al
+  // iniciar sesión -- en el escritorio, donde la ventana queda abierta
+  // horas sin recargar, una notificación nueva (por ejemplo, un reto
+  // de Clan War) no aparecía hasta cerrar y volver a abrir la app. Se
+  // refresca sola cada 45s mientras haya sesión -- alcanza para que se
+  // sienta "en vivo" sin necesidad de suscribirse a las 5 tablas
+  // distintas que suma notificaciones_pendientes_count().
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const intervalo = setInterval(() => {
+      supabase.rpc("notificaciones_pendientes_count").then(({ data }) => {
+        setInvitacionesPendientes(data ?? 0);
+      });
+    }, 45000);
+
+    return () => clearInterval(intervalo);
+  }, [session]);
 
   const signOut = async () => {
     await supabase.auth.signOut();

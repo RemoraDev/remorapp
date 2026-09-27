@@ -4,20 +4,33 @@ import { Link } from "react-router-dom";
 import { Settings, LogOut, Search } from "lucide-react";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
+import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useSearch } from "../context/SearchContext";
-import { BORDE_HEADER_OPTIONS } from "../types/profile";
+import { BORDE_HEADER_OPTIONS, ESTADO_PRESENCIA_OPTIONS } from "../types/profile";
 
 export default function Header() {
-  const { user, profile, invitacionesPendientes, signOut } = useAuth();
+  const { user, profile, invitacionesPendientes, signOut, refreshProfile } = useAuth();
   const { abrirBuscador } = useSearch();
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [cambiandoEstado, setCambiandoEstado] = useState(false);
 
   const cerrarMenu = () => setMenuAbierto(false);
 
   const handleCerrarSesion = async () => {
     cerrarMenu();
     await signOut();
+  };
+
+  // Estado de presencia (migración 121): solo manual por ahora --
+  // "Desconectado" no se elige nunca acá, se infiere solo (sin sesión
+  // activa no hay avatar de header que mostrarlo).
+  const handleCambiarEstado = async (estado: (typeof ESTADO_PRESENCIA_OPTIONS)[number]["value"]) => {
+    if (!user || cambiandoEstado) return;
+    setCambiandoEstado(true);
+    const { error } = await supabase.from("profiles").update({ estado_presencia: estado }).eq("id", user.id);
+    setCambiandoEstado(false);
+    if (!error) await refreshProfile();
   };
 
   return (
@@ -76,6 +89,22 @@ export default function Header() {
                     className="header-avatar"
                     forma="redondo"
                   />
+                  {/* Estado de presencia (migración 121): punto de color
+                      sobre el avatar del header -- disponible/ausente/
+                      ocupado, elegido a mano desde el menú de abajo.
+                      "Desconectado" no aplica acá: si se ve este avatar
+                      es porque hay una sesión activa. */}
+                  <span
+                    className="header-avatar-estado"
+                    style={{
+                      backgroundColor: ESTADO_PRESENCIA_OPTIONS.find((o) => o.value === profile?.estado_presencia)
+                        ?.colorHex,
+                    }}
+                    title={
+                      ESTADO_PRESENCIA_OPTIONS.find((o) => o.value === profile?.estado_presencia)?.label ??
+                      "Disponible"
+                    }
+                  />
                 </span>
                 {invitacionesPendientes > 0 && (
                   <span className="header-invite-badge">{invitacionesPendientes}</span>
@@ -99,6 +128,26 @@ export default function Header() {
                   idioma) adentro de un único botón "Configuración" --
                   ya no hace falta un segundo link separado acá. */}
               <div className={`header-user-menu ${menuAbierto ? "is-open" : ""}`} aria-hidden={!menuAbierto}>
+                <span className="header-user-menu-label">Estado</span>
+                <div className="header-estado-presencia-opciones">
+                  {ESTADO_PRESENCIA_OPTIONS.map((opcion) => (
+                    <button
+                      key={opcion.value}
+                      type="button"
+                      className={`header-estado-presencia-opcion ${
+                        profile?.estado_presencia === opcion.value ? "is-activo" : ""
+                      }`}
+                      disabled={cambiandoEstado}
+                      onClick={() => void handleCambiarEstado(opcion.value)}
+                    >
+                      <span className="header-estado-presencia-punto" style={{ backgroundColor: opcion.colorHex }} />
+                      {opcion.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="header-user-menu-divider" />
+
                 <Link to="/perfil?tab=configuracion" className="header-user-menu-item" onClick={cerrarMenu}>
                   <Settings className="icon-inline" />
                   Configuración

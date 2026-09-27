@@ -3717,29 +3717,11 @@ export default function TeamDetailPage() {
         )}
       </div>
 
-      {/* El código de invitación queda a mano en la página principal,
-          fuera del Panel de control -- no hace falta abrir ningún
-          submenú para encontrarlo. Lo ve el dueño o un capitán
-          (migración 038): invitar jugadores es un permiso delegado, y
-          el código es una de las dos formas de invitar. */}
-      {puedeGestionar && (
-        <div className="team-leader-invite">
-          <span className="team-leader-invite-code">{equipo.invite_code}</span>
-          <button type="button" className="btn btn-ghost" onClick={handleCopiarCodigo}>
-            {codigoCopiado ? "¡Copiado!" : "Copiar código"}
-          </button>
-        </div>
-      )}
-
-      {/* Acceso adicional a /equipos, no un reemplazo: "Mi equipo" en
-          el abanico sigue llevando directo acá cuando ya tienes clan,
-          así que sin esto no había ninguna forma de volver al
-          buscador general una vez que perteneces a un equipo. */}
-      <p className="tournament-card-meta">
-        <Link to="/equipos" className="btn-link">
-          Explorar otros equipos
-        </Link>
-      </p>
+      {/* Corrección: el código de invitación y "Explorar otros equipos"
+          ocupaban espacio permanente en la página principal -- el
+          código se mudó al Panel de control (mismo permiso de
+          siempre), y "Explorar otros equipos" era redundante con el
+          ícono "Equipos" del menú inferior, así que se saca del todo. */}
 
       <div className="detail-map-list">
         {equipo.sc2_regions.map((region) => (
@@ -3777,7 +3759,7 @@ export default function TeamDetailPage() {
           onClick={() => setSeccionPublica("logros")}
         >
           <Award className="icon-inline" />
-          Logros
+          Historial
         </button>
       </div>
 
@@ -3912,7 +3894,18 @@ export default function TeamDetailPage() {
           {panelAbierto && (
             <div className="team-leader-panel">
               {seccionPanel === null ? (
-                <div className="team-panel-menu">
+                <>
+                  {/* Corrección: el código de invitación vivía en la
+                      página principal, ocupando espacio permanente --
+                      pasa a vivir acá, en el menú principal del Panel de
+                      control, junto con el resto de la gestión. */}
+                  <div className="team-leader-invite">
+                    <span className="team-leader-invite-code">{equipo.invite_code}</span>
+                    <button type="button" className="btn btn-ghost" onClick={handleCopiarCodigo}>
+                      {codigoCopiado ? "¡Copiado!" : "Copiar código"}
+                    </button>
+                  </div>
+                  <div className="team-panel-menu">
                   {/* Configuración (logo/banner/tema/eliminar equipo) y
                       Títulos de clan quedan fuera de lo delegado a un
                       capitán -- solo el dueño las ve. */}
@@ -4043,7 +4036,8 @@ export default function TeamDetailPage() {
                     </span>
                     <span className="team-panel-menu-item-desc">Ver este equipo en la Sala de la Fama</span>
                   </Link>
-                </div>
+                  </div>
+                </>
               ) : (
                 <div className="team-panel-section">
                   <div className="team-panel-section-header">
