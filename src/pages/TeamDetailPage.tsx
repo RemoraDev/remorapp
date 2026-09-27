@@ -61,7 +61,6 @@ import {
 } from "../lib/clanWars";
 import type { InvestigacionJugador } from "../types/investigacion";
 import Avatar from "../components/Avatar";
-import LigaBadge from "../components/LigaBadge";
 import PercentBar from "../components/PercentBar";
 import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
 import TitulosActivosList from "../components/TitulosActivosList";
@@ -70,6 +69,20 @@ import LineupFondoPicker from "../components/LineupFondoPicker";
 
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const BANNER_MAX_BYTES = 3 * 1024 * 1024;
+
+// Mismos emblemas oficiales que usa TarjetaLineupClanWar.tsx (public/razas/)
+// -- se muestra solo la raza principal, sin la secundaria, y con el logo en
+// vez del nombre para que el roster se lea de un vistazo.
+const ICONO_RAZA_MIEMBRO: Record<RazaSc2, string> = {
+  Zerg: "/razas/zerg.webp",
+  Protoss: "/razas/protoss.webp",
+  Terran: "/razas/terran.webp",
+};
+
+function IconoRazaMiembro({ raza }: { raza: RazaSc2 | null }) {
+  if (!raza) return null;
+  return <img src={ICONO_RAZA_MIEMBRO[raza]} alt={raza} title={raza} className="miembro-raza-icono" />;
+}
 
 // Ranking de jugadores: torneosGanados + clanWarsGanadas = total, el
 // criterio de orden. torneosGanados incluye tanto los 1v1 ganados
@@ -3468,15 +3481,10 @@ export default function TeamDetailPage() {
       {m.nick ?? "Jugador de RemorApp"}
       {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
       {m.liga && <span className="liga-badge">{m.liga}</span>}
-      {m.razaPrincipal && (
-        <span className="liga-badge">
-          {m.razaPrincipal}
-          {m.razaSecundaria && ` / ${m.razaSecundaria}`}
-        </span>
-      )}
-      <LigaBadge liga={m.ligaEquipos} mmr={m.mmrEquipos} bancaRota={m.bancaRota} />
+      <IconoRazaMiembro raza={m.razaPrincipal} />
       <span className="liga-badge">Valentía {m.valentiaJugador}%</span>
       <span className="liga-badge">Responsabilidad {m.responsabilidadCw}%</span>
+      {m.bancaRota && <span className="nivel-badge nivel-badge-banca-rota">Banca rota</span>}
       {m.pocoConfiable && <span className="nivel-badge nivel-badge-banca-rota">Poco Responsable</span>}
       {m.roles.includes("owner") && <span className="team-owner-badge">Dueño</span>}
       {/* "Capitán" es una insignia distinta de "Dueño" a propósito --
@@ -3529,13 +3537,8 @@ export default function TeamDetailPage() {
       <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
       {m.nick ?? "Jugador de RemorApp"}
       {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
-      <LigaBadge liga={m.ligaEquipos} mmr={m.mmrEquipos} bancaRota={m.bancaRota} />
-      {m.razaPrincipal && (
-        <span className="liga-badge">
-          {m.razaPrincipal}
-          {m.razaSecundaria && ` / ${m.razaSecundaria}`}
-        </span>
-      )}
+      {m.bancaRota && <span className="nivel-badge nivel-badge-banca-rota">Banca rota</span>}
+      <IconoRazaMiembro raza={m.razaPrincipal} />
     </div>
   );
 
@@ -3601,6 +3604,27 @@ export default function TeamDetailPage() {
             [{equipo.tag}] · {miembros.length} {miembros.length === 1 ? "miembro" : "miembros"}
           </p>
         </div>
+
+        {/* Corrección: el botón vivía pegado abajo de todo, lejos del
+            nombre -- pasa a la altura del título, a la derecha (mismo
+            lugar que ocupa .team-friend-request-box en la ficha de OTRO
+            equipo -- acá nunca se muestran los dos juntos, es siempre
+            tu propio equipo). El contenido desplegable sigue en su
+            lugar de siempre, más abajo -- solo se movió el botón. */}
+        {puedeGestionar && (
+          <div className="team-panel-toggle-header">
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => {
+                setPanelAbierto((abierto) => !abierto);
+                setSeccionPanel(null);
+              }}
+            >
+              {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
+            </button>
+          </div>
+        )}
 
         {/* Botón directo para mandarle una solicitud de amistad a ESTE
             equipo, visible en la ficha pública de cualquier clan que no
@@ -3879,22 +3903,12 @@ export default function TeamDetailPage() {
           capitán, no solo el dueño -- las secciones que siguen siendo
           exclusivas del dueño (Configuración, Títulos de clan,
           transferir liderazgo) se filtran más abajo, cada una por su
-          cuenta. */}
+          cuenta. Corrección: el botón para abrirlo/cerrarlo se movió a
+          la altura del nombre del equipo (.team-panel-toggle-header,
+          ver el header más arriba) -- acá solo queda el contenido
+          desplegable en sí. */}
       {puedeGestionar && (
         <div className="team-control-panel-wrap">
-          {/* Migración 092: sin btn-block -- se veía como una barra que
-              ocupaba todo el ancho, en vez de un botón normal. */}
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => {
-              setPanelAbierto((abierto) => !abierto);
-              setSeccionPanel(null);
-            }}
-          >
-            {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
-          </button>
-
           {panelAbierto && (
             <div className="team-leader-panel">
               {seccionPanel === null ? (
@@ -5186,12 +5200,7 @@ export default function TeamDetailPage() {
                                     {m.nick ?? "Jugador de RemorApp"}
                                     {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
                                     {m.esMercenario && <span className="team-temp-badge">Mercenario</span>}
-                                    {m.razaPrincipal && (
-                                      <span className="liga-badge">
-                                        {m.razaPrincipal}
-                                        {m.razaSecundaria && ` / ${m.razaSecundaria}`}
-                                      </span>
-                                    )}
+                                    <IconoRazaMiembro raza={m.razaPrincipal} />
                                     <span className="tournament-card-meta">
                                       SC2: {m.sc2Id ?? "sin declarar"}
                                     </span>

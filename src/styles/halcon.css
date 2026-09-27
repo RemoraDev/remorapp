@@ -2145,6 +2145,16 @@ main {
   padding: 0.15rem 0.55rem;
 }
 
+/* Logo de la raza principal de un miembro del equipo (TeamDetailPage) --
+   reemplaza al nombre de texto para que el roster se lea de un vistazo. */
+.miembro-raza-icono {
+  width: 1.3rem;
+  height: 1.3rem;
+  object-fit: contain;
+  flex-shrink: 0;
+  margin-left: 0.4rem;
+}
+
 /* ---------- Clan Wars: retos entre clanes (migración 021) ---------- */
 
 .reto-item {
@@ -2205,21 +2215,38 @@ main {
 .team-leader-invite {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.6rem;
   flex-wrap: wrap;
   margin: 0.5rem 0 1.25rem;
-  padding: 0.75rem 1rem;
+  padding: 0.45rem 0.75rem;
   border-radius: 0.6rem;
   border: 1px dashed rgba(var(--h-accent-rgb), 0.4);
   background: rgba(var(--h-accent-rgb), 0.06);
 }
 
+/* Corrección: se veía desproporcionadamente grande (1.2rem + letter-
+   spacing amplio) comparado con el resto de la ficha. */
 .team-leader-invite-code {
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.2rem;
-  letter-spacing: 0.15em;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
   color: var(--color-text);
+}
+
+/* Botón "Panel de control" a la altura del nombre del equipo, alineado
+   a la derecha -- mismo lugar que ocupa .team-friend-request-box
+   cuando se ve la ficha de OTRO equipo (nunca se muestran los dos a
+   la vez). */
+.team-panel-toggle-header {
+  margin-left: auto;
+}
+
+@media (max-width: 640px) {
+  .team-panel-toggle-header {
+    margin-left: 0;
+    width: 100%;
+  }
 }
 
 .team-kick-btn {
@@ -6805,7 +6832,13 @@ html.es-escritorio .escritorio-chat-fijo {
   gap: 0.75rem;
   padding: 1rem;
   border-left: 1px solid var(--color-border);
-  background: var(--color-panel);
+  /* Corrección: usaba --color-panel (el tono cálido de las tarjetas,
+     #100e0a), que se notaba como una franja de color desentonando
+     contra el resto de la ventana (header, columna decorativa
+     izquierda) -- todos esos usan --color-bg, el tono frío de fondo.
+     La lista de mensajes de abajo (.chat-lideres-mensajes) sigue
+     usando --color-panel, como cualquier tarjeta del resto de la app. */
+  background: var(--color-bg);
   overflow: hidden;
 }
 

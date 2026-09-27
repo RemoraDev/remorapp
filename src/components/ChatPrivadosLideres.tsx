@@ -113,6 +113,31 @@ export default function ChatPrivadosLideres() {
             if (nuevo.para_usuario_id === user.id) {
               await marcarConversacionLeida(user.id, nuevo.de_usuario_id);
             }
+          } else if (nuevo.para_usuario_id === user.id) {
+            // Corrección: no había ninguna notificación al recibir un
+            // mensaje privado nuevo -- si el destinatario no estaba
+            // viendo justo esa conversación, no se enteraba salvo que
+            // mirara el contador de no leídos por su cuenta.
+            const { data: autor } = await supabase
+              .from("profiles")
+              .select("nick, avatar_url")
+              .eq("id", nuevo.de_usuario_id)
+              .maybeSingle();
+            toast(`Mensaje privado de ${autor?.nick ?? "un jugador"}`, {
+              description: nuevo.contenido.length > 100 ? `${nuevo.contenido.slice(0, 100)}…` : nuevo.contenido,
+              action: {
+                label: "Ver",
+                onClick: () =>
+                  abrirConversacion({
+                    otro_usuario_id: nuevo.de_usuario_id,
+                    otro_nick: autor?.nick ?? null,
+                    otro_avatar_url: autor?.avatar_url ?? null,
+                    ultimo_mensaje: nuevo.contenido,
+                    ultimo_mensaje_en: nuevo.created_at,
+                    no_leidos: 1,
+                  }),
+              },
+            });
           }
 
           recargarConversaciones();
@@ -123,7 +148,7 @@ export default function ChatPrivadosLideres() {
     return () => {
       supabase.removeChannel(canal);
     };
-  }, [user, recargarConversaciones, idInstancia]);
+  }, [user, recargarConversaciones, idInstancia, abrirConversacion]);
 
   useEffect(() => {
     listaRef.current?.scrollTo({ top: listaRef.current.scrollHeight });
