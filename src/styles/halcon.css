@@ -1829,7 +1829,8 @@ main {
 .team-detail-banner,
 .player-detail-banner {
   width: 100%;
-  aspect-ratio: 4 / 1;
+  aspect-ratio: 6 / 1;
+  max-height: 220px;
   object-fit: cover;
   border-radius: var(--radius-lg);
   display: block;

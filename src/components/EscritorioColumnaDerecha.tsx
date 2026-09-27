@@ -8,15 +8,20 @@ import HexPattern from "./HexPattern";
 type PestanaChat = "grupal" | "privados";
 
 // Columna derecha del layout de 3 columnas de escritorio (Tauri): para
-// quien califica para el chat de líderes (ver useChatFijoEscritorio),
-// un panel FIJO y persistente -- no una pantalla a la que hay que
+// quien califica para el chat de líderes en general, un panel FIJO y
+// persistente con las dos pestañas -- no una pantalla a la que hay que
 // entrar, se ve mientras se navega cualquier parte de la app. Para
-// quien no califica, el mismo borde decorativo que la columna
-// izquierda (ver EscritorioColumnaLateral.tsx), nunca vacío.
+// quien no califica pero tiene una conversación privada activa (un
+// admin/staff/dueño le escribió primero), el mismo panel fijo, pero
+// solo con esa conversación -- así el dueño puede usar esto para
+// atender consultas de cualquier jugador, no solo de otros líderes.
+// Para quien no tiene ni una cosa ni la otra, el mismo borde
+// decorativo que la columna izquierda (ver EscritorioColumnaLateral.tsx),
+// nunca vacío.
 export default function EscritorioColumnaDerecha() {
   const [esEscritorio, setEsEscritorio] = useState(false);
   const [pestana, setPestana] = useState<PestanaChat>("grupal");
-  const habilitado = useChatFijoEscritorio();
+  const modo = useChatFijoEscritorio();
 
   useEffect(() => {
     if (isTauri()) setEsEscritorio(true);
@@ -24,11 +29,21 @@ export default function EscritorioColumnaDerecha() {
 
   if (!esEscritorio) return null;
 
-  if (!habilitado) {
+  if (modo === null) {
     return (
       <div className="escritorio-columna-lateral escritorio-columna-derecha" aria-hidden="true">
         <HexPattern id="escritorio-hex-der" className="hex-pattern escritorio-columna-hex" />
       </div>
+    );
+  }
+
+  if (modo === "privados") {
+    return (
+      <aside className="escritorio-chat-fijo">
+        <div className="escritorio-chat-fijo-cuerpo">
+          <ChatPrivadosLideres />
+        </div>
+      </aside>
     );
   }
 
