@@ -297,7 +297,7 @@ export default function CreateTeamPage() {
             id="team-logo"
             className="form-input"
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/*"
             onChange={handleLogoChange}
           />
           {archivoParaRecortarLogo && (

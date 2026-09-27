@@ -2073,7 +2073,7 @@ export default function ProfilePage() {
                     id="perfil-avatar"
                     className="form-input"
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="image/*"
                     onChange={handleAvatarChange}
                   />
                   {archivoParaRecortarAvatar && (
@@ -2115,7 +2115,7 @@ export default function ProfilePage() {
                     id="perfil-banner"
                     className="form-input"
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="image/*"
                     onChange={handleBannerChange}
                   />
                   {archivoParaRecortarBanner && (

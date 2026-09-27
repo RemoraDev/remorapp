@@ -4159,7 +4159,7 @@ export default function TeamDetailPage() {
                 id="team-edit-logo"
                 className="form-input"
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/*"
                 onChange={handleLogoChange}
               />
               {archivoParaRecortarLogo && (
@@ -4188,7 +4188,7 @@ export default function TeamDetailPage() {
                 id="team-edit-banner"
                 className="form-input"
                 type="file"
-                accept="image/png,image/jpeg,image/webp"
+                accept="image/*"
                 onChange={handleBannerChange}
               />
               {archivoParaRecortarBanner && (

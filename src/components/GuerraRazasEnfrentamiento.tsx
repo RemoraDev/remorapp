@@ -287,7 +287,7 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
                   {subiendoImagen === raza ? "Subiendo..." : "Cambiar imagen"}
                   <input
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="image/*"
                     style={{ display: "none" }}
                     disabled={subiendoImagen === raza}
                     onChange={(e) => {

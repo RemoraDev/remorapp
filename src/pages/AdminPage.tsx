@@ -294,8 +294,23 @@ export default function AdminPage() {
   const [errorFondosLineup, setErrorFondosLineup] = useState<string | null>(null);
   const [nombreNuevoFondo, setNombreNuevoFondo] = useState("");
   const [archivoNuevoFondo, setArchivoNuevoFondo] = useState<File | null>(null);
+  const [previewNuevoFondo, setPreviewNuevoFondo] = useState<string | null>(null);
   const [subiendoFondo, setSubiendoFondo] = useState(false);
   const [eliminandoFondoId, setEliminandoFondoId] = useState<string | null>(null);
+
+  // Vista previa del fondo de lineup antes de confirmar -- object URL
+  // propio (no hay recortador acá, es solo una imagen de fondo, sin
+  // recorte), se revoca al cambiar de archivo o desmontar para no
+  // dejar memoria colgada.
+  useEffect(() => {
+    if (!archivoNuevoFondo) {
+      setPreviewNuevoFondo(null);
+      return;
+    }
+    const url = URL.createObjectURL(archivoNuevoFondo);
+    setPreviewNuevoFondo(url);
+    return () => URL.revokeObjectURL(url);
+  }, [archivoNuevoFondo]);
 
   // --- Marcos de avatar: renombrar bordes básicos y skins de efectos
   // (migración 068) -- las skins solo aparecen acá si quien mira es,
@@ -2678,8 +2693,8 @@ export default function AdminPage() {
         <div className="admin-panel">
           <p className="tournament-card-meta">
             Imágenes que cualquier capitán o dueño de equipo puede elegir como fondo de su sala de
-            lineup, junto a los 4 fondos clásicos que ya existían. Subilas en webp -- también se
-            aceptan png y jpeg.
+            lineup, junto a los 4 fondos clásicos que ya existían. Se acepta cualquier formato de
+            imagen común (webp, png, jpeg, heic, etc.).
           </p>
 
           <form className="auth-form" onSubmit={handleSubirFondoLineup}>
@@ -2699,15 +2714,18 @@ export default function AdminPage() {
             </div>
             <div className="form-group">
               <label className="form-label" htmlFor="admin-fondo-archivo">
-                Imagen (webp, png o jpeg)
+                Imagen
               </label>
               <input
                 id="admin-fondo-archivo"
                 className="form-input"
                 type="file"
-                accept="image/webp,image/png,image/jpeg"
+                accept="image/*"
                 onChange={(e) => setArchivoNuevoFondo(e.target.files?.[0] ?? null)}
               />
+              {previewNuevoFondo && (
+                <img src={previewNuevoFondo} alt="Vista previa del fondo" className="admin-fondo-preview" />
+              )}
             </div>
             <button type="submit" className="btn btn-primary btn-block" disabled={subiendoFondo || !archivoNuevoFondo}>
               {subiendoFondo ? "Subiendo..." : "Agregar fondo"}
