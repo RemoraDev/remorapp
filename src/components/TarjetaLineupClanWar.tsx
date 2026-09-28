@@ -47,12 +47,10 @@ function EquipoHeader({
   equipo,
   lado,
   streamLink,
-  streamerNombre,
 }: {
   equipo: { nombre: string; tag: string; logo_url: string | null };
   lado: "challenger" | "challenged";
   streamLink: string | null;
-  streamerNombre: string | null;
 }) {
   return (
     <div className={`lineup-card-equipo lineup-card-equipo-${lado}`}>
@@ -64,13 +62,14 @@ function EquipoHeader({
         <span className="lineup-card-equipo-nombre">{equipo.nombre}</span>
         {/* Migración 125: stream propio de cada equipo -- solo se
             muestra al público si ese equipo lo cargó, nunca un mensaje
-            de "sin stream". Migración 133: el nombre del streamer (si
-            se cargó) reemplaza al genérico "Stream" -- el delay se ve
-            en la franja destacada de arriba (StreamerBanner), acá
-            queda chico a propósito. */}
+            de "sin stream". Corrección (migración 135): acá va siempre
+            el texto genérico "Stream", nunca el nick del streamer --
+            ya sale bien visible en la franja destacada de arriba
+            (StreamerBanner); repetirlo acá abajo del equipo quedaba
+            redundante. */}
         {streamLink && (
           <a href={streamLink} target="_blank" rel="noreferrer noopener" className="lineup-card-equipo-stream">
-            {streamerNombre ?? "Stream"}
+            Stream
           </a>
         )}
       </div>
@@ -92,18 +91,29 @@ function EquipoHeader({
 // suma el nombre del streamer (si no se cargó, muestra el nombre del
 // equipo) y el delay en segundos, aparte, sin competir visualmente con
 // el punto "en vivo".
+//
+// Migración 135: el nombre del streamer se busca en el roster propio
+// (migración 133), que ya viene como "Nick#12345" -- ese "#12345" es
+// el ID interno del jugador, no algo para mostrarle al público, así
+// que se recorta acá antes de mostrarlo. Además, el link del stream
+// ahora se ve como texto de verdad abajo del nombre (antes solo el
+// nombre era clickeable, sin mostrar el link en sí).
+function quitarTagPrivado(nombre: string): string {
+  return nombre.replace(/#\d+$/, "");
+}
+
 export function StreamerBanner({ datos }: { datos: LineupPublicoClanWar }) {
   const activos = [
     datos.challenger_stream_link
       ? {
-          nombre: datos.challenger_streamer_nombre ?? datos.challenger.nombre,
+          nombre: quitarTagPrivado(datos.challenger_streamer_nombre ?? datos.challenger.nombre),
           link: datos.challenger_stream_link,
           delay: datos.challenger_stream_delay,
         }
       : null,
     datos.challenged_stream_link
       ? {
-          nombre: datos.challenged_streamer_nombre ?? datos.challenged.nombre,
+          nombre: quitarTagPrivado(datos.challenged_streamer_nombre ?? datos.challenged.nombre),
           link: datos.challenged_stream_link,
           delay: datos.challenged_stream_delay,
         }
@@ -116,18 +126,25 @@ export function StreamerBanner({ datos }: { datos: LineupPublicoClanWar }) {
         <span className="lineup-card-streamer-vacio">Sin Streamer Presente</span>
       ) : (
         activos.map((s) => (
-          <span key={s.nombre} className="lineup-card-streamer-item">
-            {/* Corrección: el nick tiene que verse como un link de
-                verdad (no solo texto blanco con un href escondido
-                detrás) -- fondo/borde de color + subrayado. */}
-            <a href={s.link} target="_blank" rel="noreferrer noopener" className="lineup-card-streamer-activo">
-              <span className="lineup-card-streamer-dot" />
-              En vivo: <span className="lineup-card-streamer-nick">{s.nombre}</span>
+          <div key={s.nombre} className="lineup-card-streamer-item">
+            <span className="lineup-card-streamer-fila">
+              {/* Corrección: el nick tiene que verse como un link de
+                  verdad (no solo texto blanco con un href escondido
+                  detrás) -- fondo/borde de color + subrayado. */}
+              <a href={s.link} target="_blank" rel="noreferrer noopener" className="lineup-card-streamer-activo">
+                <span className="lineup-card-streamer-dot" />
+                En vivo: <span className="lineup-card-streamer-nick">{s.nombre}</span>
+              </a>
+              {/* Corrección: el delay quedaba demasiado chico y apagado
+                  -- ahora es su propia insignia, bien visible. */}
+              {s.delay > 0 && <span className="lineup-card-streamer-delay">Delay {s.delay} segundos</span>}
+            </span>
+            {/* Corrección: el link en sí tiene que aparecer visible,
+                abajo, no solo escondido detrás del nombre. */}
+            <a href={s.link} target="_blank" rel="noreferrer noopener" className="lineup-card-streamer-url">
+              {s.link}
             </a>
-            {/* Corrección: el delay quedaba demasiado chico y apagado
-                -- ahora es su propia insignia, bien visible. */}
-            {s.delay > 0 && <span className="lineup-card-streamer-delay">Delay {s.delay} segundos</span>}
-          </span>
+          </div>
         ))
       )}
     </div>
@@ -160,14 +177,11 @@ function TarjetaClasica({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
           equipo={datos.challenger}
           lado="challenger"
           streamLink={datos.challenger_stream_link}
-          streamerNombre={datos.challenger_streamer_nombre}
         />
-        <span className="lineup-card-brand">RemorApp</span>
         <EquipoHeader
           equipo={datos.challenged}
           lado="challenged"
           streamLink={datos.challenged_stream_link}
-          streamerNombre={datos.challenged_streamer_nombre}
         />
       </div>
 
@@ -208,14 +222,11 @@ function TarjetaEnfrentamientos({ datos, filas }: { datos: LineupPublicoClanWar;
           equipo={datos.challenger}
           lado="challenger"
           streamLink={datos.challenger_stream_link}
-          streamerNombre={datos.challenger_streamer_nombre}
         />
-        <span className="lineup-card-brand">RemorApp</span>
         <EquipoHeader
           equipo={datos.challenged}
           lado="challenged"
           streamLink={datos.challenged_stream_link}
-          streamerNombre={datos.challenged_streamer_nombre}
         />
       </div>
 
@@ -253,7 +264,6 @@ function TarjetaPoster({ datos, filas }: { datos: LineupPublicoClanWar; filas: F
             equipo={datos.challenger}
             lado="challenger"
             streamLink={datos.challenger_stream_link}
-            streamerNombre={datos.challenger_streamer_nombre}
           />
           <div className="lineup-poster-jugadores">
             {filas.map((fila, indice) => (
@@ -267,7 +277,6 @@ function TarjetaPoster({ datos, filas }: { datos: LineupPublicoClanWar; filas: F
 
         <div className="lineup-poster-vs">
           <span className="lineup-poster-vs-texto">VS</span>
-          <span className="lineup-card-brand">RemorApp</span>
         </div>
 
         <div className="lineup-poster-mitad lineup-poster-mitad-challenged">
@@ -275,7 +284,6 @@ function TarjetaPoster({ datos, filas }: { datos: LineupPublicoClanWar; filas: F
             equipo={datos.challenged}
             lado="challenged"
             streamLink={datos.challenged_stream_link}
-            streamerNombre={datos.challenged_streamer_nombre}
           />
           <div className="lineup-poster-jugadores">
             {filas.map((fila, indice) => (
@@ -306,7 +314,6 @@ function TarjetaCascada({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
           equipo={datos.challenger}
           lado="challenger"
           streamLink={datos.challenger_stream_link}
-          streamerNombre={datos.challenger_streamer_nombre}
         />
         <div className="lineup-cascada-jugadores">
           {filas.map((fila, indice) => (
@@ -324,7 +331,6 @@ function TarjetaCascada({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
           <span className="lineup-card-vs">VS</span>
           <span className="lineup-cascada-marcador-num">0</span>
         </div>
-        <span className="lineup-card-brand lineup-cascada-brand">RemorApp</span>
       </div>
 
       <div className="lineup-cascada-equipo lineup-cascada-equipo-bottom">
@@ -340,7 +346,6 @@ function TarjetaCascada({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
           equipo={datos.challenged}
           lado="challenged"
           streamLink={datos.challenged_stream_link}
-          streamerNombre={datos.challenged_streamer_nombre}
         />
       </div>
 

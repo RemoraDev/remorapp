@@ -535,19 +535,25 @@ export default function ClanWarLineupPublicoPage() {
 
   return (
     <section className="section section-page">
-      <Link to="/" className="team-panel-back">
-        ← Volver a Inicio
-      </Link>
+      {/* Corrección: "Volver a Inicio" y la fecha/formato eran dos
+          líneas de texto plano sueltas -- ahora van juntas en una
+          franja, con la fecha como una insignia en vez de texto liso. */}
+      <div className="clan-war-lineup-header">
+        <Link to="/" className="team-panel-back">
+          ← Volver a Inicio
+        </Link>
+        {datos && (
+          <span className="clan-war-lineup-meta">
+            {formatFecha(datos.fecha_hora_cet)} · Formato {datos.formato === "wtl" ? "WTL" : "Simple"}
+          </span>
+        )}
+      </div>
 
       {cargando && <p className="tournament-card-meta">Cargando...</p>}
       {error && <div className="form-error">{error}</div>}
 
       {datos && (
         <>
-          <p className="tournament-card-meta" style={{ marginBottom: "1rem" }}>
-            {formatFecha(datos.fecha_hora_cet)} · Formato {datos.formato === "wtl" ? "WTL" : "Simple"}
-          </p>
-
           {/* Migración 132: la Clan War queda claramente marcada como
               terminada, sin importar cómo haya llegado a ese estado --
               cerrada a mano ("finalizada"/"empatada") o cerrada sola

@@ -3289,27 +3289,36 @@ html.es-escritorio .player-detail-vista-escritorio {
   to { background-position: -560px -560px; }
 }
 
-/* "Viaje" (migración 134): rayos radiando desde el centro que crecen y
-   giran despacio -- sensación de estar viajando/avanzando por el
-   espacio, a diferencia del giro parejo de un color de "Vórtice". */
+/* "Viaje" (migración 135, corrige la 134): la corrección del usuario
+   fue clara -- lo anterior (rayos girando) se veía como una luz
+   giratoria, no como viajar por las estrellas. Ahora son las mismas
+   estrellas de "Estrellado" pero con el tile agrandándose sin parar
+   (el mismo truco de "acercarse volando" que un warp speed clásico):
+   arrancan chicas y juntas, terminan grandes y separadas, en loop. */
 .lineup-card[data-fondo-lineup="viaje"]::before,
 .lineup-fondo-preview[data-fondo-lineup="viaje"]::before {
-  background-image: repeating-conic-gradient(
-    from 0deg,
-    rgba(224, 242, 254, 0.16) 0deg 2deg,
-    transparent 2deg 12deg
-  );
-  animation: fondo-lineup-viaje-avanzar 3s linear infinite;
+  background-image:
+    radial-gradient(1.5px 1.5px at 10% 20%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(1.5px 1.5px at 40% 72%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(2px 2px at 70% 32%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(1.5px 1.5px at 85% 88%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(2px 2px at 25% 92%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(1.5px 1.5px at 55% 12%, rgba(255, 255, 255, 0.75), transparent 60%),
+    radial-gradient(2px 2px at 95% 45%, rgba(255, 255, 255, 0.9), transparent 60%);
+  background-position: center;
+  background-repeat: repeat;
+  animation: fondo-lineup-viaje-avanzar 2.2s cubic-bezier(0.3, 0, 0.7, 1) infinite;
 }
 
 @keyframes fondo-lineup-viaje-avanzar {
-  0% { transform: scale(1) rotate(0deg); opacity: 0.45; }
-  50% { opacity: 0.85; }
-  100% { transform: scale(1.9) rotate(18deg); opacity: 0.45; }
+  0% { background-size: 40px 40px; opacity: 0.25; }
+  100% { background-size: 320px 320px; opacity: 0.9; }
 }
 
-/* "Fuego" (migración 134): brasas cálidas abajo, con un flicker
-   irregular de escala/opacidad para que parezca que arde de verdad. */
+/* "Fuego" (migración 135, corrige la 134): además de las brasas cálidas
+   de la base, suma partículas que suben como cenizas (el pedido
+   original) -- capa aparte (::after) con su propia animación, para que
+   el brillo de fondo y las partículas no se pisen entre sí. */
 .lineup-card[data-fondo-lineup="fuego"]::before,
 .lineup-fondo-preview[data-fondo-lineup="fuego"]::before {
   background-image:
@@ -3323,6 +3332,30 @@ html.es-escritorio .player-detail-vista-escritorio {
   0% { transform: scaleY(0.9) translateY(2%); opacity: 0.75; }
   50% { transform: scaleY(1.08) translateY(-2%); opacity: 1; }
   100% { transform: scaleY(0.95) translateY(1%); opacity: 0.85; }
+}
+
+.lineup-card[data-fondo-lineup="fuego"]::after,
+.lineup-fondo-preview[data-fondo-lineup="fuego"]::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.5px 1.5px at 15% 90%, rgba(253, 224, 71, 0.95), transparent 60%),
+    radial-gradient(1px 1px at 35% 70%, rgba(251, 146, 60, 0.9), transparent 60%),
+    radial-gradient(1.5px 1.5px at 55% 85%, rgba(253, 224, 71, 0.9), transparent 60%),
+    radial-gradient(1px 1px at 70% 60%, rgba(239, 68, 68, 0.85), transparent 60%),
+    radial-gradient(1.5px 1.5px at 85% 95%, rgba(251, 146, 60, 0.9), transparent 60%),
+    radial-gradient(1px 1px at 45% 40%, rgba(253, 224, 71, 0.8), transparent 60%),
+    radial-gradient(1px 1px at 95% 75%, rgba(239, 68, 68, 0.85), transparent 60%);
+  background-size: 160px 220px;
+  animation: fondo-lineup-fuego-cenizas 5s linear infinite;
+}
+
+@keyframes fondo-lineup-fuego-cenizas {
+  from { background-position: 0 0; }
+  to { background-position: 0 -220px; }
 }
 
 .lineup-card[data-fondo-lineup="nova"]::before,
@@ -3373,6 +3406,30 @@ html.es-escritorio .player-detail-vista-escritorio {
    -- si falla, el botón directamente no se renderiza). */
 .clan-war-editor-wrap {
   margin-top: 1.5rem;
+}
+
+/* Migración 135: "Volver a Inicio" + fecha/formato, modernizados --
+   antes eran dos líneas de texto plano sueltas, ahora van juntas en
+   una franja con la fecha como insignia. */
+.clan-war-lineup-header {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.clan-war-lineup-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(var(--h-accent-rgb), 0.08);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.28);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
 }
 
 .clan-war-estado-terminado {
@@ -3567,14 +3624,17 @@ html.es-escritorio .player-detail-vista-escritorio {
    las 4 maquetas -- un punto rojo pulsante por cada equipo que cargó
    su link (pueden ser los dos a la vez), o el aviso explícito cuando
    ninguno de los dos tiene uno cargado. */
+/* Migración 135: cada streamer ahora ocupa dos líneas (nick arriba,
+   link de verdad abajo) -- ya no entra bien en una píldora
+   completamente redonda, pasa a un radio más chico. */
 .lineup-card-streamer-banner {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  gap: 0.6rem 1rem;
-  padding: 0.4rem 0.9rem;
-  border-radius: 999px;
+  gap: 0.6rem 1.5rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--radius-lg);
   background: rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(245, 245, 244, 0.14);
   font-size: 0.78rem;
@@ -3633,10 +3693,28 @@ html.es-escritorio .player-detail-vista-escritorio {
   margin: 1rem 1.25rem 0;
 }
 
+.lineup-card-streamer-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* Migración 135: el link en sí, visible como texto (antes solo el
+   nick era clickeable, sin mostrar el link) -- abajo del nick, propio
+   estilo de link clásico para que no haya dudas de que es uno. */
+.lineup-card-streamer-url {
+  font-size: 0.7rem;
+  color: var(--color-accent-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  word-break: break-all;
+}
+
 /* Migración 133: el delay en segundos va aparte del "en vivo" -- no
    compite con el punto pulsante, mismo lugar (la franja de arriba)
    pero apagado a propósito ("en un lugar donde no moleste"). */
-.lineup-card-streamer-item {
+.lineup-card-streamer-fila {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
