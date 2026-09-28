@@ -119,25 +119,6 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
 
       {destacado && <EventoDestacado cw={destacado} ahora={ahora} />}
 
-      {noticiasDestacadas.length > 0 && (
-        <div className="home-portada-noticias">
-          <p className="home-portada-noticias-titulo">Noticias destacadas</p>
-          <ul className="home-portada-noticias-lista">
-            {noticiasDestacadas.map((n) => (
-              <li key={n.id}>
-                <Link to="/news" className="home-portada-noticia-item">
-                  <span className="home-portada-noticia-fecha">{formatFecha(n.createdAt)}</span>
-                  <span className="home-portada-noticia-titulo-texto">{n.titulo}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          <Link to="/news" className="btn-link home-portada-ver-todas">
-            Ver todas las noticias
-          </Link>
-        </div>
-      )}
-
       <button type="button" className="btn btn-primary btn-primary-lg home-portada-cta" onClick={onVerProximosEventos}>
         Ver próximos eventos
         <ArrowRight size={18} className="icon-inline" aria-hidden="true" />
@@ -148,7 +129,16 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
           (InstalarRemorApp.tsx, retirada). Ahora es una sola sección,
           con las dos opciones (celular/PC) del mismo estilo moderno.
           La de PC se sigue ocultando dentro de la propia app de
-          escritorio -- no tiene sentido ofrecer bajarla desde adentro. */}
+          escritorio -- no tiene sentido ofrecer bajarla desde adentro.
+
+          Corrección: esta sección iba DESPUÉS de "Noticias destacadas"
+          (una lista de largo variable, hasta 3 ítems) -- cuando había
+          noticias, el bloque entero quedaba empujado fuera del área
+          visible de la página del carrusel, recortado por el scroll
+          propio de .carrusel-pagina. El link de descarga entonces
+          "no hacía nada" al clickear: ni siquiera llegaba a tocarlo, el
+          click caía en el contenedor de atrás. Ahora va ANTES que las
+          noticias, así su posición no depende de cuántas haya. */}
       <div className="home-instalar-moderno">
         <a href="/instalar-celular" target="_blank" rel="noopener noreferrer" className="home-instalar-moderno-card">
           <span className="home-instalar-moderno-icono" aria-hidden="true">
@@ -175,6 +165,25 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
           </a>
         )}
       </div>
+
+      {noticiasDestacadas.length > 0 && (
+        <div className="home-portada-noticias">
+          <p className="home-portada-noticias-titulo">Noticias destacadas</p>
+          <ul className="home-portada-noticias-lista">
+            {noticiasDestacadas.map((n) => (
+              <li key={n.id}>
+                <Link to="/news" className="home-portada-noticia-item">
+                  <span className="home-portada-noticia-fecha">{formatFecha(n.createdAt)}</span>
+                  <span className="home-portada-noticia-titulo-texto">{n.titulo}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <Link to="/news" className="btn-link home-portada-ver-todas">
+            Ver todas las noticias
+          </Link>
+        </div>
+      )}
     </div>
   );
 }
