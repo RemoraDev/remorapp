@@ -5351,6 +5351,11 @@ export default function TeamDetailPage() {
                           Empate en partidas ganadas -- sin ajuste de MMR de clan.
                         </p>
                       )}
+                      {r.status === "cancelada" && (
+                        <p className="tournament-card-meta">
+                          Se cerró sola por inactividad -- nadie la cerró a mano a tiempo, sin resultado.
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

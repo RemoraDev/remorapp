@@ -47,12 +47,12 @@ function EquipoHeader({
   equipo,
   lado,
   streamLink,
-  streamDelay,
+  streamerNombre,
 }: {
   equipo: { nombre: string; tag: string; logo_url: string | null };
   lado: "challenger" | "challenged";
   streamLink: string | null;
-  streamDelay: boolean | null;
+  streamerNombre: string | null;
 }) {
   return (
     <div className={`lineup-card-equipo lineup-card-equipo-${lado}`}>
@@ -64,10 +64,13 @@ function EquipoHeader({
         <span className="lineup-card-equipo-nombre">{equipo.nombre}</span>
         {/* Migración 125: stream propio de cada equipo -- solo se
             muestra al público si ese equipo lo cargó, nunca un mensaje
-            de "sin stream". */}
+            de "sin stream". Migración 133: el nombre del streamer (si
+            se cargó) reemplaza al genérico "Stream" -- el delay se ve
+            en la franja destacada de arriba (StreamerBanner), acá
+            queda chico a propósito. */}
         {streamLink && (
           <a href={streamLink} target="_blank" rel="noreferrer noopener" className="lineup-card-equipo-stream">
-            Stream{streamDelay ? " (con delay)" : ""}
+            {streamerNombre ?? "Stream"}
           </a>
         )}
       </div>
@@ -83,15 +86,29 @@ function EquipoHeader({
 // acá se juntan los que estén cargados en una franja destacada arriba
 // de todo, con un punto "en vivo" pulsante -- y si ninguno de los dos
 // cargó un link, lo dice explícitamente en vez de quedar vacío.
-function StreamerBanner({ datos }: { datos: LineupPublicoClanWar }) {
+// Migración 132: se exporta para que la página del lobby pueda
+// mostrar la misma franja incluso ANTES de que se revele el lineup
+// (acá adentro solo se monta una vez ya revelado). Migración 133:
+// suma el nombre del streamer (si no se cargó, muestra el nombre del
+// equipo) y el delay en segundos, aparte, sin competir visualmente con
+// el punto "en vivo".
+export function StreamerBanner({ datos }: { datos: LineupPublicoClanWar }) {
   const activos = [
     datos.challenger_stream_link
-      ? { nombre: datos.challenger.nombre, link: datos.challenger_stream_link, delay: datos.challenger_stream_delay }
+      ? {
+          nombre: datos.challenger_streamer_nombre ?? datos.challenger.nombre,
+          link: datos.challenger_stream_link,
+          delay: datos.challenger_stream_delay,
+        }
       : null,
     datos.challenged_stream_link
-      ? { nombre: datos.challenged.nombre, link: datos.challenged_stream_link, delay: datos.challenged_stream_delay }
+      ? {
+          nombre: datos.challenged_streamer_nombre ?? datos.challenged.nombre,
+          link: datos.challenged_stream_link,
+          delay: datos.challenged_stream_delay,
+        }
       : null,
-  ].filter((s): s is { nombre: string; link: string; delay: boolean | null } => s !== null);
+  ].filter((s): s is { nombre: string; link: string; delay: number } => s !== null);
 
   return (
     <div className="lineup-card-streamer-banner">
@@ -99,17 +116,13 @@ function StreamerBanner({ datos }: { datos: LineupPublicoClanWar }) {
         <span className="lineup-card-streamer-vacio">Sin Streamer Presente</span>
       ) : (
         activos.map((s) => (
-          <a
-            key={s.nombre}
-            href={s.link}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="lineup-card-streamer-activo"
-          >
-            <span className="lineup-card-streamer-dot" />
-            En vivo: {s.nombre}
-            {s.delay ? " (con delay)" : ""}
-          </a>
+          <span key={s.nombre} className="lineup-card-streamer-item">
+            <a href={s.link} target="_blank" rel="noreferrer noopener" className="lineup-card-streamer-activo">
+              <span className="lineup-card-streamer-dot" />
+              En vivo: {s.nombre}
+            </a>
+            {s.delay > 0 && <span className="lineup-card-streamer-delay">Delay {s.delay} segundos</span>}
+          </span>
         ))
       )}
     </div>
@@ -142,14 +155,14 @@ function TarjetaClasica({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
           equipo={datos.challenger}
           lado="challenger"
           streamLink={datos.challenger_stream_link}
-          streamDelay={datos.challenger_stream_delay}
+          streamerNombre={datos.challenger_streamer_nombre}
         />
         <span className="lineup-card-brand">RemorApp</span>
         <EquipoHeader
           equipo={datos.challenged}
           lado="challenged"
           streamLink={datos.challenged_stream_link}
-          streamDelay={datos.challenged_stream_delay}
+          streamerNombre={datos.challenged_streamer_nombre}
         />
       </div>
 
@@ -190,14 +203,14 @@ function TarjetaEnfrentamientos({ datos, filas }: { datos: LineupPublicoClanWar;
           equipo={datos.challenger}
           lado="challenger"
           streamLink={datos.challenger_stream_link}
-          streamDelay={datos.challenger_stream_delay}
+          streamerNombre={datos.challenger_streamer_nombre}
         />
         <span className="lineup-card-brand">RemorApp</span>
         <EquipoHeader
           equipo={datos.challenged}
           lado="challenged"
           streamLink={datos.challenged_stream_link}
-          streamDelay={datos.challenged_stream_delay}
+          streamerNombre={datos.challenged_streamer_nombre}
         />
       </div>
 
@@ -235,7 +248,7 @@ function TarjetaPoster({ datos, filas }: { datos: LineupPublicoClanWar; filas: F
             equipo={datos.challenger}
             lado="challenger"
             streamLink={datos.challenger_stream_link}
-            streamDelay={datos.challenger_stream_delay}
+            streamerNombre={datos.challenger_streamer_nombre}
           />
           <div className="lineup-poster-jugadores">
             {filas.map((fila, indice) => (
@@ -257,7 +270,7 @@ function TarjetaPoster({ datos, filas }: { datos: LineupPublicoClanWar; filas: F
             equipo={datos.challenged}
             lado="challenged"
             streamLink={datos.challenged_stream_link}
-            streamDelay={datos.challenged_stream_delay}
+            streamerNombre={datos.challenged_streamer_nombre}
           />
           <div className="lineup-poster-jugadores">
             {filas.map((fila, indice) => (
@@ -288,7 +301,7 @@ function TarjetaCascada({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
           equipo={datos.challenger}
           lado="challenger"
           streamLink={datos.challenger_stream_link}
-          streamDelay={datos.challenger_stream_delay}
+          streamerNombre={datos.challenger_streamer_nombre}
         />
         <div className="lineup-cascada-jugadores">
           {filas.map((fila, indice) => (
@@ -322,7 +335,7 @@ function TarjetaCascada({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
           equipo={datos.challenged}
           lado="challenged"
           streamLink={datos.challenged_stream_link}
-          streamDelay={datos.challenged_stream_delay}
+          streamerNombre={datos.challenged_streamer_nombre}
         />
       </div>
 

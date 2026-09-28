@@ -4,8 +4,9 @@ import { Pencil } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
-import { vencioPlazoEdicionLineup } from "../lib/clanWars";
-import TarjetaLineupClanWar from "../components/TarjetaLineupClanWar";
+import { datetimeLocalAIso, formatearHoraCet, formatearHoraLocal, vencioPlazoEdicionLineup } from "../lib/clanWars";
+import TarjetaLineupClanWar, { StreamerBanner } from "../components/TarjetaLineupClanWar";
+import { formatearCuentaRegresiva, useAhora } from "../components/ProximasClanWars";
 import LineupFondoPicker from "../components/LineupFondoPicker";
 import EstructuraLineupPicker from "../components/EstructuraLineupPicker";
 import AspectoLineupPicker from "../components/AspectoLineupPicker";
@@ -34,12 +35,22 @@ export default function ClanWarLineupPublicoPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [editor, setEditor] = useState<LineupEditorClanWar | null>(null);
-  const [mostrarEditor, setMostrarEditor] = useState(false);
+  // Migración 134: "Look" (apariencia) y "Agregar y quitar" (jugadores,
+  // delay, streamer) y "Solicitud" (cambiar fecha) son tres paneles
+  // independientes -- se puede tener más de uno abierto a la vez, cada
+  // uno con sus propias sub-pestañas.
+  const [mostrarLook, setMostrarLook] = useState(false);
+  const [mostrarAgregarQuitar, setMostrarAgregarQuitar] = useState(false);
+  const [mostrarSolicitud, setMostrarSolicitud] = useState(false);
   // "Look" (migraciones 127 y 129): sub-pestañas de apariencia dentro
   // del panel -- Fondo (ya existía), Estructura (maqueta de la
   // tarjeta) y Dimensión (relación de aspecto), las tres separadas del
   // resto de la gestión (lineup, stream, visto bueno).
   const [seccionLook, setSeccionLook] = useState<"fondo" | "estructura" | "dimension">("fondo");
+  // "Agregar y quitar" (migración 134): Jugadores (roster + cantidad
+  // por lado, ya existían, antes sueltos debajo de "Tu stream"), Delay
+  // y Streamer (los dos nuevos, ver más abajo).
+  const [seccionAgregarQuitar, setSeccionAgregarQuitar] = useState<"jugadores" | "delay" | "streamer">("jugadores");
 
   const [jugadoresPorSetEditado, setJugadoresPorSetEditado] = useState("");
   const [guardandoJugadoresPorSet, setGuardandoJugadoresPorSet] = useState(false);
@@ -67,12 +78,43 @@ export default function ClanWarLineupPublicoPage() {
 
   // Stream propio de cada equipo (migración 125): se inicializa una
   // sola vez con lo que ya tenía cargado, para no pisar lo que el
-  // usuario está tipeando en cada refresco de recargarTodo().
+  // usuario está tipeando en cada refresco de recargarTodo(). Migración
+  // 133: suma nombre del streamer y delay en segundos -- viven en el
+  // mismo estado porque actualizar_stream_equipo_cw() guarda los tres
+  // juntos (las sub-pestañas Delay/Streamer solo muestran una parte
+  // cada una, pero comparten el mismo "Guardar").
   const [streamLinkEditado, setStreamLinkEditado] = useState("");
-  const [streamDelayEditado, setStreamDelayEditado] = useState(false);
+  const [streamerNombreEditado, setStreamerNombreEditado] = useState("");
+  const [delaySegundosEditado, setDelaySegundosEditado] = useState("0");
   const [streamInicializado, setStreamInicializado] = useState(false);
   const [guardandoStream, setGuardandoStream] = useState(false);
   const [errorStream, setErrorStream] = useState<string | null>(null);
+  const [mostrarSugerenciasStreamer, setMostrarSugerenciasStreamer] = useState(false);
+  const streamerBuscadorRef = useRef<HTMLDivElement | null>(null);
+
+  // Reprogramación (migración 045, ahora también accesible desde acá --
+  // antes solo vivía en el Panel de control de la ficha del equipo).
+  const [reprogramacion, setReprogramacion] = useState<{
+    id: string;
+    propuestoPor: string;
+    nuevaFechaHoraCet: string;
+    motivo: string | null;
+  } | null>(null);
+  const [nuevaFechaReprogramacion, setNuevaFechaReprogramacion] = useState("");
+  const [motivoReprogramacion, setMotivoReprogramacion] = useState("");
+  const [solicitandoReprogramacion, setSolicitandoReprogramacion] = useState(false);
+  const [respondiendoReprogramacion, setRespondiendoReprogramacion] = useState(false);
+  const [errorReprogramacion, setErrorReprogramacion] = useState<string | null>(null);
+
+  // Cooldown de la Clan War "en curso" (migración 132): si nadie la
+  // cierra a mano, se cierra sola al llegar en_curso_vence_en --
+  // extenderPlazo suma 1 hora más (solo habilitado en los últimos 10
+  // minutos), cerrarClanWar computa el resultado con cerrar_clan_war(),
+  // que ya existía (antes solo vivía en la ficha del equipo).
+  const [extendiendoPlazo, setExtendiendoPlazo] = useState(false);
+  const [errorExtenderPlazo, setErrorExtenderPlazo] = useState<string | null>(null);
+  const [cerrandoClanWar, setCerrandoClanWar] = useState(false);
+  const [errorCerrarClanWar, setErrorCerrarClanWar] = useState<string | null>(null);
 
   const cargarPublico = useCallback(async () => {
     if (!id) return;
@@ -94,12 +136,43 @@ export default function ClanWarLineupPublicoPage() {
       setEditor(null);
       return;
     }
+    // Antes de leer, intenta cerrar sola la Clan War si el plazo de
+    // "en curso" ya venció y nadie la cerró a mano -- mismo espíritu
+    // que intentar_iniciar_clan_war(), pero disparado por esta visita
+    // en vez de por otra mutación (no hace falta un cron).
+    await supabase.rpc("intentar_cancelar_clan_war_vencida", { p_clan_war_id: id });
     const { data, error: rpcError } = await supabase.rpc("lineup_editor_clan_war", { p_clan_war_id: id });
     if (rpcError || !data) {
       setEditor(null);
       return;
     }
     setEditor(data as LineupEditorClanWar);
+  }, [id, user]);
+
+  // Reprogramación (migración 045): solo la solicitud pendiente, si
+  // hay una -- mismo criterio que TeamDetailPage.tsx (solo puede haber
+  // una a la vez, ver solicitar_reprogramacion_cw()).
+  const cargarReprogramacion = useCallback(async () => {
+    if (!id || !user) {
+      setReprogramacion(null);
+      return;
+    }
+    const { data } = await supabase
+      .from("clan_war_reschedules")
+      .select("id, clan_war_id, propuesto_por, nueva_fecha_hora_cet, motivo")
+      .eq("clan_war_id", id)
+      .eq("status", "pendiente")
+      .maybeSingle();
+    setReprogramacion(
+      data
+        ? {
+            id: data.id,
+            propuestoPor: data.propuesto_por,
+            nuevaFechaHoraCet: data.nueva_fecha_hora_cet,
+            motivo: data.motivo,
+          }
+        : null
+    );
   }, [id, user]);
 
   useEffect(() => {
@@ -111,12 +184,28 @@ export default function ClanWarLineupPublicoPage() {
   }, [cargarEditor]);
 
   useEffect(() => {
+    cargarReprogramacion();
+  }, [cargarReprogramacion]);
+
+  useEffect(() => {
     if (editor && !streamInicializado) {
       setStreamLinkEditado(editor.mi_stream_link ?? "");
-      setStreamDelayEditado(!!editor.mi_stream_delay);
+      setStreamerNombreEditado(editor.mi_streamer_nombre ?? "");
+      setDelaySegundosEditado(String(editor.mi_stream_delay ?? 0));
       setStreamInicializado(true);
     }
   }, [editor, streamInicializado]);
+
+  useEffect(() => {
+    if (!mostrarSugerenciasStreamer) return;
+    const handleClickFuera = (e: MouseEvent) => {
+      if (streamerBuscadorRef.current && !streamerBuscadorRef.current.contains(e.target as Node)) {
+        setMostrarSugerenciasStreamer(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickFuera);
+    return () => document.removeEventListener("mousedown", handleClickFuera);
+  }, [mostrarSugerenciasStreamer]);
 
   useEffect(() => {
     if (!mostrarSugerencias) return;
@@ -130,7 +219,7 @@ export default function ClanWarLineupPublicoPage() {
   }, [mostrarSugerencias]);
 
   const recargarTodo = async () => {
-    await Promise.all([cargarPublico(), cargarEditor()]);
+    await Promise.all([cargarPublico(), cargarEditor(), cargarReprogramacion()]);
   };
 
   const handleGuardarJugadoresPorSet = async () => {
@@ -255,20 +344,122 @@ export default function ClanWarLineupPublicoPage() {
     await recargarTodo();
   };
 
+  // Guarda los 3 campos juntos (migración 133) -- las sub-pestañas
+  // Delay y Streamer solo muestran una parte cada una, pero comparten
+  // este mismo botón/estado, así que ninguna pisa lo que cargó la otra.
   const handleGuardarStream = async () => {
+    const delaySegundos = Number(delaySegundosEditado);
+    if (!Number.isFinite(delaySegundos) || delaySegundos < 0) {
+      setErrorStream("El delay tiene que ser 0 o más segundos.");
+      return;
+    }
+
     setGuardandoStream(true);
     setErrorStream(null);
 
     const { error: rpcError } = await supabase.rpc("actualizar_stream_equipo_cw", {
       p_clan_war_id: id,
       p_stream_link: streamLinkEditado.trim() || null,
-      p_tiene_delay: streamDelayEditado,
+      p_streamer_nombre: streamerNombreEditado.trim() || null,
+      p_delay_segundos: delaySegundos,
     });
 
     setGuardandoStream(false);
 
     if (rpcError) {
       setErrorStream(rpcError.message);
+      return;
+    }
+
+    await recargarTodo();
+  };
+
+  // Reprogramar (migración 045, ya existía en el Panel de control de
+  // la ficha del equipo -- mismo par de RPCs, ahora también acá).
+  const handleSolicitarReprogramacion = async () => {
+    if (!nuevaFechaReprogramacion) {
+      setErrorReprogramacion("Elige la nueva fecha y hora.");
+      return;
+    }
+
+    setSolicitandoReprogramacion(true);
+    setErrorReprogramacion(null);
+
+    const { error: rpcError } = await supabase.rpc("solicitar_reprogramacion_cw", {
+      p_clan_war_id: id,
+      p_nueva_fecha_hora_cet: datetimeLocalAIso(nuevaFechaReprogramacion),
+      p_motivo: motivoReprogramacion.trim() || null,
+    });
+
+    setSolicitandoReprogramacion(false);
+
+    if (rpcError) {
+      setErrorReprogramacion(rpcError.message);
+      return;
+    }
+
+    setNuevaFechaReprogramacion("");
+    setMotivoReprogramacion("");
+    await recargarTodo();
+  };
+
+  const handleResponderReprogramacion = async (aceptar: boolean) => {
+    if (!reprogramacion) return;
+    setRespondiendoReprogramacion(true);
+    setErrorReprogramacion(null);
+
+    const { error: rpcError } = await supabase.rpc("responder_reprogramacion_cw", {
+      p_reschedule_id: reprogramacion.id,
+      p_aceptar: aceptar,
+    });
+
+    setRespondiendoReprogramacion(false);
+
+    if (rpcError) {
+      setErrorReprogramacion(rpcError.message);
+      return;
+    }
+
+    await recargarTodo();
+  };
+
+  const handleExtenderPlazo = async () => {
+    setExtendiendoPlazo(true);
+    setErrorExtenderPlazo(null);
+
+    const { error: rpcError } = await supabase.rpc("extender_plazo_clan_war_en_curso", { p_clan_war_id: id });
+
+    setExtendiendoPlazo(false);
+
+    if (rpcError) {
+      setErrorExtenderPlazo(rpcError.message);
+      return;
+    }
+
+    await recargarTodo();
+  };
+
+  // Mismo cerrar_clan_war() que ya usaba la ficha del equipo -- computa
+  // el resultado (todos los sets/partidas jugados, sin empate sin
+  // resolver) recién cuando los dos capitanes confirmaron el cierre.
+  const handleCerrarClanWar = async () => {
+    if (
+      !window.confirm(
+        "¿Confirmas que quieres cerrar esta Clan War? El equipo con más partidas ganadas se lleva el ajuste de MMR de clan. Hace falta que los dos capitanes confirmen el cierre."
+      )
+    ) {
+      return;
+    }
+
+    setCerrandoClanWar(true);
+    setErrorCerrarClanWar(null);
+
+    const { error: rpcError } = await supabase.rpc("cerrar_clan_war", { p_clan_war_id: id });
+
+    setCerrandoClanWar(false);
+
+    if (rpcError) {
+      setErrorCerrarClanWar(rpcError.message);
       return;
     }
 
@@ -285,6 +476,17 @@ export default function ClanWarLineupPublicoPage() {
     : false;
 
   const puedeGestionar = !!editor && (editor.status === "aceptada" || editor.status === "en_curso");
+
+  // Cooldown de la Clan War "en curso" (migración 132) -- el botón de
+  // extender solo aparece en los últimos 10 minutos antes del cierre
+  // automático, para que no se use como forma de posponerla desde el
+  // principio. ahora (con tick propio) es lo que hace que el aviso y
+  // el botón aparezcan solos, sin necesitar que alguien recargue.
+  const ahora = useAhora(30000);
+  const enCurso = editor?.status === "en_curso" && !!editor.en_curso_vence_en;
+  const vencimientoEnCurso = enCurso ? new Date(editor!.en_curso_vence_en!) : null;
+  const puedeExtenderPlazo =
+    vencimientoEnCurso !== null && vencimientoEnCurso.getTime() - ahora.getTime() <= 10 * 60 * 1000;
 
   // Buscador de jugador (migración 126): roster elegible + temporales
   // ya creados, todos en una sola lista para filtrar por nick a medida
@@ -316,6 +518,22 @@ export default function ClanWarLineupPublicoPage() {
     (o) => o.nombre.toLowerCase() === busquedaJugador.trim().toLowerCase()
   );
 
+  // Streamer (migración 133): mismo roster_elegible del buscador de
+  // jugadores de arriba, pero acá el resultado es un texto simple (no
+  // una referencia a un jugador) -- si no está en el roster, se
+  // escribe a mano y listo.
+  const sugerenciasStreamer = editor
+    ? editor.roster_elegible.filter((op) =>
+        streamerNombreEditado.trim() ? op.nombre.toLowerCase().includes(streamerNombreEditado.trim().toLowerCase()) : true
+      )
+    : [];
+
+  // Reprogramación (migración 045): "Solicitud" -- si hay una pendiente,
+  // se distingue quién la propuso para saber si corresponde esperar o
+  // responder.
+  const yoPropuseReprogramar = !!reprogramacion && !!editor && reprogramacion.propuestoPor === editor.mi_team_id;
+  const reprogramacionesRestantes = editor ? 2 - editor.reprogramaciones_usadas : 2;
+
   return (
     <section className="section section-page">
       <Link to="/" className="team-panel-back">
@@ -331,40 +549,112 @@ export default function ClanWarLineupPublicoPage() {
             {formatFecha(datos.fecha_hora_cet)} · Formato {datos.formato === "wtl" ? "WTL" : "Simple"}
           </p>
 
-          {!datos.revelado ? (
-            <p className="detail-empty">
-              Todavía no se reveló la alineación de ambos equipos -- volvé a intentarlo más cerca del
-              inicio de la Clan War.
+          {/* Migración 132: la Clan War queda claramente marcada como
+              terminada, sin importar cómo haya llegado a ese estado --
+              cerrada a mano ("finalizada"/"empatada") o cerrada sola
+              por inactividad ("cancelada", el único caso que hoy usa
+              ese status). */}
+          {(datos.status === "finalizada" || datos.status === "empatada" || datos.status === "cancelada") && (
+            <p className="clan-war-estado-terminado">
+              {datos.status === "empatada"
+                ? "Evento terminado -- empate."
+                : datos.status === "cancelada"
+                  ? "Evento cerrado automáticamente por inactividad."
+                  : "Evento terminado."}
             </p>
+          )}
+
+          {!datos.revelado ? (
+            <>
+              {/* Migración 134: el streamer se ve apenas se carga, no
+                  hace falta esperar a que se revele el lineup -- acá
+                  afuera de la tarjeta (que recién se monta una vez
+                  revelado) para que igual se muestre. */}
+              <StreamerBanner datos={datos} />
+              <p className="detail-empty">
+                Todavía no se reveló la alineación de ambos equipos -- volvé a intentarlo más cerca del
+                inicio de la Clan War.
+              </p>
+            </>
           ) : (
             <TarjetaLineupClanWar datos={datos} />
           )}
 
           {puedeGestionar && editor && (
             <div className="clan-war-editor-wrap">
-              <button
-                type="button"
-                className="clan-war-editor-toggle"
-                onClick={() => setMostrarEditor((v) => !v)}
-              >
-                <Pencil className="icon-inline" />
-                {mostrarEditor ? "Cerrar Look" : "Look"}
-              </button>
+              {/* Cooldown de "en curso" (migración 132): si nadie la
+                  cierra a mano, se cierra sola al vencer el plazo --
+                  el aviso y el botón de extender aparecen solos (sin
+                  recargar) gracias al tick de useAhora(). */}
+              {enCurso && vencimientoEnCurso && (
+                <div className="clan-war-cooldown">
+                  <p className={`clan-war-cooldown-aviso ${puedeExtenderPlazo ? "clan-war-cooldown-aviso-urgente" : ""}`}>
+                    Si nadie la cierra, esta Clan War se cierra sola en{" "}
+                    {formatearCuentaRegresiva(vencimientoEnCurso, ahora)}.
+                  </p>
+                  {errorExtenderPlazo && <div className="form-error">{errorExtenderPlazo}</div>}
+                  <div className="clan-war-cooldown-botones">
+                    {puedeExtenderPlazo && (
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={extendiendoPlazo}
+                        onClick={handleExtenderPlazo}
+                      >
+                        {extendiendoPlazo ? "Extendiendo..." : "Extender 1 hora más"}
+                      </button>
+                    )}
+                    {!editor.mi_cierre_confirmado && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={cerrandoClanWar}
+                        onClick={handleCerrarClanWar}
+                      >
+                        {cerrandoClanWar ? "Cerrando..." : "Guardar y cerrar Clan War"}
+                      </button>
+                    )}
+                  </div>
+                  <p className="tournament-card-meta">
+                    Tu confirmación de cierre: {editor.mi_cierre_confirmado ? "Confirmado" : "Pendiente"} · Confirmación
+                    de {editor.rival_nombre}: {editor.cierre_confirmado_rival ? "Confirmado" : "Pendiente"}
+                  </p>
+                  {errorCerrarClanWar && <div className="form-error">{errorCerrarClanWar}</div>}
+                </div>
+              )}
 
-              {mostrarEditor && (
+              <div className="clan-war-editor-toggle-fila">
+                <button
+                  type="button"
+                  className="clan-war-editor-toggle"
+                  onClick={() => setMostrarLook((v) => !v)}
+                >
+                  <Pencil className="icon-inline" />
+                  {mostrarLook ? "Cerrar Look" : "Look"}
+                </button>
+                <button
+                  type="button"
+                  className="clan-war-editor-toggle"
+                  onClick={() => setMostrarAgregarQuitar((v) => !v)}
+                >
+                  {mostrarAgregarQuitar ? "Cerrar Agregar y quitar" : "Agregar y quitar"}
+                </button>
+                <button
+                  type="button"
+                  className="clan-war-editor-toggle clan-war-editor-toggle-derecha"
+                  onClick={() => setMostrarSolicitud((v) => !v)}
+                >
+                  {mostrarSolicitud ? "Cerrar Solicitud" : "Solicitud"}
+                </button>
+              </div>
+
+              {mostrarLook && (
                 <div className="clan-war-lineup-room">
                   {/* "Look" (migraciones 127 y 129): apariencia de la
-                      tarjeta, separado del resto de la gestión -- Fondo
-                      (ya existía), Estructura (maqueta) y Dimensión
-                      (relación de aspecto), en sub-pestañas.
-
-                      Corrección: esta sala de edición llegó a tener el
-                      fondo elegido (incluida la imagen subida, a
-                      pantalla completa) pintado como decoración de este
-                      mismo panel -- tapaba las miniaturas del selector y
-                      el formulario de stream. El fondo es una propiedad
-                      de la TARJETA (TarjetaLineupClanWar, arriba), no de
-                      este panel de edición, así que ya no se aplica acá. */}
+                      tarjeta -- Fondo, Estructura y Dimensión, en
+                      sub-pestañas. Separado del resto de la gestión
+                      (migración 134: "Agregar y quitar" y "Solicitud"
+                      son paneles aparte, no sub-pestañas de acá). */}
                   <div className="team-info-tabs clan-war-look-tabs">
                     <button
                       type="button"
@@ -417,247 +707,179 @@ export default function ClanWarLineupPublicoPage() {
                       onCambio={recargarTodo}
                     />
                   )}
+                </div>
+              )}
 
-                  {/* Stream propio de cada equipo (migración 125): cada
-                      capitán carga el suyo acá mismo, sin pisar el del
-                      rival -- antes esto ni existía en el lobby, solo en
-                      la ficha del equipo, y encima era un único campo
-                      compartido entre los dos lados. */}
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="editor-stream-link">
-                      Tu stream (opcional)
-                    </label>
-                    <input
-                      id="editor-stream-link"
-                      className="form-input"
-                      type="text"
-                      placeholder="https://twitch.tv/tu_canal"
-                      value={streamLinkEditado}
-                      onChange={(e) => setStreamLinkEditado(e.target.value)}
-                    />
-                    <label className="form-checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={streamDelayEditado}
-                        onChange={(e) => setStreamDelayEditado(e.target.checked)}
-                      />
-                      Tiene delay
-                    </label>
+              {mostrarAgregarQuitar && (
+                <div className="clan-war-lineup-room">
+                  {/* "Agregar y quitar" (migración 134): quién entra y
+                      sale de la Clan War -- jugadores del lineup,
+                      cantidad por lado, delay del stream y el streamer
+                      -- separado de "Look" (apariencia) y "Solicitud"
+                      (cambiar la fecha). Antes todo esto vivía suelto,
+                      siempre visible, debajo de "Look". */}
+                  <div className="team-info-tabs clan-war-look-tabs">
                     <button
                       type="button"
-                      className="btn btn-ghost"
-                      disabled={guardandoStream}
-                      onClick={handleGuardarStream}
+                      className={`team-info-tab ${seccionAgregarQuitar === "jugadores" ? "is-active" : ""}`}
+                      onClick={() => setSeccionAgregarQuitar("jugadores")}
                     >
-                      {guardandoStream ? "Guardando..." : "Guardar stream"}
+                      Jugadores
                     </button>
-                    {errorStream && <div className="form-error">{errorStream}</div>}
-                    <p className="form-hint">
-                      {editor.rival_stream_link
-                        ? `Stream de ${editor.rival_nombre}: ${editor.rival_stream_link}${
-                            editor.rival_stream_delay ? " (con delay)" : ""
-                          }`
-                        : `${editor.rival_nombre} todavía no cargó su stream.`}
-                    </p>
+                    <button
+                      type="button"
+                      className={`team-info-tab ${seccionAgregarQuitar === "delay" ? "is-active" : ""}`}
+                      onClick={() => setSeccionAgregarQuitar("delay")}
+                    >
+                      Delay
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-info-tab ${seccionAgregarQuitar === "streamer" ? "is-active" : ""}`}
+                      onClick={() => setSeccionAgregarQuitar("streamer")}
+                    >
+                      Streamer
+                    </button>
                   </div>
 
-                  {!editor.es_de_torneo && (
+                  {seccionAgregarQuitar === "delay" && (
                     <div className="form-group">
-                      <label className="form-label" htmlFor="editor-jugadores-por-set">
-                        Cantidad de jugadores por lado
+                      <label className="form-label" htmlFor="editor-stream-delay">
+                        Delay de tu stream, en segundos (0 = sin delay)
                       </label>
                       <input
-                        id="editor-jugadores-por-set"
+                        id="editor-stream-delay"
                         className="form-input"
                         type="number"
-                        min={1}
-                        value={jugadoresPorSetEditado || String(editor.jugadores_por_set)}
-                        onChange={(e) => setJugadoresPorSetEditado(e.target.value)}
+                        min={0}
+                        value={delaySegundosEditado}
+                        onChange={(e) => setDelaySegundosEditado(e.target.value)}
                       />
                       <button
                         type="button"
                         className="btn btn-ghost"
-                        disabled={guardandoJugadoresPorSet}
-                        onClick={handleGuardarJugadoresPorSet}
+                        disabled={guardandoStream}
+                        onClick={handleGuardarStream}
                       >
-                        {guardandoJugadoresPorSet ? "Guardando..." : "Actualizar cantidad"}
+                        {guardandoStream ? "Guardando..." : "Guardar"}
                       </button>
-                      {errorJugadoresPorSet && <div className="form-error">{errorJugadoresPorSet}</div>}
+                      {errorStream && <div className="form-error">{errorStream}</div>}
                       <p className="form-hint">
-                        Al ser una Clan War amistosa, se puede subir o bajar en cualquier momento -- no
-                        hace falta que los dos capitanes se pongan de acuerdo de nuevo con el lineup.
+                        {editor.rival_stream_delay > 0
+                          ? `${editor.rival_nombre} tiene un delay de ${editor.rival_stream_delay} segundos.`
+                          : `${editor.rival_nombre} no cargó ningún delay.`}
                       </p>
                     </div>
                   )}
 
-                  <h5 className="detail-subtitle">Lineup: tu equipo</h5>
-                  {errorAgregar && <div className="form-error">{errorAgregar}</div>}
-                  {editor.lineup_propio.length === 0 ? (
-                    <p className="detail-empty">Todavía no agregaste jugadores al lineup.</p>
-                  ) : (
-                    <div className="detail-participant-list">
-                      {editor.lineup_propio.map((entry) => (
-                        <div key={entry.id} className="detail-participant-item">
-                          {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
-                          {entry.nombre}
-                          {entry.es_temporal && <span className="team-temp-badge">Temporal</span>}
-                          {entry.es_suplente && <span className="team-temp-badge">Suplente</span>}
-                          {entry.link_verificacion && (
-                            <a
-                              href={entry.link_verificacion}
-                              target="_blank"
-                              rel="noreferrer noopener"
-                              className="btn-link"
-                            >
-                              Verificación
-                            </a>
-                          )}
-                          {!vencioPlazo && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
-                              disabled={quitando === entry.id}
-                              onClick={() => handleQuitar(entry.id)}
-                            >
-                              {quitando === entry.id ? "Quitando..." : "Quitar"}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {vencioPlazo ? (
-                    <p className="form-hint">
-                      El plazo para seguir editando tu lineup ya venció -- pedile al staff o al equipo
-                      rival una extensión desde el Panel de control de tu equipo.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="form-group jugador-buscador-wrap" ref={buscadorJugadorRef}>
-                        <label className="form-label" htmlFor="editor-lineup-jugador">
-                          Agregar jugador
+                  {seccionAgregarQuitar === "streamer" && (
+                    <div className="form-group">
+                      <div className="form-group jugador-buscador-wrap" ref={streamerBuscadorRef}>
+                        <label className="form-label" htmlFor="editor-streamer-nombre">
+                          Streamer de tu equipo (opcional)
                         </label>
                         <input
-                          id="editor-lineup-jugador"
+                          id="editor-streamer-nombre"
                           className="form-input"
                           type="text"
                           autoComplete="off"
-                          placeholder="Escribe el nick de tu equipo..."
-                          value={busquedaJugador}
+                          placeholder="Busca en tu equipo, o escribe el nombre a mano"
+                          value={streamerNombreEditado}
                           onChange={(e) => {
-                            setBusquedaJugador(e.target.value);
-                            setJugadorNuevo("");
-                            setMostrarSugerencias(true);
+                            setStreamerNombreEditado(e.target.value);
+                            setMostrarSugerenciasStreamer(true);
                           }}
-                          onFocus={() => setMostrarSugerencias(true)}
+                          onFocus={() => setMostrarSugerenciasStreamer(true)}
                         />
-                        {mostrarSugerencias && (
+                        {mostrarSugerenciasStreamer && sugerenciasStreamer.length > 0 && (
                           <div className="jugador-buscador-sugerencias">
-                            {sugerenciasJugador.length === 0 && !busquedaJugador.trim() && (
-                              <p className="jugador-buscador-vacio">Escribe para buscar en tu equipo.</p>
-                            )}
-                            {sugerenciasJugador.map((op) => (
+                            {sugerenciasStreamer.map((op) => (
                               <button
-                                key={`${op.tipo}:${op.id}`}
+                                key={op.jugador_id}
                                 type="button"
                                 className="jugador-buscador-sugerencia"
                                 onClick={() => {
-                                  setJugadorNuevo(`${op.tipo}:${op.id}`);
-                                  setBusquedaJugador(op.nombre);
-                                  setMostrarSugerencias(false);
+                                  setStreamerNombreEditado(op.nombre);
+                                  setMostrarSugerenciasStreamer(false);
                                 }}
                               >
                                 {op.nombre}
-                                {op.extra}
                               </button>
                             ))}
-                            {/* Migración 126: si lo que se escribió no
-                                coincide con nadie del roster, se ofrece
-                                crearlo como jugador temporal al vuelo --
-                                sin salir del formulario ni ir a otra
-                                pantalla a crearlo primero. */}
-                            {busquedaJugador.trim().length >= 3 && !hayCoincidenciaExacta && (
-                              <button
-                                type="button"
-                                className="jugador-buscador-sugerencia jugador-buscador-crear"
-                                disabled={creandoTemporal}
-                                onClick={() => handleCrearTemporal(busquedaJugador.trim())}
-                              >
-                                {creandoTemporal
-                                  ? "Creando..."
-                                  : `+ Crear jugador temporal "${busquedaJugador.trim()}"`}
-                              </button>
-                            )}
                           </div>
                         )}
-                        {errorTemporal && <div className="form-error">{errorTemporal}</div>}
                       </div>
-                      <div className="form-group">
-                        <label className="form-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={esSuplenteNuevo}
-                            onChange={(e) => setEsSuplenteNuevo(e.target.checked)}
-                          />
-                          Es suplente
-                        </label>
-                        <p className="form-hint">
-                          Un suplente se anota igual, sin ocupar ninguna de las posiciones que se van a
-                          jugar -- sirve para reemplazar a un titular si el rival reporta un problema.
-                        </p>
-                      </div>
-                      {editor.formato === "wtl" && !esSuplenteNuevo && (
-                        <div className="form-group">
-                          <label className="form-label" htmlFor="editor-lineup-posicion">
-                            Posición (1 a {editor.jugadores_por_set})
-                          </label>
-                          <select
-                            id="editor-lineup-posicion"
-                            className="form-select"
-                            value={posicionNueva}
-                            onChange={(e) => setPosicionNueva(e.target.value)}
-                          >
-                            <option value="">Selecciona la posición</option>
-                            {Array.from({ length: editor.jugadores_por_set }, (_, i) => i + 1).map((pos) => (
-                              <option key={pos} value={pos}>
-                                Posición {pos}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="editor-lineup-link">
-                          Link de verificación (opcional)
-                        </label>
-                        <input
-                          id="editor-lineup-link"
-                          className="form-input"
-                          type="text"
-                          placeholder="https://sc2pulse.nephest.com/..."
-                          value={linkNuevo}
-                          onChange={(e) => setLinkNuevo(e.target.value)}
-                        />
-                      </div>
-                      <button type="button" className="btn btn-ghost" disabled={agregando} onClick={handleAgregar}>
-                        {agregando ? "Agregando..." : "Agregar al lineup"}
+                      <label className="form-label" htmlFor="editor-stream-link">
+                        Link del stream (opcional)
+                      </label>
+                      <input
+                        id="editor-stream-link"
+                        className="form-input"
+                        type="text"
+                        placeholder="https://twitch.tv/tu_canal"
+                        value={streamLinkEditado}
+                        onChange={(e) => setStreamLinkEditado(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={guardandoStream}
+                        onClick={handleGuardarStream}
+                      >
+                        {guardandoStream ? "Guardando..." : "Guardar"}
                       </button>
-                    </>
+                      {errorStream && <div className="form-error">{errorStream}</div>}
+                      <p className="form-hint">
+                        {editor.rival_stream_link
+                          ? `Stream de ${editor.rival_nombre}: ${editor.rival_streamer_nombre ?? editor.rival_nombre} -- ${editor.rival_stream_link}`
+                          : `${editor.rival_nombre} todavía no cargó su stream.`}
+                      </p>
+                    </div>
                   )}
 
-                  <h5 className="detail-subtitle">Lineup de {editor.rival_nombre}</h5>
-                  {editor.lineup_rival.length === 0 ? (
-                    <p className="detail-empty">{editor.rival_nombre} todavía no anotó ningún jugador.</p>
-                  ) : (
-                    <div className="detail-participant-list">
-                      {editor.lineup_rival.map((entry, indice) => (
-                        <div key={indice} className="detail-participant-item">
-                          {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
-                          {editor.lineup_revelado ? (
-                            <>
+                  {seccionAgregarQuitar === "jugadores" && (
+                    <>
+                      {!editor.es_de_torneo && (
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="editor-jugadores-por-set">
+                            Cantidad de jugadores por lado
+                          </label>
+                          <input
+                            id="editor-jugadores-por-set"
+                            className="form-input"
+                            type="number"
+                            min={1}
+                            value={jugadoresPorSetEditado || String(editor.jugadores_por_set)}
+                            onChange={(e) => setJugadoresPorSetEditado(e.target.value)}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={guardandoJugadoresPorSet}
+                            onClick={handleGuardarJugadoresPorSet}
+                          >
+                            {guardandoJugadoresPorSet ? "Guardando..." : "Actualizar cantidad"}
+                          </button>
+                          {errorJugadoresPorSet && <div className="form-error">{errorJugadoresPorSet}</div>}
+                          <p className="form-hint">
+                            Al ser una Clan War amistosa, se puede subir o bajar en cualquier momento -- no
+                            hace falta que los dos capitanes se pongan de acuerdo de nuevo con el lineup.
+                          </p>
+                        </div>
+                      )}
+
+                      <h5 className="detail-subtitle">Lineup: tu equipo</h5>
+                      {errorAgregar && <div className="form-error">{errorAgregar}</div>}
+                      {editor.lineup_propio.length === 0 ? (
+                        <p className="detail-empty">Todavía no agregaste jugadores al lineup.</p>
+                      ) : (
+                        <div className="detail-participant-list">
+                          {editor.lineup_propio.map((entry) => (
+                            <div key={entry.id} className="detail-participant-item">
+                              {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
                               {entry.nombre}
                               {entry.es_temporal && <span className="team-temp-badge">Temporal</span>}
+                              {entry.es_suplente && <span className="team-temp-badge">Suplente</span>}
                               {entry.link_verificacion && (
                                 <a
                                   href={entry.link_verificacion}
@@ -668,13 +890,273 @@ export default function ClanWarLineupPublicoPage() {
                                   Verificación
                                 </a>
                               )}
-                            </>
-                          ) : (
-                            <span className="tournament-card-meta">Jugador anotado (oculto hasta el visto bueno)</span>
-                          )}
-                          {entry.es_suplente && <span className="team-temp-badge">Suplente</span>}
+                              {!vencioPlazo && (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  disabled={quitando === entry.id}
+                                  onClick={() => handleQuitar(entry.id)}
+                                >
+                                  {quitando === entry.id ? "Quitando..." : "Quitar"}
+                                </button>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )}
+
+                      {vencioPlazo ? (
+                        <p className="form-hint">
+                          El plazo para seguir editando tu lineup ya venció -- pedile al staff o al equipo
+                          rival una extensión desde el Panel de control de tu equipo.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="form-group jugador-buscador-wrap" ref={buscadorJugadorRef}>
+                            <label className="form-label" htmlFor="editor-lineup-jugador">
+                              Agregar jugador
+                            </label>
+                            <input
+                              id="editor-lineup-jugador"
+                              className="form-input"
+                              type="text"
+                              autoComplete="off"
+                              placeholder="Escribe el nick de tu equipo..."
+                              value={busquedaJugador}
+                              onChange={(e) => {
+                                setBusquedaJugador(e.target.value);
+                                setJugadorNuevo("");
+                                setMostrarSugerencias(true);
+                              }}
+                              onFocus={() => setMostrarSugerencias(true)}
+                            />
+                            {mostrarSugerencias && (
+                              <div className="jugador-buscador-sugerencias">
+                                {sugerenciasJugador.length === 0 && !busquedaJugador.trim() && (
+                                  <p className="jugador-buscador-vacio">Escribe para buscar en tu equipo.</p>
+                                )}
+                                {sugerenciasJugador.map((op) => (
+                                  <button
+                                    key={`${op.tipo}:${op.id}`}
+                                    type="button"
+                                    className="jugador-buscador-sugerencia"
+                                    onClick={() => {
+                                      setJugadorNuevo(`${op.tipo}:${op.id}`);
+                                      setBusquedaJugador(op.nombre);
+                                      setMostrarSugerencias(false);
+                                    }}
+                                  >
+                                    {op.nombre}
+                                    {op.extra}
+                                  </button>
+                                ))}
+                                {/* Migración 126: si lo que se escribió no
+                                    coincide con nadie del roster, se ofrece
+                                    crearlo como jugador temporal al vuelo --
+                                    sin salir del formulario ni ir a otra
+                                    pantalla a crearlo primero. */}
+                                {busquedaJugador.trim().length >= 3 && !hayCoincidenciaExacta && (
+                                  <button
+                                    type="button"
+                                    className="jugador-buscador-sugerencia jugador-buscador-crear"
+                                    disabled={creandoTemporal}
+                                    onClick={() => handleCrearTemporal(busquedaJugador.trim())}
+                                  >
+                                    {creandoTemporal
+                                      ? "Creando..."
+                                      : `+ Crear jugador temporal "${busquedaJugador.trim()}"`}
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            {errorTemporal && <div className="form-error">{errorTemporal}</div>}
+                          </div>
+                          <div className="form-group">
+                            <label className="form-checkbox-label">
+                              <input
+                                type="checkbox"
+                                checked={esSuplenteNuevo}
+                                onChange={(e) => setEsSuplenteNuevo(e.target.checked)}
+                              />
+                              Es suplente
+                            </label>
+                            <p className="form-hint">
+                              Un suplente se anota igual, sin ocupar ninguna de las posiciones que se van a
+                              jugar -- sirve para reemplazar a un titular si el rival reporta un problema.
+                            </p>
+                          </div>
+                          {editor.formato === "wtl" && !esSuplenteNuevo && (
+                            <div className="form-group">
+                              <label className="form-label" htmlFor="editor-lineup-posicion">
+                                Posición (1 a {editor.jugadores_por_set})
+                              </label>
+                              <select
+                                id="editor-lineup-posicion"
+                                className="form-select"
+                                value={posicionNueva}
+                                onChange={(e) => setPosicionNueva(e.target.value)}
+                              >
+                                <option value="">Selecciona la posición</option>
+                                {Array.from({ length: editor.jugadores_por_set }, (_, i) => i + 1).map((pos) => (
+                                  <option key={pos} value={pos}>
+                                    Posición {pos}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="editor-lineup-link">
+                              Link de verificación (opcional)
+                            </label>
+                            <input
+                              id="editor-lineup-link"
+                              className="form-input"
+                              type="text"
+                              placeholder="https://sc2pulse.nephest.com/..."
+                              value={linkNuevo}
+                              onChange={(e) => setLinkNuevo(e.target.value)}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={agregando}
+                            onClick={handleAgregar}
+                          >
+                            {agregando ? "Agregando..." : "Agregar al lineup"}
+                          </button>
+                        </>
+                      )}
+
+                      <h5 className="detail-subtitle">Lineup de {editor.rival_nombre}</h5>
+                      {editor.lineup_rival.length === 0 ? (
+                        <p className="detail-empty">{editor.rival_nombre} todavía no anotó ningún jugador.</p>
+                      ) : (
+                        <div className="detail-participant-list">
+                          {editor.lineup_rival.map((entry, indice) => (
+                            <div key={indice} className="detail-participant-item">
+                              {entry.posicion && <span className="liga-badge">Pos. {entry.posicion}</span>}
+                              {editor.lineup_revelado ? (
+                                <>
+                                  {entry.nombre}
+                                  {entry.es_temporal && <span className="team-temp-badge">Temporal</span>}
+                                  {entry.link_verificacion && (
+                                    <a
+                                      href={entry.link_verificacion}
+                                      target="_blank"
+                                      rel="noreferrer noopener"
+                                      className="btn-link"
+                                    >
+                                      Verificación
+                                    </a>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="tournament-card-meta">
+                                  Jugador anotado (oculto hasta el visto bueno)
+                                </span>
+                              )}
+                              {entry.es_suplente && <span className="team-temp-badge">Suplente</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {mostrarSolicitud && (
+                <div className="clan-war-lineup-room">
+                  {/* "Solicitud" (migración 134, reutiliza solicitar_
+                      reprogramacion_cw()/responder_reprogramacion_cw()
+                      de la migración 045 -- antes solo vivían en el
+                      Panel de control de la ficha del equipo, nunca acá
+                      en el lobby). Solo tiene sentido con la CW
+                      "aceptada" -- una vez en curso ya no se puede
+                      reprogramar (ver el chequeo en la propia RPC). */}
+                  <h5 className="detail-subtitle">Cambiar fecha</h5>
+                  {errorReprogramacion && <div className="form-error">{errorReprogramacion}</div>}
+                  {editor.status !== "aceptada" ? (
+                    <p className="detail-empty">
+                      Solo se puede solicitar un cambio de fecha mientras la Clan War está aceptada, antes
+                      del check-in.
+                    </p>
+                  ) : reprogramacion ? (
+                    yoPropuseReprogramar ? (
+                      <p className="tournament-card-meta">
+                        Propusiste cambiar la fecha a {formatearHoraLocal(reprogramacion.nuevaFechaHoraCet)} (
+                        {formatearHoraCet(reprogramacion.nuevaFechaHoraCet)} CET)
+                        {reprogramacion.motivo && <> -- Motivo: {reprogramacion.motivo}</>}. Esperando la
+                        respuesta de {editor.rival_nombre}.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="tournament-card-meta">
+                          {editor.rival_nombre} propuso cambiar la fecha a{" "}
+                          {formatearHoraLocal(reprogramacion.nuevaFechaHoraCet)} (
+                          {formatearHoraCet(reprogramacion.nuevaFechaHoraCet)} CET)
+                          {reprogramacion.motivo && <> -- Motivo: {reprogramacion.motivo}</>}.
+                        </p>
+                        <div className="bracket-report">
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={respondiendoReprogramacion}
+                            onClick={() => handleResponderReprogramacion(true)}
+                          >
+                            {respondiendoReprogramacion ? "Guardando..." : "Aceptar"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={respondiendoReprogramacion}
+                            onClick={() => handleResponderReprogramacion(false)}
+                          >
+                            {respondiendoReprogramacion ? "Guardando..." : "Rechazar"}
+                          </button>
+                        </div>
+                      </>
+                    )
+                  ) : reprogramacionesRestantes <= 0 ? (
+                    <p className="tournament-card-meta">
+                      Ya se usaron las 2 reprogramaciones permitidas para esta Clan War.
+                    </p>
+                  ) : (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="reprogramar-fecha">
+                        Nueva fecha y hora (tu hora local)
+                      </label>
+                      <input
+                        id="reprogramar-fecha"
+                        className="form-input"
+                        type="datetime-local"
+                        value={nuevaFechaReprogramacion}
+                        onChange={(e) => setNuevaFechaReprogramacion(e.target.value)}
+                      />
+                      <label className="form-label" htmlFor="reprogramar-motivo">
+                        Motivo (opcional)
+                      </label>
+                      <input
+                        id="reprogramar-motivo"
+                        className="form-input"
+                        type="text"
+                        value={motivoReprogramacion}
+                        onChange={(e) => setMotivoReprogramacion(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={solicitandoReprogramacion}
+                        onClick={handleSolicitarReprogramacion}
+                      >
+                        {solicitandoReprogramacion ? "Solicitando..." : "Solicitar cambio de fecha"}
+                      </button>
+                      <p className="form-hint">
+                        Te queda{reprogramacionesRestantes === 1 ? "" : "n"} {reprogramacionesRestantes}{" "}
+                        reprogramaci{reprogramacionesRestantes === 1 ? "ón" : "ones"} para esta Clan War.
+                      </p>
                     </div>
                   )}
                 </div>

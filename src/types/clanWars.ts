@@ -67,10 +67,15 @@ export interface LineupPublicoClanWar {
   // Migración 125: stream propio de cada equipo (reemplaza al campo
   // compartido caster_nombre/caster_link para la gestión diaria) --
   // null cuando ese equipo no cargó nada, se muestra solo en ese caso.
+  // Migración 133: el delay pasa de sí/no a segundos reales, y suma el
+  // nombre del streamer (buscado en el roster propio, o escrito a
+  // mano si no está).
   challenger_stream_link: string | null;
-  challenger_stream_delay: boolean | null;
+  challenger_stream_delay: number;
+  challenger_streamer_nombre: string | null;
   challenged_stream_link: string | null;
-  challenged_stream_delay: boolean | null;
+  challenged_stream_delay: number;
+  challenged_streamer_nombre: string | null;
   // Migración 067: fondo de imagen (catalogo_fondos_lineup) tiene
   // prioridad sobre el clásico cuando está presente -- son mutuamente
   // excluyentes, ver cambiar_fondo_lineup_cw()/cambiar_fondo_lineup_imagen_cw().
@@ -151,11 +156,26 @@ export interface LineupEditorClanWar {
   visto_bueno_rival: boolean;
   // Migración 125: stream propio -- editable acá mismo; el del rival
   // es de solo lectura (visible siempre para el editor, a diferencia
-  // de la tarjeta pública, que lo omite si no está cargado).
+  // de la tarjeta pública, que lo omite si no está cargado). Migración
+  // 133: delay en segundos (no sí/no) + nombre del streamer.
   mi_stream_link: string | null;
-  mi_stream_delay: boolean | null;
+  mi_stream_delay: number;
+  mi_streamer_nombre: string | null;
+  // Migración 132: cooldown de la Clan War "en curso" -- si nadie la
+  // cierra a mano, se cierra sola al llegar en_curso_vence_en (null
+  // cuando el status no es "en_curso"). mi_cierre_confirmado/
+  // cierre_confirmado_rival son el mismo dato que ya usa "Cerrar Clan
+  // War" en la ficha del equipo, ahora también acá para el botón
+  // "Guardar y cerrar Clan War".
+  en_curso_vence_en: string | null;
+  mi_cierre_confirmado: boolean;
+  cierre_confirmado_rival: boolean;
   rival_stream_link: string | null;
-  rival_stream_delay: boolean | null;
+  rival_stream_delay: number;
+  rival_streamer_nombre: string | null;
+  // Migración 133 (dato ya existía en la tabla desde la 045): cuántas
+  // reprogramaciones de fecha ya se ACEPTARON -- el límite es 2.
+  reprogramaciones_usadas: number;
   roster_elegible: LineupEditorJugadorElegible[];
   temporales_propios: LineupEditorTemporal[];
   lineup_propio: LineupEditorEntryPropio[];

@@ -51,10 +51,17 @@ const CAMPO_IMAGEN: Record<RazaGuerra, "imagen_protoss_url" | "imagen_terran_url
 // lector" para ver exactamente lo que ve el resto.
 export default function GuerraDeRazasPage() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
 
   const [guerra, setGuerra] = useState<GuerraRazasRow | null>(null);
+  // guerra_razas.creado_por ya existe desde la migración 106, pero
+  // hasta ahora no se mostraba en ningún lado -- con varias cuentas de
+  // prueba dando vueltas no había forma de distinguir cuál Race War
+  // era de quién. Solo se resuelve el nick y solo se le muestra a quien
+  // ya podría verlo por otra vía (el organizador o el dueño de la
+  // plataforma) -- nunca a la audiencia del marcador.
+  const [creadorNick, setCreadorNick] = useState<string | null>(null);
   const [jugadores, setJugadores] = useState<GuerraRazasJugadorRow[]>([]);
   const [cargando, setCargando] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -98,6 +105,13 @@ export default function GuerraDeRazasPage() {
     setGuerra(guerraData as GuerraRazasRow);
     setJugadores((jugadoresData ?? []) as GuerraRazasJugadorRow[]);
     setCargando(false);
+
+    const { data: creadorData } = await supabase
+      .from("profiles")
+      .select("nick, unique_id")
+      .eq("id", guerraData.creado_por)
+      .maybeSingle();
+    setCreadorNick(creadorData?.nick ? `${creadorData.nick}#${creadorData.unique_id}` : null);
   }, [id]);
 
   useEffect(() => {
@@ -204,6 +218,10 @@ export default function GuerraDeRazasPage() {
 
   const esOrganizador = !!user && user.id === guerra.creado_por;
   const modoEdicionActivo = esOrganizador && !vistaPrevia;
+  // El dato de quién lo creó nunca llega a la audiencia del marcador --
+  // solo lo ve el propio organizador o el dueño de la plataforma
+  // (auditoría de eventos, sin depender de acordarse de memoria).
+  const puedeVerCreador = esOrganizador || !!profile?.es_admin;
 
   // Migración 108: sin ninguna condición de "debe estar vacío" -- el
   // organizador puede eliminar este Race War en cualquier momento.
@@ -409,6 +427,15 @@ export default function GuerraDeRazasPage() {
         <h1 className="guerra-razas-titulo">Race War</h1>
         <div className="guerra-razas-franja" />
       </header>
+
+      {/* Nunca a la audiencia del marcador (mismo criterio que el
+          bloque de abajo) -- solo el organizador o el dueño de la
+          plataforma necesitan saber quién lo creó. */}
+      {puedeVerCreador && (
+        <p className="guerra-razas-creador">
+          Creado por: {creadorNick ?? "Cargando..."}
+        </p>
+      )}
 
       {/* Migración 110: ningún indicador técnico (ni "Modo edición" ni
           "Solo lectura -- en vivo") debe llegar a la audiencia -- se
