@@ -465,14 +465,22 @@ export default function ClanWarLineupPublicoPage() {
     await recargarTodo();
   };
 
-  const vencioPlazo = editor
-    ? vencioPlazoEdicionLineup(
-        editor.fecha_hora_cet,
-        editor.lineup_plazo_extendido_hasta,
-        Date.now(),
-        editor.ventana_revelacion_minutos
-      )
-    : false;
+  // Corrección: el plazo de edición del lineup (30 min antes de la
+  // hora del reto, o la extensión aprobada) es para coordinar la
+  // revelación simultánea en Clan Wars DE TORNEO, donde afecta la
+  // tabla de posiciones -- una Clan War amistosa no tiene ese problema
+  // y ya se podía subir/bajar la cantidad de jugadores en cualquier
+  // momento (ver más abajo), así que el lineup en sí tiene que seguir
+  // el mismo criterio: sin plazo salvo que sea de torneo.
+  const vencioPlazo =
+    editor && editor.es_de_torneo
+      ? vencioPlazoEdicionLineup(
+          editor.fecha_hora_cet,
+          editor.lineup_plazo_extendido_hasta,
+          Date.now(),
+          editor.ventana_revelacion_minutos
+        )
+      : false;
 
   const puedeGestionar = !!editor && (editor.status === "aceptada" || editor.status === "en_curso");
 
