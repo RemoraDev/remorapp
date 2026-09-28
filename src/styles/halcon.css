@@ -1986,13 +1986,19 @@ main {
   border: 0;
 }
 
-/* ---------- Vitrina de jugador en escritorio (migración 124) ----------
-   Reemplaza el modelo de banner+avatar superpuesto+info apilada, SOLO
-   en escritorio (html.es-escritorio): banner a la mitad de ancho con
-   el botón de Panel de control al lado, y una tarjeta de presentación
-   centrada (foto editable con el lápiz, nombre, país, equipo,
-   transmisión) con la descripción personal aparte, a la derecha.
-   Nunca se muestran las dos vistas a la vez. */
+/* ---------- Vitrina de jugador en escritorio (rediseño) ----------
+   Reemplaza el modelo anterior (banner a la mitad de ancho + dos cajas
+   lado a lado con la foto y la descripción, que quedaba muy chico y
+   desproporcionado) por uno más parecido a un perfil de plataforma de
+   streaming: banner ANCHO COMPLETO y más alto, con el avatar
+   superpuesto en su esquina y el botón de Panel de control flotando
+   encima (no ocupando su propia columna). Debajo, la identidad
+   (nombre, país, clan) y pestañas Perfil/Stream/Logros -- "Perfil"
+   muestra una grilla de 3 columnas (foto de presentación angosta /
+   descripción al centro, más ancha / vistas previas de Stream y
+   Logros a la derecha), "Stream" y "Logros" muestran ese mismo
+   contenido expandido a toda la columna. Solo en escritorio
+   (html.es-escritorio) -- la vista móvil de arriba no cambia. */
 .player-detail-vista-escritorio {
   display: none;
 }
@@ -2005,90 +2011,161 @@ html.es-escritorio .player-detail-vista-escritorio {
   display: block;
 }
 
-.player-detail-escritorio-top {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
+.player-hero-banner-wrap {
+  position: relative;
+  margin-bottom: 3.75rem;
+}
+
+.player-hero-banner {
+  aspect-ratio: 4 / 1;
+  max-height: 280px;
+}
+
+.player-hero-panel-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+}
+
+.player-hero-identity {
   margin-bottom: 1.5rem;
 }
 
-/* Corrección: con un ancho fijo en 50%, "Panel de control" podía
-   terminar sobresaliendo del margen derecho según cuánto ocupara su
-   propio texto -- el banner ahora crece para llenar lo que sobra
-   después del botón (que nunca se achica), así los dos siempre suman
-   exactamente el ancho disponible, sin desbordar nunca. */
-.player-detail-escritorio-banner-wrap {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin-bottom: 0;
+.player-hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.player-detail-escritorio-banner-wrap .player-detail-banner,
-.player-detail-escritorio-banner-wrap .player-detail-banner-placeholder {
-  aspect-ratio: 3 / 1;
+.player-hero-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.25rem;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
 }
 
-.player-detail-escritorio-panel-btn {
-  flex-shrink: 0;
+.player-hero-meta-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
 }
 
-/* Corrección: vuelven a ser dos columnas lado a lado, compartiendo el
-   ancho -- la tarjeta de presentación y la descripción, cada una la
-   mitad. */
-.player-detail-escritorio-main {
+.player-hero-meta-clan {
+  color: var(--color-text-muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.player-hero-meta-clan:hover {
+  color: var(--color-accent);
+}
+
+.player-hero-meta-clan-logo {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 0.25rem;
+  object-fit: cover;
+}
+
+/* Pestañas Perfil/Stream/Logros -- mismo patrón visual que cualquier
+   fila de tabs del proyecto (subrayado en la activa), pero acá con
+   icono a la izquierda de cada etiqueta. */
+.player-tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1.5rem;
+}
+
+.player-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.75rem 0.25rem;
+  margin-bottom: -1px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--color-text-muted);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.player-tab-btn + .player-tab-btn {
+  margin-left: 0.75rem;
+}
+
+.player-tab-btn:hover {
+  color: var(--color-text);
+}
+
+.player-tab-btn-activo,
+.player-tab-btn-activo:hover {
+  color: var(--color-accent);
+  border-bottom-color: var(--color-accent);
+}
+
+/* Grilla de la pestaña "Perfil": foto angosta / descripción ancha /
+   vistas previas angostas -- la del medio es la que realmente crece. */
+.player-tab-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 11rem) minmax(0, 2fr) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
 }
 
-.player-detail-escritorio-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 1.5rem;
-  padding: 1.5rem 1.75rem;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border);
-  background: linear-gradient(180deg, rgba(var(--h-accent-rgb), 0.08), transparent 40%), var(--color-panel);
-}
-
-.player-detail-escritorio-card-info {
+.player-tab-col-foto {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
   gap: 0.5rem;
-  min-width: 0;
-  /* Corrección: nick+#id sin espacio en el medio (es una sola
-     "palabra" para el navegador) se salía de la tarjeta ahora que la
-     columna es angosta -- que corte en vez de desbordar. */
-  overflow-wrap: anywhere;
 }
 
-/* Foto de presentación (migración 128): propia de esta tarjeta,
-   distinta del avatar de siempre -- el avatar sigue en su lugar de
-   siempre, superpuesto en la esquina del banner (ver
-   .player-detail-avatar-overlap). */
-.player-detail-escritorio-foto-wrap {
+.player-tab-foto-wrap {
   position: relative;
-  flex-shrink: 0;
 }
 
-/* Corrección: la foto de presentación pasa a ser vertical (9:16) y más
-   grande -- ya no un cuadrado chico de 8rem. */
-.player-detail-escritorio-foto-wrap .player-detail-avatar {
-  width: 11rem;
+/* La foto de presentación (migración 128) es vertical (9:16) --
+   distinta del avatar de siempre, que sigue en su lugar habitual
+   superpuesto en la esquina del banner (.player-detail-avatar-overlap). */
+.player-tab-foto {
+  width: 100%;
   height: auto;
   aspect-ratio: 9 / 16;
+  border-radius: var(--radius-lg);
+  object-fit: cover;
 }
 
-/* El lápiz de editar foto -- corrección: nada de texto ni mensaje de
-   "subir foto", solo este botón circular sobre la esquina de la foto,
-   que abre directo el selector de archivo + recorte. Solo se renderiza
-   cuando quien mira es el dueño del perfil. */
+.player-tab-foto-vacia {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  border: 1px dashed var(--color-border);
+  background: var(--color-panel);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.player-tab-foto-vacia-proporcion {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+/* El lápiz de editar foto -- solo este botón circular sobre la
+   esquina de la foto, que abre directo el selector de archivo +
+   recorte. Solo se renderiza cuando quien mira es el dueño del perfil. */
 .player-detail-foto-presentacion-edit-btn {
   position: absolute;
-  right: -0.35rem;
-  bottom: -0.35rem;
+  right: 0.4rem;
+  bottom: 0.4rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2112,26 +2189,96 @@ html.es-escritorio .player-detail-vista-escritorio {
   cursor: wait;
 }
 
-.player-detail-escritorio-bio {
+.player-tab-col-main .detail-card,
+.player-tab-col-side {
+  height: 100%;
+}
+
+.player-tab-col-side {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Tarjetas de vista previa de Stream/Logros -- mismo patrón visual que
+   .team-panel-menu-item (título + descripción + click), con un
+   chevron a la derecha del título indicando que llevan a su pestaña. */
+.player-tab-preview-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+  width: 100%;
+  text-align: left;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-tab-preview-card:hover {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+}
+
+.player-tab-preview-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  font-family: var(--font-display);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.player-tab-preview-card-chevron {
+  margin-left: auto;
+  color: var(--color-text-muted);
+}
+
+.player-tab-preview-card-desc {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+/* Tarjeta genérica de contenido de pestaña (Descripción en "Perfil",
+   y el contenido expandido de "Stream"/"Logros"). */
+.detail-card {
   padding: 1.5rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background: var(--color-panel);
 }
 
-.player-detail-escritorio-bio .team-detail-description {
+.detail-card .team-detail-description {
   margin-top: 0.5rem;
 }
 
-@media (max-width: 640px) {
-  .player-detail-escritorio-card {
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
+@media (max-width: 900px) {
+  .player-tab-grid {
+    grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
   }
 
-  .player-detail-escritorio-card-info {
-    align-items: center;
+  .player-tab-col-side {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .player-tab-col-side .player-tab-preview-card {
+    flex: 1 1 12rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .player-tab-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .player-tab-col-foto {
+    max-width: 11rem;
   }
 }
 

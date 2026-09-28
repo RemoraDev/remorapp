@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { BarChart3, Award, History, Settings, Shield, Pencil } from "lucide-react";
+import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight, Users } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import Carrusel from "../components/Carrusel";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
+import TitulosActivosList from "../components/TitulosActivosList";
 import { COUNTRY_OPTIONS } from "../types/profile";
 import type { Country, LinkTransmision } from "../types/profile";
 import type { SkinAvatarClave } from "../types/skins";
@@ -62,6 +63,19 @@ interface EquipoActual {
   logoUrl: string | null;
 }
 
+// Solo presentación (emoji, no hay bandera SVG en el proyecto) -- la
+// lista de países es la misma acotada de COUNTRY_OPTIONS.
+const BANDERA_POR_PAIS: Record<Country, string> = {
+  chile: "🇨🇱",
+  guatemala: "🇬🇹",
+  puerto_rico: "🇵🇷",
+  argentina: "🇦🇷",
+  peru: "🇵🇪",
+  bolivia: "🇧🇴",
+};
+
+type TabPerfil = "perfil" | "stream" | "logros";
+
 // El título más "importante" cuando hay varios activos a la vez: el
 // de mayor duracion_dias -- mismo criterio y mismo formato de texto
 // que en la Sala de la Fama (Muro de Jugadores).
@@ -94,6 +108,10 @@ export default function PlayerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
+  // Pestañas de la vista de escritorio (Perfil/Stream/Logros) -- la
+  // vista móvil de arriba no las usa, se mantiene como una sola página
+  // apilada de siempre.
+  const [tabEscritorio, setTabEscritorio] = useState<TabPerfil>("perfil");
 
   // Edición rápida de la foto de presentación desde la tarjeta de
   // escritorio (migraciones 124 y 128): sin texto ni botón de
@@ -452,41 +470,39 @@ export default function PlayerDetailPage() {
         </div>
       </div>
 
-      {/* Vista de escritorio (migraciones 124 y 128): banner a la mitad
-          de ancho con el avatar de siempre superpuesto en su esquina
-          (igual que en la vista móvil de arriba) y el botón de Panel
-          de control al lado. Debajo, dos cajas horizontales apiladas:
-          la tarjeta de presentación (foto propia -- editable con el
-          lápiz si es tu propio perfil, distinta del avatar --, nombre,
-          país, equipo y transmisión) y, abajo, la descripción
-          personal. Reemplaza al modelo de arriba -- nunca se muestran
-          los dos a la vez. */}
+      {/* Vista de escritorio (rediseño): banner ancho completo, con el
+          avatar superpuesto en su esquina y el botón de Panel de
+          control flotando encima, a la derecha. Debajo, la identidad
+          (nombre, título, raza, país, equipo) y las pestañas
+          Perfil/Stream/Logros -- "Perfil" muestra una grilla de 3
+          columnas (foto de presentación / descripción / vistas previas
+          de Stream y Logros), las otras dos pestañas muestran ese
+          mismo contenido expandido. Reemplaza al modelo de la vista
+          móvil de arriba -- nunca se muestran los dos a la vez. */}
       <div className="player-detail-vista-escritorio">
-        <div className="player-detail-escritorio-top">
-          <div className="player-detail-banner-wrap player-detail-escritorio-banner-wrap">
-            {perfil.bannerUrl ? (
-              <img src={perfil.bannerUrl} alt="" className="player-detail-banner" />
-            ) : (
-              <div className="player-detail-banner player-detail-banner-placeholder" />
-            )}
-            <div className={`player-detail-avatar-overlap ${claseForma}`}>
-              <AvatarSkin
-                clave={perfil.avatarTransparente ? null : skinAvatarClave}
-                bordeColor={perfil.avatarTransparente ? null : bordeBasicoColorHex}
-                bordeGrosor={perfil.bordeGrosor}
+        <div className="player-hero-banner-wrap">
+          {perfil.bannerUrl ? (
+            <img src={perfil.bannerUrl} alt="" className="player-detail-banner player-hero-banner" />
+          ) : (
+            <div className="player-detail-banner player-detail-banner-placeholder player-hero-banner" />
+          )}
+          <div className={`player-detail-avatar-overlap ${claseForma}`}>
+            <AvatarSkin
+              clave={perfil.avatarTransparente ? null : skinAvatarClave}
+              bordeColor={perfil.avatarTransparente ? null : bordeBasicoColorHex}
+              bordeGrosor={perfil.bordeGrosor}
+              forma="cuadrado"
+            >
+              <Avatar
+                url={perfil.avatarUrl}
+                nombre={perfil.nick}
+                className="player-detail-avatar"
                 forma="cuadrado"
-              >
-                <Avatar
-                  url={perfil.avatarUrl}
-                  nombre={perfil.nick}
-                  className="player-detail-avatar"
-                  forma="cuadrado"
-                />
-              </AvatarSkin>
-            </div>
+              />
+            </AvatarSkin>
           </div>
           {esMiPropioPerfil && (
-            <div className="player-detail-escritorio-panel-btn">
+            <div className="player-hero-panel-btn">
               <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
                 {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
               </button>
@@ -494,61 +510,167 @@ export default function PlayerDetailPage() {
           )}
         </div>
 
-        <div className="player-detail-escritorio-main">
-          <div className="player-detail-escritorio-card">
-            <div className="player-detail-escritorio-foto-wrap">
-              <Avatar
-                url={fotoPresentacionMostrada}
-                nombre={perfil.nick}
-                className="player-detail-avatar"
-                forma="cuadrado"
-              />
-              {esMiPropioPerfil && (
-                <button
-                  type="button"
-                  className="player-detail-foto-presentacion-edit-btn"
-                  onClick={() => fotoPresentacionInputRef.current?.click()}
-                  disabled={subiendoFotoPresentacion}
-                  aria-label="Cambiar foto de presentación"
-                  title="Cambiar foto de presentación"
-                >
-                  <Pencil size={14} />
-                </button>
-              )}
-            </div>
-
-            <div className="player-detail-escritorio-card-info">
-              {errorFotoPresentacion && <div className="form-error">{errorFotoPresentacion}</div>}
-              <h1 className="section-title">
-                {perfil.nick}
-                <span className="profile-nick-id">#{perfil.uniqueId}</span>
-              </h1>
-              {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
-              {perfil.razaPrincipal && (
-                <span className="liga-badge">
-                  Raza: {perfil.razaPrincipal}
-                  {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
-                </span>
-              )}
-              {perfil.country && (
-                <p className="tournament-card-meta">
-                  País: {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
-                </p>
-              )}
-              {bloqueEquipo}
-              {bloqueTransmision}
-            </div>
+        <div className="player-hero-identity">
+          <h1 className="section-title">
+            {perfil.nick}
+            <span className="profile-nick-id">#{perfil.uniqueId}</span>
+          </h1>
+          <div className="player-hero-badges">
+            {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
+            {perfil.razaPrincipal && (
+              <span className="liga-badge">
+                Raza: {perfil.razaPrincipal}
+                {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
+              </span>
+            )}
           </div>
-
-          <div className="player-detail-escritorio-bio">
-            <h3 className="detail-subtitle">Descripción</h3>
-            {perfil.bio ? (
-              <p className="team-detail-description">{perfil.bio}</p>
-            ) : (
-              <p className="detail-empty">Todavía no escribió una descripción personal.</p>
+          <div className="player-hero-meta-row">
+            {perfil.country && (
+              <span className="player-hero-meta-item">
+                <span aria-hidden="true">{BANDERA_POR_PAIS[perfil.country]}</span>
+                {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
+              </span>
+            )}
+            {equipoActual && (
+              <Link to={`/equipos/${equipoActual.tag}`} className="player-hero-meta-item player-hero-meta-clan">
+                {equipoActual.logoUrl ? (
+                  <img src={equipoActual.logoUrl} alt="" className="player-hero-meta-clan-logo" />
+                ) : (
+                  <Users size={14} aria-hidden="true" />
+                )}
+                Clan: {equipoActual.name}
+              </Link>
             )}
           </div>
         </div>
+
+        <div className="player-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabEscritorio === "perfil"}
+            className={`player-tab-btn ${tabEscritorio === "perfil" ? "player-tab-btn-activo" : ""}`}
+            onClick={() => setTabEscritorio("perfil")}
+          >
+            <User size={16} className="icon-inline" aria-hidden="true" />
+            Perfil
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabEscritorio === "stream"}
+            className={`player-tab-btn ${tabEscritorio === "stream" ? "player-tab-btn-activo" : ""}`}
+            onClick={() => setTabEscritorio("stream")}
+          >
+            <Radio size={16} className="icon-inline" aria-hidden="true" />
+            Stream
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tabEscritorio === "logros"}
+            className={`player-tab-btn ${tabEscritorio === "logros" ? "player-tab-btn-activo" : ""}`}
+            onClick={() => setTabEscritorio("logros")}
+          >
+            <Award size={16} className="icon-inline" aria-hidden="true" />
+            Logros
+          </button>
+        </div>
+
+        {tabEscritorio === "perfil" && (
+          <div className="player-tab-grid">
+            <div className="player-tab-col-foto">
+              <div className="player-tab-foto-wrap">
+                {fotoPresentacionMostrada ? (
+                  <Avatar
+                    url={fotoPresentacionMostrada}
+                    nombre={perfil.nick}
+                    className="player-tab-foto"
+                    forma="cuadrado"
+                  />
+                ) : (
+                  <div className="player-tab-foto player-tab-foto-vacia">
+                    <span>Tu foto aquí</span>
+                    <span className="player-tab-foto-vacia-proporcion">(9:16)</span>
+                  </div>
+                )}
+                {esMiPropioPerfil && (
+                  <button
+                    type="button"
+                    className="player-detail-foto-presentacion-edit-btn"
+                    onClick={() => fotoPresentacionInputRef.current?.click()}
+                    disabled={subiendoFotoPresentacion}
+                    aria-label="Cambiar foto de presentación"
+                    title="Cambiar foto de presentación"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                )}
+              </div>
+              {errorFotoPresentacion && <div className="form-error">{errorFotoPresentacion}</div>}
+            </div>
+
+            <div className="player-tab-col-main">
+              <div className="detail-card">
+                <h3 className="detail-subtitle">Descripción</h3>
+                {perfil.bio ? (
+                  <p className="team-detail-description">{perfil.bio}</p>
+                ) : (
+                  <p className="detail-empty">Todavía no escribió una descripción personal.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="player-tab-col-side">
+              <button type="button" className="player-tab-preview-card" onClick={() => setTabEscritorio("stream")}>
+                <span className="player-tab-preview-card-header">
+                  <Radio size={16} className="icon-inline" aria-hidden="true" />
+                  Stream
+                  <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
+                </span>
+                <span className="player-tab-preview-card-desc">
+                  {!perfil.esCaster || perfil.linksTransmision.length === 0
+                    ? "Aún no hay transmisiones."
+                    : `${perfil.linksTransmision.length} link${perfil.linksTransmision.length > 1 ? "s" : ""} de transmisión.`}
+                </span>
+              </button>
+
+              <button type="button" className="player-tab-preview-card" onClick={() => setTabEscritorio("logros")}>
+                <span className="player-tab-preview-card-header">
+                  <Award size={16} className="icon-inline" aria-hidden="true" />
+                  Logros
+                  <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
+                </span>
+                <span className="player-tab-preview-card-desc">
+                  Participá, jugá y desbloqueá nuevos logros.
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tabEscritorio === "stream" && (
+          <div className="detail-card">
+            {perfil.esCaster ? (
+              bloqueTransmision
+            ) : (
+              <>
+                <h3 className="detail-subtitle">Stream</h3>
+                <p className="detail-empty">Este jugador no transmite.</p>
+              </>
+            )}
+          </div>
+        )}
+
+        {tabEscritorio === "logros" && (
+          <div className="detail-card">
+            <h3 className="detail-subtitle">Logros</h3>
+            <TitulosActivosList tipo="jugador" id={perfil.id} className="detail-map-list" />
+            {!tituloTexto && (
+              <p className="detail-empty">Todavía no tiene títulos Padre/Hijo activos.</p>
+            )}
+          </div>
+        )}
       </div>
 
       {inputArchivoFotoPresentacion}
