@@ -99,8 +99,10 @@ export default function CreateTournamentPage() {
   const [cargandoMiEquipo, setCargandoMiEquipo] = useState(true);
 
   // Migración 109: Race War -- sin formulario propio, crear_race_war()
-  // no pide nada más que confirmar.
+  // no pide nada más que confirmar. Migración 137: sumó un nombre
+  // opcional ("Race War" es el default si se deja en blanco).
   const [creandoRaceWar, setCreandoRaceWar] = useState(false);
+  const [raceWarTitulo, setRaceWarTitulo] = useState("");
   const [cwJugadoresPorSet, setCwJugadoresPorSet] = useState("3");
   const [cwMapasPorSet, setCwMapasPorSet] = useState("2");
   const [cwFechaHora, setCwFechaHora] = useState("");
@@ -379,7 +381,9 @@ export default function CreateTournamentPage() {
   const handleCrearRaceWar = async () => {
     if (!user) return;
     setCreandoRaceWar(true);
-    const { data, error } = await supabase.rpc("crear_race_war");
+    const { data, error } = await supabase.rpc("crear_race_war", {
+      p_titulo: raceWarTitulo.trim() || null,
+    });
     setCreandoRaceWar(false);
 
     if (error) {
@@ -770,9 +774,23 @@ export default function CreateTournamentPage() {
       ) : esRaceWar ? (
         <div className="create-tournament-form">
           <p className="form-hint">
-            No necesita ningún otro dato -- se crea al toque y te lleva directo al marcador, donde
-            configuras los puntos iniciales, las imágenes de cada raza y los jugadores destacados.
+            Se crea al toque y te lleva directo al marcador, donde configuras los puntos iniciales, las
+            imágenes de cada raza y los jugadores destacados.
           </p>
+          <div className="form-group">
+            <label className="form-label" htmlFor="race-war-titulo">
+              Nombre (opcional)
+            </label>
+            <input
+              id="race-war-titulo"
+              className="form-input"
+              type="text"
+              placeholder="Race War"
+              maxLength={60}
+              value={raceWarTitulo}
+              onChange={(e) => setRaceWarTitulo(e.target.value)}
+            />
+          </div>
           <button
             type="button"
             className="btn btn-primary btn-block"

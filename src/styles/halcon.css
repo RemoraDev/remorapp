@@ -1935,6 +1935,14 @@ main {
   margin-bottom: 1rem;
 }
 
+/* Corrección: nick+#id sin espacio en el medio (es una sola "palabra"
+   para el navegador) se cortaba contra el borde en pantallas angostas
+   -- que corte de línea en vez de desbordar. */
+.player-detail-header .section-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 /* Botón "Enviar solicitud de amistad" en la ficha de OTRO equipo --
    empujado al extremo derecho del header (nombre/tag a la izquierda),
    se apila arriba del nombre en pantallas angostas. */
@@ -1944,7 +1952,8 @@ main {
 }
 
 @media (max-width: 640px) {
-  .team-detail-header {
+  .team-detail-header,
+  .player-detail-header {
     flex-wrap: wrap;
   }
 
@@ -2019,6 +2028,8 @@ html.es-escritorio .player-detail-vista-escritorio {
 .player-hero-banner {
   aspect-ratio: 4 / 1;
   max-height: 280px;
+  border-color: rgba(var(--h-accent-rgb), 0.45);
+  box-shadow: var(--shadow-accent);
 }
 
 .player-hero-panel-btn {
@@ -2029,6 +2040,12 @@ html.es-escritorio .player-detail-vista-escritorio {
 
 .player-hero-identity {
   margin-bottom: 1.5rem;
+  /* Corrección: nick+#id sin espacio en el medio (es una sola
+     "palabra" para el navegador) se cortaba contra el borde de la
+     pantalla en anchos angostos -- que corte de línea en vez de
+     desbordar/recortarse. */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .player-hero-badges {
@@ -2210,12 +2227,20 @@ html.es-escritorio .player-detail-vista-escritorio {
   gap: 0.35rem;
   width: 100%;
   text-align: left;
+  text-decoration: none;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.35);
   background: var(--color-card);
   padding: 1rem 1.1rem;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-tab-preview-card-clan-logo {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 0.25rem;
+  object-fit: cover;
 }
 
 .player-tab-preview-card:hover {
@@ -2248,7 +2273,7 @@ html.es-escritorio .player-detail-vista-escritorio {
 .detail-card {
   padding: 1.5rem;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.35);
   background: var(--color-panel);
 }
 
@@ -3719,6 +3744,17 @@ html.es-escritorio .player-detail-vista-escritorio {
   color: #f5f5f4;
   font-family: var(--font-display);
   aspect-ratio: 16 / 9;
+}
+
+/* Compartir/descargar la tarjeta ya revelada (mismo par de botones que
+   el marcador de Race War) -- captura tal cual se ve en pantalla, con
+   la maqueta/dimensión/fondo que haya elegido el capitán o caster. */
+.lineup-card-acciones {
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .lineup-card-overlay {
@@ -7549,6 +7585,148 @@ body.overlay-obs {
   flex-wrap: wrap;
   justify-content: center;
   gap: 0.5rem;
+}
+
+/* Migración 137: editor de nombre -- mismo panel que el efecto de
+   brillo, con un input + botón "Guardar" en línea en vez de auto-
+   guardar al perder el foco (nada de sorpresas por un blur sin
+   querer). */
+.guerra-razas-titulo-editor {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+  max-width: 24rem;
+}
+
+.guerra-razas-titulo-editor .form-input {
+  flex: 1;
+}
+
+.guerra-razas-compartir-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+/* Migración 138: tarjeta para compartir el marcador de un Race War en
+   formato "historia" de celular (9:16) -- WhatsApp Estados, Instagram
+   Stories. Nunca se le muestra al usuario navegando la página -- pero
+   el recorte tiene que hacerlo el CONTENEDOR de afuera
+   (.guerra-razas-compartir-clip, con tamaño 0 y overflow:hidden), no
+   la tarjeta misma: html-to-image clona el nodo capturado con sus
+   propios estilos calculados, así que si la tarjeta tuviera
+   "position: fixed; left: -9999px" (como tenía antes), ese mismo
+   corrimiento se copiaba adentro del SVG intermedio que arma la
+   librería y el contenido terminaba renderizado fuera del área
+   capturable -- resultado: una imagen en blanco. Acá adentro la
+   tarjeta queda en flujo normal, con su tamaño real (540x960 -- con
+   pixelRatio 2 al capturar da 1080x1920, la resolución habitual de una
+   Story), y es la única responsable de "desaparecer" el contenedor de
+   afuera. */
+.guerra-razas-compartir-clip {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.guerra-razas-compartir-card {
+  position: relative;
+  width: 540px;
+  height: 960px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2.5rem;
+  padding: 3rem 2.5rem;
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% 0%, rgba(var(--h-accent-rgb), 0.22), transparent 60%),
+    #06070a;
+  font-family: var(--font-body);
+}
+
+.guerra-razas-compartir-marca {
+  position: absolute;
+  top: 1.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--color-accent);
+  letter-spacing: 0.04em;
+}
+
+.guerra-razas-compartir-titulo {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 2.25rem;
+  line-height: 1.15;
+  color: var(--color-text);
+}
+
+.guerra-razas-compartir-podio {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.guerra-razas-compartir-raza {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  width: 100%;
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  box-sizing: border-box;
+}
+
+.guerra-razas-compartir-raza-primero {
+  border-color: var(--gr-glow-2);
+  box-shadow: 0 0 0 1px var(--gr-glow-2), 0 0 28px rgba(var(--h-accent-rgb), 0.25);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), transparent 60%), var(--color-panel);
+}
+
+.guerra-razas-compartir-raza-lugar {
+  flex-shrink: 0;
+  width: 2.5rem;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.4rem;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.guerra-razas-compartir-raza-img {
+  flex-shrink: 0;
+  width: 4rem;
+  height: 4rem;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
+}
+
+.guerra-razas-compartir-raza-nombre {
+  flex: 1;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.3rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text);
+}
+
+.guerra-razas-compartir-raza-puntos {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 2rem;
+  color: var(--color-accent);
 }
 
 .guerra-razas-color-swatch {

@@ -41,6 +41,9 @@ export interface GuerraRazasRow {
   id: string;
   tournament_id: string;
   creado_por: string;
+  // Migración 137: nombre propio, opcional -- "Race War" es el default
+  // cuando queda en null (ver GuerraDeRazasPage.tsx).
+  titulo: string | null;
   puntos_protoss: number;
   puntos_terran: number;
   puntos_zerg: number;

@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Plus, Star, Trash2, Upload } from "lucide-react";
+import { toBlob } from "html-to-image";
+import { Plus, Share2, Star, Trash2, Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import GuerraRazasEnfrentamiento from "../components/GuerraRazasEnfrentamiento";
 import GuerraRazasTablaPosiciones from "../components/GuerraRazasTablaPosiciones";
+import TarjetaCompartirGuerraDeRazas from "../components/TarjetaCompartirGuerraDeRazas";
 import {
   CATEGORIAS_GUERRA,
   EFECTO_NEON_COLOR_OPTIONS,
@@ -81,6 +83,73 @@ export default function GuerraDeRazasPage() {
   });
   const [agregando, setAgregando] = useState<RazaGuerra | null>(null);
   const [guardandoEfecto, setGuardandoEfecto] = useState(false);
+
+  // Migración 137: nombre propio, editable por el organizador en
+  // cualquier momento (mismo criterio que las imágenes de mascota y el
+  // efecto neón -- se guarda directo en guerra_razas, sin RPC propia).
+  // Sincronizado con guerra.titulo en vez de controlado del todo a
+  // mano, para que un cambio por Realtime (otra sesión del mismo
+  // organizador) también se refleje acá.
+  const [tituloEditado, setTituloEditado] = useState("");
+  const [guardandoTitulo, setGuardandoTitulo] = useState(false);
+
+  useEffect(() => {
+    setTituloEditado(guerra?.titulo ?? "");
+  }, [guerra?.titulo]);
+
+  // Migración 138: "Compartir" -- captura la tarjeta vertical (ver
+  // TarjetaCompartirGuerraDeRazas.tsx, montada siempre fuera de la
+  // pantalla más abajo) como imagen y la comparte. En celular, vía el
+  // selector nativo (Web Share API, con la imagen ya adjunta -- ahí
+  // se elige WhatsApp como cualquier otra app instalada). Donde ese
+  // selector no soporta compartir archivos (PC/escritorio, donde
+  // WhatsApp Web/Desktop no tiene forma de recibir una imagen desde un
+  // link), se descarga la imagen y se abre WhatsApp Web con un mensaje
+  // ya escrito, para que el usuario la adjunte a mano.
+  const tarjetaCompartirRef = useRef<HTMLDivElement>(null);
+  const [compartiendo, setCompartiendo] = useState(false);
+
+  const handleCompartir = async () => {
+    if (!guerra || !tarjetaCompartirRef.current || compartiendo) return;
+    setCompartiendo(true);
+    try {
+      const blob = await toBlob(tarjetaCompartirRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: "#06070a",
+      });
+      if (!blob) {
+        toast.error("No se pudo generar la imagen.");
+        return;
+      }
+
+      const nombreArchivo = `${(guerra.titulo || "race-war").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
+      const archivo = new File([blob], nombreArchivo, { type: "image/png" });
+      const textoCompartido = `${guerra.titulo || "Race War"} -- marcador en RemorApp`;
+
+      if (navigator.canShare?.({ files: [archivo] })) {
+        await navigator.share({ files: [archivo], title: guerra.titulo || "Race War", text: textoCompartido });
+        return;
+      }
+
+      const enlace = document.createElement("a");
+      enlace.href = URL.createObjectURL(blob);
+      enlace.download = nombreArchivo;
+      enlace.click();
+      URL.revokeObjectURL(enlace.href);
+
+      toast.success("Se descargó la imagen -- adjuntala en el mensaje que se abrió abajo.");
+      window.open(`https://wa.me/?text=${encodeURIComponent(textoCompartido)}`, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      // AbortError: el usuario cerró el selector nativo de compartir
+      // sin elegir nada -- no es un error real, no hace falta avisar.
+      if (err instanceof Error && err.name !== "AbortError") {
+        toast.error("No se pudo compartir la imagen.");
+      }
+    } finally {
+      setCompartiendo(false);
+    }
+  };
 
   // Migración 111: "Enfrentamiento" y "Tabla de Posiciones", nuevas
   // secciones dentro de la misma página -- Marcador sigue siendo el
@@ -324,6 +393,21 @@ export default function GuerraDeRazasPage() {
     setGuerra((g) => (g ? { ...g, ...cambios } : g));
   };
 
+  const handleGuardarTitulo = async () => {
+    if (!guerra) return;
+    const nuevoTitulo = tituloEditado.trim() || null;
+    if (nuevoTitulo === guerra.titulo) return;
+    setGuardandoTitulo(true);
+    const { error } = await supabase.from("guerra_razas").update({ titulo: nuevoTitulo }).eq("id", guerra.id);
+    setGuardandoTitulo(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setGuerra((g) => (g ? { ...g, titulo: nuevoTitulo } : g));
+    toast.success("Nombre actualizado.");
+  };
+
   const handleAgregarJugador = async (raza: RazaGuerra) => {
     if (!guerra) return;
     const nombre = nombresNuevos[raza].trim();
@@ -424,7 +508,7 @@ export default function GuerraDeRazasPage() {
       </Link>
 
       <header className="guerra-razas-header">
-        <h1 className="guerra-razas-titulo">Race War</h1>
+        <h1 className="guerra-razas-titulo">{guerra.titulo || "Race War"}</h1>
         <div className="guerra-razas-franja" />
       </header>
 
@@ -460,6 +544,31 @@ export default function GuerraDeRazasPage() {
               </button>
             </span>
           )}
+        </div>
+      )}
+
+      {modoEdicionActivo && (
+        <div className="guerra-razas-efecto-panel">
+          <p className="form-label">Nombre</p>
+          <div className="guerra-razas-titulo-editor">
+            <input
+              className="form-input"
+              type="text"
+              placeholder="Race War"
+              maxLength={60}
+              value={tituloEditado}
+              disabled={guardandoTitulo}
+              onChange={(e) => setTituloEditado(e.target.value)}
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={guardandoTitulo || tituloEditado.trim() === (guerra.titulo ?? "")}
+              onClick={handleGuardarTitulo}
+            >
+              {guardandoTitulo ? "Guardando..." : "Guardar"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -554,6 +663,13 @@ export default function GuerraDeRazasPage() {
 
       {seccionActiva === "marcador" && (
       <>
+      <div className="guerra-razas-compartir-wrap">
+        <button type="button" className="btn btn-ghost" disabled={compartiendo} onClick={handleCompartir}>
+          <Share2 size={16} className="icon-inline" aria-hidden="true" />
+          {compartiendo ? "Generando imagen..." : "Compartir"}
+        </button>
+      </div>
+
       <div className="guerra-razas-podio">
         {RAZAS_GUERRA.map(({ value: raza, label }) => {
           const esPrimero = ranking[0] === raza;
@@ -734,6 +850,14 @@ export default function GuerraDeRazasPage() {
           {eliminando ? "Eliminando..." : "Eliminar Race War"}
         </button>
       )}
+
+      {/* Montada siempre, recortada visualmente por el contenedor (ver
+          .guerra-razas-compartir-clip en halcon.css) -- handleCompartir
+          la captura cuando hace falta, nunca se le muestra al usuario
+          navegando la página. */}
+      <div className="guerra-razas-compartir-clip">
+        <TarjetaCompartirGuerraDeRazas ref={tarjetaCompartirRef} guerra={guerra} />
+      </div>
     </section>
   );
 }
