@@ -8,6 +8,7 @@ import { vencioPlazoEdicionLineup } from "../lib/clanWars";
 import TarjetaLineupClanWar from "../components/TarjetaLineupClanWar";
 import LineupFondoPicker from "../components/LineupFondoPicker";
 import EstructuraLineupPicker from "../components/EstructuraLineupPicker";
+import AspectoLineupPicker from "../components/AspectoLineupPicker";
 import type { LineupEditorClanWar, LineupPublicoClanWar } from "../types/clanWars";
 
 // Vista pública del lineup de una Clan War (migración 066, con la
@@ -34,11 +35,11 @@ export default function ClanWarLineupPublicoPage() {
 
   const [editor, setEditor] = useState<LineupEditorClanWar | null>(null);
   const [mostrarEditor, setMostrarEditor] = useState(false);
-  // "Look" (migración 127): sub-pestañas de apariencia dentro del panel
-  // -- Fondo (ya existía) y Estructura (maqueta de la tarjeta), ambas
-  // separadas del resto de la gestión (lineup, stream, visto bueno).
-  const [seccionLook, setSeccionLook] = useState<"fondo" | "estructura">("fondo");
-  const [fondoImagenUrl, setFondoImagenUrl] = useState<string | null>(null);
+  // "Look" (migraciones 127 y 129): sub-pestañas de apariencia dentro
+  // del panel -- Fondo (ya existía), Estructura (maqueta de la
+  // tarjeta) y Dimensión (relación de aspecto), las tres separadas del
+  // resto de la gestión (lineup, stream, visto bueno).
+  const [seccionLook, setSeccionLook] = useState<"fondo" | "estructura" | "dimension">("fondo");
 
   const [jugadoresPorSetEditado, setJugadoresPorSetEditado] = useState("");
   const [guardandoJugadoresPorSet, setGuardandoJugadoresPorSet] = useState(false);
@@ -108,21 +109,6 @@ export default function ClanWarLineupPublicoPage() {
   useEffect(() => {
     cargarEditor();
   }, [cargarEditor]);
-
-  // Solo cuando el fondo elegido es una imagen del catálogo (no uno de
-  // los 4 clásicos, que se pintan con CSS puro vía data-fondo-lineup).
-  useEffect(() => {
-    if (!editor?.fondo_lineup_imagen_id) {
-      setFondoImagenUrl(null);
-      return;
-    }
-    supabase
-      .from("catalogo_fondos_lineup")
-      .select("image_url")
-      .eq("id", editor.fondo_lineup_imagen_id)
-      .maybeSingle()
-      .then(({ data }) => setFondoImagenUrl(data?.image_url ?? null));
-  }, [editor?.fondo_lineup_imagen_id]);
 
   useEffect(() => {
     if (editor && !streamInicializado) {
@@ -366,18 +352,19 @@ export default function ClanWarLineupPublicoPage() {
               </button>
 
               {mostrarEditor && (
-                <div
-                  className="clan-war-lineup-room"
-                  data-fondo-lineup={editor.fondo_lineup_imagen_id ? undefined : editor.fondo_lineup}
-                  style={
-                    editor.fondo_lineup_imagen_id && fondoImagenUrl
-                      ? { backgroundImage: `url(${fondoImagenUrl})`, backgroundSize: "cover", backgroundPosition: "center" }
-                      : undefined
-                  }
-                >
-                  {/* "Look" (migración 127): apariencia de la tarjeta,
-                      separado del resto de la gestión -- Fondo (ya
-                      existía) y Estructura (maqueta), en sub-pestañas. */}
+                <div className="clan-war-lineup-room">
+                  {/* "Look" (migraciones 127 y 129): apariencia de la
+                      tarjeta, separado del resto de la gestión -- Fondo
+                      (ya existía), Estructura (maqueta) y Dimensión
+                      (relación de aspecto), en sub-pestañas.
+
+                      Corrección: esta sala de edición llegó a tener el
+                      fondo elegido (incluida la imagen subida, a
+                      pantalla completa) pintado como decoración de este
+                      mismo panel -- tapaba las miniaturas del selector y
+                      el formulario de stream. El fondo es una propiedad
+                      de la TARJETA (TarjetaLineupClanWar, arriba), no de
+                      este panel de edición, así que ya no se aplica acá. */}
                   <div className="team-info-tabs clan-war-look-tabs">
                     <button
                       type="button"
@@ -393,9 +380,16 @@ export default function ClanWarLineupPublicoPage() {
                     >
                       Estructura
                     </button>
+                    <button
+                      type="button"
+                      className={`team-info-tab ${seccionLook === "dimension" ? "is-active" : ""}`}
+                      onClick={() => setSeccionLook("dimension")}
+                    >
+                      Dimensión
+                    </button>
                   </div>
 
-                  {seccionLook === "fondo" ? (
+                  {seccionLook === "fondo" && (
                     /* Corrección: onCambio solo refrescaba cargarEditor()
                        (el fondo previsualizado acá adentro) -- la
                        tarjeta real de arriba (TarjetaLineupClanWar) usa
@@ -408,10 +402,18 @@ export default function ClanWarLineupPublicoPage() {
                       fondoImagenId={editor.fondo_lineup_imagen_id}
                       onCambio={recargarTodo}
                     />
-                  ) : (
+                  )}
+                  {seccionLook === "estructura" && (
                     <EstructuraLineupPicker
                       clanWarId={id!}
                       estructura={editor.estructura_lineup}
+                      onCambio={recargarTodo}
+                    />
+                  )}
+                  {seccionLook === "dimension" && (
+                    <AspectoLineupPicker
+                      clanWarId={id!}
+                      aspecto={editor.aspecto_lineup}
                       onCambio={recargarTodo}
                     />
                   )}

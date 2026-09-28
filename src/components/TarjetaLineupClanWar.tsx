@@ -134,6 +134,103 @@ function TarjetaClasica({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
   );
 }
 
+// Maqueta "Enfrentamientos" (migración 130): en vez de una sola tabla
+// con una fila por enfrentamiento (como "Clásico"), cada enfrentamiento
+// es su propia tarjeta chica, lado a lado con las demás -- estilo
+// habitual de los broadcasts de juegos 1 vs 1 (cada duelo, su propio
+// recuadro).
+function TarjetaEnfrentamientos({ datos, filas }: { datos: LineupPublicoClanWar; filas: Fila[] }) {
+  return (
+    <div className="lineup-card-overlay">
+      <div className="lineup-card-header">
+        <EquipoHeader
+          equipo={datos.challenger}
+          lado="challenger"
+          streamLink={datos.challenger_stream_link}
+          streamDelay={datos.challenger_stream_delay}
+        />
+        <span className="lineup-card-brand">RemorApp</span>
+        <EquipoHeader
+          equipo={datos.challenged}
+          lado="challenged"
+          streamLink={datos.challenged_stream_link}
+          streamDelay={datos.challenged_stream_delay}
+        />
+      </div>
+
+      <div className="lineup-enfrentamientos-fila">
+        {filas.map((fila, indice) => (
+          <div key={indice} className="lineup-enfrentamientos-duelo">
+            <div className="lineup-enfrentamientos-jugador">
+              <RazaBadge raza={fila.challenger?.raza ?? null} lado="challenger" />
+              <span className="lineup-card-jugador-nombre">{fila.challenger?.nombre ?? "Por definir"}</span>
+            </div>
+            <span className="lineup-card-vs">VS</span>
+            <div className="lineup-enfrentamientos-jugador">
+              <RazaBadge raza={fila.challenged?.raza ?? null} lado="challenged" />
+              <span className="lineup-card-jugador-nombre">{fila.challenged?.nombre ?? "Por definir"}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <CasterFooter datos={datos} />
+    </div>
+  );
+}
+
+// Maqueta "Póster" (migración 130): split vertical al estilo cartel de
+// versus/character-select -- cada equipo ocupa su mitad completa, con
+// un "VS" grande al centro en vez del marcador angosto de "Cascada".
+function TarjetaPoster({ datos, filas }: { datos: LineupPublicoClanWar; filas: Fila[] }) {
+  return (
+    <div className="lineup-card-overlay lineup-poster-overlay">
+      <div className="lineup-poster-split">
+        <div className="lineup-poster-mitad lineup-poster-mitad-challenger">
+          <EquipoHeader
+            equipo={datos.challenger}
+            lado="challenger"
+            streamLink={datos.challenger_stream_link}
+            streamDelay={datos.challenger_stream_delay}
+          />
+          <div className="lineup-poster-jugadores">
+            {filas.map((fila, indice) => (
+              <div key={indice} className="lineup-poster-jugador">
+                <RazaBadge raza={fila.challenger?.raza ?? null} lado="challenger" />
+                <span className="lineup-card-jugador-nombre">{fila.challenger?.nombre ?? "Por definir"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="lineup-poster-vs">
+          <span className="lineup-poster-vs-texto">VS</span>
+          <span className="lineup-card-brand">RemorApp</span>
+        </div>
+
+        <div className="lineup-poster-mitad lineup-poster-mitad-challenged">
+          <EquipoHeader
+            equipo={datos.challenged}
+            lado="challenged"
+            streamLink={datos.challenged_stream_link}
+            streamDelay={datos.challenged_stream_delay}
+          />
+          <div className="lineup-poster-jugadores">
+            {filas.map((fila, indice) => (
+              <div key={indice} className="lineup-poster-jugador">
+                <RazaBadge raza={fila.challenged?.raza ?? null} lado="challenged" />
+                <span className="lineup-card-jugador-nombre">{fila.challenged?.nombre ?? "Por definir"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <CasterFooter datos={datos} />
+    </div>
+  );
+}
+
 // Maqueta "Cascada" (migración 127): el challenger arriba, con sus
 // jugadores en una fila horizontal; marcador grande al centro; el
 // challenged abajo, mismo criterio. Pensada para un estilo más de
@@ -189,27 +286,36 @@ function TarjetaCascada({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
   );
 }
 
+const MAQUETAS: Record<LineupPublicoClanWar["estructura"], (props: { datos: LineupPublicoClanWar; filas: Fila[] }) => JSX.Element> = {
+  clasico: TarjetaClasica,
+  cascada: TarjetaCascada,
+  enfrentamientos: TarjetaEnfrentamientos,
+  poster: TarjetaPoster,
+};
+
 // Tarjeta de lineup con el mismo lenguaje visual de un marcador de
-// esports -- la maqueta (clásico lado a lado, o cascada) la elige el
-// capitán o el caster desde "Look -> Estructura" en el lobby del
-// evento (migración 127). El fondo es el mismo para las dos maquetas
-// (imagen del catálogo, o uno de los fondos clásicos si no eligieron
-// ninguna imagen).
+// esports -- la maqueta (Clásico, Cascada, Enfrentamientos o Póster) y
+// la dimensión (4:3, 16:9, 16:10, 21:9) las elige el capitán o el
+// caster desde "Look" en el lobby del evento (migraciones 127, 129 y
+// 130). El fondo es el mismo para las cuatro maquetas (imagen del
+// catálogo, o uno de los fondos clásicos si no eligieron ninguna
+// imagen).
 export default function TarjetaLineupClanWar({ datos }: { datos: LineupPublicoClanWar }) {
   const filas = filasEnfrentamiento(datos);
   const conFondoImagen = !!datos.fondo_imagen_url;
+  const Maqueta = MAQUETAS[datos.estructura] ?? TarjetaClasica;
+  const aspectoClase = `lineup-card-aspecto-${datos.aspecto.replace(":", "-")}`;
 
   return (
     <div
-      className={`lineup-card ${datos.estructura === "cascada" ? "lineup-card-cascada" : ""}`}
+      className={`lineup-card ${aspectoClase} ${datos.estructura === "cascada" ? "lineup-card-cascada" : ""}`}
       data-fondo-lineup={conFondoImagen ? undefined : datos.fondo_clasico}
-      style={conFondoImagen ? { backgroundImage: `url(${datos.fondo_imagen_url})` } : undefined}
+      style={{
+        aspectRatio: datos.aspecto.replace(":", " / "),
+        ...(conFondoImagen ? { backgroundImage: `url(${datos.fondo_imagen_url})` } : {}),
+      }}
     >
-      {datos.estructura === "cascada" ? (
-        <TarjetaCascada datos={datos} filas={filas} />
-      ) : (
-        <TarjetaClasica datos={datos} filas={filas} />
-      )}
+      <Maqueta datos={datos} filas={filas} />
     </div>
   );
 }

@@ -1,10 +1,18 @@
 import type { FondoLineup } from "./teams";
 
-// Migración 127: maqueta con la que se arma la tarjeta del lineup --
-// "clasico" (equipos lado a lado, una fila por enfrentamiento) o
-// "cascada" (un equipo arriba en fila horizontal, marcador grande al
-// centro, el otro equipo abajo). Ver TarjetaLineupClanWar.tsx.
-export type EstructuraLineup = "clasico" | "cascada";
+// Migración 127 (clasico/cascada) y 130 (enfrentamientos/poster):
+// maqueta con la que se arma la tarjeta del lineup -- "clasico"
+// (equipos lado a lado, una fila por enfrentamiento), "cascada" (un
+// equipo arriba en fila horizontal, marcador grande al centro, el
+// otro equipo abajo), "enfrentamientos" (un duelo 1 vs 1 por tarjeta
+// chica, lado a lado) o "poster" (split vertical al estilo cartel de
+// versus, un "VS" grande al centro). Ver TarjetaLineupClanWar.tsx.
+export type EstructuraLineup = "clasico" | "cascada" | "enfrentamientos" | "poster";
+
+// Migración 129: relación de aspecto de la tarjeta -- "16:9" es el
+// default de siempre, pensado sobre todo para quien usa
+// /overlay/clan-war/:id como fuente de navegador en OBS.
+export type AspectoLineup = "4:3" | "16:9" | "16:10" | "21:9";
 
 // Fila devuelta por clan_wars_proximas() (migración 059, extendida en
 // la 064 con liga_nombre/division_nombre y en la 066 con status y los
@@ -69,6 +77,7 @@ export interface LineupPublicoClanWar {
   fondo_clasico: FondoLineup;
   fondo_imagen_url: string | null;
   estructura: EstructuraLineup;
+  aspecto: AspectoLineup;
   lineup_challenger: LineupPublicoJugador[] | null;
   lineup_challenged: LineupPublicoJugador[] | null;
 }
@@ -132,6 +141,7 @@ export interface LineupEditorClanWar {
   fondo_lineup: FondoLineup;
   fondo_lineup_imagen_id: string | null;
   estructura_lineup: EstructuraLineup;
+  aspecto_lineup: AspectoLineup;
   fecha_hora_cet: string;
   lineup_plazo_extendido_hasta: string | null;
   ventana_revelacion_minutos: number;
