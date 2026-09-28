@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Pencil } from "lucide-react";
+import { toast } from "sonner";
+import { toBlob } from "html-to-image";
+import { Download, Pencil, Share2 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
@@ -74,6 +76,80 @@ export default function ClanWarLineupPublicoPage() {
 
   const [confirmando, setConfirmando] = useState(false);
   const [errorConfirmar, setErrorConfirmar] = useState<string | null>(null);
+
+  // Compartir/descargar la tarjeta de lineup ya revelada (mismo par de
+  // herramientas que el marcador de Race War y el bracket de torneos):
+  // captura el nodo tal cual se ve en pantalla (con la maqueta,
+  // dimensión y fondo que haya elegido el capitán/caster en "Look"),
+  // sin armar una versión aparte -- folder distinto al de Race War,
+  // que si necesitaba una tarjeta vertical propia porque el marcador
+  // real es horizontal y no entra en formato historia.
+  const tarjetaLineupRef = useRef<HTMLDivElement>(null);
+  const [compartiendoLineup, setCompartiendoLineup] = useState(false);
+  const [descargandoLineup, setDescargandoLineup] = useState(false);
+
+  const nombreArchivoLineup = () =>
+    `lineup-${datos ? `${datos.challenger.tag}-vs-${datos.challenged.tag}` : "clan-war"}`
+      .replace(/[^a-z0-9-]+/gi, "-")
+      .toLowerCase() + ".png";
+
+  const handleDescargarLineup = async () => {
+    if (!tarjetaLineupRef.current || descargandoLineup) return;
+    setDescargandoLineup(true);
+    try {
+      const blob = await toBlob(tarjetaLineupRef.current, { cacheBust: true, pixelRatio: 2 });
+      if (!blob) {
+        toast.error("No se pudo generar la imagen.");
+        return;
+      }
+      const enlace = document.createElement("a");
+      enlace.href = URL.createObjectURL(blob);
+      enlace.download = nombreArchivoLineup();
+      enlace.click();
+      URL.revokeObjectURL(enlace.href);
+    } catch {
+      toast.error("No se pudo generar la imagen.");
+    } finally {
+      setDescargandoLineup(false);
+    }
+  };
+
+  const handleCompartirLineup = async () => {
+    if (!tarjetaLineupRef.current || compartiendoLineup) return;
+    setCompartiendoLineup(true);
+    try {
+      const blob = await toBlob(tarjetaLineupRef.current, { cacheBust: true, pixelRatio: 2 });
+      if (!blob) {
+        toast.error("No se pudo generar la imagen.");
+        return;
+      }
+      const nombreArchivo = nombreArchivoLineup();
+      const archivo = new File([blob], nombreArchivo, { type: "image/png" });
+      const texto = datos
+        ? `${datos.challenger.tag} vs ${datos.challenged.tag} -- lineup en RemorApp`
+        : "Lineup en RemorApp";
+
+      if (navigator.canShare?.({ files: [archivo] })) {
+        await navigator.share({ files: [archivo], title: texto, text: texto });
+        return;
+      }
+
+      const enlace = document.createElement("a");
+      enlace.href = URL.createObjectURL(blob);
+      enlace.download = nombreArchivo;
+      enlace.click();
+      URL.revokeObjectURL(enlace.href);
+
+      toast.success("Se descargó la imagen -- adjuntala en el mensaje que se abrió abajo.");
+      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      if (err instanceof Error && err.name !== "AbortError") {
+        toast.error("No se pudo compartir la imagen.");
+      }
+    } finally {
+      setCompartiendoLineup(false);
+    }
+  };
 
   // Stream propio de cada equipo (migración 125): se inicializa una
   // sola vez con lo que ya tenía cargado, para no pisar lo que el
@@ -590,7 +666,31 @@ export default function ClanWarLineupPublicoPage() {
               </p>
             </>
           ) : (
-            <TarjetaLineupClanWar datos={datos} />
+            <>
+              <div ref={tarjetaLineupRef} className="lineup-card-captura-wrap">
+                <TarjetaLineupClanWar datos={datos} />
+              </div>
+              <div className="lineup-card-acciones">
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={compartiendoLineup}
+                  onClick={handleCompartirLineup}
+                >
+                  <Share2 size={16} className="icon-inline" aria-hidden="true" />
+                  {compartiendoLineup ? "Generando imagen..." : "Compartir"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  disabled={descargandoLineup}
+                  onClick={handleDescargarLineup}
+                >
+                  <Download size={16} className="icon-inline" aria-hidden="true" />
+                  {descargandoLineup ? "Generando imagen..." : "Descargar"}
+                </button>
+              </div>
+            </>
           )}
 
           {puedeGestionar && editor && (
