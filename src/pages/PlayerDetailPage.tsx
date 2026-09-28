@@ -330,7 +330,7 @@ export default function PlayerDetailPage() {
   const recortadorFotoPresentacion = archivoParaRecortarFotoPresentacion && (
     <RecortadorImagenModal
       archivo={archivoParaRecortarFotoPresentacion}
-      aspecto={1}
+      aspecto={9 / 16}
       titulo="Ajustar foto de presentación"
       onConfirmar={handleConfirmarRecorteFotoPresentacion}
       onCancelar={() => setArchivoParaRecortarFotoPresentacion(null)}

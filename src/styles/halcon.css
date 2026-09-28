@@ -2012,8 +2012,14 @@ html.es-escritorio .player-detail-vista-escritorio {
   margin-bottom: 1.5rem;
 }
 
+/* Corrección: con un ancho fijo en 50%, "Panel de control" podía
+   terminar sobresaliendo del margen derecho según cuánto ocupara su
+   propio texto -- el banner ahora crece para llenar lo que sobra
+   después del botón (que nunca se achica), así los dos siempre suman
+   exactamente el ancho disponible, sin desbordar nunca. */
 .player-detail-escritorio-banner-wrap {
-  flex: 0 1 50%;
+  flex: 1 1 auto;
+  min-width: 0;
   margin-bottom: 0;
 }
 
@@ -2026,18 +2032,19 @@ html.es-escritorio .player-detail-vista-escritorio {
   flex-shrink: 0;
 }
 
-/* Migración 128: ya no son dos columnas lado a lado -- son dos cajas
-   horizontales apiladas, cada una ocupando todo el ancho disponible
-   (tarjeta de presentación arriba, descripción abajo). */
+/* Corrección: vuelven a ser dos columnas lado a lado, compartiendo el
+   ancho -- la tarjeta de presentación y la descripción, cada una la
+   mitad. */
 .player-detail-escritorio-main {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1.5rem;
+  align-items: start;
 }
 
 .player-detail-escritorio-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 1.5rem;
   padding: 1.5rem 1.75rem;
   border-radius: var(--radius-lg);
@@ -2051,6 +2058,10 @@ html.es-escritorio .player-detail-vista-escritorio {
   align-items: flex-start;
   gap: 0.5rem;
   min-width: 0;
+  /* Corrección: nick+#id sin espacio en el medio (es una sola
+     "palabra" para el navegador) se salía de la tarjeta ahora que la
+     columna es angosta -- que corte en vez de desbordar. */
+  overflow-wrap: anywhere;
 }
 
 /* Foto de presentación (migración 128): propia de esta tarjeta,
@@ -2062,9 +2073,12 @@ html.es-escritorio .player-detail-vista-escritorio {
   flex-shrink: 0;
 }
 
+/* Corrección: la foto de presentación pasa a ser vertical (9:16) y más
+   grande -- ya no un cuadrado chico de 8rem. */
 .player-detail-escritorio-foto-wrap .player-detail-avatar {
-  width: 8rem;
-  height: 8rem;
+  width: 11rem;
+  height: auto;
+  aspect-ratio: 9 / 16;
 }
 
 /* El lápiz de editar foto -- corrección: nada de texto ni mensaje de
