@@ -75,6 +75,47 @@ function EquipoHeader({
   );
 }
 
+// Migración 131: el streamer tiene que salir bien visible en pantalla,
+// en las 4 maquetas por igual -- antes solo había un link chico bajo
+// el nombre del equipo (EquipoHeader), fácil de pasar por alto. Cada
+// equipo puede tener el suyo propio (challenger_stream_link/
+// challenged_stream_link, migración 125, independientes entre sí);
+// acá se juntan los que estén cargados en una franja destacada arriba
+// de todo, con un punto "en vivo" pulsante -- y si ninguno de los dos
+// cargó un link, lo dice explícitamente en vez de quedar vacío.
+function StreamerBanner({ datos }: { datos: LineupPublicoClanWar }) {
+  const activos = [
+    datos.challenger_stream_link
+      ? { nombre: datos.challenger.nombre, link: datos.challenger_stream_link, delay: datos.challenger_stream_delay }
+      : null,
+    datos.challenged_stream_link
+      ? { nombre: datos.challenged.nombre, link: datos.challenged_stream_link, delay: datos.challenged_stream_delay }
+      : null,
+  ].filter((s): s is { nombre: string; link: string; delay: boolean | null } => s !== null);
+
+  return (
+    <div className="lineup-card-streamer-banner">
+      {activos.length === 0 ? (
+        <span className="lineup-card-streamer-vacio">Sin Streamer Presente</span>
+      ) : (
+        activos.map((s) => (
+          <a
+            key={s.nombre}
+            href={s.link}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="lineup-card-streamer-activo"
+          >
+            <span className="lineup-card-streamer-dot" />
+            En vivo: {s.nombre}
+            {s.delay ? " (con delay)" : ""}
+          </a>
+        ))
+      )}
+    </div>
+  );
+}
+
 function CasterFooter({ datos }: { datos: LineupPublicoClanWar }) {
   if (!datos.caster_nombre && !datos.caster_link) return null;
   return (
@@ -95,6 +136,7 @@ function CasterFooter({ datos }: { datos: LineupPublicoClanWar }) {
 function TarjetaClasica({ datos, filas }: { datos: LineupPublicoClanWar; filas: Fila[] }) {
   return (
     <div className="lineup-card-overlay">
+      <StreamerBanner datos={datos} />
       <div className="lineup-card-header">
         <EquipoHeader
           equipo={datos.challenger}
@@ -142,6 +184,7 @@ function TarjetaClasica({ datos, filas }: { datos: LineupPublicoClanWar; filas: 
 function TarjetaEnfrentamientos({ datos, filas }: { datos: LineupPublicoClanWar; filas: Fila[] }) {
   return (
     <div className="lineup-card-overlay">
+      <StreamerBanner datos={datos} />
       <div className="lineup-card-header">
         <EquipoHeader
           equipo={datos.challenger}
@@ -185,6 +228,7 @@ function TarjetaEnfrentamientos({ datos, filas }: { datos: LineupPublicoClanWar;
 function TarjetaPoster({ datos, filas }: { datos: LineupPublicoClanWar; filas: Fila[] }) {
   return (
     <div className="lineup-card-overlay lineup-poster-overlay">
+      <StreamerBanner datos={datos} />
       <div className="lineup-poster-split">
         <div className="lineup-poster-mitad lineup-poster-mitad-challenger">
           <EquipoHeader
@@ -238,6 +282,7 @@ function TarjetaPoster({ datos, filas }: { datos: LineupPublicoClanWar; filas: F
 function TarjetaCascada({ datos, filas }: { datos: LineupPublicoClanWar; filas: Fila[] }) {
   return (
     <div className="lineup-card-overlay lineup-cascada-overlay">
+      <StreamerBanner datos={datos} />
       <div className="lineup-cascada-equipo lineup-cascada-equipo-top">
         <EquipoHeader
           equipo={datos.challenger}

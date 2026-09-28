@@ -192,19 +192,24 @@ export interface ClanWarRow {
   fondo_lineup: FondoLineup;
 }
 
-// Fondo de la sala de lineup (migración 051): mismos 5 valores que
-// FondoBracket (types/tournaments.ts) por coincidencia de diseño, pero
-// es un catálogo aparte -- clan_wars.fondo_lineup, no
+// Fondo de la sala de lineup (migración 051, catálogo con movimiento
+// desde la 131): catálogo propio de clan_wars.fondo_lineup, distinto de
 // tournaments.fondo_bracket. Ver el bloque de CSS bajo
 // data-fondo-lineup en halcon.css, separado del de data-fondo-bracket.
-export type FondoLineup = "ninguno" | "campo_estrellas" | "nebulosa" | "constelacion" | "vortice";
+// Migración 131: los 4 fondos originales (estáticos) se reemplazan por
+// estos 6, todos animados -- "campo_estrellas"/"nebulosa"/"constelacion"
+// salen del catálogo (ver esa migración para el mapeo de datos
+// existentes), "vortice" se queda pero ahora gira de verdad.
+export type FondoLineup = "ninguno" | "estrellas" | "vortice" | "nova" | "planeta" | "lluvia" | "meteoros";
 
 export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
-  { value: "campo_estrellas", label: "Campo de estrellas" },
-  { value: "nebulosa", label: "Nebulosa" },
-  { value: "constelacion", label: "Constelación" },
+  { value: "estrellas", label: "Estrellas" },
   { value: "vortice", label: "Vórtice" },
+  { value: "nova", label: "Nova" },
+  { value: "planeta", label: "Planeta" },
+  { value: "lluvia", label: "Lluvia" },
+  { value: "meteoros", label: "Meteoros" },
 ];
 
 // Temporadas (migración 047): contenedor mínimo para torneos/ligas,
