@@ -35,13 +35,12 @@ export default function ClanWarLineupPublicoPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [editor, setEditor] = useState<LineupEditorClanWar | null>(null);
-  // Migración 134: "Look" (apariencia) y "Agregar y quitar" (jugadores,
-  // delay, streamer) y "Solicitud" (cambiar fecha) son tres paneles
-  // independientes -- se puede tener más de uno abierto a la vez, cada
-  // uno con sus propias sub-pestañas.
-  const [mostrarLook, setMostrarLook] = useState(false);
-  const [mostrarAgregarQuitar, setMostrarAgregarQuitar] = useState(false);
-  const [mostrarSolicitud, setMostrarSolicitud] = useState(false);
+  // Migración 134: "Look" (apariencia), "Agregar y quitar" (jugadores,
+  // delay, streamer) y "Solicitud" (cambiar fecha) son pestañas que se
+  // excluyen entre sí -- corrección: antes eran 3 toggles
+  // independientes que se apilaban uno debajo del otro; ahora abrir uno
+  // cierra el que estuviera abierto, como cualquier grupo de pestañas.
+  const [panelActivo, setPanelActivo] = useState<"look" | "agregar_quitar" | "solicitud" | null>(null);
   // "Look" (migraciones 127 y 129): sub-pestañas de apariencia dentro
   // del panel -- Fondo (ya existía), Estructura (maqueta de la
   // tarjeta) y Dimensión (relación de aspecto), las tres separadas del
@@ -626,29 +625,29 @@ export default function ClanWarLineupPublicoPage() {
               <div className="clan-war-editor-toggle-fila">
                 <button
                   type="button"
-                  className="clan-war-editor-toggle"
-                  onClick={() => setMostrarLook((v) => !v)}
+                  className={`clan-war-editor-toggle ${panelActivo === "look" ? "is-active" : ""}`}
+                  onClick={() => setPanelActivo((v) => (v === "look" ? null : "look"))}
                 >
                   <Pencil className="icon-inline" />
-                  {mostrarLook ? "Cerrar Look" : "Look"}
+                  Look
                 </button>
                 <button
                   type="button"
-                  className="clan-war-editor-toggle"
-                  onClick={() => setMostrarAgregarQuitar((v) => !v)}
+                  className={`clan-war-editor-toggle ${panelActivo === "agregar_quitar" ? "is-active" : ""}`}
+                  onClick={() => setPanelActivo((v) => (v === "agregar_quitar" ? null : "agregar_quitar"))}
                 >
-                  {mostrarAgregarQuitar ? "Cerrar Agregar y quitar" : "Agregar y quitar"}
+                  Agregar y quitar
                 </button>
                 <button
                   type="button"
-                  className="clan-war-editor-toggle clan-war-editor-toggle-derecha"
-                  onClick={() => setMostrarSolicitud((v) => !v)}
+                  className={`clan-war-editor-toggle clan-war-editor-toggle-derecha ${panelActivo === "solicitud" ? "is-active" : ""}`}
+                  onClick={() => setPanelActivo((v) => (v === "solicitud" ? null : "solicitud"))}
                 >
-                  {mostrarSolicitud ? "Cerrar Solicitud" : "Solicitud"}
+                  Solicitud
                 </button>
               </div>
 
-              {mostrarLook && (
+              {panelActivo === "look" && (
                 <div className="clan-war-lineup-room">
                   {/* "Look" (migraciones 127 y 129): apariencia de la
                       tarjeta -- Fondo, Estructura y Dimensión, en
@@ -710,7 +709,7 @@ export default function ClanWarLineupPublicoPage() {
                 </div>
               )}
 
-              {mostrarAgregarQuitar && (
+              {panelActivo === "agregar_quitar" && (
                 <div className="clan-war-lineup-room">
                   {/* "Agregar y quitar" (migración 134): quién entra y
                       sale de la Clan War -- jugadores del lineup,
@@ -1067,7 +1066,7 @@ export default function ClanWarLineupPublicoPage() {
                 </div>
               )}
 
-              {mostrarSolicitud && (
+              {panelActivo === "solicitud" && (
                 <div className="clan-war-lineup-room">
                   {/* "Solicitud" (migración 134, reutiliza solicitar_
                       reprogramacion_cw()/responder_reprogramacion_cw()

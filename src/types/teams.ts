@@ -196,20 +196,19 @@ export interface ClanWarRow {
 // desde la 131): catálogo propio de clan_wars.fondo_lineup, distinto de
 // tournaments.fondo_bracket. Ver el bloque de CSS bajo
 // data-fondo-lineup en halcon.css, separado del de data-fondo-bracket.
-// Migración 131: los 4 fondos originales (estáticos) se reemplazan por
-// estos 6, todos animados -- "campo_estrellas"/"nebulosa"/"constelacion"
-// salen del catálogo (ver esa migración para el mapeo de datos
-// existentes), "vortice" se queda pero ahora gira de verdad.
-export type FondoLineup = "ninguno" | "estrellas" | "vortice" | "nova" | "planeta" | "lluvia" | "meteoros";
+// Migración 134: "vortice"/"lluvia"/"meteoros" salen del catálogo,
+// reemplazados por "estrellado" (más denso y notorio que "estrellas"),
+// "viaje" (viajando por el espacio) y "fuego".
+export type FondoLineup = "ninguno" | "estrellas" | "estrellado" | "nova" | "planeta" | "viaje" | "fuego";
 
 export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
   { value: "estrellas", label: "Estrellas" },
-  { value: "vortice", label: "Vórtice" },
+  { value: "estrellado", label: "Estrellado" },
   { value: "nova", label: "Nova" },
   { value: "planeta", label: "Planeta" },
-  { value: "lluvia", label: "Lluvia" },
-  { value: "meteoros", label: "Meteoros" },
+  { value: "viaje", label: "Viaje" },
+  { value: "fuego", label: "Fuego" },
 ];
 
 // Temporadas (migración 047): contenedor mínimo para torneos/ligas,

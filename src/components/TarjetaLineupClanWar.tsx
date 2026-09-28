@@ -117,10 +117,15 @@ export function StreamerBanner({ datos }: { datos: LineupPublicoClanWar }) {
       ) : (
         activos.map((s) => (
           <span key={s.nombre} className="lineup-card-streamer-item">
+            {/* Corrección: el nick tiene que verse como un link de
+                verdad (no solo texto blanco con un href escondido
+                detrás) -- fondo/borde de color + subrayado. */}
             <a href={s.link} target="_blank" rel="noreferrer noopener" className="lineup-card-streamer-activo">
               <span className="lineup-card-streamer-dot" />
-              En vivo: {s.nombre}
+              En vivo: <span className="lineup-card-streamer-nick">{s.nombre}</span>
             </a>
+            {/* Corrección: el delay quedaba demasiado chico y apagado
+                -- ahora es su propia insignia, bien visible. */}
             {s.delay > 0 && <span className="lineup-card-streamer-delay">Delay {s.delay} segundos</span>}
           </span>
         ))
