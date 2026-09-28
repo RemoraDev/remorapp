@@ -622,6 +622,21 @@ export default function PlayerDetailPage() {
             </div>
 
             <div className="player-tab-col-side">
+              {equipoActual && (
+                <Link to={`/equipos/${equipoActual.tag}`} className="player-tab-preview-card">
+                  <span className="player-tab-preview-card-header">
+                    {equipoActual.logoUrl ? (
+                      <img src={equipoActual.logoUrl} alt="" className="player-tab-preview-card-clan-logo" />
+                    ) : (
+                      <Users size={16} className="icon-inline" aria-hidden="true" />
+                    )}
+                    Clan
+                    <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
+                  </span>
+                  <span className="player-tab-preview-card-desc">{equipoActual.name}</span>
+                </Link>
+              )}
+
               <button type="button" className="player-tab-preview-card" onClick={() => setTabEscritorio("stream")}>
                 <span className="player-tab-preview-card-header">
                   <Radio size={16} className="icon-inline" aria-hidden="true" />
