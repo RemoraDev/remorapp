@@ -63,17 +63,6 @@ interface EquipoActual {
   logoUrl: string | null;
 }
 
-// Solo presentación (emoji, no hay bandera SVG en el proyecto) -- la
-// lista de países es la misma acotada de COUNTRY_OPTIONS.
-const BANDERA_POR_PAIS: Record<Country, string> = {
-  chile: "🇨🇱",
-  guatemala: "🇬🇹",
-  puerto_rico: "🇵🇷",
-  argentina: "🇦🇷",
-  peru: "🇵🇪",
-  bolivia: "🇧🇴",
-};
-
 type TabPerfil = "perfil" | "stream" | "logros";
 
 // El título más "importante" cuando hay varios activos a la vez: el
@@ -134,6 +123,36 @@ export default function PlayerDetailPage() {
       return;
     }
     setArchivoParaRecortarFotoPresentacion(archivo);
+  };
+
+  // Edición rápida de "Sobre mí" desde la tarjeta de escritorio -- mismo
+  // criterio que la foto de presentación de arriba (excepción puntual a
+  // "acá no se edita nada", con el lápiz de siempre): un textarea +
+  // Guardar, sin ir hasta Configuración solo para cambiar una frase.
+  const [editandoBio, setEditandoBio] = useState(false);
+  const [bioEditada, setBioEditada] = useState("");
+  const [guardandoBio, setGuardandoBio] = useState(false);
+  const [errorBio, setErrorBio] = useState<string | null>(null);
+
+  const handleAbrirEdicionBio = () => {
+    setBioEditada(perfil?.bio ?? "");
+    setErrorBio(null);
+    setEditandoBio(true);
+  };
+
+  const handleGuardarBio = async () => {
+    if (!user) return;
+    setGuardandoBio(true);
+    setErrorBio(null);
+    const nuevaBio = bioEditada.trim() || null;
+    const { error } = await supabase.from("profiles").update({ bio: nuevaBio }).eq("id", user.id);
+    setGuardandoBio(false);
+    if (error) {
+      setErrorBio(error.message);
+      return;
+    }
+    setPerfil((prev) => (prev ? { ...prev, bio: nuevaBio } : prev));
+    setEditandoBio(false);
   };
 
   const handleConfirmarRecorteFotoPresentacion = async (recorte: Blob) => {
@@ -515,33 +534,11 @@ export default function PlayerDetailPage() {
             {perfil.nick}
             <span className="profile-nick-id">#{perfil.uniqueId}</span>
           </h1>
-          <div className="player-hero-badges">
-            {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
-            {perfil.razaPrincipal && (
-              <span className="liga-badge">
-                Raza: {perfil.razaPrincipal}
-                {perfil.razaSecundaria && ` / ${perfil.razaSecundaria}`}
-              </span>
-            )}
-          </div>
-          <div className="player-hero-meta-row">
-            {perfil.country && (
-              <span className="player-hero-meta-item">
-                <span aria-hidden="true">{BANDERA_POR_PAIS[perfil.country]}</span>
-                {COUNTRY_OPTIONS.find((o) => o.value === perfil.country)?.label ?? perfil.country}
-              </span>
-            )}
-            {equipoActual && (
-              <Link to={`/equipos/${equipoActual.tag}`} className="player-hero-meta-item player-hero-meta-clan">
-                {equipoActual.logoUrl ? (
-                  <img src={equipoActual.logoUrl} alt="" className="player-hero-meta-clan-logo" />
-                ) : (
-                  <Users size={14} aria-hidden="true" />
-                )}
-                Clan: {equipoActual.name}
-              </Link>
-            )}
-          </div>
+          {tituloTexto && (
+            <div className="player-hero-badges">
+              <span className="liga-badge">{tituloTexto}</span>
+            </div>
+          )}
         </div>
 
         <div className="player-tabs" role="tablist">
@@ -621,12 +618,53 @@ export default function PlayerDetailPage() {
             </div>
 
             <div className="player-tab-col-main">
-              <div className="detail-card">
-                <h3 className="detail-subtitle">Descripción</h3>
-                {perfil.bio ? (
-                  <p className="team-detail-description">{perfil.bio}</p>
+              <div className="detail-card player-tab-bio-card">
+                <h3 className="detail-subtitle">Sobre mí</h3>
+
+                {editandoBio ? (
+                  <>
+                    <textarea
+                      className="form-textarea player-tab-bio-textarea"
+                      value={bioEditada}
+                      onChange={(e) => setBioEditada(e.target.value)}
+                      maxLength={500}
+                      disabled={guardandoBio}
+                      autoFocus
+                    />
+                    {errorBio && <div className="form-error">{errorBio}</div>}
+                    <div className="player-tab-bio-acciones">
+                      <button type="button" className="btn btn-primary" disabled={guardandoBio} onClick={handleGuardarBio}>
+                        {guardandoBio ? "Guardando..." : "Guardar"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={guardandoBio}
+                        onClick={() => setEditandoBio(false)}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </>
                 ) : (
-                  <p className="detail-empty">Todavía no escribió una descripción personal.</p>
+                  <>
+                    {perfil.bio ? (
+                      <p className="team-detail-description">{perfil.bio}</p>
+                    ) : (
+                      <p className="detail-empty">Todavía no escribió una descripción personal.</p>
+                    )}
+                    {esMiPropioPerfil && (
+                      <button
+                        type="button"
+                        className="player-tab-bio-edit-btn"
+                        onClick={handleAbrirEdicionBio}
+                        aria-label="Editar Sobre mí"
+                        title="Editar Sobre mí"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -634,12 +672,16 @@ export default function PlayerDetailPage() {
             <div className="player-tab-col-side">
               {equipoActual && (
                 <Link to={`/equipos/${equipoActual.tag}`} className="player-tab-preview-card">
-                  <span className="player-tab-preview-card-header">
+                  <span className="player-tab-preview-card-clan-foto-wrap">
                     {equipoActual.logoUrl ? (
-                      <img src={equipoActual.logoUrl} alt="" className="player-tab-preview-card-clan-logo" />
+                      <img src={equipoActual.logoUrl} alt="" className="player-tab-preview-card-clan-foto" />
                     ) : (
-                      <Users size={16} className="icon-inline" aria-hidden="true" />
+                      <span className="player-tab-preview-card-clan-foto player-tab-preview-card-clan-foto-vacia">
+                        <Users size={22} aria-hidden="true" />
+                      </span>
                     )}
+                  </span>
+                  <span className="player-tab-preview-card-header">
                     Clan
                     <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
                   </span>

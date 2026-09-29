@@ -1927,6 +1927,15 @@ main {
   line-height: 0;
 }
 
+/* Corrección: el avatar del perfil de jugador pasa a tener el mismo
+   color de borde que el banner (acento cian), en vez del borde
+   "invisible" (mismo color que el fondo) de siempre -- separado de
+   .team-detail-logo-overlap porque ese cambio es solo para el perfil
+   de jugador, no para la ficha de equipo. */
+.player-detail-avatar-overlap {
+  border-color: rgba(var(--h-accent-rgb), 0.5);
+}
+
 .team-detail-header,
 .player-detail-header {
   display: flex;
@@ -2052,39 +2061,7 @@ html.es-escritorio .player-detail-vista-escritorio {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-
-.player-hero-meta-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1.25rem;
-  margin-top: 0.6rem;
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
-}
-
-.player-hero-meta-item {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.player-hero-meta-clan {
-  color: var(--color-text-muted);
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.player-hero-meta-clan:hover {
-  color: var(--color-accent);
-}
-
-.player-hero-meta-clan-logo {
-  width: 1.1rem;
-  height: 1.1rem;
-  border-radius: 0.25rem;
-  object-fit: cover;
+  margin-top: 0.5rem;
 }
 
 /* Pestañas Perfil/Stream/Logros -- mismo patrón visual que cualquier
@@ -2134,7 +2111,12 @@ html.es-escritorio .player-detail-vista-escritorio {
   display: grid;
   grid-template-columns: minmax(0, 11rem) minmax(0, 2fr) minmax(0, 1fr);
   gap: 1.5rem;
-  align-items: start;
+  /* Corrección: con "start" cada columna medía su propio contenido y
+     la tarjeta de "Sobre mí" quedaba mucho más baja que la foto de al
+     lado -- "stretch" hace que las tres columnas compartan el alto de
+     la fila más alta (la foto, 9:16), y .player-tab-col-main .detail-card
+     ya tenía "height: 100%" esperando justo esto. */
+  align-items: stretch;
 }
 
 .player-tab-col-foto {
@@ -2319,11 +2301,32 @@ html.es-escritorio .player-detail-vista-escritorio {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.player-tab-preview-card-clan-logo {
-  width: 1.1rem;
-  height: 1.1rem;
-  border-radius: 0.25rem;
+/* Foto del clan (a pedido del usuario -- antes un ícono de 16px
+   perdido en el título): un espacio 4:3 de verdad, arriba de todo en
+   la tarjeta, con el logo del equipo si tiene o un ícono genérico
+   centrado si no. */
+.player-tab-preview-card-clan-foto-wrap {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  margin-bottom: 0.75rem;
+  border-radius: 0.35rem;
+  overflow: hidden;
+}
+
+.player-tab-preview-card-clan-foto {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+.player-tab-preview-card-clan-foto-vacia {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-panel);
+  color: var(--color-text-muted);
 }
 
 .player-tab-preview-card:hover {
@@ -2351,17 +2354,67 @@ html.es-escritorio .player-detail-vista-escritorio {
   color: var(--color-text-muted);
 }
 
-/* Tarjeta genérica de contenido de pestaña (Descripción en "Perfil",
-   y el contenido expandido de "Stream"/"Logros"). */
+/* Tarjeta genérica de contenido de pestaña ("Sobre mí" en "Perfil", y
+   el contenido expandido de "Stream"/"Logros"). Mismo hover que las
+   tarjetas de vista previa, en todas las tarjetas del perfil salvo el
+   banner y el avatar (a pedido del usuario). */
 .detail-card {
   padding: 1.5rem;
   border-radius: var(--radius-lg);
   border: 1px solid rgba(var(--h-accent-rgb), 0.35);
   background: var(--color-panel);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.detail-card:hover {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
 }
 
 .detail-card .team-detail-description {
   margin-top: 0.5rem;
+}
+
+/* Tarjeta "Sobre mí": relative para poder anclar el lápiz de editar
+   abajo a la derecha, igual que el de la foto de presentación. */
+.player-tab-bio-card {
+  position: relative;
+  padding-bottom: 3.25rem;
+}
+
+.player-tab-bio-edit-btn {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-tab-bio-edit-btn:hover {
+  transform: scale(1.08);
+  box-shadow: var(--shadow-accent);
+}
+
+.player-tab-bio-textarea {
+  width: 100%;
+  min-height: 8rem;
+  margin-top: 0.5rem;
+  resize: vertical;
+}
+
+.player-tab-bio-acciones {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 @media (max-width: 900px) {
