@@ -7605,7 +7605,21 @@ body.overlay-obs {
 .guerra-razas-compartir-wrap {
   display: flex;
   justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   margin-bottom: 1rem;
+}
+
+/* Migración 139: "Compartir imagen" en Enfrentamiento captura el nodo
+   tal cual se ve en pantalla -- pero los controles de edición del
+   organizador (selects de resultado con su chrome de <select>, subir
+   imagen, Finalizar/Rehacer/Generar) no aportan nada a una imagen
+   pensada para compartir y solo la ensucian. Se ocultan solo durante
+   el instante de la captura (la clase se agrega y se saca en el mismo
+   handler, ver GuerraDeRazasPage.tsx) -- el organizador los sigue
+   viendo y usando normalmente el resto del tiempo. */
+.ocultando-para-compartir .compartir-ocultar {
+  display: none !important;
 }
 
 /* Migración 138: tarjeta para compartir el marcador de un Race War en
@@ -7727,6 +7741,115 @@ body.overlay-obs {
   font-weight: 700;
   font-size: 2rem;
   color: var(--color-accent);
+}
+
+/* Migración 139: tarjeta que combina los encuentros actuales de las 5
+   categorías en una sola imagen -- a diferencia de la tarjeta de
+   Marcador (vertical, 9:16, pensada para Estados/Stories), esta es
+   horizontal: un mini-resumen por categoría no entra prolijo en un
+   formato tan angosto. Mismo criterio de recorte que el resto (nunca
+   position:fixed en el nodo capturado, ver .guerra-razas-compartir-clip
+   en GuerraDeRazasPage.tsx). */
+.guerra-razas-resumen-card {
+  position: relative;
+  width: 900px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  padding: 3.5rem 2.5rem 2.5rem;
+  box-sizing: border-box;
+  background:
+    radial-gradient(ellipse 90% 50% at 50% 0%, rgba(var(--h-accent-rgb), 0.22), transparent 60%),
+    #06070a;
+  font-family: var(--font-body);
+}
+
+.guerra-razas-resumen-titulo {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  color: var(--color-text);
+}
+
+.guerra-razas-resumen-subtitulo {
+  margin: -0.75rem 0 0;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.guerra-razas-resumen-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.25rem;
+  width: 100%;
+}
+
+.guerra-razas-resumen-categoria {
+  flex: 1 1 15rem;
+  max-width: 16rem;
+  padding: 1.25rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.35);
+  background: var(--color-panel);
+  box-sizing: border-box;
+}
+
+.guerra-razas-resumen-categoria-titulo {
+  margin: 0 0 0.75rem;
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--color-text);
+}
+
+.guerra-razas-resumen-vacio {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--color-text-faint);
+}
+
+.guerra-razas-resumen-jugadores {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.guerra-razas-resumen-jugador-fila {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.guerra-razas-resumen-jugador-img {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: contain;
+}
+
+.guerra-razas-resumen-jugador-raza {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  width: 3.5rem;
+}
+
+.guerra-razas-resumen-jugador-nombre {
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #3b82f6;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .guerra-razas-color-swatch {
@@ -9112,9 +9235,14 @@ html.es-escritorio .escritorio-chat-fijo {
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.55));
 }
 
+/* Corrección: los nombres de los 3 jugadores del triángulo quedaban
+   apagados (mismo gris que cualquier meta-dato) -- ahora resaltan en
+   azul brillante para que se lean bien en la composición. */
 .guerra-razas-triangulo-jugador {
-  font-size: 0.85rem;
-  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #3b82f6;
+  text-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
   max-width: 8rem;
   overflow: hidden;
   text-overflow: ellipsis;

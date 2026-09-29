@@ -282,7 +282,7 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
               <p className="guerra-razas-podio-nombre-raza">{label}</p>
               <p className="guerra-razas-triangulo-jugador">{jugador?.nombre ?? "Sin jugador"}</p>
               {modoEdicionActivo && (
-                <label className="guerra-razas-imagen-label">
+                <label className="guerra-razas-imagen-label compartir-ocultar">
                   <Upload className="icon-inline" aria-hidden="true" />{" "}
                   {subiendoImagen === raza ? "Subiendo..." : "Cambiar imagen"}
                   <input
@@ -349,7 +349,7 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
       {modoEdicionActivo && (
         <button
           type="button"
-          className="btn btn-primary btn-block"
+          className="btn btn-primary btn-block compartir-ocultar"
           disabled={
             finalizando ||
             !encuentro.resultado_protoss_terran ||
@@ -365,7 +365,7 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
       {modoEdicionActivo && (
         <button
           type="button"
-          className="btn btn-ghost btn-block"
+          className="btn btn-ghost btn-block compartir-ocultar"
           disabled={rehaciendo || finalizando}
           onClick={handleRehacer}
           title="Úsalo si cambiaste la estrella de 'elegido' en Marcador y este encuentro todavía muestra a los jugadores anteriores"
@@ -375,7 +375,7 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
       )}
 
       {esOrganizador && encuentro.finalizado && (
-        <button type="button" className="btn btn-ghost btn-block" disabled={generando} onClick={handleGenerar}>
+        <button type="button" className="btn btn-ghost btn-block compartir-ocultar" disabled={generando} onClick={handleGenerar}>
           {generando ? "Generando..." : "Generar siguiente encuentro"}
         </button>
       )}

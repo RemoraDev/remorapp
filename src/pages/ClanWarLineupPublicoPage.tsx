@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { toast } from "sonner";
-import { toBlob } from "html-to-image";
 import { Download, Pencil, Share2 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { compartirImagenDeNodo, descargarImagenDeNodo } from "../lib/compartirImagen";
 import { formatFecha } from "../lib/formatters";
 import { datetimeLocalAIso, formatearHoraCet, formatearHoraLocal, vencioPlazoEdicionLineup } from "../lib/clanWars";
 import TarjetaLineupClanWar, { StreamerBanner } from "../components/TarjetaLineupClanWar";
@@ -96,59 +95,18 @@ export default function ClanWarLineupPublicoPage() {
   const handleDescargarLineup = async () => {
     if (!tarjetaLineupRef.current || descargandoLineup) return;
     setDescargandoLineup(true);
-    try {
-      const blob = await toBlob(tarjetaLineupRef.current, { cacheBust: true, pixelRatio: 2 });
-      if (!blob) {
-        toast.error("No se pudo generar la imagen.");
-        return;
-      }
-      const enlace = document.createElement("a");
-      enlace.href = URL.createObjectURL(blob);
-      enlace.download = nombreArchivoLineup();
-      enlace.click();
-      URL.revokeObjectURL(enlace.href);
-    } catch {
-      toast.error("No se pudo generar la imagen.");
-    } finally {
-      setDescargandoLineup(false);
-    }
+    await descargarImagenDeNodo(tarjetaLineupRef.current, nombreArchivoLineup());
+    setDescargandoLineup(false);
   };
 
   const handleCompartirLineup = async () => {
     if (!tarjetaLineupRef.current || compartiendoLineup) return;
     setCompartiendoLineup(true);
-    try {
-      const blob = await toBlob(tarjetaLineupRef.current, { cacheBust: true, pixelRatio: 2 });
-      if (!blob) {
-        toast.error("No se pudo generar la imagen.");
-        return;
-      }
-      const nombreArchivo = nombreArchivoLineup();
-      const archivo = new File([blob], nombreArchivo, { type: "image/png" });
-      const texto = datos
-        ? `${datos.challenger.tag} vs ${datos.challenged.tag} -- lineup en RemorApp`
-        : "Lineup en RemorApp";
-
-      if (navigator.canShare?.({ files: [archivo] })) {
-        await navigator.share({ files: [archivo], title: texto, text: texto });
-        return;
-      }
-
-      const enlace = document.createElement("a");
-      enlace.href = URL.createObjectURL(blob);
-      enlace.download = nombreArchivo;
-      enlace.click();
-      URL.revokeObjectURL(enlace.href);
-
-      toast.success("Se descargó la imagen -- adjuntala en el mensaje que se abrió abajo.");
-      window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      if (err instanceof Error && err.name !== "AbortError") {
-        toast.error("No se pudo compartir la imagen.");
-      }
-    } finally {
-      setCompartiendoLineup(false);
-    }
+    const texto = datos
+      ? `${datos.challenger.tag} vs ${datos.challenged.tag} -- lineup en RemorApp`
+      : "Lineup en RemorApp";
+    await compartirImagenDeNodo(tarjetaLineupRef.current, nombreArchivoLineup(), texto);
+    setCompartiendoLineup(false);
   };
 
   // Stream propio de cada equipo (migración 125): se inicializa una

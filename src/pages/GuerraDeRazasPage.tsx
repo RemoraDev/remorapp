@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { toBlob } from "html-to-image";
 import { Plus, Share2, Star, Trash2, Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
+import { compartirImagenDeNodo, nombreArchivoDesde } from "../lib/compartirImagen";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import GuerraRazasEnfrentamiento from "../components/GuerraRazasEnfrentamiento";
 import GuerraRazasTablaPosiciones from "../components/GuerraRazasTablaPosiciones";
 import TarjetaCompartirGuerraDeRazas from "../components/TarjetaCompartirGuerraDeRazas";
+import TarjetaResumenEnfrentamientos from "../components/TarjetaResumenEnfrentamientos";
 import {
   CATEGORIAS_GUERRA,
   EFECTO_NEON_COLOR_OPTIONS,
@@ -19,6 +20,7 @@ import type {
   CategoriaGuerra,
   EfectoNeon,
   EfectoNeonColor,
+  GuerraRazasEncuentroRow,
   GuerraRazasJugadorRow,
   GuerraRazasRow,
   RazaGuerra,
@@ -112,42 +114,109 @@ export default function GuerraDeRazasPage() {
   const handleCompartir = async () => {
     if (!guerra || !tarjetaCompartirRef.current || compartiendo) return;
     setCompartiendo(true);
+    const textoCompartido = `${guerra.titulo || "Race War"} -- marcador en RemorApp`;
+    await compartirImagenDeNodo(tarjetaCompartirRef.current, nombreArchivoDesde(guerra.titulo || "race-war"), textoCompartido, {
+      backgroundColor: "#06070a",
+    });
+    setCompartiendo(false);
+  };
+
+  // Migración 139: "Compartir imagen" en Enfrentamiento y Tabla de
+  // Posiciones -- a diferencia de Marcador (que arma una tarjeta
+  // vertical aparte), estas dos capturan tal cual se ve en pantalla el
+  // contenido de la pestaña activa (mismo criterio que la tarjeta de
+  // lineup de Clan War).
+  const enfrentamientoRef = useRef<HTMLDivElement>(null);
+  const tablaRef = useRef<HTMLDivElement>(null);
+  const [compartiendoEnfrentamiento, setCompartiendoEnfrentamiento] = useState(false);
+  const [compartiendoTabla, setCompartiendoTabla] = useState(false);
+
+  const handleCompartirEnfrentamiento = async () => {
+    if (!guerra || !enfrentamientoRef.current || compartiendoEnfrentamiento) return;
+    setCompartiendoEnfrentamiento(true);
+    const nodo = enfrentamientoRef.current;
+    // Oculta los controles de edición (select de resultado, subir
+    // imagen, Finalizar/Rehacer/Generar -- ver .compartir-ocultar) solo
+    // mientras dura la captura, para que la imagen compartida se vea
+    // limpia sin importar si quien comparte es el organizador.
+    nodo.classList.add("ocultando-para-compartir");
     try {
-      const blob = await toBlob(tarjetaCompartirRef.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#06070a",
-      });
-      if (!blob) {
+      const texto = `${guerra.titulo || "Race War"} -- Enfrentamiento (${categoriaActiva}) en RemorApp`;
+      await compartirImagenDeNodo(
+        nodo,
+        nombreArchivoDesde(`${guerra.titulo || "race-war"}-enfrentamiento-${categoriaActiva}`),
+        texto,
+        { backgroundColor: "#06070a" }
+      );
+    } finally {
+      nodo.classList.remove("ocultando-para-compartir");
+      setCompartiendoEnfrentamiento(false);
+    }
+  };
+
+  const handleCompartirTabla = async () => {
+    if (!guerra || !tablaRef.current || compartiendoTabla) return;
+    setCompartiendoTabla(true);
+    const texto = `${guerra.titulo || "Race War"} -- Tabla de posiciones (${categoriaActiva}) en RemorApp`;
+    await compartirImagenDeNodo(
+      tablaRef.current,
+      nombreArchivoDesde(`${guerra.titulo || "race-war"}-tabla-${categoriaActiva}`),
+      texto,
+      { backgroundColor: "#06070a" }
+    );
+    setCompartiendoTabla(false);
+  };
+
+  // Migración 139: "Compartir todas las categorías" -- combina el
+  // encuentro actual (el más reciente, generado o no) de las 5
+  // categorías en una sola imagen (ver TarjetaResumenEnfrentamientos.tsx,
+  // montada fuera de la pantalla más abajo). Se busca a demanda (no
+  // hace falta tenerlo siempre cargado) y se espera un frame antes de
+  // capturar, para que React ya haya pintado la tarjeta con los datos
+  // recién llegados -- el ref apunta al nodo real del DOM, así que una
+  // vez commiteado el render ya está listo para toBlob(), sin importar
+  // que la variable de JS todavía no se haya "asentado".
+  const resumenRef = useRef<HTMLDivElement>(null);
+  const [resumenEncuentros, setResumenEncuentros] = useState<Record<CategoriaGuerra, GuerraRazasEncuentroRow | null> | null>(
+    null
+  );
+  const [compartiendoResumen, setCompartiendoResumen] = useState(false);
+
+  const handleCompartirResumen = async () => {
+    if (!guerra || compartiendoResumen) return;
+    setCompartiendoResumen(true);
+    try {
+      const { data, error } = await supabase
+        .from("guerra_razas_encuentros")
+        .select("*")
+        .eq("guerra_id", guerra.id)
+        .order("creado_en", { ascending: false });
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      const filas = (data ?? []) as GuerraRazasEncuentroRow[];
+      const porCategoria = {} as Record<CategoriaGuerra, GuerraRazasEncuentroRow | null>;
+      for (const { value: categoria } of CATEGORIAS_GUERRA) {
+        porCategoria[categoria] = filas.find((f) => f.categoria === categoria) ?? null;
+      }
+      setResumenEncuentros(porCategoria);
+
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+      if (!resumenRef.current) {
         toast.error("No se pudo generar la imagen.");
         return;
       }
-
-      const nombreArchivo = `${(guerra.titulo || "race-war").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`;
-      const archivo = new File([blob], nombreArchivo, { type: "image/png" });
-      const textoCompartido = `${guerra.titulo || "Race War"} -- marcador en RemorApp`;
-
-      if (navigator.canShare?.({ files: [archivo] })) {
-        await navigator.share({ files: [archivo], title: guerra.titulo || "Race War", text: textoCompartido });
-        return;
-      }
-
-      const enlace = document.createElement("a");
-      enlace.href = URL.createObjectURL(blob);
-      enlace.download = nombreArchivo;
-      enlace.click();
-      URL.revokeObjectURL(enlace.href);
-
-      toast.success("Se descargó la imagen -- adjuntala en el mensaje que se abrió abajo.");
-      window.open(`https://wa.me/?text=${encodeURIComponent(textoCompartido)}`, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      // AbortError: el usuario cerró el selector nativo de compartir
-      // sin elegir nada -- no es un error real, no hace falta avisar.
-      if (err instanceof Error && err.name !== "AbortError") {
-        toast.error("No se pudo compartir la imagen.");
-      }
+      const texto = `${guerra.titulo || "Race War"} -- Enfrentamientos de todas las categorías en RemorApp`;
+      await compartirImagenDeNodo(
+        resumenRef.current,
+        nombreArchivoDesde(`${guerra.titulo || "race-war"}-enfrentamientos`),
+        texto,
+        { backgroundColor: "#06070a" }
+      );
     } finally {
-      setCompartiendo(false);
+      setCompartiendoResumen(false);
     }
   };
 
@@ -649,16 +718,40 @@ export default function GuerraDeRazasPage() {
       </div>
 
       {seccionActiva === "enfrentamiento" && (
-        <GuerraRazasEnfrentamiento
-          guerra={guerra}
-          categoria={categoriaActiva}
-          jugadores={jugadores}
-          esOrganizador={esOrganizador}
-        />
+        <>
+          <div className="guerra-razas-compartir-wrap">
+            <button type="button" className="btn btn-ghost" disabled={compartiendoEnfrentamiento} onClick={handleCompartirEnfrentamiento}>
+              <Share2 size={16} className="icon-inline" aria-hidden="true" />
+              {compartiendoEnfrentamiento ? "Generando imagen..." : "Compartir imagen"}
+            </button>
+            <button type="button" className="btn btn-ghost" disabled={compartiendoResumen} onClick={handleCompartirResumen}>
+              <Share2 size={16} className="icon-inline" aria-hidden="true" />
+              {compartiendoResumen ? "Generando imagen..." : "Compartir todas las categorías"}
+            </button>
+          </div>
+          <div ref={enfrentamientoRef}>
+            <GuerraRazasEnfrentamiento
+              guerra={guerra}
+              categoria={categoriaActiva}
+              jugadores={jugadores}
+              esOrganizador={esOrganizador}
+            />
+          </div>
+        </>
       )}
 
       {seccionActiva === "tabla" && (
-        <GuerraRazasTablaPosiciones guerraId={guerra.id} categoria={categoriaActiva} jugadores={jugadores} />
+        <>
+          <div className="guerra-razas-compartir-wrap">
+            <button type="button" className="btn btn-ghost" disabled={compartiendoTabla} onClick={handleCompartirTabla}>
+              <Share2 size={16} className="icon-inline" aria-hidden="true" />
+              {compartiendoTabla ? "Generando imagen..." : "Compartir imagen"}
+            </button>
+          </div>
+          <div ref={tablaRef}>
+            <GuerraRazasTablaPosiciones guerraId={guerra.id} categoria={categoriaActiva} jugadores={jugadores} />
+          </div>
+        </>
       )}
 
       {seccionActiva === "marcador" && (
@@ -857,6 +950,9 @@ export default function GuerraDeRazasPage() {
           navegando la página. */}
       <div className="guerra-razas-compartir-clip">
         <TarjetaCompartirGuerraDeRazas ref={tarjetaCompartirRef} guerra={guerra} />
+        {resumenEncuentros && (
+          <TarjetaResumenEnfrentamientos ref={resumenRef} guerra={guerra} jugadores={jugadores} encuentros={resumenEncuentros} />
+        )}
       </div>
     </section>
   );
