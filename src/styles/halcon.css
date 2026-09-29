@@ -3517,42 +3517,113 @@ html.es-escritorio .player-detail-vista-escritorio {
   to { background-position: -720px -720px; }
 }
 
-/* "Estrellado" (migración 134, mejorado en la 141): mismo espíritu que
-   "Estrellas", pero con muchas más estrellas, un poco más grandes/
-   brillantes y con un tile más chico (más denso) -- a propósito más
-   notorio. Migración 141: en vez del drift diagonal de siempre, un
-   balanceo en 3D (sobre un modelo de referencia del usuario -- ahí
-   cada capa de estrellas gira en rotate3d entre -30°/0°/30° en vez de
-   trasladarse) -- se lee como si el campo de estrellas se meciera
-   suavemente frente a cámara, en vez de desplazarse en línea recta.
-   El perspective() va adentro del mismo transform (no en el elemento
-   padre) para no afectar a los otros fondos que comparten esa misma
-   tarjeta. */
+/* "Estrellado" (migración 134; rehecho en la 142, corregido en la 143):
+   la migración 141 (mosaico de 12 puntos + balanceo de 14°) no se
+   parecía en nada a la referencia ("totalmente decepcionado"). La 142
+   probó la técnica LITERAL de la referencia (un campo fijo de ~350
+   estrellas sueltas por box-shadow, centrado con margin negativo) --
+   se veía perfecto en una tarjeta grande y aislada, pero la miniatura
+   del selector (.lineup-fondo-preview, apenas 64x48px) solo alcanza a
+   mostrar una ventana minúscula de ese campo fijo de 1400x1400px:
+   quedaba prácticamente vacía. Un campo de tamaño FIJO no puede andar
+   bien en algo que se muestra tanto en una miniatura chica como en la
+   tarjeta grande real. Por eso esta versión vuelve al mosaico (que sí
+   escala perfecto a cualquier tamaño, como el resto del catálogo) pero
+   con muchas más estrellas que la 141 (42 + 14, no 12) y un tile bien
+   chico (120px) para que de verdad se vea denso, más un balanceo en 3D
+   bien marcado (28°, casi el doble de grande que la 141, y 8s en vez
+   de 14s) para que el movimiento se note. Dos capas de profundidad
+   (chicas rápidas en ::before, grandes y más brillantes y lentas en
+   ::after), cada una con su propio giro. */
 .lineup-card[data-fondo-lineup="estrellado"]::before,
 .lineup-fondo-preview[data-fondo-lineup="estrellado"]::before {
   background-image:
-    radial-gradient(1.5px 1.5px at 5% 15%, rgba(255, 255, 255, 0.95), transparent 60%),
-    radial-gradient(1.5px 1.5px at 15% 60%, rgba(255, 255, 255, 0.85), transparent 60%),
-    radial-gradient(2px 2px at 25% 30%, rgba(255, 255, 255, 0.9), transparent 60%),
-    radial-gradient(1.5px 1.5px at 35% 80%, rgba(255, 255, 255, 0.8), transparent 60%),
-    radial-gradient(2px 2px at 45% 10%, rgba(255, 255, 255, 0.95), transparent 60%),
-    radial-gradient(1.5px 1.5px at 55% 55%, rgba(255, 255, 255, 0.85), transparent 60%),
-    radial-gradient(2px 2px at 65% 25%, rgba(255, 255, 255, 0.9), transparent 60%),
-    radial-gradient(1.5px 1.5px at 75% 70%, rgba(255, 255, 255, 0.8), transparent 60%),
-    radial-gradient(2px 2px at 85% 40%, rgba(255, 255, 255, 0.95), transparent 60%),
-    radial-gradient(1.5px 1.5px at 95% 85%, rgba(255, 255, 255, 0.85), transparent 60%),
-    radial-gradient(1.5px 1.5px at 10% 95%, rgba(255, 255, 255, 0.75), transparent 60%),
-    radial-gradient(2px 2px at 90% 5%, rgba(255, 255, 255, 0.9), transparent 60%);
-  background-size: 140px 140px;
-  animation: fondo-lineup-estrellado-mecer 14s ease-in-out infinite;
+    radial-gradient(1.5px 1.5px at 60% 8%, rgba(255, 255, 255, 0.62), transparent 60%),
+    radial-gradient(1.2px 1.2px at 72% 16%, rgba(255, 255, 255, 0.82), transparent 60%),
+    radial-gradient(1.3px 1.3px at 44% 11%, rgba(255, 255, 255, 0.99), transparent 60%),
+    radial-gradient(1.9px 1.9px at 1% 23%, rgba(255, 255, 255, 0.61), transparent 60%),
+    radial-gradient(1.2px 1.2px at 44% 62%, rgba(255, 255, 255, 0.72), transparent 60%),
+    radial-gradient(2px 2px at 79% 0%, rgba(255, 255, 255, 0.65), transparent 60%),
+    radial-gradient(1.8px 1.8px at 91% 14%, rgba(255, 255, 255, 0.61), transparent 60%),
+    radial-gradient(1.4px 1.4px at 80% 72%, rgba(255, 255, 255, 0.96), transparent 60%),
+    radial-gradient(1.9px 1.9px at 42% 74%, rgba(255, 255, 255, 0.99), transparent 60%),
+    radial-gradient(1.5px 1.5px at 22% 40%, rgba(255, 255, 255, 0.76), transparent 60%),
+    radial-gradient(1.6px 1.6px at 48% 36%, rgba(255, 255, 255, 0.64), transparent 60%),
+    radial-gradient(1.9px 1.9px at 85% 85%, rgba(255, 255, 255, 0.77), transparent 60%),
+    radial-gradient(1.6px 1.6px at 61% 90%, rgba(255, 255, 255, 0.77), transparent 60%),
+    radial-gradient(1.6px 1.6px at 73% 89%, rgba(255, 255, 255, 0.91), transparent 60%),
+    radial-gradient(1.8px 1.8px at 63% 37%, rgba(255, 255, 255, 0.97), transparent 60%),
+    radial-gradient(1.8px 1.8px at 95% 8%, rgba(255, 255, 255, 0.92), transparent 60%),
+    radial-gradient(1.3px 1.3px at 27% 29%, rgba(255, 255, 255, 0.81), transparent 60%),
+    radial-gradient(1.5px 1.5px at 94% 55%, rgba(255, 255, 255, 0.79), transparent 60%),
+    radial-gradient(1.3px 1.3px at 100% 10%, rgba(255, 255, 255, 0.92), transparent 60%),
+    radial-gradient(2px 2px at 60% 10%, rgba(255, 255, 255, 0.93), transparent 60%),
+    radial-gradient(1.2px 1.2px at 18% 40%, rgba(255, 255, 255, 0.75), transparent 60%),
+    radial-gradient(1.7px 1.7px at 4% 94%, rgba(255, 255, 255, 0.72), transparent 60%),
+    radial-gradient(1.2px 1.2px at 11% 68%, rgba(255, 255, 255, 0.62), transparent 60%),
+    radial-gradient(1.5px 1.5px at 75% 32%, rgba(255, 255, 255, 0.66), transparent 60%),
+    radial-gradient(1px 1px at 22% 12%, rgba(255, 255, 255, 0.64), transparent 60%),
+    radial-gradient(1.6px 1.6px at 91% 6%, rgba(255, 255, 255, 0.73), transparent 60%),
+    radial-gradient(2px 2px at 62% 88%, rgba(255, 255, 255, 0.87), transparent 60%),
+    radial-gradient(2px 2px at 77% 49%, rgba(255, 255, 255, 0.77), transparent 60%),
+    radial-gradient(1.3px 1.3px at 68% 33%, rgba(255, 255, 255, 0.66), transparent 60%),
+    radial-gradient(1.8px 1.8px at 55% 72%, rgba(255, 255, 255, 0.76), transparent 60%),
+    radial-gradient(1.2px 1.2px at 22% 88%, rgba(255, 255, 255, 0.86), transparent 60%),
+    radial-gradient(1.8px 1.8px at 5% 83%, rgba(255, 255, 255, 0.92), transparent 60%),
+    radial-gradient(1.8px 1.8px at 83% 38%, rgba(255, 255, 255, 0.89), transparent 60%),
+    radial-gradient(1.4px 1.4px at 93% 77%, rgba(255, 255, 255, 0.97), transparent 60%),
+    radial-gradient(1.4px 1.4px at 74% 49%, rgba(255, 255, 255, 0.80), transparent 60%),
+    radial-gradient(1.2px 1.2px at 75% 53%, rgba(255, 255, 255, 0.82), transparent 60%),
+    radial-gradient(1.4px 1.4px at 85% 4%, rgba(255, 255, 255, 0.68), transparent 60%),
+    radial-gradient(1.5px 1.5px at 51% 7%, rgba(255, 255, 255, 0.66), transparent 60%),
+    radial-gradient(1.5px 1.5px at 72% 21%, rgba(255, 255, 255, 0.81), transparent 60%),
+    radial-gradient(1.1px 1.1px at 15% 81%, rgba(255, 255, 255, 0.99), transparent 60%),
+    radial-gradient(1.4px 1.4px at 10% 95%, rgba(255, 255, 255, 0.91), transparent 60%),
+    radial-gradient(1.2px 1.2px at 23% 48%, rgba(255, 255, 255, 0.75), transparent 60%);
+  background-size: 120px 120px;
+  animation: fondo-lineup-estrellado-mecer 8s ease-in-out infinite;
+}
+
+.lineup-card[data-fondo-lineup="estrellado"]::after,
+.lineup-fondo-preview[data-fondo-lineup="estrellado"]::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2.6px 2.6px at 27% 95%, rgba(255, 255, 255, 0.93), transparent 60%),
+    radial-gradient(2.9px 2.9px at 45% 39%, rgba(255, 255, 255, 0.97), transparent 60%),
+    radial-gradient(2.1px 2.1px at 77% 80%, rgba(255, 255, 255, 0.89), transparent 60%),
+    radial-gradient(2.3px 2.3px at 94% 69%, rgba(255, 255, 255, 0.90), transparent 60%),
+    radial-gradient(2.2px 2.2px at 62% 93%, rgba(255, 255, 255, 0.89), transparent 60%),
+    radial-gradient(2.7px 2.7px at 11% 21%, rgba(255, 255, 255, 0.99), transparent 60%),
+    radial-gradient(2.8px 2.8px at 95% 85%, rgba(255, 255, 255, 0.86), transparent 60%),
+    radial-gradient(2.4px 2.4px at 51% 22%, rgba(255, 255, 255, 0.87), transparent 60%),
+    radial-gradient(2.9px 2.9px at 10% 55%, rgba(255, 255, 255, 0.94), transparent 60%),
+    radial-gradient(2.7px 2.7px at 19% 59%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(2.7px 2.7px at 91% 81%, rgba(255, 255, 255, 1), transparent 60%),
+    radial-gradient(2.6px 2.6px at 99% 71%, rgba(255, 255, 255, 0.88), transparent 60%),
+    radial-gradient(2.8px 2.8px at 24% 98%, rgba(255, 255, 255, 0.99), transparent 60%),
+    radial-gradient(2.4px 2.4px at 96% 30%, rgba(255, 255, 255, 0.91), transparent 60%);
+  background-size: 240px 240px;
+  animation: fondo-lineup-estrellado-mecer-grandes 11s ease-in-out infinite;
 }
 
 @keyframes fondo-lineup-estrellado-mecer {
-  0%   { transform: perspective(600px) rotate3d(-1, 1, 0, 0deg); }
-  25%  { transform: perspective(600px) rotate3d(-1, 1, 0, 14deg); }
-  50%  { transform: perspective(600px) rotate3d(-1, 1, 0, 0deg); }
-  75%  { transform: perspective(600px) rotate3d(-1, 1, 0, -14deg); }
-  100% { transform: perspective(600px) rotate3d(-1, 1, 0, 0deg); }
+  0%   { transform: perspective(500px) rotate3d(-1, 1, 0, 0deg); }
+  25%  { transform: perspective(500px) rotate3d(-1, 1, 0, 28deg); }
+  50%  { transform: perspective(500px) rotate3d(-1, 1, 0, 0deg); }
+  75%  { transform: perspective(500px) rotate3d(-1, 1, 0, -28deg); }
+  100% { transform: perspective(500px) rotate3d(-1, 1, 0, 0deg); }
+}
+
+@keyframes fondo-lineup-estrellado-mecer-grandes {
+  0%   { transform: perspective(500px) rotate3d(-1, 1, 0, 0deg); }
+  25%  { transform: perspective(500px) rotate3d(-1, 1, 0, -22deg); }
+  50%  { transform: perspective(500px) rotate3d(-1, 1, 0, 0deg); }
+  75%  { transform: perspective(500px) rotate3d(-1, 1, 0, 22deg); }
+  100% { transform: perspective(500px) rotate3d(-1, 1, 0, 0deg); }
 }
 
 /* "Estrellado 2" (migración 140): inspirado en un modelo de referencia
@@ -3673,6 +3744,11 @@ html.es-escritorio .player-detail-vista-escritorio {
   100% { transform: scaleY(0.92) translateY(2%); opacity: 0.8; }
 }
 
+/* Corrección: las cenizas eran demasiado chicas (1-1.5px) y poco
+   opacas para notarse contra un fondo tan cargado de color -- ahora
+   son más grandes (2.5-3.5px), casi opacas del todo, con más
+   cantidad y un tile más chico (más denso) para que de verdad se vean
+   subir. */
 .lineup-card[data-fondo-lineup="fuego"]::after,
 .lineup-fondo-preview[data-fondo-lineup="fuego"]::after {
   content: "";
@@ -3681,15 +3757,18 @@ html.es-escritorio .player-detail-vista-escritorio {
   z-index: 0;
   pointer-events: none;
   background-image:
-    radial-gradient(1.5px 1.5px at 15% 90%, rgba(253, 224, 71, 0.95), transparent 60%),
-    radial-gradient(1px 1px at 35% 70%, rgba(251, 146, 60, 0.9), transparent 60%),
-    radial-gradient(1.5px 1.5px at 55% 85%, rgba(253, 224, 71, 0.9), transparent 60%),
-    radial-gradient(1px 1px at 70% 60%, rgba(239, 68, 68, 0.85), transparent 60%),
-    radial-gradient(1.5px 1.5px at 85% 95%, rgba(251, 146, 60, 0.9), transparent 60%),
-    radial-gradient(1px 1px at 45% 40%, rgba(253, 224, 71, 0.8), transparent 60%),
-    radial-gradient(1px 1px at 95% 75%, rgba(239, 68, 68, 0.85), transparent 60%);
-  background-size: 160px 220px;
-  animation: fondo-lineup-fuego-cenizas 5s linear infinite;
+    radial-gradient(3px 3px at 10% 92%, rgba(253, 224, 71, 1), transparent 65%),
+    radial-gradient(2.5px 2.5px at 25% 68%, rgba(251, 146, 60, 1), transparent 65%),
+    radial-gradient(3.5px 3.5px at 40% 88%, rgba(253, 224, 71, 1), transparent 65%),
+    radial-gradient(2.5px 2.5px at 55% 55%, rgba(239, 68, 68, 0.95), transparent 65%),
+    radial-gradient(3px 3px at 68% 80%, rgba(251, 146, 60, 1), transparent 65%),
+    radial-gradient(2.5px 2.5px at 20% 35%, rgba(253, 224, 71, 0.9), transparent 65%),
+    radial-gradient(3px 3px at 82% 62%, rgba(239, 68, 68, 0.95), transparent 65%),
+    radial-gradient(2.5px 2.5px at 92% 90%, rgba(253, 224, 71, 1), transparent 65%),
+    radial-gradient(3px 3px at 48% 20%, rgba(251, 146, 60, 0.9), transparent 65%),
+    radial-gradient(2.5px 2.5px at 8% 15%, rgba(253, 224, 71, 0.85), transparent 65%);
+  background-size: 130px 170px;
+  animation: fondo-lineup-fuego-cenizas 4.5s linear infinite;
 }
 
 @keyframes fondo-lineup-fuego-cenizas {
