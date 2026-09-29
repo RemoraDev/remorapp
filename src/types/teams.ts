@@ -198,13 +198,25 @@ export interface ClanWarRow {
 // data-fondo-lineup en halcon.css, separado del de data-fondo-bracket.
 // Migración 134: "vortice"/"lluvia"/"meteoros" salen del catálogo,
 // reemplazados por "estrellado" (más denso y notorio que "estrellas"),
-// "viaje" (viajando por el espacio) y "fuego".
-export type FondoLineup = "ninguno" | "estrellas" | "estrellado" | "nova" | "planeta" | "viaje" | "fuego";
+// "viaje" (viajando por el espacio) y "fuego". Migración 140:
+// "estrellado_2", sobre un modelo de referencia del usuario -- capas
+// de estrellas subiendo derecho hacia arriba (no en diagonal, como
+// "estrellado"), con más profundidad (chicas rápidas + grandes lentas).
+export type FondoLineup =
+  | "ninguno"
+  | "estrellas"
+  | "estrellado"
+  | "estrellado_2"
+  | "nova"
+  | "planeta"
+  | "viaje"
+  | "fuego";
 
 export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
   { value: "estrellas", label: "Estrellas" },
   { value: "estrellado", label: "Estrellado" },
+  { value: "estrellado_2", label: "Estrellado 2" },
   { value: "nova", label: "Nova" },
   { value: "planeta", label: "Planeta" },
   { value: "viaje", label: "Viaje" },
