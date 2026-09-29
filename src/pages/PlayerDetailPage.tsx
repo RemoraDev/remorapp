@@ -581,6 +581,16 @@ export default function PlayerDetailPage() {
           <div className="player-tab-grid">
             <div className="player-tab-col-foto">
               <div className="player-tab-foto-wrap">
+                {/* Marco decorativo tipo "corner bracket" (a pedido del
+                    usuario, adaptado de una referencia con estética Art
+                    Decó dorada -- acá recoloreado al acento cian de
+                    siempre en vez de adoptar esa paleta/tipografías,
+                    para que se sienta parte de RemorApp). Puramente
+                    visual, aria-hidden. */}
+                <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
                 {fotoPresentacionMostrada ? (
                   <Avatar
                     url={fotoPresentacionMostrada}

@@ -2145,16 +2145,20 @@ html.es-escritorio .player-detail-vista-escritorio {
 
 .player-tab-foto-wrap {
   position: relative;
+  border: 1px solid rgba(var(--h-accent-rgb), 0.5);
 }
 
 /* La foto de presentación (migración 128) es vertical (9:16) --
    distinta del avatar de siempre, que sigue en su lugar habitual
-   superpuesto en la esquina del banner (.player-detail-avatar-overlap). */
+   superpuesto en la esquina del banner (.player-detail-avatar-overlap).
+   Sin radio de esquina a propósito: el marco decorativo de abajo
+   (.foto-presentacion-corner) es de esquina recta, con las de la foto
+   redondeadas quedaba desprolijo. */
 .player-tab-foto {
+  display: block;
   width: 100%;
   height: auto;
   aspect-ratio: 9 / 16;
-  border-radius: var(--radius-lg);
   object-fit: cover;
 }
 
@@ -2164,11 +2168,90 @@ html.es-escritorio .player-detail-vista-escritorio {
   align-items: center;
   justify-content: center;
   gap: 0.25rem;
-  border: 1px dashed var(--color-border);
   background: var(--color-panel);
   color: var(--color-text-muted);
   font-size: 0.8rem;
   text-align: center;
+}
+
+/* Marco decorativo de esquinas ("corner bracket", a pedido del
+   usuario) -- cada esquina combina dos clases (ej. "-top -left") para
+   armar una L: un cuadradito apenas saliente en la punta más dos
+   brazos superpuestos, uno horizontal (::after) y uno vertical
+   (::before), cada uno con el borde del lado que le corresponde.
+   Recoloreado al acento cian de siempre (rgba(var(--h-accent-rgb))),
+   no al dorado de la referencia original -- así se siente parte del
+   resto de la app en vez de un tema pegado aparte. */
+.foto-presentacion-corner {
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid var(--color-accent);
+  position: absolute;
+  z-index: 1;
+}
+
+.foto-presentacion-corner::after,
+.foto-presentacion-corner::before {
+  content: "";
+  position: absolute;
+}
+
+.foto-presentacion-corner::after {
+  width: 1.25rem;
+  height: calc(0.6rem - 1px);
+}
+
+.foto-presentacion-corner::before {
+  width: calc(0.6rem - 1px);
+  height: 1.25rem;
+}
+
+.foto-presentacion-corner-left {
+  left: -0.5rem;
+}
+.foto-presentacion-corner-left::after {
+  left: calc(-2px + 0.6rem);
+  border-left: 1px solid var(--color-accent);
+}
+.foto-presentacion-corner-left::before {
+  left: -1px;
+  border-left: 1px solid var(--color-accent);
+}
+
+.foto-presentacion-corner-right {
+  right: -0.5rem;
+}
+.foto-presentacion-corner-right::after {
+  right: calc(-2px + 0.6rem);
+  border-right: 1px solid var(--color-accent);
+}
+.foto-presentacion-corner-right::before {
+  right: -1px;
+  border-right: 1px solid var(--color-accent);
+}
+
+.foto-presentacion-corner-top {
+  top: -0.5rem;
+}
+.foto-presentacion-corner-top::after {
+  top: -1px;
+  border-top: 1px solid var(--color-accent);
+}
+.foto-presentacion-corner-top::before {
+  top: calc(-2px + 0.6rem);
+  border-top: 1px solid var(--color-accent);
+}
+
+.foto-presentacion-corner-bottom {
+  bottom: -0.5rem;
+}
+.foto-presentacion-corner-bottom::after {
+  bottom: -1px;
+  border-bottom: 1px solid var(--color-accent);
+}
+.foto-presentacion-corner-bottom::before {
+  bottom: calc(-2px + 0.6rem);
+  border-bottom: 1px solid var(--color-accent);
 }
 
 .player-tab-foto-vacia-proporcion {
