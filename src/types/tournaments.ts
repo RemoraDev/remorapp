@@ -134,6 +134,10 @@ export interface TournamentRow {
   // ver evaluar_vencimiento_torneo() y reactivar_torneo_candidato().
   candidato_eliminacion_desde: string | null;
   ultima_reactivacion_en: string | null;
+  // Migración 144: reglamento en PDF, opcional -- subido en cualquier
+  // momento desde el Panel de organizador, mostrado embebido con
+  // PDF.js (ver VisorPdf.tsx).
+  pdf_reglamento_url: string | null;
 }
 
 // Migración 041: etapa de grupos.

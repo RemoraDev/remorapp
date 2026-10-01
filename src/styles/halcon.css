@@ -7311,6 +7311,59 @@ body.overlay-obs {
   margin-top: 0.5rem;
 }
 
+/* ---------- Visor de PDF embebido (PDF.js, migración 144) ----------
+   Mismo modal de siempre (.modal-backdrop/.modal-panel), pero bastante
+   más ancho y con scroll vertical propio en el cuerpo -- un reglamento
+   es mucho más alto que un recorte de imagen. */
+.visor-pdf-panel {
+  max-width: 50rem;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.visor-pdf-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-right: 1.5rem;
+}
+
+.visor-pdf-descargar {
+  padding: 0.4rem;
+}
+
+.visor-pdf-cuerpo {
+  margin-top: 1rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.visor-pdf-pagina-wrap {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  background: #06070a;
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+}
+
+.visor-pdf-canvas {
+  max-width: 100%;
+  height: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+.visor-pdf-navegacion {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 /* ---------- Recortador interactivo de imágenes (react-easy-crop) ----------
    Avatar de perfil, banner de perfil, logo de equipo y banner de
    equipo comparten este mismo modal -- solo cambia la proporción

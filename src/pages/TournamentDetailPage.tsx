@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import { toast } from "sonner";
-import { Trophy, Medal, Download } from "lucide-react";
+import { Trophy, Medal, Download, FileText, Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -23,6 +23,12 @@ import Avatar from "../components/Avatar";
 import LigaBadge from "../components/LigaBadge";
 import ArmarLlaveManual from "../components/ArmarLlaveManual";
 import type { ParticipanteParaLlave } from "../components/ArmarLlaveManual";
+// Migración 144: PDF.js (y el visor que lo usa) solo se descargan
+// cuando alguien realmente abre el reglamento -- React.lazy() separa
+// VisorPdf.tsx (y, adentro de ese mismo chunk, "pdfjs-dist") en su
+// propio archivo, que Vite no incluye en la carga normal de esta
+// página.
+const VisorPdf = lazy(() => import("../components/VisorPdf"));
 import type { PosicionGrupo, TournamentGroupMatchRow, TournamentGroupRow, TournamentRow } from "../types/tournaments";
 import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
@@ -306,6 +312,13 @@ export default function TournamentDetailPage() {
   // que ya existe) alcanza para un update directo, sin RPC nueva.
   const [mostrarOpcionesAvanzadas, setMostrarOpcionesAvanzadas] = useState(false);
   const [errorOpcionesAvanzadas, setErrorOpcionesAvanzadas] = useState<string | null>(null);
+  // Migración 144: reglamento en PDF -- subida (desde el Panel de
+  // organizador) y visor embebido (público, con PDF.js) del archivo
+  // guardado en tournaments.pdf_reglamento_url.
+  const reglamentoInputRef = useRef<HTMLInputElement | null>(null);
+  const [subiendoReglamento, setSubiendoReglamento] = useState(false);
+  const [errorReglamento, setErrorReglamento] = useState<string | null>(null);
+  const [mostrandoVisorReglamento, setMostrandoVisorReglamento] = useState(false);
   const [guardandoInscripciones, setGuardandoInscripciones] = useState<string | null>(null);
   const [temporadaRangosAbierta, setTemporadaRangosAbierta] = useState<string | null>(null);
   const [rangosMmrForm, setRangosMmrForm] = useState<Record<string, string>>({});
@@ -802,6 +815,54 @@ export default function TournamentDetailPage() {
 
     await cargarTorneo();
     return true;
+  };
+
+  // Migración 144: subida del reglamento en PDF -- opcional, en
+  // cualquier momento, exclusivo del organizador. Mismo patrón que la
+  // subida de logo/banner de equipo (storage.upload -> getPublicUrl ->
+  // update de la fila), pero contra el bucket "reglamentos" y validando
+  // tamaño/tipo antes de subir nada.
+  const handleSubirReglamento = async (file: File) => {
+    if (!torneo || !user) return;
+    setErrorReglamento(null);
+
+    if (file.type !== "application/pdf") {
+      setErrorReglamento("El reglamento debe ser un archivo PDF.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorReglamento("El PDF no puede pesar más de 10MB.");
+      return;
+    }
+
+    setSubiendoReglamento(true);
+    const ruta = `${user.id}/${torneo.id}-${Date.now()}.pdf`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("reglamentos")
+      .upload(ruta, file, { contentType: "application/pdf" });
+
+    if (uploadError) {
+      setErrorReglamento("No se pudo subir el reglamento: " + uploadError.message);
+      setSubiendoReglamento(false);
+      return;
+    }
+
+    const url = supabase.storage.from("reglamentos").getPublicUrl(ruta).data.publicUrl;
+
+    const { error: updateError } = await supabase
+      .from("tournaments")
+      .update({ pdf_reglamento_url: url })
+      .eq("id", torneo.id);
+
+    setSubiendoReglamento(false);
+
+    if (updateError) {
+      setErrorReglamento(updateError.message);
+      return;
+    }
+
+    await cargarTorneo();
   };
 
   const handleAbrirCheckIn = async () => {
@@ -1645,6 +1706,20 @@ export default function TournamentDetailPage() {
         {getModoLabel(torneo.modo)} — {getModoDescripcion(torneo.modo)}
       </p>
 
+      {/* Migración 144: visible para cualquiera (no solo el organizador)
+          si ya hay un reglamento subido. El PDF y pdfjs-dist recién se
+          descargan al abrir este visor (ver VisorPdf.tsx). */}
+      {torneo.pdf_reglamento_url && (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          onClick={() => setMostrandoVisorReglamento(true)}
+        >
+          <FileText size={16} className="icon-inline" aria-hidden="true" />
+          Ver reglamento
+        </button>
+      )}
+
       <div className="overlay-obs-copy">
         <button type="button" className="btn btn-ghost" onClick={handleCopiarUrlObs}>
           {urlObsCopiada ? "¡Copiado!" : "Copiar URL para OBS"}
@@ -2010,6 +2085,46 @@ export default function TournamentDetailPage() {
                       checked={torneo.mostrar_posiciones}
                       onChange={(checked) => handleActualizarOpcionAvanzada("mostrar_posiciones", checked)}
                     />
+                  </div>
+                </div>
+
+                {/* Migración 144: no es obligatorio al crear el torneo --
+                    se puede subir (o reemplazar) en cualquier momento
+                    desde acá. */}
+                <div className="organizer-panel-card">
+                  <div className="organizer-panel-card-header">
+                    <span className="organizer-panel-card-icon">
+                      <FileText size={18} />
+                    </span>
+                    <h3 className="organizer-panel-card-title">Reglamento</h3>
+                  </div>
+                  <div className="organizer-panel-card-body">
+                    {errorReglamento && <div className="form-error">{errorReglamento}</div>}
+                    <input
+                      ref={reglamentoInputRef}
+                      type="file"
+                      accept="application/pdf"
+                      hidden
+                      onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (file) handleSubirReglamento(file);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={subiendoReglamento}
+                      onClick={() => reglamentoInputRef.current?.click()}
+                    >
+                      <Upload size={16} className="icon-inline" aria-hidden="true" />
+                      {subiendoReglamento
+                        ? "Subiendo..."
+                        : torneo.pdf_reglamento_url
+                          ? "Reemplazar reglamento (PDF)"
+                          : "Subir reglamento (PDF)"}
+                    </button>
+                    <p className="form-hint">Hasta 10MB. Se muestra embebido en la página pública del torneo.</p>
                   </div>
                 </div>
               </div>
@@ -2893,6 +3008,16 @@ export default function TournamentDetailPage() {
         >
           {eliminandoTorneo ? "Eliminando..." : "Eliminar torneo"}
         </button>
+      )}
+
+      {mostrandoVisorReglamento && torneo.pdf_reglamento_url && (
+        <Suspense fallback={<div className="modal-backdrop" />}>
+          <VisorPdf
+            url={torneo.pdf_reglamento_url}
+            titulo={`Reglamento — ${torneo.nombre}`}
+            onCerrar={() => setMostrandoVisorReglamento(false)}
+          />
+        </Suspense>
       )}
     </section>
   );
