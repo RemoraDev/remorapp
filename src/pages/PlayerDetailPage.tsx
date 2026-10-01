@@ -688,30 +688,6 @@ export default function PlayerDetailPage() {
                   <span className="player-tab-preview-card-desc">{equipoActual.name}</span>
                 </Link>
               )}
-
-              <button type="button" className="player-tab-preview-card" onClick={() => setTabEscritorio("stream")}>
-                <span className="player-tab-preview-card-header">
-                  <Radio size={16} className="icon-inline" aria-hidden="true" />
-                  Stream
-                  <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
-                </span>
-                <span className="player-tab-preview-card-desc">
-                  {!perfil.esCaster || perfil.linksTransmision.length === 0
-                    ? "Aún no hay transmisiones."
-                    : `${perfil.linksTransmision.length} link${perfil.linksTransmision.length > 1 ? "s" : ""} de transmisión.`}
-                </span>
-              </button>
-
-              <button type="button" className="player-tab-preview-card" onClick={() => setTabEscritorio("logros")}>
-                <span className="player-tab-preview-card-header">
-                  <Award size={16} className="icon-inline" aria-hidden="true" />
-                  Logros
-                  <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
-                </span>
-                <span className="player-tab-preview-card-desc">
-                  Participá, jugá y desbloqueá nuevos logros.
-                </span>
-              </button>
             </div>
           </div>
         )}

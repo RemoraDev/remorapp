@@ -2035,8 +2035,8 @@ html.es-escritorio .player-detail-vista-escritorio {
 }
 
 .player-hero-banner {
-  aspect-ratio: 4 / 1;
-  max-height: 280px;
+  aspect-ratio: 5 / 1;
+  max-height: 200px;
   border-color: rgba(var(--h-accent-rgb), 0.45);
   box-shadow: var(--shadow-accent);
 }
@@ -2045,6 +2045,13 @@ html.es-escritorio .player-detail-vista-escritorio {
   position: absolute;
   top: 1rem;
   right: 1rem;
+}
+
+/* Corrección: el botón quedaba sin ningún borde propio, flotando
+   directo sobre el banner -- un trazo negro lo separa con más fuerza
+   del fondo, sin importar qué tan clara sea esa zona de la imagen. */
+.player-hero-panel-btn .btn {
+  border: 1px solid #000;
 }
 
 .player-hero-identity {
@@ -2064,52 +2071,50 @@ html.es-escritorio .player-detail-vista-escritorio {
   margin-top: 0.5rem;
 }
 
-/* Pestañas Perfil/Stream/Logros -- mismo patrón visual que cualquier
-   fila de tabs del proyecto (subrayado en la activa), pero acá con
-   icono a la izquierda de cada etiqueta. */
+/* Pestañas Perfil/Stream/Logros -- corrección: pasa de un subrayado
+   chato a un selector tipo "píldora" (mismo lenguaje que
+   .guerra-razas-tab), bien marcado el que está activo con fondo sólido
+   de acento en vez de apenas un trazo de color. */
 .player-tabs {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  border-bottom: 1px solid var(--color-border);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 .player-tab-btn {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.75rem 0.25rem;
-  margin-bottom: -1px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: none;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
   color: var(--color-text-muted);
   font-family: var(--font-display);
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   cursor: pointer;
-  transition: color 0.15s ease, border-color 0.15s ease;
-}
-
-.player-tab-btn + .player-tab-btn {
-  margin-left: 0.75rem;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
 .player-tab-btn:hover {
   color: var(--color-text);
+  border-color: rgba(var(--h-accent-rgb), 0.5);
 }
 
 .player-tab-btn-activo,
 .player-tab-btn-activo:hover {
-  color: var(--color-accent);
-  border-bottom-color: var(--color-accent);
+  color: var(--color-on-accent);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
 }
 
 /* Grilla de la pestaña "Perfil": foto angosta / descripción ancha /
    vistas previas angostas -- la del medio es la que realmente crece. */
 .player-tab-grid {
   display: grid;
-  grid-template-columns: minmax(0, 11rem) minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 2fr) minmax(0, 1fr);
   gap: 1.5rem;
   /* Corrección: con "start" cada columna medía su propio contenido y
      la tarjeta de "Sobre mí" quedaba mucho más baja que la foto de al
