@@ -8,6 +8,7 @@ import EmojiPicker from "./EmojiPicker";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import { buscarLideresChat, marcarConversacionLeida, obtenerConversacionesChatLideres } from "../lib/chatLideres";
 import type { ConversacionPrivadaLider, LiderBusqueda, MensajePrivadoLider } from "../lib/chatLideres";
+import { ESTADO_PRESENCIA_OPTIONS } from "../types/profile";
 
 type Destino = LiderBusqueda | ConversacionPrivadaLider;
 
@@ -25,6 +26,24 @@ function nickDe(destino: Destino): string | null {
 
 function avatarDe(destino: Destino): string | null {
   return esConversacion(destino) ? destino.otro_avatar_url : destino.avatar_url;
+}
+
+// Punto de presencia (disponible/ausente/ocupado) sobre el avatar --
+// a pedido del usuario, en el chat privado no se veía si la otra
+// persona estaba conectada. Solo existe en ConversacionPrivadaLider
+// (mis_conversaciones_chat_lideres(), migración 146) -- un resultado
+// de búsqueda recién abierto (LiderBusqueda) todavía no lo trae.
+function PuntoPresencia({ destino }: { destino: Destino }) {
+  if (!esConversacion(destino)) return null;
+  const opcion = ESTADO_PRESENCIA_OPTIONS.find((o) => o.value === destino.otro_estado_presencia);
+  if (!opcion) return null;
+  return (
+    <span
+      className="chat-lideres-avatar-estado"
+      style={{ backgroundColor: opcion.colorHex }}
+      title={opcion.label}
+    />
+  );
 }
 
 // Mensajes privados entre dos personas habilitadas hoy. La lista de
@@ -121,7 +140,7 @@ export default function ChatPrivadosLideres() {
             // mirara el contador de no leídos por su cuenta.
             const { data: autor } = await supabase
               .from("profiles")
-              .select("nick, avatar_url")
+              .select("nick, avatar_url, estado_presencia")
               .eq("id", nuevo.de_usuario_id)
               .maybeSingle();
             toast(`Mensaje privado de ${autor?.nick ?? "un jugador"}`, {
@@ -133,6 +152,7 @@ export default function ChatPrivadosLideres() {
                     otro_usuario_id: nuevo.de_usuario_id,
                     otro_nick: autor?.nick ?? null,
                     otro_avatar_url: autor?.avatar_url ?? null,
+                    otro_estado_presencia: autor?.estado_presencia ?? "disponible",
                     ultimo_mensaje: nuevo.contenido,
                     ultimo_mensaje_en: nuevo.created_at,
                     no_leidos: 1,
@@ -209,11 +229,14 @@ export default function ChatPrivadosLideres() {
           ← Volver a conversaciones
         </button>
         <div className="chat-lideres-privado-titulo">
-          <Avatar
-            url={avatarDe(conversacionAbierta)}
-            nombre={nickDe(conversacionAbierta)}
-            className="chat-lideres-avatar"
-          />
+          <span className="chat-lideres-avatar-wrap">
+            <Avatar
+              url={avatarDe(conversacionAbierta)}
+              nombre={nickDe(conversacionAbierta)}
+              className="chat-lideres-avatar"
+            />
+            <PuntoPresencia destino={conversacionAbierta} />
+          </span>
           <span>{nickDe(conversacionAbierta) ?? "Jugador"}</span>
         </div>
         <div className="chat-lideres-mensajes" ref={listaRef}>
@@ -284,7 +307,10 @@ export default function ChatPrivadosLideres() {
             className="chat-lideres-conversacion-item"
             onClick={() => abrirConversacion(c)}
           >
-            <Avatar url={c.otro_avatar_url} nombre={c.otro_nick} className="chat-lideres-avatar" />
+            <span className="chat-lideres-avatar-wrap">
+              <Avatar url={c.otro_avatar_url} nombre={c.otro_nick} className="chat-lideres-avatar" />
+              <PuntoPresencia destino={c} />
+            </span>
             <div className="chat-lideres-conversacion-info">
               <span className="chat-lideres-conversacion-nick">{c.otro_nick ?? "Jugador"}</span>
               <span className="chat-lideres-conversacion-preview">{c.ultimo_mensaje}</span>

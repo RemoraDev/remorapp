@@ -2065,8 +2065,15 @@ html.es-escritorio .player-detail-vista-movil {
   display: none;
 }
 
+/* flex column + min-height:100% -- corrección: el contenido quedaba
+   pegado arriba, con un hueco vacío abajo (mismo problema que ya se
+   corrigió en la portada de Inicio). .player-tab-grid y las tarjetas
+   de Stream/Logros (flex:1 más abajo) estiran para ocupar el espacio
+   que sobra, en vez de dejarlo vacío. */
 html.es-escritorio .player-detail-vista-escritorio {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
 }
 
 .player-hero-banner-wrap {
@@ -2201,6 +2208,10 @@ html.es-escritorio .player-detail-panel-inline {
 /* Grilla de la pestaña "Perfil": foto angosta / descripción ancha /
    vistas previas angostas -- la del medio es la que realmente crece. */
 .player-tab-grid {
+  /* flex:1 -- se estira para ocupar el alto que sobra dentro de
+     .player-detail-vista-escritorio (flex column), en vez de dejar un
+     hueco vacío abajo. */
+  flex: 1;
   display: grid;
   grid-template-columns: minmax(0, 8.5rem) minmax(0, 2fr) minmax(0, 1fr);
   gap: 1.5rem;
@@ -2215,21 +2226,17 @@ html.es-escritorio .player-detail-panel-inline {
 .player-tab-col-foto {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0.5rem;
 }
 
-/* El hover acá estaba excluido a propósito (ver comentario de
-   .detail-card más abajo) -- el usuario pidió sumarlo después, para
-   que las tres cajas de "Perfil" (foto, Sobre mí, Clan) se vean
-   consistentes entre sí. */
+/* El brillo queda siempre prendido (no solo al pasar el mouse) -- a
+   pedido del usuario, para que las tres cajas de "Perfil" (foto,
+   Sobre mí, Clan) se vean activas todo el tiempo, no muertas hasta
+   tocarlas. */
 .player-tab-foto-wrap {
   position: relative;
-  border: 1px solid rgba(var(--h-accent-rgb), 0.5);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.player-tab-foto-wrap:hover {
-  border-color: var(--color-accent);
+  border: 1px solid var(--color-accent);
   box-shadow: var(--shadow-accent);
 }
 
@@ -2401,16 +2408,13 @@ html.es-escritorio .player-detail-panel-inline {
   text-align: left;
   text-decoration: none;
   border-radius: var(--radius-md);
-  border: 1px solid rgba(var(--h-accent-rgb), 0.35);
+  /* Brillo siempre prendido (no solo al pasar el mouse) -- a pedido
+     del usuario, mismas tres cajas que .player-tab-foto-wrap. */
+  border: 1px solid var(--color-accent);
+  box-shadow: var(--shadow-accent);
   background: var(--color-card);
   padding: 0.85rem 1.1rem;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.player-tab-preview-card:hover {
-  border-color: var(--color-accent);
-  box-shadow: var(--shadow-accent);
 }
 
 .player-tab-preview-card-info {
@@ -2437,11 +2441,9 @@ html.es-escritorio .player-detail-panel-inline {
   color: var(--color-text-muted);
 }
 
-/* Tarjeta genérica de contenido de pestaña ("Sobre mí" en "Perfil", y
-   el contenido expandido de "Stream"/"Logros"). Mismo hover que las
-   tarjetas de vista previa y la foto de presentación (ver
-   .player-tab-foto-wrap), en todas las tarjetas del perfil salvo el
-   banner. */
+/* Tarjeta genérica de contenido ("Sobre mí" en "Perfil", y el
+   contenido expandido de "Stream"/"Logros" en la mayoría de la app).
+   Mismo hover en todas las tarjetas salvo el banner. */
 .detail-card {
   padding: 1.5rem;
   border-radius: var(--radius-lg);
@@ -2457,6 +2459,19 @@ html.es-escritorio .player-detail-panel-inline {
 
 .detail-card .team-detail-description {
   margin-top: 0.5rem;
+}
+
+/* Tarjetas de la pestaña "Perfil" (Sobre mí) y de "Stream"/"Logros" en
+   la vista de escritorio del jugador -- brillo siempre prendido (no
+   solo al pasar el mouse), a pedido del usuario, mismo criterio que
+   .player-tab-foto-wrap/.player-tab-preview-card. Por eso tienen una
+   clase propia en vez de aplicar esto a TODO .detail-card de la app
+   (ahí sí tiene sentido que el brillo sea solo al pasar el mouse). */
+.player-tab-standalone-card {
+  position: relative;
+  flex: 1;
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
 }
 
 /* Tarjeta "Sobre mí": relative para poder anclar el lápiz de editar
@@ -8850,6 +8865,24 @@ html.es-escritorio .escritorio-chat-fijo {
   object-fit: cover;
   font-size: 0.9rem;
   flex-shrink: 0;
+}
+
+/* Punto de presencia (disponible/ausente/ocupado) sobre el avatar --
+   mismo tamaño/posición que .header-avatar-estado. */
+.chat-lideres-avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.chat-lideres-avatar-estado {
+  position: absolute;
+  bottom: -0.05rem;
+  right: -0.05rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg);
 }
 
 .chat-lideres-mensaje-cuerpo {

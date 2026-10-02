@@ -383,7 +383,10 @@ export default function PlayerDetailPage() {
 
   const bloqueTransmision = perfil.esCaster && (
     <>
-      <h3 className="detail-subtitle">Transmisión</h3>
+      <h3 className="detail-subtitle">
+        <Radio size={16} className="icon-inline" aria-hidden="true" />
+        Transmisión
+      </h3>
       {perfil.linksTransmision.length === 0 ? (
         <p className="detail-empty">Todavía no agregó links de transmisión.</p>
       ) : (
@@ -708,7 +711,7 @@ export default function PlayerDetailPage() {
             </div>
 
             <div className="player-tab-col-main">
-              <div className="detail-card player-tab-bio-card">
+              <div className="detail-card player-tab-bio-card player-tab-standalone-card">
                 {/* Mismo marco "corner bracket" que la foto de
                     presentación y la tarjeta del clan -- a pedido del
                     usuario, para que las tres cajas de "Perfil" se vean
@@ -795,12 +798,19 @@ export default function PlayerDetailPage() {
         )}
 
         {tabEscritorio === "stream" && (
-          <div className="detail-card">
+          <div className="detail-card player-tab-standalone-card">
+            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
             {perfil.esCaster ? (
               bloqueTransmision
             ) : (
               <>
-                <h3 className="detail-subtitle">Stream</h3>
+                <h3 className="detail-subtitle">
+                  <Radio size={16} className="icon-inline" aria-hidden="true" />
+                  Stream
+                </h3>
                 <p className="detail-empty">Este jugador no transmite.</p>
               </>
             )}
@@ -808,8 +818,15 @@ export default function PlayerDetailPage() {
         )}
 
         {tabEscritorio === "logros" && (
-          <div className="detail-card">
-            <h3 className="detail-subtitle">Logros</h3>
+          <div className="detail-card player-tab-standalone-card">
+            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+            <h3 className="detail-subtitle">
+              <Award size={16} className="icon-inline" aria-hidden="true" />
+              Logros
+            </h3>
             <TitulosActivosList tipo="jugador" id={perfil.id} className="detail-map-list" />
             {!tituloTexto && (
               <p className="detail-empty">Todavía no tiene títulos Padre/Hijo activos.</p>

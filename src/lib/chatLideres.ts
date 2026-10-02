@@ -20,6 +20,8 @@ export interface ConversacionPrivadaLider {
   otro_usuario_id: string;
   otro_nick: string | null;
   otro_avatar_url: string | null;
+  // Migración 146: "disponible" | "ausente" | "ocupado" (profiles.estado_presencia).
+  otro_estado_presencia: string;
   ultimo_mensaje: string;
   ultimo_mensaje_en: string;
   no_leidos: number;

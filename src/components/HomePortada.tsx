@@ -176,11 +176,13 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
       )}
 
       <section className="home-fila-principal">
-        <div className="home-descarga-col">
-          {/* Se oculta dentro de la propia app de escritorio -- no tiene
-              sentido ofrecer bajarla desde adentro (mismo criterio que
-              tenía esta sección antes del rediseño). */}
-          {!esEscritorio && (
+        {/* Instalar en PC/celular: solo tiene sentido en la web -- si
+            ya está adentro de la app de escritorio, ya la tiene
+            instalada (a pedido del usuario). Toda la columna
+            desaparece, no solo la tarjeta de PC -- .home-eventos-col
+            ocupa el ancho completo en ese caso. */}
+        {!esEscritorio && (
+          <div className="home-descarga-col">
             <a href={URL_INSTALADOR_WINDOWS} className="home-descarga-card">
               <div className="home-descarga-card-glow" aria-hidden="true" />
               <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
@@ -195,13 +197,13 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
                 <span className="home-descarga-desc">Sin barra del navegador, avisa solo de versiones nuevas</span>
               </span>
             </a>
-          )}
 
-          <a href="/instalar-celular" target="_blank" rel="noopener noreferrer" className="home-descarga-mobile-link">
-            <Smartphone size={15} className="icon-inline" aria-hidden="true" />
-            Instalar en celular (Chrome / Brave)
-          </a>
-        </div>
+            <a href="/instalar-celular" target="_blank" rel="noopener noreferrer" className="home-descarga-mobile-link">
+              <Smartphone size={15} className="icon-inline" aria-hidden="true" />
+              Instalar en celular (Chrome / Brave)
+            </a>
+          </div>
+        )}
 
         <div className="home-eventos-col">
           <div className="home-seccion-label-row">
