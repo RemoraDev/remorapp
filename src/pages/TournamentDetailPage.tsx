@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react"
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
+import confetti from "canvas-confetti";
 import { toast } from "sonner";
 import { Trophy, Medal, Download, FileText, Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
@@ -863,6 +864,13 @@ export default function TournamentDetailPage() {
     }
 
     await cargarTorneo();
+  };
+
+  // Migración 145: confeti al ganar -- disponible para cualquiera que
+  // vea el resultado final (no solo el ganador), solo se dispara al
+  // presionar el botón, nunca sola al cargar la página.
+  const handleVerCelebracion = () => {
+    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
   };
 
   const handleAbrirCheckIn = async () => {
@@ -2400,11 +2408,16 @@ export default function TournamentDetailPage() {
               ) : (
                 <>
                   {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-                    <p className="form-success">
-                      <Trophy className="icon-inline" />Campeón:{" "}
-                      {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                        "Jugador de RemorApp"}
-                    </p>
+                    <>
+                      <p className="form-success">
+                        <Trophy className="icon-inline" />Campeón:{" "}
+                        {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                          "Jugador de RemorApp"}
+                      </p>
+                      <button type="button" className="btn btn-ghost" onClick={handleVerCelebracion}>
+                        Ver celebración
+                      </button>
+                    </>
                   )}
                   {torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id && (
                     <p className="tournament-card-meta">
@@ -2487,11 +2500,16 @@ export default function TournamentDetailPage() {
           {errorSuizo && <div className="form-error">{errorSuizo}</div>}
 
           {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-            <p className="form-success">
-              <Trophy className="icon-inline" />Campeón:{" "}
-              {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                "Jugador de RemorApp"}
-            </p>
+            <>
+              <p className="form-success">
+                <Trophy className="icon-inline" />Campeón:{" "}
+                {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                  "Jugador de RemorApp"}
+              </p>
+              <button type="button" className="btn btn-ghost" onClick={handleVerCelebracion}>
+                Ver celebración
+              </button>
+            </>
           )}
 
           {torneo.estado === "abierto" ? (
@@ -2570,11 +2588,16 @@ export default function TournamentDetailPage() {
           {errorTodosContraTodos && <div className="form-error">{errorTodosContraTodos}</div>}
 
           {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-            <p className="form-success">
-              <Trophy className="icon-inline" />Campeón:{" "}
-              {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                "Jugador de RemorApp"}
-            </p>
+            <>
+              <p className="form-success">
+                <Trophy className="icon-inline" />Campeón:{" "}
+                {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                  "Jugador de RemorApp"}
+              </p>
+              <button type="button" className="btn btn-ghost" onClick={handleVerCelebracion}>
+                Ver celebración
+              </button>
+            </>
           )}
 
           {torneo.estado === "abierto" && (
@@ -2695,11 +2718,16 @@ export default function TournamentDetailPage() {
           {errorLeaderboard && <div className="form-error">{errorLeaderboard}</div>}
 
           {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-            <p className="form-success">
-              <Trophy className="icon-inline" />Campeón:{" "}
-              {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                "Jugador de RemorApp"}
-            </p>
+            <>
+              <p className="form-success">
+                <Trophy className="icon-inline" />Campeón:{" "}
+                {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
+                  "Jugador de RemorApp"}
+              </p>
+              <button type="button" className="btn btn-ghost" onClick={handleVerCelebracion}>
+                Ver celebración
+              </button>
+            </>
           )}
 
           <table className="group-standings-table ranking-table">

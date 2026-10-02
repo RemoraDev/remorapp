@@ -4,6 +4,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { BarChart3, Settings, Award, History, Shield } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "../context/ThemeContext";
 import { useSkinWeb, SKINS_WEB } from "../context/SkinWebContext";
@@ -25,8 +26,13 @@ import AvatarSkin from "../components/AvatarSkin";
 import TitulosActivosList from "../components/TitulosActivosList";
 import PercentBar from "../components/PercentBar";
 
-const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
-const BANNER_MAX_BYTES = 3 * 1024 * 1024;
+// Migración 145: el límite subió de 2MB/3MB a 15MB -- antes había que
+// mantenerlo bajo porque ESE archivo era el que terminaba en Storage;
+// ahora comprimirImagen() se encarga de bajarle el peso antes de
+// subir, así que el límite de acá solo necesita cubrir una foto de
+// celular pesada sin comprimir (hasta unos 15MB en la práctica).
+const AVATAR_MAX_BYTES = 15 * 1024 * 1024;
+const BANNER_MAX_BYTES = 15 * 1024 * 1024;
 
 interface InvitacionConEquipo {
   id: string;
@@ -1317,7 +1323,7 @@ export default function ProfilePage() {
     if (!archivo) return;
 
     if (archivo.size > AVATAR_MAX_BYTES) {
-      setErrorAvatar("La foto no puede pesar más de 2MB.");
+      setErrorAvatar("La foto no puede pesar más de 15MB.");
       return;
     }
 
@@ -1342,12 +1348,13 @@ export default function ProfilePage() {
     setAvatarGuardado(false);
 
     try {
-      const extension = avatarFile.type === "image/png" ? "png" : "jpg";
+      const avatarComprimido = await comprimirImagen(avatarFile, "avatar");
+      const extension = avatarComprimido.type === "image/png" ? "png" : "jpg";
       const ruta = `${user.id}/${Date.now()}-avatar.${extension}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(ruta, avatarFile, { contentType: avatarFile.type });
+        .upload(ruta, avatarComprimido, { contentType: avatarComprimido.type });
 
       if (uploadError) {
         setErrorAvatar("No se pudo subir la foto: " + uploadError.message);
@@ -1389,7 +1396,7 @@ export default function ProfilePage() {
     if (!archivo) return;
 
     if (archivo.size > BANNER_MAX_BYTES) {
-      setErrorPerfilPublico("El banner no puede pesar más de 3MB.");
+      setErrorPerfilPublico("El banner no puede pesar más de 15MB.");
       return;
     }
 
@@ -1418,12 +1425,13 @@ export default function ProfilePage() {
 
     try {
       if (bannerFile) {
-        const extension = bannerFile.type === "image/png" ? "png" : "jpg";
+        const bannerComprimido = await comprimirImagen(bannerFile, "banner");
+        const extension = bannerComprimido.type === "image/png" ? "png" : "jpg";
         const ruta = `${user.id}/${Date.now()}-banner.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("player-banners")
-          .upload(ruta, bannerFile, { contentType: bannerFile.type });
+          .upload(ruta, bannerComprimido, { contentType: bannerComprimido.type });
 
         if (uploadError) {
           setErrorPerfilPublico("No se pudo subir el banner: " + uploadError.message);
@@ -2109,7 +2117,7 @@ export default function ProfilePage() {
 
                 <div className="form-group">
                   <label className="form-label" htmlFor="perfil-banner">
-                    Banner (opcional, máx. 3MB, se recorta a 4:1)
+                    Banner (opcional, máx. 15MB, se recorta a 4:1)
                   </label>
                   <input
                     id="perfil-banner"

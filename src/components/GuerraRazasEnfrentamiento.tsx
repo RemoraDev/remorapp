@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { comprimirImagen } from "../lib/imageCompression";
 import RecortadorImagenModal from "./RecortadorImagenModal";
 import { RAZAS_GUERRA, RESULTADO_BO3_OPTIONS } from "../types/guerraRazas";
 import type {
@@ -203,11 +204,12 @@ export default function GuerraRazasEnfrentamiento({ guerra, categoria, jugadores
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return;
-      const extension = recorte.type === "image/png" ? "png" : "jpg";
+      const recorteComprimido = await comprimirImagen(recorte, raza);
+      const extension = recorteComprimido.type === "image/png" ? "png" : "jpg";
       const ruta = `${user.id}/encuentro-${encuentro.id}-${raza}-${Date.now()}.${extension}`;
       const { error: uploadError } = await supabase.storage
         .from("guerra-razas")
-        .upload(ruta, recorte, { contentType: recorte.type });
+        .upload(ruta, recorteComprimido, { contentType: recorteComprimido.type });
       if (uploadError) {
         toast.error("No se pudo subir la imagen: " + uploadError.message);
         return;

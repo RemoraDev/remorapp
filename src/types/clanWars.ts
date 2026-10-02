@@ -62,6 +62,10 @@ export interface LineupPublicoClanWar {
   fecha_hora_cet: string;
   challenger: { nombre: string; tag: string; logo_url: string | null };
   challenged: { nombre: string; tag: string; logo_url: string | null };
+  // Migración 145: para saber a cuál de los dos corresponde
+  // ganador_team_id (challenger/challenged solo traen nombre/tag/logo).
+  challenger_team_id: string;
+  challenged_team_id: string;
   caster_nombre: string | null;
   caster_link: string | null;
   // Migración 125: stream propio de cada equipo (reemplaza al campo
@@ -83,6 +87,13 @@ export interface LineupPublicoClanWar {
   fondo_imagen_url: string | null;
   estructura: EstructuraLineup;
   aspecto: AspectoLineup;
+  // Migración 145: resultado real -- null mientras la Clan War no
+  // esté resuelta. Permite mostrarlo en la ficha pública (antes solo
+  // se veía en el panel privado del equipo) y habilitar "Ver
+  // celebración" ahí para el ganador.
+  ganador_team_id: string | null;
+  resultado_mapas_challenger: number | null;
+  resultado_mapas_challenged: number | null;
   lineup_challenger: LineupPublicoJugador[] | null;
   lineup_challenged: LineupPublicoJugador[] | null;
 }

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Plus, Share2, Star, Trash2, Upload } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import { compartirImagenDeNodo, nombreArchivoDesde } from "../lib/compartirImagen";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
@@ -420,11 +421,12 @@ export default function GuerraDeRazasPage() {
     setArchivoParaRecortar(null);
     setSubiendoImagen(raza);
     try {
-      const extension = recorte.type === "image/png" ? "png" : "jpg";
+      const recorteComprimido = await comprimirImagen(recorte, raza);
+      const extension = recorteComprimido.type === "image/png" ? "png" : "jpg";
       const ruta = `${user.id}/${guerra.id}-${raza}-${Date.now()}.${extension}`;
       const { error: uploadError } = await supabase.storage
         .from("guerra-razas")
-        .upload(ruta, recorte, { contentType: recorte.type });
+        .upload(ruta, recorteComprimido, { contentType: recorteComprimido.type });
       if (uploadError) {
         toast.error("No se pudo subir la imagen: " + uploadError.message);
         return;

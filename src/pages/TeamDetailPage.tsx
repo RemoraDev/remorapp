@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
+import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
@@ -66,8 +67,11 @@ import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
 import TitulosActivosList from "../components/TitulosActivosList";
 import LogrosClanWarList from "../components/LogrosClanWarList";
 
-const LOGO_MAX_BYTES = 2 * 1024 * 1024;
-const BANNER_MAX_BYTES = 3 * 1024 * 1024;
+// Migración 145: el límite subió de 2MB/3MB a 15MB -- comprimirImagen()
+// baja el peso antes de subir, así que acá solo hace falta cubrir una
+// foto de celular pesada sin comprimir.
+const LOGO_MAX_BYTES = 15 * 1024 * 1024;
+const BANNER_MAX_BYTES = 15 * 1024 * 1024;
 
 // Mismos emblemas oficiales que usa TarjetaLineupClanWar.tsx (public/razas/)
 // -- se muestra solo la raza principal, sin la secundaria, y con el logo en
@@ -1956,7 +1960,7 @@ export default function TeamDetailPage() {
     if (!archivo) return;
 
     if (archivo.size > LOGO_MAX_BYTES) {
-      setErrorEquipo("El logo no puede pesar más de 2MB.");
+      setErrorEquipo("El logo no puede pesar más de 15MB.");
       return;
     }
 
@@ -1979,7 +1983,7 @@ export default function TeamDetailPage() {
     if (!archivo) return;
 
     if (archivo.size > BANNER_MAX_BYTES) {
-      setErrorEquipo("El banner no puede pesar más de 3MB.");
+      setErrorEquipo("El banner no puede pesar más de 15MB.");
       return;
     }
 
@@ -2008,12 +2012,13 @@ export default function TeamDetailPage() {
 
     try {
       if (logoFile) {
-        const extension = logoFile.type === "image/png" ? "png" : "jpg";
+        const logoComprimido = await comprimirImagen(logoFile, "logo");
+        const extension = logoComprimido.type === "image/png" ? "png" : "jpg";
         const ruta = `${user.id}/${Date.now()}-logo.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("team-logos")
-          .upload(ruta, logoFile, { contentType: logoFile.type });
+          .upload(ruta, logoComprimido, { contentType: logoComprimido.type });
 
         if (uploadError) {
           setErrorEquipo("No se pudo subir el logo: " + uploadError.message);
@@ -2025,12 +2030,13 @@ export default function TeamDetailPage() {
       }
 
       if (bannerFile) {
-        const extension = bannerFile.type === "image/png" ? "png" : "jpg";
+        const bannerComprimido = await comprimirImagen(bannerFile, "banner");
+        const extension = bannerComprimido.type === "image/png" ? "png" : "jpg";
         const ruta = `${user.id}/${Date.now()}-banner.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("team-banners")
-          .upload(ruta, bannerFile, { contentType: bannerFile.type });
+          .upload(ruta, bannerComprimido, { contentType: bannerComprimido.type });
 
         if (uploadError) {
           setErrorEquipo("No se pudo subir el banner: " + uploadError.message);
@@ -3984,7 +3990,7 @@ export default function TeamDetailPage() {
 
             <div className="form-group">
               <label className="form-label" htmlFor="team-edit-logo">
-                Logo (opcional, máx. 2MB, se recorta a 1:1)
+                Logo (opcional, máx. 15MB, se recorta a 1:1)
               </label>
               <input
                 id="team-edit-logo"
@@ -4013,7 +4019,7 @@ export default function TeamDetailPage() {
 
             <div className="form-group">
               <label className="form-label" htmlFor="team-edit-banner">
-                Banner (opcional, máx. 3MB, se recorta a 4:1)
+                Banner (opcional, máx. 15MB, se recorta a 4:1)
               </label>
               <input
                 id="team-edit-banner"

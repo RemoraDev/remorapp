@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Download, Pencil, Share2 } from "lucide-react";
+import confetti from "canvas-confetti";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { compartirImagenDeNodo, descargarImagenDeNodo } from "../lib/compartirImagen";
@@ -609,6 +610,29 @@ export default function ClanWarLineupPublicoPage() {
                   ? "Evento cerrado automáticamente por inactividad."
                   : "Evento terminado."}
             </p>
+          )}
+
+          {/* Migración 145: resultado real, visible para cualquiera
+              (antes solo se veía en el panel privado del equipo) --
+              botón de celebración solo si hubo un ganador (no en
+              empate ni cancelada). */}
+          {datos.status === "finalizada" && datos.ganador_team_id && (
+            <>
+              <p className="form-success">
+                Ganó{" "}
+                {datos.ganador_team_id === datos.challenger_team_id
+                  ? datos.challenger.nombre
+                  : datos.challenged.nombre}{" "}
+                ({datos.resultado_mapas_challenger} - {datos.resultado_mapas_challenged})
+              </p>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } })}
+              >
+                Ver celebración
+              </button>
+            </>
           )}
 
           {!datos.revelado ? (

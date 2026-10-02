@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
+import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
@@ -12,7 +13,10 @@ import type { Sc2Region } from "../types/profile";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 
 const TAG_REGEX = /^[A-Z]{3,6}$/;
-const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+// Migración 145: el límite subió de 2MB a 15MB -- comprimirImagen()
+// baja el peso antes de subir, así que acá solo hace falta cubrir una
+// foto de celular pesada sin comprimir.
+const LOGO_MAX_BYTES = 15 * 1024 * 1024;
 
 export default function CreateTeamPage() {
   const { user, profile, loading: authLoading } = useAuth();
@@ -60,7 +64,7 @@ export default function CreateTeamPage() {
     if (!archivo) return;
 
     if (archivo.size > LOGO_MAX_BYTES) {
-      toast.error("El logo no puede pesar más de 2MB.");
+      toast.error("El logo no puede pesar más de 15MB.");
       return;
     }
 
@@ -173,12 +177,13 @@ export default function CreateTeamPage() {
     let logoUrl: string | null = null;
     if (logoFile) {
       try {
-        const extension = logoFile.type === "image/png" ? "png" : "jpg";
+        const logoComprimido = await comprimirImagen(logoFile, "logo");
+        const extension = logoComprimido.type === "image/png" ? "png" : "jpg";
         const ruta = `${user.id}/${Date.now()}-logo.${extension}`;
 
         const { error: uploadError } = await supabase.storage
           .from("team-logos")
-          .upload(ruta, logoFile, { contentType: logoFile.type });
+          .upload(ruta, logoComprimido, { contentType: logoComprimido.type });
 
         if (uploadError) {
           toast.error("No se pudo subir el logo: " + uploadError.message);
@@ -291,7 +296,7 @@ export default function CreateTeamPage() {
 
         <div className="form-group">
           <label className="form-label" htmlFor="team-logo">
-            Logo (opcional, máx. 2MB, se recorta a 1:1)
+            Logo (opcional, máx. 15MB, se recorta a 1:1)
           </label>
           <input
             id="team-logo"

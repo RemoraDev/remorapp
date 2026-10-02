@@ -3,6 +3,7 @@ import type { ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight, Users } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
@@ -107,7 +108,10 @@ export default function PlayerDetailPage() {
   // "Guardar" -- elegís el archivo, ajustás el recorte, y se sube
   // sola. Va a su propia columna (foto_presentacion_url), separada del
   // avatar de siempre -- este botón nunca toca avatar_url.
-  const FOTO_PRESENTACION_MAX_BYTES = 2 * 1024 * 1024;
+  // Migración 145: el límite subió de 2MB a 15MB -- comprimirImagen()
+  // baja el peso antes de subir, así que acá solo hace falta cubrir
+  // una foto de celular pesada sin comprimir.
+  const FOTO_PRESENTACION_MAX_BYTES = 15 * 1024 * 1024;
   const fotoPresentacionInputRef = useRef<HTMLInputElement | null>(null);
   const [archivoParaRecortarFotoPresentacion, setArchivoParaRecortarFotoPresentacion] = useState<File | null>(null);
   const [subiendoFotoPresentacion, setSubiendoFotoPresentacion] = useState(false);
@@ -119,7 +123,7 @@ export default function PlayerDetailPage() {
     event.target.value = "";
     if (!archivo) return;
     if (archivo.size > FOTO_PRESENTACION_MAX_BYTES) {
-      setErrorFotoPresentacion("La foto no puede pesar más de 2MB.");
+      setErrorFotoPresentacion("La foto no puede pesar más de 15MB.");
       return;
     }
     setArchivoParaRecortarFotoPresentacion(archivo);
@@ -163,12 +167,13 @@ export default function PlayerDetailPage() {
     setErrorFotoPresentacion(null);
 
     try {
-      const extension = recorte.type === "image/png" ? "png" : "jpg";
+      const recorteComprimido = await comprimirImagen(recorte, "presentacion");
+      const extension = recorteComprimido.type === "image/png" ? "png" : "jpg";
       const ruta = `${user.id}/${Date.now()}-presentacion.${extension}`;
 
       const { error: uploadError } = await supabase.storage
         .from("avatars")
-        .upload(ruta, recorte, { contentType: recorte.type });
+        .upload(ruta, recorteComprimido, { contentType: recorteComprimido.type });
 
       if (uploadError) {
         setErrorFotoPresentacion("No se pudo subir la foto: " + uploadError.message);
