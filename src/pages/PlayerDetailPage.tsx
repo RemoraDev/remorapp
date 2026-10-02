@@ -677,6 +677,12 @@ export default function PlayerDetailPage() {
             <div className="player-tab-col-side">
               {equipoActual && (
                 <Link to={`/equipos/${equipoActual.tag}`} className="player-tab-preview-card">
+                  {/* Mismo marco decorativo "corner bracket" de la foto de
+                      presentación (a pedido del usuario), acá también. */}
+                  <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+                  <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+                  <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+                  <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
                   {equipoActual.logoUrl ? (
                     <img src={equipoActual.logoUrl} alt="" className="clan-name-logo" />
                   ) : (

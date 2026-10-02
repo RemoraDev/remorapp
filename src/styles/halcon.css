@@ -1964,10 +1964,12 @@ main {
   gap: 0.6rem;
 }
 
+/* 3rem (48px), no 2rem -- a pedido del usuario, un logo de equipo
+   real pierde calidad visible a 32px. */
 .clan-name-logo {
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.4rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.5rem;
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -1980,7 +1982,7 @@ main {
   color: var(--color-accent-soft);
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 0.9rem;
+  font-size: 1.1rem;
 }
 
 /* Botón "Enviar solicitud de amistad" en la ficha de OTRO equipo --
@@ -2161,9 +2163,19 @@ html.es-escritorio .player-detail-vista-escritorio {
   gap: 0.5rem;
 }
 
+/* El hover acá estaba excluido a propósito (ver comentario de
+   .detail-card más abajo) -- el usuario pidió sumarlo después, para
+   que las tres cajas de "Perfil" (foto, Sobre mí, Clan) se vean
+   consistentes entre sí. */
 .player-tab-foto-wrap {
   position: relative;
   border: 1px solid rgba(var(--h-accent-rgb), 0.5);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-tab-foto-wrap:hover {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
 }
 
 /* La foto de presentación (migración 128) es vertical (9:16) --
@@ -2322,8 +2334,11 @@ html.es-escritorio .player-detail-vista-escritorio {
    .team-panel-menu-item (título + descripción + click), con el logo
    al lado del nombre (en vez de una foto grande arriba, que quedaba
    despareja con el resto de la ficha) y el chevron a la derecha de
-   todo. */
+   todo. position: relative -- a pedido del usuario, para anclar el
+   mismo marco "corner bracket" de la foto de presentación (ver
+   .foto-presentacion-corner), que también se usa acá. */
 .player-tab-preview-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -2369,8 +2384,9 @@ html.es-escritorio .player-detail-vista-escritorio {
 
 /* Tarjeta genérica de contenido de pestaña ("Sobre mí" en "Perfil", y
    el contenido expandido de "Stream"/"Logros"). Mismo hover que las
-   tarjetas de vista previa, en todas las tarjetas del perfil salvo el
-   banner y el avatar (a pedido del usuario). */
+   tarjetas de vista previa y la foto de presentación (ver
+   .player-tab-foto-wrap), en todas las tarjetas del perfil salvo el
+   banner. */
 .detail-card {
   padding: 1.5rem;
   border-radius: var(--radius-lg);
