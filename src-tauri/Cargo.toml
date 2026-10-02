@@ -1,6 +1,6 @@
 [package]
 name = "remorapp"
-version = "0.1.24"
+version = "0.1.25"
 description = "RemorApp -- gestor de torneos y clanes de StarCraft II"
 authors = ["RemoraDev"]
 license = ""
@@ -25,6 +25,7 @@ tauri = { version = "2.11.6", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2.12.0"
 tauri-plugin-process = "2.3.1"
+tauri-plugin-single-instance = "2"
 
 # Mismo crate y versión que ya usa tauri internamente para Windows (ver
 # su Cargo.toml, sección [target."cfg(windows)".dependencies.windows])

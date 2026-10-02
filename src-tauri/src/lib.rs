@@ -1,4 +1,3 @@
-#[cfg(target_os = "windows")]
 use tauri::Manager;
 
 // Windows deja el color de la barra de título nativa a criterio del
@@ -33,6 +32,24 @@ fn pintar_titlebar_negro(window: &tauri::WebviewWindow) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
+    // Una sola instancia a la vez: intentar abrir una segunda (ej. doble
+    // click en el acceso directo con la app ya abierta) enfoca la
+    // ventana existente en vez de abrir otra. Tiene que ser el PRIMER
+    // plugin registrado (lo exige tauri-plugin-single-instance) para
+    // poder cortar el arranque antes de que se cree nada más.
+    //
+    // Sin esto, dos instancias corriendo a la vez bloqueaban la
+    // autoactualización: el instalador no puede reemplazar el .exe
+    // mientras la otra instancia lo tiene abierto, así que la
+    // actualización "se aplicaba" pero al reabrir seguía siendo la
+    // versión vieja -- quedaba pidiendo actualizar en bucle.
+    .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+      }
+    }))
     // Autoactualización (ver src/lib/tauriUpdater.ts en el frontend):
     // este plugin solo expone la posibilidad de revisar/descargar/
     // instalar una versión nueva -- la lógica de CUÁNDO ofrecerla y
