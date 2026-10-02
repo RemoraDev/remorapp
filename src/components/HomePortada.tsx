@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { isTauri } from "@tauri-apps/api/core";
-import { ArrowRight, Download, Monitor, Smartphone } from "lucide-react";
+import { ArrowRight, Smartphone } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { formatFecha } from "../lib/formatters";
 import { formatearCuentaRegresiva, formatoHora, LogoEquipo, useAhora, yaComenzo } from "./ProximasClanWars";
@@ -17,60 +18,67 @@ interface Props {
 // InstalarRemorApp.tsx (retirado -- ver el comentario más abajo).
 const URL_INSTALADOR_WINDOWS = "https://github.com/RemoraDev/remorapp/releases/latest/download/RemorApp-Setup.exe";
 
-// Evento destacado: el que empieza antes entre los "en vivo" (esos
-// primero, sin importar hora) y el resto ordenado por fecha_hora_cet.
-// Mismo criterio de agrupado que ProximasClanWars.tsx, pero acá solo
-// interesa UNO -- el más inminente -- no la lista completa.
-function elegirDestacado(clanWars: ClanWarProxima[], ahora: Date): ClanWarProxima | null {
-  if (clanWars.length === 0) return null;
-  const ordenados = [...clanWars].sort((a, b) => {
-    const aEnVivo = yaComenzo(a, ahora);
-    const bEnVivo = yaComenzo(b, ahora);
-    if (aEnVivo !== bEnVivo) return aEnVivo ? -1 : 1;
-    return new Date(a.fecha_hora_cet).getTime() - new Date(b.fecha_hora_cet).getTime();
-  });
-  return ordenados[0];
+// Cuántas partículas de fondo -- a mano, no por Math.random() en cada
+// render (se recalcularía solo, el fondo "saltaría" en cada
+// re-render). Cada una entra con un retraso/duración/posición propios,
+// para que no se vean todas sincronizadas en fila.
+const PARTICULAS = Array.from({ length: 18 }, (_, i) => ({
+  izquierda: (i * 37 + 5) % 100,
+  retraso: (i % 9) * 1.1,
+  duracion: 9 + (i % 5) * 1.8,
+  tamano: 3 + (i % 3),
+  zigzag: i % 2 === 0 ? 1 : -1,
+}));
+
+// Cuántos eventos próximos entran en la fila -- mismo criterio que
+// "Noticias destacadas" (hasta 3), ver elegirProximos() más abajo.
+const EVENTOS_DESTACADOS = 3;
+
+// Evento(s) destacado(s): los "en vivo" primero (sin importar hora),
+// el resto ordenado por fecha_hora_cet -- mismo criterio de agrupado
+// que ProximasClanWars.tsx, acá recortado a los primeros `cantidad`.
+function elegirProximos(clanWars: ClanWarProxima[], ahora: Date, cantidad: number): ClanWarProxima[] {
+  return [...clanWars]
+    .sort((a, b) => {
+      const aEnVivo = yaComenzo(a, ahora);
+      const bEnVivo = yaComenzo(b, ahora);
+      if (aEnVivo !== bEnVivo) return aEnVivo ? -1 : 1;
+      return new Date(a.fecha_hora_cet).getTime() - new Date(b.fecha_hora_cet).getTime();
+    })
+    .slice(0, cantidad);
 }
 
-function EventoDestacado({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
-  const categoria = cw.division_nombre ? `${cw.liga_nombre} · ${cw.division_nombre}` : cw.liga_nombre;
+function EventoMini({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
   const enVivo = yaComenzo(cw, ahora);
 
   const contenido = (
-    <div className={`home-evento-destacado ${cw.lineup_revelado ? "es-clickeable" : ""}`}>
-      <div className="home-evento-destacado-glow" aria-hidden="true" />
-      <span className="home-evento-destacado-etiqueta">
-        {enVivo ? "En vivo ahora" : "Próximo evento"}
+    <div className={`home-evento-mini ${cw.lineup_revelado ? "es-clickeable" : ""}`}>
+      <span className={`home-evento-mini-etiqueta ${enVivo ? "home-evento-mini-etiqueta-vivo" : ""}`}>
+        {enVivo ? "En vivo" : formatoHora.format(new Date(cw.fecha_hora_cet))}
       </span>
-      <div className="home-evento-destacado-cuerpo">
-        <div className="home-evento-destacado-equipo">
+      <div className="home-evento-mini-cuerpo">
+        <span className="home-evento-mini-equipo">
           <LogoEquipo nombre={cw.challenger_nombre} tag={cw.challenger_tag} logoUrl={cw.challenger_logo_url} />
-          <span className="home-evento-destacado-tag">{cw.challenger_tag}</span>
-        </div>
-        <div className="home-evento-destacado-centro">
-          <span className="home-evento-destacado-vs">VS</span>
-          <span className="home-evento-destacado-categoria">{categoria ?? "Clan War amistosa"}</span>
-        </div>
-        <div className="home-evento-destacado-equipo">
+          <span className="home-evento-mini-tag">{cw.challenger_tag}</span>
+        </span>
+        <span className="home-evento-mini-vs">VS</span>
+        <span className="home-evento-mini-equipo">
           <LogoEquipo nombre={cw.challenged_nombre} tag={cw.challenged_tag} logoUrl={cw.challenged_logo_url} />
-          <span className="home-evento-destacado-tag">{cw.challenged_tag}</span>
-        </div>
+          <span className="home-evento-mini-tag">{cw.challenged_tag}</span>
+        </span>
       </div>
-      <div className="home-evento-destacado-footer">
-        <span>{formatoHora.format(new Date(cw.fecha_hora_cet))}</span>
+      <span className="home-evento-mini-footer">
         {enVivo ? (
           <span className="clan-war-card-en-vivo">EN VIVO</span>
         ) : (
-          <span className="clan-war-card-cuenta-regresiva">
-            {formatearCuentaRegresiva(new Date(cw.fecha_hora_cet), ahora)}
-          </span>
+          formatearCuentaRegresiva(new Date(cw.fecha_hora_cet), ahora)
         )}
-      </div>
+      </span>
     </div>
   );
 
   return cw.lineup_revelado ? (
-    <Link to={`/clan-war/${cw.id}`} className="home-evento-destacado-link">
+    <Link to={`/clan-war/${cw.id}`} className="home-evento-mini-link">
       {contenido}
     </Link>
   ) : (
@@ -78,14 +86,39 @@ function EventoDestacado({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
   );
 }
 
+// SVG propio (no un ícono de lucide) para la tarjeta de descarga de
+// escritorio -- a pedido del usuario, algo que "combine con la web":
+// mismo trazo fino/geométrico que el resto del set de íconos, con el
+// signo de bajada adentro de la pantalla en el color de acento.
+function IconoDescargaEscritorio() {
+  return (
+    <svg
+      width="40"
+      height="40"
+      viewBox="0 0 40 40"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <rect x="4" y="5" width="32" height="21" rx="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M14 31h12M20 26v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      <path
+        d="M20 10v9m0 0 3.5-3.5M20 19l-3.5-3.5"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 // Portada de Inicio (primera página del carrusel): título de marca,
-// el evento más inminente destacado (Clan War próxima o en vivo),
-// hasta 3 noticias destacadas si hay, un llamado a la acción que lleva
-// a "Clan Wars próximas" del mismo carrusel, y la sección para llevarse
-// RemorApp a cualquier dispositivo -- antes esto último vivía partido
-// en dos lugares (esta tarjeta de PC acá, y una página aparte del
-// carrusel con las dos tarjetas, InstalarRemorApp.tsx) -- ahora es una
-// sola sección acá, con las dos opciones (celular/PC) modernizadas.
+// hasta 3 noticias destacadas si hay (fila horizontal), y una segunda
+// fila con la descarga de escritorio a la izquierda y hasta 3 eventos
+// próximos a la derecha (también horizontal) -- rediseño a pedido del
+// usuario, "ultra gaming moderno minimalista", con un fondo de
+// partículas subiendo en zigzag (puro CSS, ver .home-particula).
 export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }: Props) {
   const [esEscritorio, setEsEscritorio] = useState(false);
   const [clanWars, setClanWars] = useState<ClanWarProxima[] | null>(null);
@@ -98,7 +131,7 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
   useEffect(() => {
     supabase.rpc("clan_wars_proximas").then(({ data, error }) => {
       if (error) {
-        console.error("Error cargando el evento destacado:", error);
+        console.error("Error cargando los eventos próximos:", error);
         setClanWars([]);
         return;
       }
@@ -106,10 +139,29 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
     });
   }, []);
 
-  const destacado = clanWars ? elegirDestacado(clanWars, ahora) : null;
+  const proximos = useMemo(
+    () => (clanWars ? elegirProximos(clanWars, ahora, EVENTOS_DESTACADOS) : []),
+    [clanWars, ahora]
+  );
 
   return (
     <div className="home-portada">
+      <div className="home-particulas" aria-hidden="true">
+        {PARTICULAS.map((p, i) => {
+          // CSSProperties no tipa variables CSS propias (--zigzag) --
+          // se castea, igual que cualquier otro estilo inline calculado.
+          const estilo = {
+            left: `${p.izquierda}%`,
+            width: `${p.tamano}px`,
+            height: `${p.tamano}px`,
+            animationDelay: `${p.retraso}s`,
+            animationDuration: `${p.duracion}s`,
+            "--zigzag": p.zigzag,
+          } as CSSProperties;
+
+          return <span key={i} className="home-particula" style={estilo} />;
+        })}
+      </div>
       <div className="home-portada-glow" aria-hidden="true" />
       <div className="home-portada-scanlines" aria-hidden="true" />
       <h1 className="home-portada-titulo">
@@ -117,73 +169,63 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
       </h1>
       <div className="home-portada-franja" />
 
-      {destacado && <EventoDestacado cw={destacado} ahora={ahora} />}
-
-      <button type="button" className="btn btn-primary btn-primary-lg home-portada-cta" onClick={onVerProximosEventos}>
-        Ver próximos eventos
-        <ArrowRight size={18} className="icon-inline" aria-hidden="true" />
-      </button>
-
-      {/* Corrección: vivía partido en dos lugares -- esta tarjeta (solo
-          PC) más una página aparte del carrusel con estilo viejo
-          (InstalarRemorApp.tsx, retirada). Ahora es una sola sección,
-          con las dos opciones (celular/PC) del mismo estilo moderno.
-          La de PC se sigue ocultando dentro de la propia app de
-          escritorio -- no tiene sentido ofrecer bajarla desde adentro.
-
-          Corrección: esta sección iba DESPUÉS de "Noticias destacadas"
-          (una lista de largo variable, hasta 3 ítems) -- cuando había
-          noticias, el bloque entero quedaba empujado fuera del área
-          visible de la página del carrusel, recortado por el scroll
-          propio de .carrusel-pagina. El link de descarga entonces
-          "no hacía nada" al clickear: ni siquiera llegaba a tocarlo, el
-          click caía en el contenedor de atrás. Ahora va ANTES que las
-          noticias, así su posición no depende de cuántas haya. */}
-      <div className="home-instalar-moderno">
-        <a href="/instalar-celular" target="_blank" rel="noopener noreferrer" className="home-instalar-moderno-card">
-          <span className="home-instalar-moderno-icono" aria-hidden="true">
-            <Smartphone size={26} />
-          </span>
-          <span className="home-instalar-moderno-texto">
-            <span className="home-instalar-moderno-titulo">Instalar en celular</span>
-            <span className="home-instalar-moderno-desc">Guía para Chrome y Brave en Android</span>
-          </span>
-        </a>
-
-        {!esEscritorio && (
-          <a href={URL_INSTALADOR_WINDOWS} className="home-instalar-moderno-card home-instalar-moderno-card-destacada">
-            <span className="home-instalar-moderno-icono" aria-hidden="true">
-              <Monitor size={26} />
-            </span>
-            <span className="home-instalar-moderno-texto">
-              <span className="home-instalar-moderno-titulo">
-                Llevate RemorApp a tu escritorio
-                <Download size={15} className="icon-inline" aria-hidden="true" />
-              </span>
-              <span className="home-instalar-moderno-desc">Sin barra del navegador, avisa solo de versiones nuevas</span>
-            </span>
-          </a>
-        )}
-      </div>
-
       {noticiasDestacadas.length > 0 && (
-        <div className="home-portada-noticias">
-          <p className="home-portada-noticias-titulo">Noticias destacadas</p>
-          <ul className="home-portada-noticias-lista">
+        <section className="home-seccion-ancha">
+          <p className="home-seccion-label">Noticias destacadas</p>
+          <div className="home-noticias-grid">
             {noticiasDestacadas.map((n) => (
-              <li key={n.id}>
-                <Link to="/news" className="home-portada-noticia-item">
-                  <span className="home-portada-noticia-fecha">{formatFecha(n.createdAt)}</span>
-                  <span className="home-portada-noticia-titulo-texto">{n.titulo}</span>
-                </Link>
-              </li>
+              <Link key={n.id} to="/news" className="home-noticia-card">
+                <span className="home-noticia-card-fecha">{formatFecha(n.createdAt)}</span>
+                <span className="home-noticia-card-titulo">{n.titulo}</span>
+              </Link>
             ))}
-          </ul>
-          <Link to="/news" className="btn-link home-portada-ver-todas">
-            Ver todas las noticias
-          </Link>
-        </div>
+          </div>
+        </section>
       )}
+
+      <section className="home-fila-principal">
+        <div className="home-descarga-col">
+          {/* Se oculta dentro de la propia app de escritorio -- no tiene
+              sentido ofrecer bajarla desde adentro (mismo criterio que
+              tenía esta sección antes del rediseño). */}
+          {!esEscritorio && (
+            <a href={URL_INSTALADOR_WINDOWS} className="home-descarga-card">
+              <span className="home-descarga-icono">
+                <IconoDescargaEscritorio />
+              </span>
+              <span className="home-descarga-texto">
+                <span className="home-descarga-titulo">Llevate RemorApp a tu escritorio</span>
+                <span className="home-descarga-desc">Sin barra del navegador, avisa solo de versiones nuevas</span>
+              </span>
+            </a>
+          )}
+
+          <a href="/instalar-celular" target="_blank" rel="noopener noreferrer" className="home-descarga-mobile-link">
+            <Smartphone size={15} className="icon-inline" aria-hidden="true" />
+            Instalar en celular (Chrome / Brave)
+          </a>
+        </div>
+
+        <div className="home-eventos-col">
+          <div className="home-seccion-label-row">
+            <p className="home-seccion-label">Próximos eventos</p>
+            <button type="button" className="home-ver-todos-btn" onClick={onVerProximosEventos}>
+              Ver todos
+              <ArrowRight size={14} className="icon-inline" aria-hidden="true" />
+            </button>
+          </div>
+
+          {proximos.length > 0 ? (
+            <div className="home-eventos-grid">
+              {proximos.map((cw) => (
+                <EventoMini key={cw.id} cw={cw} ahora={ahora} />
+              ))}
+            </div>
+          ) : (
+            <p className="detail-empty">Todavía no hay ningún evento programado.</p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
