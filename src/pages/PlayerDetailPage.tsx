@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight, Users } from "lucide-react";
+import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
@@ -677,20 +677,18 @@ export default function PlayerDetailPage() {
             <div className="player-tab-col-side">
               {equipoActual && (
                 <Link to={`/equipos/${equipoActual.tag}`} className="player-tab-preview-card">
-                  <span className="player-tab-preview-card-clan-foto-wrap">
-                    {equipoActual.logoUrl ? (
-                      <img src={equipoActual.logoUrl} alt="" className="player-tab-preview-card-clan-foto" />
-                    ) : (
-                      <span className="player-tab-preview-card-clan-foto player-tab-preview-card-clan-foto-vacia">
-                        <Users size={22} aria-hidden="true" />
-                      </span>
-                    )}
+                  {equipoActual.logoUrl ? (
+                    <img src={equipoActual.logoUrl} alt="" className="clan-name-logo" />
+                  ) : (
+                    <span className="clan-name-logo clan-name-logo-placeholder">
+                      {equipoActual.tag.charAt(0)}
+                    </span>
+                  )}
+                  <span className="player-tab-preview-card-info">
+                    <span className="player-tab-preview-card-header">Clan</span>
+                    <span className="player-tab-preview-card-desc">{equipoActual.name}</span>
                   </span>
-                  <span className="player-tab-preview-card-header">
-                    Clan
-                    <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
-                  </span>
-                  <span className="player-tab-preview-card-desc">{equipoActual.name}</span>
+                  <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
                 </Link>
               )}
             </div>

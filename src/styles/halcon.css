@@ -1952,6 +1952,37 @@ main {
   overflow-wrap: anywhere;
 }
 
+/* Logo del clan al lado de su nombre -- mismo tamaño en la ficha del
+   equipo (.team-detail-title-row) y en la tarjeta "Clan" del perfil
+   del jugador (.player-tab-preview-card), para que las dos se vean
+   consistentes entre sí. Distinto del logo grande que ya se superpone
+   al banner (.team-detail-logo-overlap, 7rem): este es chico, a
+   propósito, para ir en línea junto al texto. */
+.team-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.clan-name-logo {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.4rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.clan-name-logo-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(var(--h-accent-rgb), 0.1);
+  color: var(--color-accent-soft);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
 /* Botón "Enviar solicitud de amistad" en la ficha de OTRO equipo --
    empujado al extremo derecho del header (nombre/tag a la izquierda),
    se apila arriba del nombre en pantallas angostas. */
@@ -2287,51 +2318,24 @@ html.es-escritorio .player-detail-vista-escritorio {
   gap: 0.75rem;
 }
 
-/* Tarjetas de vista previa de Stream/Logros -- mismo patrón visual que
-   .team-panel-menu-item (título + descripción + click), con un
-   chevron a la derecha del título indicando que llevan a su pestaña. */
+/* Tarjeta de vista previa del clan -- mismo patrón visual que
+   .team-panel-menu-item (título + descripción + click), con el logo
+   al lado del nombre (en vez de una foto grande arriba, que quedaba
+   despareja con el resto de la ficha) y el chevron a la derecha de
+   todo. */
 .player-tab-preview-card {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.35rem;
+  align-items: center;
+  gap: 0.75rem;
   width: 100%;
   text-align: left;
   text-decoration: none;
   border-radius: var(--radius-md);
   border: 1px solid rgba(var(--h-accent-rgb), 0.35);
   background: var(--color-card);
-  padding: 1rem 1.1rem;
+  padding: 0.85rem 1.1rem;
   cursor: pointer;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-/* Foto del clan (a pedido del usuario -- antes un ícono de 16px
-   perdido en el título): un espacio 4:3 de verdad, arriba de todo en
-   la tarjeta, con el logo del equipo si tiene o un ícono genérico
-   centrado si no. */
-.player-tab-preview-card-clan-foto-wrap {
-  display: block;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  margin-bottom: 0.75rem;
-  border-radius: 0.35rem;
-  overflow: hidden;
-}
-
-.player-tab-preview-card-clan-foto {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.player-tab-preview-card-clan-foto-vacia {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-panel);
-  color: var(--color-text-muted);
 }
 
 .player-tab-preview-card:hover {
@@ -2339,11 +2343,14 @@ html.es-escritorio .player-detail-vista-escritorio {
   box-shadow: var(--shadow-accent);
 }
 
-.player-tab-preview-card-header {
+.player-tab-preview-card-info {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  width: 100%;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.player-tab-preview-card-header {
   font-family: var(--font-display);
   font-weight: 700;
   color: var(--color-text);
@@ -2352,6 +2359,7 @@ html.es-escritorio .player-detail-vista-escritorio {
 .player-tab-preview-card-chevron {
   margin-left: auto;
   color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
 .player-tab-preview-card-desc {

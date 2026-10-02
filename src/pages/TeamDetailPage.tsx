@@ -3432,7 +3432,14 @@ export default function TeamDetailPage() {
 
       <div className="team-detail-header">
         <div>
-          <h1 className="section-title">{equipo.name}</h1>
+          <div className="team-detail-title-row">
+            {equipo.logo_url ? (
+              <img src={equipo.logo_url} alt="" className="clan-name-logo" />
+            ) : (
+              <span className="clan-name-logo clan-name-logo-placeholder">{equipo.tag.charAt(0)}</span>
+            )}
+            <h1 className="section-title">{equipo.name}</h1>
+          </div>
           <p className="tournament-card-meta">
             [{equipo.tag}] · {miembros.length} {miembros.length === 1 ? "miembro" : "miembros"}
           </p>
