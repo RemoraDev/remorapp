@@ -9171,12 +9171,18 @@ html.es-escritorio .escritorio-chat-fijo {
    la izquierda y hasta 3 próximos eventos a la derecha, también en
    fila. overflow:hidden achica el fondo de partículas (ver
    .home-particulas) a los bordes de esta misma sección. */
+/* min-height + justify-content: center -- corrección: sin esto el
+   contenido quedaba pegado arriba, con un hueco negro enorme abajo en
+   pantallas altas/anchas (se sentía "cortado", como si faltara algo).
+   Centrado vertical dentro de toda la página del carrusel. */
 .home-portada {
   position: relative;
   overflow: hidden;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   text-align: center;
   padding: clamp(1.25rem, 4vh, 2.5rem) 1.25rem 1.5rem;
   gap: 1.1rem;
