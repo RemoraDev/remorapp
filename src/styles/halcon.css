@@ -2087,6 +2087,54 @@ html.es-escritorio .player-detail-vista-escritorio {
   border: 1px solid #000;
 }
 
+/* Panel de control en escritorio: desplegable anclado al botón (a
+   pedido del usuario, no le gustaba que el menú apareciera abajo de
+   todo y hubiera que hacer scroll para verlo) -- mismo patrón que
+   .header-user-menu/.header-user-click-catcher en Header.tsx.
+   .player-hero-panel-btn ya es position:absolute, así que alcanza
+   como ancla sin agregarle nada más. La versión en línea de
+   mobile/PWA (.player-detail-panel-inline) se oculta acá para no
+   duplicar el menú. */
+.player-panel-dropdown-catcher {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+  background: transparent;
+  pointer-events: none;
+}
+
+.player-panel-dropdown-catcher.is-open {
+  pointer-events: auto;
+}
+
+.player-panel-dropdown {
+  position: absolute;
+  top: calc(100% + 0.6rem);
+  right: 0;
+  z-index: 50;
+  width: 20rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.3);
+  background: var(--h-surface-2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.5rem) scale(0.97);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.player-panel-dropdown.is-open {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0) scale(1);
+}
+
+html.es-escritorio .player-detail-panel-inline {
+  display: none;
+}
+
 .player-hero-identity {
   margin-bottom: 1.5rem;
   /* Corrección: nick+#id sin espacio en el medio (es una sola
