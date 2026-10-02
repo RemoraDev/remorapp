@@ -2050,7 +2050,14 @@ main {
    Logros a la derecha), "Stream" y "Logros" muestran ese mismo
    contenido expandido a toda la columna. Solo en escritorio
    (html.es-escritorio) -- la vista móvil de arriba no cambia. */
+/* position:relative -- ancla el fondo de partículas (ver
+   FondoParticulas.tsx) a esta sección, mismo efecto que ya tiene la
+   portada de Inicio (a pedido del usuario). Sin overflow:hidden acá
+   a propósito -- .home-particulas ya se recorta sola (tiene su propio
+   overflow:hidden) y esto evita cortar el desplegable del Panel de
+   control, que se extiende fuera del banner. */
 .player-detail-vista-escritorio {
+  position: relative;
   display: none;
 }
 
@@ -9171,10 +9178,13 @@ html.es-escritorio .escritorio-chat-fijo {
    la izquierda y hasta 3 próximos eventos a la derecha, también en
    fila. overflow:hidden achica el fondo de partículas (ver
    .home-particulas) a los bordes de esta misma sección. */
-/* min-height + justify-content: center -- corrección: sin esto el
-   contenido quedaba pegado arriba, con un hueco negro enorme abajo en
-   pantallas altas/anchas (se sentía "cortado", como si faltara algo).
-   Centrado vertical dentro de toda la página del carrusel. */
+/* min-height -- corrección: sin esto el contenido quedaba pegado
+   arriba, con un hueco negro enorme abajo en pantallas altas/anchas
+   (se sentía "cortado", como si faltara algo). Ya no se centra todo
+   como un solo bloque (eso amontonaba el título y la fila principal
+   en el medio, demasiado juntos) -- el título queda arriba (flujo
+   normal) y .home-fila-principal se empuja hacia abajo con
+   margin-top: auto, repartiendo mejor el espacio de punta a punta. */
 .home-portada {
   position: relative;
   overflow: hidden;
@@ -9182,9 +9192,17 @@ html.es-escritorio .escritorio-chat-fijo {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
   text-align: center;
-  padding: clamp(1.25rem, 4vh, 2.5rem) 1.25rem 1.5rem;
+  padding: clamp(1.5rem, 6vh, 3.5rem) 1.25rem 2rem;
+  gap: 1.1rem;
+}
+
+.home-portada-titulo-wrap {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: 1.1rem;
 }
 
@@ -9391,11 +9409,16 @@ html.es-escritorio .escritorio-chat-fijo {
 /* Fila principal: descarga de escritorio a la izquierda, próximos
    eventos a la derecha -- en pantallas angostas se apilan (descarga
    arriba, eventos abajo), ver el media query más abajo. */
+/* margin-top: auto -- empuja esta fila hacia abajo dentro de
+   .home-portada (que ya no centra todo como un solo bloque, ver más
+   arriba), para que el título quede arriba y esto quede "más
+   abajito", a pedido del usuario. */
 .home-fila-principal {
   position: relative;
   z-index: 1;
   width: 100%;
   max-width: 68rem;
+  margin-top: auto;
   display: flex;
   gap: 1.25rem;
   align-items: stretch;
@@ -9408,7 +9431,13 @@ html.es-escritorio .escritorio-chat-fijo {
   gap: 0.6rem;
 }
 
+/* position: relative -- ancla tanto el glow (::home-descarga-card-glow)
+   como el marco "corner bracket" que comparte con la foto de
+   presentación y la tarjeta del clan (mismo lenguaje visual en toda la
+   app, a pedido del usuario). */
 .home-descarga-card {
+  position: relative;
+  overflow: hidden;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -9430,13 +9459,22 @@ html.es-escritorio .escritorio-chat-fijo {
   transform: translateY(-2px);
 }
 
+.home-descarga-card-glow {
+  position: absolute;
+  inset: -40% -10% auto -10%;
+  height: 140%;
+  background: radial-gradient(ellipse at top, rgba(var(--h-accent-rgb), 0.18), transparent 70%);
+  pointer-events: none;
+}
+
 .home-descarga-icono {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 3.5rem;
-  height: 3.5rem;
+  width: 4.5rem;
+  height: 4.5rem;
   border-radius: var(--radius-md);
   background: rgba(var(--h-accent-rgb), 0.14);
   color: var(--color-accent);

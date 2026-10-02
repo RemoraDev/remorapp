@@ -9,6 +9,7 @@ import { useAuth } from "../context/AuthContext";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import Carrusel from "../components/Carrusel";
+import FondoParticulas from "../components/FondoParticulas";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import TitulosActivosList from "../components/TitulosActivosList";
 import { COUNTRY_OPTIONS } from "../types/profile";
@@ -563,6 +564,7 @@ export default function PlayerDetailPage() {
           mismo contenido expandido. Reemplaza al modelo de la vista
           móvil de arriba -- nunca se muestran los dos a la vez. */}
       <div className="player-detail-vista-escritorio">
+        <FondoParticulas />
         <div className="player-hero-banner-wrap">
           {perfil.bannerUrl ? (
             <img src={perfil.bannerUrl} alt="" className="player-detail-banner player-hero-banner" />
@@ -707,6 +709,14 @@ export default function PlayerDetailPage() {
 
             <div className="player-tab-col-main">
               <div className="detail-card player-tab-bio-card">
+                {/* Mismo marco "corner bracket" que la foto de
+                    presentación y la tarjeta del clan -- a pedido del
+                    usuario, para que las tres cajas de "Perfil" se vean
+                    consistentes entre sí. */}
+                <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
                 <h3 className="detail-subtitle">Sobre mí</h3>
 
                 {editandoBio ? (

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { isTauri } from "@tauri-apps/api/core";
 import { ArrowRight, Smartphone } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { formatFecha } from "../lib/formatters";
 import { formatearCuentaRegresiva, formatoHora, LogoEquipo, useAhora, yaComenzo } from "./ProximasClanWars";
+import FondoParticulas from "./FondoParticulas";
 import type { NoticiaPreview } from "./NewsSection";
 import type { ClanWarProxima } from "../types/clanWars";
 
@@ -17,18 +17,6 @@ interface Props {
 // Mismo link estable de GitHub Releases que antes usaba
 // InstalarRemorApp.tsx (retirado -- ver el comentario más abajo).
 const URL_INSTALADOR_WINDOWS = "https://github.com/RemoraDev/remorapp/releases/latest/download/RemorApp-Setup.exe";
-
-// Cuántas partículas de fondo -- a mano, no por Math.random() en cada
-// render (se recalcularía solo, el fondo "saltaría" en cada
-// re-render). Cada una entra con un retraso/duración/posición propios,
-// para que no se vean todas sincronizadas en fila.
-const PARTICULAS = Array.from({ length: 18 }, (_, i) => ({
-  izquierda: (i * 37 + 5) % 100,
-  retraso: (i % 9) * 1.1,
-  duracion: 9 + (i % 5) * 1.8,
-  tamano: 3 + (i % 3),
-  zigzag: i % 2 === 0 ? 1 : -1,
-}));
 
 // Cuántos eventos próximos entran en la fila -- mismo criterio que
 // "Noticias destacadas" (hasta 3), ver elegirProximos() más abajo.
@@ -87,25 +75,42 @@ function EventoMini({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
 }
 
 // SVG propio (no un ícono de lucide) para la tarjeta de descarga de
-// escritorio -- a pedido del usuario, algo que "combine con la web":
-// mismo trazo fino/geométrico que el resto del set de íconos, con el
-// signo de bajada adentro de la pantalla en el color de acento.
+// escritorio -- a pedido del usuario, que se note que tiene tanto
+// cuidado como el resto de la portada: pantalla con degradado del
+// acento, flecha de bajada con glow, y el mismo marco "corner bracket"
+// que ya se usa en la foto de presentación/tarjeta del clan del
+// perfil, para que se sienta parte del mismo lenguaje visual.
 function IconoDescargaEscritorio() {
   return (
-    <svg
-      width="40"
-      height="40"
-      viewBox="0 0 40 40"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <rect x="4" y="5" width="32" height="21" rx="2" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M14 31h12M20 26v5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path
-        d="M20 10v9m0 0 3.5-3.5M20 19l-3.5-3.5"
+    <svg width="56" height="56" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <defs>
+        <linearGradient id="descarga-pantalla-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" style={{ stopColor: "var(--color-accent)", stopOpacity: 0.4 }} />
+          <stop offset="100%" style={{ stopColor: "var(--color-accent)", stopOpacity: 0.05 }} />
+        </linearGradient>
+      </defs>
+
+      {/* Esquinas decorativas, mismo lenguaje que .foto-presentacion-corner */}
+      <path d="M2 10V3h7" stroke="var(--color-accent)" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M47 3h7v7" stroke="var(--color-accent)" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M2 46v7h7" stroke="var(--color-accent)" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="M47 53h7v-7" stroke="var(--color-accent)" strokeWidth="1.6" strokeLinecap="round" />
+
+      <rect
+        x="9"
+        y="12"
+        width="38"
+        height="25"
+        rx="2.5"
+        fill="url(#descarga-pantalla-grad)"
         stroke="currentColor"
-        strokeWidth="1.6"
+        strokeWidth="1.8"
+      />
+      <path d="M21 44h14M28 37v7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path
+        d="M28 18v12m0 0 5-5m-5 5-5-5"
+        stroke="var(--color-accent)"
+        strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
@@ -146,28 +151,15 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
 
   return (
     <div className="home-portada">
-      <div className="home-particulas" aria-hidden="true">
-        {PARTICULAS.map((p, i) => {
-          // CSSProperties no tipa variables CSS propias (--zigzag) --
-          // se castea, igual que cualquier otro estilo inline calculado.
-          const estilo = {
-            left: `${p.izquierda}%`,
-            width: `${p.tamano}px`,
-            height: `${p.tamano}px`,
-            animationDelay: `${p.retraso}s`,
-            animationDuration: `${p.duracion}s`,
-            "--zigzag": p.zigzag,
-          } as CSSProperties;
-
-          return <span key={i} className="home-particula" style={estilo} />;
-        })}
-      </div>
+      <FondoParticulas />
       <div className="home-portada-glow" aria-hidden="true" />
       <div className="home-portada-scanlines" aria-hidden="true" />
-      <h1 className="home-portada-titulo">
-        Bienvenidos a RemorApp<span className="home-portada-titulo-accent"> Gaming</span>
-      </h1>
-      <div className="home-portada-franja" />
+      <div className="home-portada-titulo-wrap">
+        <h1 className="home-portada-titulo">
+          Bienvenidos a RemorApp<span className="home-portada-titulo-accent"> Gaming</span>
+        </h1>
+        <div className="home-portada-franja" />
+      </div>
 
       {noticiasDestacadas.length > 0 && (
         <section className="home-seccion-ancha">
@@ -190,6 +182,11 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
               tenía esta sección antes del rediseño). */}
           {!esEscritorio && (
             <a href={URL_INSTALADOR_WINDOWS} className="home-descarga-card">
+              <div className="home-descarga-card-glow" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
               <span className="home-descarga-icono">
                 <IconoDescargaEscritorio />
               </span>
