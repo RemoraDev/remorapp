@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { CalendarCheck } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
 import TournamentListCard from "../components/TournamentListCard";
 import type { EventoPublico } from "../types/tournaments";
 
@@ -10,6 +12,7 @@ import type { EventoPublico } from "../types/tournaments";
 // "Crear Race War"; ahora Race War es una opción más dentro de "Crear
 // evento" (CreateTournamentPage.tsx), igual que Clan War Amistosa.
 export default function TournamentsPage() {
+  const { user } = useAuth();
   const [eventos, setEventos] = useState<EventoPublico[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,9 +33,20 @@ export default function TournamentsPage() {
     <section className="section section-page">
       <div className="section-head">
         <h1 className="section-title">Eventos</h1>
-        <Link to="/tournaments/create" className="btn btn-primary">
-          Crear evento
-        </Link>
+        <div className="section-head-acciones">
+          {/* Reorganización: antes vivía en el abanico central como
+              "Mis torneos" -- se elimina de ahí y pasa a ser un botón
+              acá mismo, al lado de "Crear evento". */}
+          {user && (
+            <Link to="/tournaments/inscritos" className="btn btn-ghost">
+              <CalendarCheck size={16} className="icon-inline" aria-hidden="true" />
+              Mis eventos inscritos
+            </Link>
+          )}
+          <Link to="/tournaments/create" className="btn btn-primary">
+            Crear evento
+          </Link>
+        </div>
       </div>
 
       <p className="tournament-card-meta">

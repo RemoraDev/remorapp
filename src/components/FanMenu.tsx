@@ -28,14 +28,19 @@ interface FanItem {
 // -- no existía ningún botón de check-in en el abanico antes de esto.
 // "Torneos" se sumó acá al reordenar la barra inferior (Torneos salió
 // de ahí, Voice ocupó ese lugar) -- mismo destino de siempre, solo
-// cambió de menú. "Torneos inscritos" pasó a llamarse "Mis torneos"
-// (mismo destino). "Chat" vivió acá brevemente (migración 105) y se
+// cambió de menú. "Chat" vivió acá brevemente (migración 105) y se
 // mudó a un ícono fijo en la barra inferior (migración 109, en el
 // lugar que tenía "Inicio") -- ver BottomNav.tsx.
+//
+// Reorganización (a pedido del usuario): "Mis torneos" se elimina de
+// acá -- pasa a vivir como botón "Mis eventos inscritos" dentro de la
+// propia página de Eventos (ver TournamentsPage.tsx). "Mi equipo" se
+// cambia de lugar con "Equipos": "Mi equipo" (ahora "Mi Clan") pasa a
+// la barra inferior fija (ver BottomNav.tsx), y "Equipos" (ahora
+// "Clanes", el buscador general, no el propio) entra acá en su lugar.
 const FAN_ITEMS: FanItem[] = [
   { key: "torneos", label: "Eventos", requiresAuth: false },
-  { key: "torneos-inscritos", label: "Mis torneos", requiresAuth: true },
-  { key: "mi-equipo", label: "Mi equipo", requiresAuth: true },
+  { key: "clanes", label: "Clanes", requiresAuth: false },
   { key: "checkin", label: "Check-in", requiresAuth: true },
   { key: "ayuda", label: "Ayuda", requiresAuth: false },
 ];
@@ -70,20 +75,14 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
       return;
     }
 
-    if (item.key === "torneos-inscritos") {
-      navigate("/tournaments/inscritos");
-      onClose();
-      return;
-    }
-
     if (item.key === "ayuda") {
       navigate("/ayuda");
       onClose();
       return;
     }
 
-    if (item.key === "mi-equipo") {
-      navigate(miEquipo ? `/equipos/${miEquipo.teamTag}` : "/equipos");
+    if (item.key === "clanes") {
+      navigate("/equipos");
       onClose();
       return;
     }

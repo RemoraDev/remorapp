@@ -164,7 +164,7 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
         )}
 
         {equipos.length > 0 && (
-          <Command.Group heading="Equipos">
+          <Command.Group heading="Clanes">
             {equipos.map((e) => (
               <Command.Item key={e.id} value={`equipo-${e.id}`} onSelect={() => irA(`/equipos/${e.tag}`)}>
                 {e.logo_url ? (

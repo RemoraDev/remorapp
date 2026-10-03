@@ -13,10 +13,13 @@ const RUTA_POR_TIPO: Record<EventoPublico["tipo"], (id: string) => string> = {
   clan_war_amistosa: (id) => `/clan-war/${id}`,
 };
 
+// Migración 147: Race War y Clan War Amistosa se presentan como
+// "MiniEvento" en la tarjeta pública -- a pedido del usuario, para
+// distinguirlos de un torneo por ligas de un vistazo.
 const ETIQUETA_POR_TIPO: Record<EventoPublico["tipo"], string> = {
   torneo: "Torneo por ligas",
-  race_war: "Race War",
-  clan_war_amistosa: "Clan War Amistosa",
+  race_war: "MiniEvento: Race War",
+  clan_war_amistosa: "MiniEvento: Clan War Amistosa",
 };
 
 // Tarjeta para el listado público de eventos (migración 109: torneo

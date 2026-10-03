@@ -18,9 +18,9 @@ interface Props {
 // InstalarRemorApp.tsx (retirado -- ver el comentario más abajo).
 const URL_INSTALADOR_WINDOWS = "https://github.com/RemoraDev/remorapp/releases/latest/download/RemorApp-Setup.exe";
 
-// Cuántos eventos próximos entran en la fila -- mismo criterio que
-// "Noticias destacadas" (hasta 3), ver elegirProximos() más abajo.
-const EVENTOS_DESTACADOS = 3;
+// Cuántos eventos próximos entran en la fila -- hasta 5 (a pedido del
+// usuario, antes 3), ver elegirProximos() más abajo.
+const EVENTOS_DESTACADOS = 5;
 
 // Evento(s) destacado(s): los "en vivo" primero (sin importar hora),
 // el resto ordenado por fecha_hora_cet -- mismo criterio de agrupado

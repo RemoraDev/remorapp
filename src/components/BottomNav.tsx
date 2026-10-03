@@ -1,9 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { MessageSquare, Users, BarChart3, User, Home } from "lucide-react";
+import { MessageSquare, Shield, BarChart3, User, Home } from "lucide-react";
 import FanMenu from "./FanMenu";
 import { useAuth } from "../context/AuthContext";
 import useChatFijoEscritorio from "../hooks/useChatFijoEscritorio";
+import { obtenerEquipoDelUsuario } from "../lib/teams";
+import type { EquipoDelUsuario } from "../lib/teams";
 
 // Migración 098: los 4 íconos de la barra inferior eran SVG a mano,
 // uno por uno -- se reemplazan por lucide-react (mismo trazo de 2px,
@@ -18,6 +20,20 @@ export default function BottomNav() {
   // primero, y sin sesión manda a /login, en vez de a una ruta de
   // jugador que no podría resolver.
   const miPerfilHref = !user ? "/login" : profile?.nick ? `/jugador/${profile.nick}/${profile.unique_id}` : "/perfil";
+  // Reorganización: "Mi Clan" (antes "Mi equipo") se cambia de lugar
+  // con "Clanes" -- pasa a la barra inferior fija, directo al clan
+  // propio (o al buscador general, si todavía no pertenece a
+  // ninguno). "Clanes" (el buscador general) entra en su lugar al
+  // abanico central (ver FanMenu.tsx).
+  const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
+  useEffect(() => {
+    if (!user) {
+      setMiEquipo(null);
+      return;
+    }
+    obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
+  }, [user]);
+  const miClanHref = !user ? "/login" : miEquipo?.teamTag ? `/equipos/${miEquipo.teamTag}` : "/equipos";
   const [fanOpen, setFanOpen] = useState(false);
   // Dispara la animación "poder" (ver .animar-poder en halcon.css) cada
   // vez que se toca el botón central; se saca sola al terminar, vía
@@ -57,15 +73,9 @@ export default function BottomNav() {
           </NavLink>
         )}
 
-        {/* "Equipos" reemplaza a Noticias en la barra inferior: lleva
-            SIEMPRE al buscador general de equipos (/equipos), nunca
-            directo al equipo propio -- eso sigue siendo "Mi equipo" en
-            el abanico central (ver FanMenu.tsx), un destino distinto a
-            propósito. Noticias sigue viva dentro de Inicio, ahora sin
-            ícono propio en la barra. */}
-        <NavLink to="/equipos" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
-          <Users />
-          <span>Equipos</span>
+        <NavLink to={miClanHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <Shield />
+          <span>Mi Clan</span>
         </NavLink>
 
         <div className="bottom-nav-center">

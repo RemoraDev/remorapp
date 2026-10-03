@@ -25,6 +25,8 @@ import {
   Flag,
   Trophy,
   GripVertical,
+  Info,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
@@ -543,7 +545,10 @@ export default function TeamDetailPage() {
   // "null" que mostraba el menú y ocultaba el contenido) a pestañas
   // horizontales siempre visibles, "jugadores" por defecto -- mismo
   // criterio visual que las pestañas del chat de líderes.
-  const [seccionPublica, setSeccionPublica] = useState<"jugadores" | "lideres" | "logros">("jugadores");
+  // Migración 147: "general" es nueva -- cuadro con la descripción del
+  // clan, antes mostrada siempre debajo del banner (ahora vive acá,
+  // como primera pestaña).
+  const [seccionPublica, setSeccionPublica] = useState<"general" | "jugadores" | "lideres" | "logros">("general");
 
   // Acceso rápido desde "Check-in" en el abanico: ?panel=eventos abre
   // el Panel de control directo en Gestor de eventos, para no tener
@@ -3425,11 +3430,6 @@ export default function TeamDetailPage() {
         </div>
       </div>
 
-      {/* La descripción va inmediatamente debajo del banner, antes de
-          cualquier otra cosa -- a propósito, no es un detalle menor
-          en la página. */}
-      {equipo.description && <p className="team-detail-description">{equipo.description}</p>}
-
       <div className="team-detail-header">
         <div>
           <div className="team-detail-title-row">
@@ -3579,6 +3579,14 @@ export default function TeamDetailPage() {
       <div className="team-info-tabs">
         <button
           type="button"
+          className={`team-info-tab ${seccionPublica === "general" ? "is-active" : ""}`}
+          onClick={() => setSeccionPublica("general")}
+        >
+          <Info className="icon-inline" />
+          General
+        </button>
+        <button
+          type="button"
           className={`team-info-tab ${seccionPublica === "jugadores" ? "is-active" : ""}`}
           onClick={() => setSeccionPublica("jugadores")}
         >
@@ -3602,6 +3610,24 @@ export default function TeamDetailPage() {
           Historial
         </button>
       </div>
+
+      {seccionPublica === "general" && (
+        <div className="detail-card team-general-card">
+          <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+          <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+          <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+          <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+          <h3 className="detail-subtitle">
+            <Info size={16} className="icon-inline" aria-hidden="true" />
+            Información del clan
+          </h3>
+          {equipo.description ? (
+            <p className="team-detail-description">{equipo.description}</p>
+          ) : (
+            <p className="detail-empty">Todavía no escribió una descripción del clan.</p>
+          )}
+        </div>
+      )}
 
       {seccionPublica === "jugadores" && (
         <div className="detail-participant-list">
@@ -3731,8 +3757,25 @@ export default function TeamDetailPage() {
           desplegable en sí. */}
       {puedeGestionar && (
         <div className="team-control-panel-wrap">
+          {/* Migración 147: pasa a ser un modal centrado (antes quedaba
+              en línea, empujando el resto de la ficha hacia abajo) --
+              mismo .modal-backdrop de siempre, con un modificador
+              propio (team-leader-panel-propio) para no tocar
+              .team-leader-panel en los otros lugares que lo reusan
+              (InvestigacionJugadorPanel.tsx, el panel de Mi perfil en
+              mobile/PWA). stopPropagation para que clickear ADENTRO
+              del panel no dispare el cierre del backdrop. */}
           {panelAbierto && (
-            <div className="team-leader-panel">
+            <div className="modal-backdrop" onClick={() => setPanelAbierto(false)}>
+              <div className="team-leader-panel team-leader-panel-propio" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="modal-close"
+                onClick={() => setPanelAbierto(false)}
+                aria-label="Cerrar panel de control"
+              >
+                <X size={18} />
+              </button>
               {seccionPanel === null ? (
                 <>
                   {/* Corrección: el código de invitación vivía en la
@@ -3745,7 +3788,7 @@ export default function TeamDetailPage() {
                       {codigoCopiado ? "¡Copiado!" : "Copiar código"}
                     </button>
                   </div>
-                  <div className="team-panel-menu">
+                  <div className="team-panel-menu team-panel-menu-2col">
                   {/* Configuración (logo/banner/tema/eliminar equipo) y
                       Títulos de clan quedan fuera de lo delegado a un
                       capitán -- solo el dueño las ve. */}
@@ -5900,6 +5943,7 @@ export default function TeamDetailPage() {
               )}
                 </div>
               )}
+            </div>
             </div>
           )}
         </div>

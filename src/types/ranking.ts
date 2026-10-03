@@ -37,3 +37,21 @@ export interface RankingJugador {
   team_logo_url: string | null;
   victorias: number;
 }
+
+// Migración 148: "Mini eventos" -- pestaña privada de Ranking, solo
+// para quien pertenece a un clan, con los Race War y Clan War
+// Amistosa de SU clan (ver mis_minieventos_clan()/
+// ranking_minieventos_clan() en la base).
+export interface MiniEvento {
+  tipo: "race_war" | "clan_war_amistosa";
+  id: string;
+  titulo: string;
+  fecha: string;
+  rival_nombre: string | null;
+  resultado: "Ganada" | "Perdida" | null;
+}
+
+export interface RankingMinievento {
+  jugador_nombre: string;
+  puntos: number;
+}

@@ -816,6 +816,13 @@ main {
   margin-bottom: 1rem;
 }
 
+.section-head-acciones {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
 /* Migración 109: distingue de un vistazo el tipo de evento en la
    tarjeta (torneo por ligas / Race War / Clan War Amistosa) --
    colores discretos, sin competir con los badges de formato/modo que
@@ -1749,36 +1756,50 @@ main {
   border: 1px solid var(--color-border);
 }
 
-.team-join-box {
-  margin: 1.5rem 0;
-  padding: 1rem 1.25rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-panel);
-}
-
-.team-join-row {
-  display: flex;
-  gap: 0.6rem;
-}
-
-.team-join-row .form-input {
-  flex: 1;
-}
-
-.team-search-bar {
+/* Migración 147: un solo buscador compacto reemplaza la caja de
+   código de invitación + la barra de búsqueda que vivían separadas
+   (la primera ocupaba espacio fijo aunque nadie la usara). Una sola
+   fila moderna: lupa + input que also detecta un código de 6
+   caracteres, el filtro de servidor, y el botón de unirse que
+   aparece solo cuando hace falta. */
+.team-search-moderna {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.6rem;
   margin-bottom: 1.5rem;
 }
 
-.team-search-bar .form-input {
+.team-search-moderna-input {
   flex: 1;
-  min-width: 12rem;
+  min-width: 14rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.85rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  background: var(--color-panel);
+  color: var(--color-text-muted);
+  transition: border-color 0.15s ease;
 }
 
-.team-search-bar .form-select {
+.team-search-moderna-input:focus-within {
+  border-color: var(--color-accent);
+}
+
+.team-search-moderna-input .form-input {
+  flex: 1;
+  border: none;
+  background: none;
+  padding: 0.65rem 0;
+}
+
+.team-search-moderna-input .form-input:focus {
+  box-shadow: none;
+}
+
+.team-search-moderna .form-select {
   width: auto;
 }
 
@@ -2020,6 +2041,13 @@ main {
   margin-top: 1rem;
   font-size: 0.9rem;
   color: var(--color-text-muted);
+}
+
+/* Pestaña "General" (migración 147) -- mismo marco "corner bracket"
+   que el resto de la app. Sin max-height/overflow a propósito: crece
+   con el contenido, nunca genera scroll propio en escritorio. */
+.team-general-card {
+  position: relative;
 }
 
 /* Utilidad estándar: oculta visualmente un elemento sin sacarlo del
@@ -2846,6 +2874,24 @@ html.es-escritorio .player-detail-panel-inline {
   border-radius: var(--radius-lg);
   border: 1px solid rgba(var(--h-accent-rgb), 0.3);
   background: var(--color-panel);
+}
+
+/* Panel de control de Mi Clan (migración 147): modal centrado, no en
+   línea -- antes empujaba el resto de la ficha hacia abajo. Modificador
+   propio (no se toca .team-leader-panel en sí, lo reusan
+   InvestigacionJugadorPanel.tsx y el panel de Mi perfil en
+   mobile/PWA). Borde más iluminado y con glow -- "más moderno", a
+   pedido del usuario -- y bastante más ancho que el genérico, porque
+   su menú es mucho más largo (ver .team-panel-menu-2col). */
+.team-leader-panel-propio {
+  position: relative;
+  width: min(90vw, 56rem);
+  max-height: 85vh;
+  overflow-y: auto;
+  margin-top: 0;
+  border: 1px solid var(--color-accent);
+  box-shadow: 0 0 44px rgba(var(--h-accent-rgb), 0.3), 0 24px 60px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(160deg, rgba(var(--h-accent-rgb), 0.08), transparent 55%), var(--color-panel);
 }
 
 .team-leader-invite {
@@ -5392,6 +5438,12 @@ html.es-escritorio .player-detail-panel-inline {
   font-weight: 600;
 }
 
+/* Corrección: nunca tuvo :hover -- a pedido del usuario, se enciende
+   igual que el resto de los botones interactivos de la app. */
+.bottom-nav-item:hover {
+  color: var(--color-accent);
+}
+
 .bottom-nav-item.active {
   color: var(--color-accent);
 }
@@ -5977,6 +6029,33 @@ html.es-escritorio .player-detail-panel-inline {
 .team-panel-menu-item:hover {
   border-color: var(--color-accent);
   box-shadow: var(--shadow-accent);
+}
+
+/* De a dos (migración 147) -- el menú del Panel de control de Mi Clan
+   es mucho más largo que el genérico (hasta 10 accesos), así que en
+   dos columnas entra entero sin scroll propio. Interior "más moderno"
+   a pedido del usuario: degradado sutil del acento + se levanta al
+   pasar el mouse, además del brillo de borde que ya tenía. */
+.team-panel-menu-2col {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+}
+
+.team-panel-menu-2col .team-panel-menu-item {
+  border-color: rgba(var(--h-accent-rgb), 0.35);
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.08), transparent 65%), var(--color-card);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.team-panel-menu-2col .team-panel-menu-item:hover {
+  transform: translateY(-2px);
+}
+
+@media (max-width: 640px) {
+  .team-panel-menu-2col {
+    grid-template-columns: 1fr;
+  }
 }
 
 .team-panel-menu-item-title {

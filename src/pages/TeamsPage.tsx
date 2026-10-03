@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Search } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
@@ -24,7 +25,6 @@ export default function TeamsPage() {
   const [busqueda, setBusqueda] = useState("");
   const [regionFiltro, setRegionFiltro] = useState<Sc2Region | "">("");
 
-  const [codigo, setCodigo] = useState("");
   const [uniendose, setUniendose] = useState(false);
   const [errorCodigo, setErrorCodigo] = useState<string | null>(null);
 
@@ -91,16 +91,26 @@ export default function TeamsPage() {
     cargarEquipos();
   }, [regionFiltro]);
 
-  const equiposFiltrados = equipos.filter((t) => {
-    if (!busqueda.trim()) return true;
-    const termino = busqueda.trim().toLowerCase();
-    const nickTag = t.ownerNick ? `${t.ownerNick}#${t.ownerUniqueId}`.toLowerCase() : "";
-    return (
-      t.name.toLowerCase().includes(termino) ||
-      t.tag.toLowerCase().includes(termino) ||
-      nickTag.includes(termino)
-    );
-  });
+  // Migración 147: orden por defecto -- cantidad de miembros
+  // descendente, a pedido del usuario (antes era por fecha de
+  // creación). El filtro de texto no cambia.
+  const equiposFiltrados = equipos
+    .filter((t) => {
+      if (!busqueda.trim()) return true;
+      const termino = busqueda.trim().toLowerCase();
+      const nickTag = t.ownerNick ? `${t.ownerNick}#${t.ownerUniqueId}`.toLowerCase() : "";
+      return (
+        t.name.toLowerCase().includes(termino) ||
+        t.tag.toLowerCase().includes(termino) ||
+        nickTag.includes(termino)
+      );
+    })
+    .sort((a, b) => b.memberCount - a.memberCount);
+
+  // Migración 147: el código de invitación ya no tiene su propia caja
+  // aparte -- se escribe en el mismo buscador de arriba (si mide 6
+  // caracteres, aparece el botón "Unirme con este código" al lado).
+  const pareceCodigo = busqueda.trim().length === 6;
 
   const handleUnirse = async (event: FormEvent) => {
     event.preventDefault();
@@ -114,7 +124,7 @@ export default function TeamsPage() {
     setUniendose(true);
     setErrorCodigo(null);
 
-    const codigoNormalizado = codigo.trim().toUpperCase();
+    const codigoNormalizado = busqueda.trim().toUpperCase();
     const { data: equipo } = await supabase
       .from("teams")
       .select("id, tag")
@@ -151,7 +161,7 @@ export default function TeamsPage() {
     <div className="equipos-page-fijo">
       <div className="equipos-page-header">
         <div className="section-head">
-          <h1 className="section-title">Equipos</h1>
+          <h1 className="section-title">Clanes</h1>
           {/* Bug corregido: este botón se mostraba siempre, incluso a
               quien ya pertenece a un equipo ("un jugador, un equipo") --
               equipoActual ya se calculaba más arriba (se usa en
@@ -161,7 +171,7 @@ export default function TeamsPage() {
               to={equipoActual.teamTag ? `/equipos/${equipoActual.teamTag}` : "/equipos"}
               className="btn btn-primary"
             >
-              Mi equipo
+              Mi Clan
             </Link>
           ) : (
             <Link to="/equipos/crear" className="btn btn-primary">
@@ -170,38 +180,24 @@ export default function TeamsPage() {
           )}
         </div>
 
-        <form className="team-join-box" onSubmit={handleUnirse}>
-          <div className="form-group">
-            <label className="form-label" htmlFor="team-codigo">
-              ¿Tienes un código de invitación?
-            </label>
-            <div className="team-join-row">
-              <input
-                id="team-codigo"
-                className="form-input"
-                type="text"
-                maxLength={6}
-                placeholder="Código de 6 caracteres"
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value.toUpperCase())}
-              />
-              <button type="submit" className="btn btn-ghost" disabled={uniendose || !user}>
-                {uniendose ? "Uniendo..." : "Unirme"}
-              </button>
-            </div>
+        {/* Migración 147: un solo buscador, moderno y compacto -- antes
+            había una caja aparte solo para el código de invitación
+            (ocupaba espacio permanente aunque nadie la usara). Ahora
+            escribir un código de 6 caracteres acá mismo hace aparecer
+            "Unirme con este código" al lado, sin dejar de filtrar la
+            lista por nombre/tag/dueño en simultáneo. */}
+        <form className="team-search-moderna" onSubmit={handleUnirse}>
+          <div className="team-search-moderna-input">
+            <Search size={16} className="icon-inline" aria-hidden="true" />
+            <input
+              className="form-input"
+              type="text"
+              maxLength={40}
+              placeholder="Buscar por nombre, tag, Nick#ID del dueño o código de invitación"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+            />
           </div>
-          {!user && <p className="tournament-card-meta">Inicia sesión para unirte con un código.</p>}
-          {errorCodigo && <div className="form-error">{errorCodigo}</div>}
-        </form>
-
-        <div className="team-search-bar">
-          <input
-            className="form-input"
-            type="text"
-            placeholder="Buscar por nombre, tag o Nick#ID del dueño"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
           <select
             className="form-select"
             value={regionFiltro}
@@ -214,7 +210,13 @@ export default function TeamsPage() {
               </option>
             ))}
           </select>
-        </div>
+          {pareceCodigo && user && !equipoActual && (
+            <button type="submit" className="btn btn-ghost" disabled={uniendose}>
+              {uniendose ? "Uniendo..." : "Unirme con este código"}
+            </button>
+          )}
+        </form>
+        {pareceCodigo && errorCodigo && <div className="form-error">{errorCodigo}</div>}
       </div>
 
       {/* Migración 110: título y controles fijos arriba (bloque de

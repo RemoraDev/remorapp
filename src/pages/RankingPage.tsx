@@ -1,13 +1,44 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Swords, Trophy } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-import type { DivisionLiga, Liga, RankingClan, RankingJugador } from "../types/ranking";
+import { useAuth } from "../context/AuthContext";
+import { obtenerEquipoDelUsuario } from "../lib/teams";
+import type { EquipoDelUsuario } from "../lib/teams";
+import type { DivisionLiga, Liga, MiniEvento, RankingClan, RankingJugador, RankingMinievento } from "../types/ranking";
 
 // null = "General" (suma las tres ligas, sin distinguir división) --
 // no es una fila de la tabla ligas, es un valor especial de la UI.
 type CategoriaLiga = Liga | null;
 
 export default function RankingPage() {
+  const { user } = useAuth();
+  // Migración 148: "Mini eventos" -- pestaña privada, solo visible
+  // para quien pertenece a un clan (oculta al público, a propósito).
+  const [seccion, setSeccion] = useState<"ranking" | "minieventos">("ranking");
+  const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
+  const [minieventos, setMinieventos] = useState<MiniEvento[]>([]);
+  const [rankingMinieventos, setRankingMinieventos] = useState<RankingMinievento[]>([]);
+  const [cargandoMinieventos, setCargandoMinieventos] = useState(false);
+
+  useEffect(() => {
+    if (user) obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
+  }, [user]);
+
+  useEffect(() => {
+    if (seccion !== "minieventos" || !miEquipo) return;
+    setCargandoMinieventos(true);
+    Promise.all([supabase.rpc("mis_minieventos_clan"), supabase.rpc("ranking_minieventos_clan")]).then(
+      ([eventosRes, rankingRes]) => {
+        if (eventosRes.error) console.error("Error cargando mis minieventos:", eventosRes.error);
+        if (rankingRes.error) console.error("Error cargando el ranking de minieventos:", rankingRes.error);
+        setMinieventos((eventosRes.data ?? []) as MiniEvento[]);
+        setRankingMinieventos((rankingRes.data ?? []) as RankingMinievento[]);
+        setCargandoMinieventos(false);
+      }
+    );
+  }, [seccion, miEquipo]);
+
   const [ligas, setLigas] = useState<Liga[]>([]);
   const [divisiones, setDivisiones] = useState<DivisionLiga[]>([]);
   const [categoria, setCategoria] = useState<CategoriaLiga>(null);
@@ -76,7 +107,115 @@ export default function RankingPage() {
 
   return (
     <section className="section section-page">
-      <h1 className="section-title">Ranking de clanes</h1>
+      <h1 className="section-title">Ranking</h1>
+
+      {/* Solo aparece si pertenezco a un clan -- oculta al público a
+          propósito, los mini eventos de un clan son privados: ni
+          siquiera otro clan los ve. */}
+      {miEquipo && (
+        <div className="team-info-tabs ranking-tabs">
+          <button
+            type="button"
+            className={`team-info-tab ${seccion === "ranking" ? "is-active" : ""}`}
+            onClick={() => setSeccion("ranking")}
+          >
+            <Trophy className="icon-inline" />
+            Ranking
+          </button>
+          <button
+            type="button"
+            className={`team-info-tab ${seccion === "minieventos" ? "is-active" : ""}`}
+            onClick={() => setSeccion("minieventos")}
+          >
+            <Swords className="icon-inline" />
+            Mini eventos
+          </button>
+        </div>
+      )}
+
+      {seccion === "minieventos" && miEquipo ? (
+        <>
+          <p className="tournament-card-meta">
+            Race War y Clan War Amistosa de <strong>{miEquipo.teamTag}</strong> -- privado, nadie
+            fuera de tu clan ve esta pestaña.
+          </p>
+
+          <h2 className="section-title ranking-jugadores-titulo">Tus mini eventos</h2>
+          {cargandoMinieventos ? (
+            <p className="tournament-card-meta">Cargando...</p>
+          ) : minieventos.length === 0 ? (
+            <p className="detail-empty">
+              Todavía no creaste ninguna Race War ni jugaste ninguna Clan War Amistosa.
+            </p>
+          ) : (
+            <div className="table-scroll">
+              <table className="group-standings-table ranking-table">
+                <thead>
+                  <tr>
+                    <th>Tipo</th>
+                    <th>Nombre</th>
+                    <th>Fecha</th>
+                    <th>Rival</th>
+                    <th>Resultado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {minieventos.map((ev) => (
+                    <tr key={ev.id}>
+                      <td>{ev.tipo === "race_war" ? "Race War" : "Clan War Amistosa"}</td>
+                      <td>{ev.titulo}</td>
+                      <td>{new Date(ev.fecha).toLocaleDateString("es")}</td>
+                      <td>{ev.rival_nombre ?? "--"}</td>
+                      <td>{ev.resultado ?? "--"}</td>
+                      <td>
+                        <Link
+                          to={ev.tipo === "race_war" ? `/guerra-razas/${ev.id}` : `/clan-war/${ev.id}`}
+                          className="btn btn-ghost"
+                        >
+                          Ver
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <h2 className="section-title ranking-jugadores-titulo">Ranking privado</h2>
+          <p className="tournament-card-meta">
+            Puntos acumulados de tus jugadores a través de todas las Race War de tu clan.
+          </p>
+          {cargandoMinieventos ? (
+            <p className="tournament-card-meta">Cargando...</p>
+          ) : rankingMinieventos.length === 0 ? (
+            <p className="detail-empty">Todavía no hay puntos registrados en ninguna Race War de tu clan.</p>
+          ) : (
+            <div className="table-scroll">
+              <table className="group-standings-table ranking-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Jugador</th>
+                    <th>Puntos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankingMinieventos.map((fila, indice) => (
+                    <tr key={fila.jugador_nombre}>
+                      <td>{indice + 1}</td>
+                      <td>{fila.jugador_nombre}</td>
+                      <td>{fila.puntos}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
       <p className="tournament-card-meta">
         Ordenado por cantidad de torneos ganados en cada liga y división. "General" suma las tres
         ligas, sin distinguir división.
@@ -230,6 +369,8 @@ export default function RankingPage() {
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </section>
   );
