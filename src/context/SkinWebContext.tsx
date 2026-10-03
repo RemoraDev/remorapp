@@ -10,26 +10,27 @@ import type { ReactNode } from "react";
 // bloque de CSS propio: cae en los valores base de :root (cian).
 export type SkinWeb =
   | "actual"
-  | "cafe"
-  | "blanco"
   | "azul-petroleo"
   | "amarillo"
-  | "rojo"
   | "azul"
   | "verde-claro"
   | "verde-oscuro"
   | "naranja"
   | "violeta"
   | "celeste"
-  | "rosa";
+  | "rosa"
+  | "deep-violet"
+  | "royal-purple"
+  | "amatista"
+  | "rosa-vibrante"
+  | "azul-electrico"
+  | "ciruela-oscura"
+  | "magenta-puro";
 
 const VALORES_SKIN_WEB: SkinWeb[] = [
   "actual",
-  "cafe",
-  "blanco",
   "azul-petroleo",
   "amarillo",
-  "rojo",
   "azul",
   "verde-claro",
   "verde-oscuro",
@@ -37,18 +38,22 @@ const VALORES_SKIN_WEB: SkinWeb[] = [
   "violeta",
   "celeste",
   "rosa",
+  "deep-violet",
+  "royal-purple",
+  "amatista",
+  "rosa-vibrante",
+  "azul-electrico",
+  "ciruela-oscura",
+  "magenta-puro",
 ];
 
-// Catálogo para el selector visual (Apariencia > SkinWeb). "actual" no
-// tiene bloque de CSS propio (ver halcon.css) por eso reutiliza el
-// mismo color de acento base (cian) en el swatch.
+// Catálogo para el selector visual (Apariencia > Apariencias
+// generales). "actual" no tiene bloque de CSS propio (ver halcon.css)
+// por eso reutiliza el mismo color de acento base (cian) en el swatch.
 export const SKINS_WEB: { value: SkinWeb; label: string; color: string }[] = [
   { value: "actual", label: "Estilo actual", color: "#22d3ee" },
-  { value: "cafe", label: "Café", color: "#92400e" },
-  { value: "blanco", label: "Blanco", color: "#f8fafc" },
   { value: "azul-petroleo", label: "Azul petróleo", color: "#0f766e" },
   { value: "amarillo", label: "Amarillo", color: "#facc15" },
-  { value: "rojo", label: "Rojo", color: "#f87171" },
   { value: "azul", label: "Azul", color: "#4f46e5" },
   { value: "verde-claro", label: "Verde claro", color: "#84cc16" },
   { value: "verde-oscuro", label: "Verde oscuro", color: "#047857" },
@@ -56,6 +61,13 @@ export const SKINS_WEB: { value: SkinWeb; label: string; color: string }[] = [
   { value: "violeta", label: "Violeta", color: "#a78bfa" },
   { value: "celeste", label: "Celeste", color: "#38bdf8" },
   { value: "rosa", label: "Rosa", color: "#f472b6" },
+  { value: "deep-violet", label: "Deep Violet", color: "#240046" },
+  { value: "royal-purple", label: "Royal Purple", color: "#3c096c" },
+  { value: "amatista", label: "Amatista", color: "#5a189a" },
+  { value: "rosa-vibrante", label: "Rosa Vibrante", color: "#f72585" },
+  { value: "azul-electrico", label: "Azul eléctrico", color: "#4cc9f0" },
+  { value: "ciruela-oscura", label: "Ciruela oscura", color: "#8d155e" },
+  { value: "magenta-puro", label: "Magenta Puro", color: "#ff00ff" },
 ];
 
 const CLAVE_STORAGE = "remorapp-skin-web";

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { BarChart3, Settings, Award, History, Shield } from "lucide-react";
+import { BarChart3, Settings, Award, History, Shield, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
@@ -12,15 +12,12 @@ import { validarNick } from "../lib/nickValidation";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { formatFecha } from "../lib/formatters";
-import { BORDE_HEADER_OPTIONS, COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
-import type { BordeHeader, Country, Liga, LinkTransmision, Sc2Region, Profile } from "../types/profile";
+import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
+import type { Country, Liga, LinkTransmision, Sc2Region, Profile } from "../types/profile";
 import { RAZA_SC2_OPTIONS } from "../types/juegos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
-import type { SkinAvatar } from "../types/skins";
-import { BORDE_GROSOR_MAX, BORDE_GROSOR_MIN } from "../types/bordes";
 import { EVENTO_OBS_CONFIG_ACTUALIZADA } from "../lib/obsWebsocket";
-import type { BordeBasico } from "../types/bordes";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import TitulosActivosList from "../components/TitulosActivosList";
@@ -145,7 +142,6 @@ const SECCIONES_VALIDAS: SeccionPerfil[] = ["estadisticas", "configuracion", "lo
 
 type SubseccionPerfil =
   | "datos"
-  | "transmision"
   | "juegos"
   | "idioma"
   | "apariencia"
@@ -195,6 +191,7 @@ export default function ProfilePage() {
   const { tema, setTema } = useTheme();
   const { skinWeb, setSkinWeb } = useSkinWeb();
   const location = useLocation();
+  const navigate = useNavigate();
   // El Panel de control de /jugador/:nick/:uniqueId (vitrina propia)
   // manda acá con ?tab=... -- sin el parámetro (o con cualquier otro
   // valor), arranca mostrando solo los cuadritos del Panel de control.
@@ -218,6 +215,23 @@ export default function ProfilePage() {
   // Llega desde LoginPage/RegisterPage cuando alguien con sesión activa
   // intentó entrar o registrarse de nuevo (ver Navigate en esas páginas).
   const avisoRedireccion = (location.state as { aviso?: string } | null)?.aviso ?? null;
+
+  // Migración 149: "Configuración" desde el menú del Header manda acá
+  // con un backgroundLocation en el state (ver Header.tsx) -- en ese
+  // caso Mi perfil se muestra como ventana superpuesta sobre la página
+  // en la que ya estaba el usuario, en vez de navegar de lleno a /perfil
+  // y perder su lugar. Sin ese state (entrar directo por URL, recargar,
+  // o venir de un <Link> normal) se sigue viendo como página completa.
+  const backgroundLocation = (location.state as { backgroundLocation?: { pathname: string; search?: string } } | null)
+    ?.backgroundLocation;
+  const esOverlay = Boolean(backgroundLocation);
+  const cerrarOverlay = () => {
+    if (backgroundLocation) {
+      navigate(`${backgroundLocation.pathname}${backgroundLocation.search ?? ""}`, { replace: true });
+    } else {
+      navigate(-1);
+    }
+  };
 
   // --- Estadísticas (nuevo botón de primer nivel): solo hace falta
   // saber si el usuario pertenece a un equipo, para decidir si
@@ -319,30 +333,6 @@ export default function ProfilePage() {
   const [guardandoObs, setGuardandoObs] = useState(false);
   const [errorObs, setErrorObs] = useState<string | null>(null);
   const [obsGuardado, setObsGuardado] = useState(false);
-
-  // --- Skins de avatar (migración 052): catalogo_skins_avatar solo es
-  // legible vía RLS cuando es_dueno_plataforma() es verdadero -- si la
-  // consulta vuelve vacía, esta sección no se muestra, sin necesidad
-  // de otra verificación aparte. ---
-  const [catalogoSkins, setCatalogoSkins] = useState<SkinAvatar[]>([]);
-  const [guardandoSkin, setGuardandoSkin] = useState(false);
-  const [errorSkin, setErrorSkin] = useState<string | null>(null);
-
-  // --- Borde básico de avatar (migración 055): público y gratuito
-  // para cualquier cuenta, a diferencia de las skins de arriba. Elegir
-  // un color se aplica al toque (mismo patrón que las skins); el
-  // grosor es lo único que se ajusta en el slider antes de guardar --
-  // grosorSeleccionado es ese estado LOCAL, todavía sin guardar. ---
-  const [catalogoBordes, setCatalogoBordes] = useState<BordeBasico[]>([]);
-  const [grosorSeleccionado, setGrosorSeleccionado] = useState(3);
-  const [guardandoBorde, setGuardandoBorde] = useState(false);
-  const [errorBorde, setErrorBorde] = useState<string | null>(null);
-  const [bordeGuardado, setBordeGuardado] = useState(false);
-
-  // --- Borde del header (migración 056): sistema aparte, mucho más
-  // simple -- 4 colores fijos, se aplica al toque, sin grosor. ---
-  const [guardandoBordeHeader, setGuardandoBordeHeader] = useState(false);
-  const [errorBordeHeader, setErrorBordeHeader] = useState<string | null>(null);
 
   // --- Foto de perfil ---
   // avatarFile guarda el resultado YA RECORTADO por el usuario en el
@@ -465,41 +455,6 @@ export default function ProfilePage() {
       setRazaSecundaria(datos?.raza_secundaria ?? "");
     })();
   }, [user]);
-
-  useEffect(() => {
-    if (!user) {
-      setCatalogoSkins([]);
-      return;
-    }
-
-    (async () => {
-      const { data } = await supabase
-        .from("catalogo_skins_avatar")
-        .select("id, clave, nombre, descripcion")
-        .order("nombre");
-      setCatalogoSkins((data as SkinAvatar[] | null) ?? []);
-    })();
-  }, [user]);
-
-  // Público (sin RLS restrictiva, a diferencia del catálogo de
-  // arriba): se carga siempre, para cualquier cuenta.
-  useEffect(() => {
-    (async () => {
-      const { data } = await supabase
-        .from("catalogo_bordes_basicos")
-        .select("id, nombre, color_hex")
-        .order("nombre");
-      setCatalogoBordes((data as BordeBasico[] | null) ?? []);
-    })();
-  }, []);
-
-  // El estado local de la vista previa se sincroniza con el perfil
-  // cada vez que llega (o cambia tras guardar) -- mismo patrón que el
-  // resto de los campos de "Editar datos".
-  useEffect(() => {
-    if (!profile) return;
-    setGrosorSeleccionado(profile.borde_grosor);
-  }, [profile]);
 
   const cargarInvitaciones = async () => {
     if (!user) {
@@ -1220,100 +1175,6 @@ export default function ProfilePage() {
     window.dispatchEvent(new Event(EVENTO_OBS_CONFIG_ACTUALIZADA));
   };
 
-  // "Bordes de Avatar" es una sola lista (borde básico + skins de
-  // efectos): elegir cualquiera de las dos cosas apaga la otra --
-  // nunca quedan las dos activas a la vez, aunque la prioridad visual
-  // (si por algún motivo quedaran las dos escritas) ya está resuelta
-  // en AvatarSkin.tsx a favor de la skin.
-  const handleActivarSkin = async (skinId: string | null) => {
-    if (!user || skinId === profile?.skin_avatar_activa) return;
-
-    setGuardandoSkin(true);
-    setErrorSkin(null);
-
-    const { error: rpcError } = await supabase.rpc("activar_skin_avatar", { p_skin_id: skinId });
-
-    setGuardandoSkin(false);
-
-    if (rpcError) {
-      setErrorSkin(rpcError.message);
-      return;
-    }
-
-    if (skinId !== null && profile?.borde_basico_activo) {
-      await supabase.from("profiles").update({ borde_basico_activo: null }).eq("id", user.id);
-    }
-
-    await refreshProfile();
-  };
-
-  const handleElegirBordeBasico = async (bordeId: string | null) => {
-    if (!user || bordeId === profile?.borde_basico_activo) return;
-
-    setGuardandoBorde(true);
-    setErrorBorde(null);
-    setBordeGuardado(false);
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({ borde_basico_activo: bordeId, borde_grosor: grosorSeleccionado })
-      .eq("id", user.id);
-
-    setGuardandoBorde(false);
-
-    if (error) {
-      setErrorBorde(error.message);
-      return;
-    }
-
-    if (bordeId !== null && profile?.skin_avatar_activa) {
-      await supabase.rpc("activar_skin_avatar", { p_skin_id: null });
-    }
-
-    await refreshProfile();
-  };
-
-  const handleGuardarGrosor = async () => {
-    if (!user) return;
-
-    setGuardandoBorde(true);
-    setErrorBorde(null);
-    setBordeGuardado(false);
-
-    const { error } = await supabase
-      .from("profiles")
-      .update({ borde_grosor: grosorSeleccionado })
-      .eq("id", user.id);
-
-    setGuardandoBorde(false);
-
-    if (error) {
-      setErrorBorde(error.message);
-      return;
-    }
-
-    await refreshProfile();
-    setBordeGuardado(true);
-  };
-
-  const handleGuardarBordeHeader = async (valor: BordeHeader) => {
-    if (!user || valor === profile?.borde_header) return;
-
-    setGuardandoBordeHeader(true);
-    setErrorBordeHeader(null);
-
-    const { error } = await supabase.from("profiles").update({ borde_header: valor }).eq("id", user.id);
-
-    setGuardandoBordeHeader(false);
-
-    if (error) {
-      setErrorBordeHeader(error.message);
-      return;
-    }
-
-    await refreshProfile();
-  };
-
   const handleAvatarChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
     setErrorAvatar(null);
@@ -1466,7 +1327,19 @@ export default function ProfilePage() {
   const progreso = calcularProgresoPerfil(profile);
 
   return (
-    <section className="auth-page">
+    <div
+      className={esOverlay ? "modal-backdrop" : "profile-page-plain-wrap"}
+      onClick={esOverlay ? cerrarOverlay : undefined}
+    >
+    <section
+      className={esOverlay ? "auth-page profile-overlay-panel" : "auth-page"}
+      onClick={esOverlay ? (e) => e.stopPropagation() : undefined}
+    >
+      {esOverlay && (
+        <button type="button" className="modal-close" onClick={cerrarOverlay} aria-label="Cerrar panel de Mi perfil">
+          <X size={18} />
+        </button>
+      )}
       <h1 className="auth-title">Mi perfil</h1>
 
       {avisoRedireccion && <div className="form-hint profile-gate-banner">{avisoRedireccion}</div>}
@@ -1569,7 +1442,7 @@ export default function ProfilePage() {
               Configuración
             </span>
             <span className="team-panel-menu-item-desc">
-              Datos, transmisión, apariencia, juegos e idioma
+              Datos, apariencia, juegos e idioma
             </span>
           </button>
           <button
@@ -1654,16 +1527,6 @@ export default function ProfilePage() {
                   Nick, contraseña, país y correo de recuperación
                 </span>
               </button>
-              <button
-                type="button"
-                className="team-panel-menu-item"
-                onClick={() => setSubseccion("transmision")}
-              >
-                <span className="team-panel-menu-item-title">Editar Datos de Transmisión</span>
-                <span className="team-panel-menu-item-desc">
-                  Plataformas donde transmitís, con días y horarios
-                </span>
-              </button>
               <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("juegos")}>
                 <span className="team-panel-menu-item-title">Editar Datos del Juego</span>
                 <span className="team-panel-menu-item-desc">
@@ -1679,9 +1542,9 @@ export default function ProfilePage() {
                 className="team-panel-menu-item"
                 onClick={() => setSubseccion("apariencia")}
               >
-                <span className="team-panel-menu-item-title">Apariencia</span>
+                <span className="team-panel-menu-item-title">Configurar Apariencia</span>
                 <span className="team-panel-menu-item-desc">
-                  Tema del sitio, avatar, banner y bordes de avatar y del header
+                  Tema del sitio, avatar, banner y color de acento
                 </span>
               </button>
             </div>
@@ -1827,12 +1690,11 @@ export default function ProfilePage() {
             </>
           )}
 
-          {subseccion === "transmision" && (
+          {/* Migración 149: fusionado dentro de "Editar Datos" -- ya no
+              tiene su propio acceso en el menú de Configuración (antes
+              "Editar Datos de Transmisión"). */}
+          {subseccion === "datos" && (
             <>
-              <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
-                ← Volver
-              </button>
-
               <div className="auth-form">
                 {errorCaster && <div className="form-error">{errorCaster}</div>}
                 <label className="profile-caster-toggle">
@@ -2164,131 +2026,6 @@ export default function ProfilePage() {
             </>
           )}
 
-          {subseccion === "apariencia" && subsubseccion === "bordes-avatar" && (
-            <>
-              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
-                ← Volver
-              </button>
-              <h3 className="detail-subtitle">Bordes de Avatar</h3>
-              <p className="tournament-card-meta">
-                Elegir un borde básico o una skin de efectos apaga la otra opción -- nunca quedan las dos
-                activas a la vez.
-              </p>
-
-              <div className="profile-avatar-section">
-                <AvatarSkin
-                  clave={profile?.avatar_transparente ? null : skinAvatarClave}
-                  bordeColor={profile?.avatar_transparente ? null : bordeBasicoColorHex}
-                  bordeGrosor={grosorSeleccionado}
-                  forma="cuadrado"
-                >
-                  <Avatar
-                    url={profile?.avatar_url}
-                    nombre={profile?.nick ?? profile?.nombre}
-                    className="profile-avatar"
-                    forma="cuadrado"
-                  />
-                </AvatarSkin>
-              </div>
-
-              {profile?.avatar_transparente && (
-                <p className="tournament-card-meta">
-                  Tu foto actual tiene fondo transparente -- el borde y las skins de efectos quedan
-                  apagados mientras tanto, aunque elijas uno acá abajo.
-                </p>
-              )}
-
-              {errorBorde && <div className="form-error">{errorBorde}</div>}
-              {errorSkin && <div className="form-error">{errorSkin}</div>}
-              {bordeGuardado && <div className="form-success">Tu borde se guardó correctamente.</div>}
-
-              <h4 className="detail-subtitle">Bordes básicos de color</h4>
-              <div className="borde-basico-options">
-                <button
-                  type="button"
-                  className={`borde-basico-swatch borde-basico-swatch-vacio ${
-                    profile?.borde_basico_activo === null && profile?.skin_avatar_activa === null ? "selected" : ""
-                  }`}
-                  disabled={guardandoBorde}
-                  onClick={() => handleElegirBordeBasico(null)}
-                  title="Sin borde"
-                >
-                  <span className="borde-basico-swatch-nombre">Sin borde</span>
-                </button>
-                {catalogoBordes.map((borde) => (
-                  <button
-                    key={borde.id}
-                    type="button"
-                    className={`borde-basico-swatch ${profile?.borde_basico_activo === borde.id ? "selected" : ""}`}
-                    style={{ backgroundColor: borde.color_hex }}
-                    disabled={guardandoBorde}
-                    onClick={() => handleElegirBordeBasico(borde.id)}
-                    title={borde.nombre}
-                  />
-                ))}
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="perfil-borde-grosor">
-                  Grosor del borde ({grosorSeleccionado}px)
-                </label>
-                <input
-                  id="perfil-borde-grosor"
-                  className="form-range"
-                  type="range"
-                  min={BORDE_GROSOR_MIN}
-                  max={BORDE_GROSOR_MAX}
-                  value={grosorSeleccionado}
-                  onChange={(e) => setGrosorSeleccionado(Number(e.target.value))}
-                  disabled={profile?.borde_basico_activo == null}
-                />
-              </div>
-
-              <button
-                type="button"
-                className="btn btn-ghost btn-block"
-                disabled={guardandoBorde || profile?.borde_basico_activo == null}
-                onClick={handleGuardarGrosor}
-              >
-                {guardandoBorde ? "Guardando..." : "Guardar grosor"}
-              </button>
-
-              {/* catalogo_skins_avatar solo trae filas cuando
-                  es_dueno_plataforma() es verdadero (RLS) -- para
-                  cualquier otra cuenta, catalogoSkins queda vacío y
-                  esta sección directamente no existe, ni gris ni
-                  bloqueada. */}
-              {catalogoSkins.length > 0 && (
-                <div className="skins-exclusivas">
-                  <h4 className="detail-subtitle skins-exclusivas-titulo">Skins de efectos</h4>
-                  <p className="tournament-card-meta">
-                    Colección del dueño de la plataforma -- todavía no está disponible para el resto de las
-                    cuentas.
-                  </p>
-                  <div className="skins-exclusivas-grid">
-                    {catalogoSkins.map((skin) => (
-                      <button
-                        key={skin.id}
-                        type="button"
-                        className={`skin-exclusiva-option ${profile?.skin_avatar_activa === skin.id ? "selected" : ""}`}
-                        disabled={guardandoSkin}
-                        onClick={() => handleActivarSkin(skin.id)}
-                        title={skin.descripcion}
-                      >
-                        <span className="skin-exclusiva-preview">
-                          <AvatarSkin clave={skin.clave}>
-                            <Avatar url={null} nombre={profile?.nick ?? profile?.nombre} className="skin-exclusiva-avatar" />
-                          </AvatarSkin>
-                        </span>
-                        <span className="skin-exclusiva-nombre">{skin.nombre}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
           {subseccion === "juegos" && subsubseccion === null && (
             <div className="team-panel-menu">
               <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
@@ -2567,26 +2304,8 @@ export default function ProfilePage() {
                   <span className="team-panel-menu-item-title">Subir Banner</span>
                   <span className="team-panel-menu-item-desc">Portada y descripción</span>
                 </button>
-                <button
-                  type="button"
-                  className="team-panel-menu-item"
-                  onClick={() => setSubsubseccion("bordes-avatar")}
-                >
-                  <span className="team-panel-menu-item-title">Bordes de Avatar</span>
-                  <span className="team-panel-menu-item-desc">
-                    Bordes básicos de color y, si corresponde, skins de efectos
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className="team-panel-menu-item"
-                  onClick={() => setSubsubseccion("borde-header")}
-                >
-                  <span className="team-panel-menu-item-title">Borde del Header</span>
-                  <span className="team-panel-menu-item-desc">4 colores lisos, exclusivo del avatar del header</span>
-                </button>
                 <button type="button" className="team-panel-menu-item" onClick={() => setSubsubseccion("skin-web")}>
-                  <span className="team-panel-menu-item-title">SkinWeb</span>
+                  <span className="team-panel-menu-item-title">Apariencias generales</span>
                   <span className="team-panel-menu-item-desc">
                     Cambia el color de acento de toda la web (botones, bordes, brillos)
                   </span>
@@ -2600,7 +2319,7 @@ export default function ProfilePage() {
               <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
                 ← Volver
               </button>
-              <h3 className="detail-subtitle">SkinWeb</h3>
+              <h3 className="detail-subtitle">Apariencias generales</h3>
               <p className="tournament-card-meta">
                 Elige el color de acento de toda RemorApp. La elección se guarda solo en tu navegador.
               </p>
@@ -2620,49 +2339,6 @@ export default function ProfilePage() {
             </>
           )}
 
-          {subseccion === "apariencia" && subsubseccion === "borde-header" && (
-            <>
-              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
-                ← Volver
-              </button>
-              <h3 className="detail-subtitle">Borde del Header</h3>
-              <p className="tournament-card-meta">
-                Sistema aparte de los Bordes de Avatar de Mi perfil -- solo 4 colores lisos, sin grosor
-                editable, exclusivo del avatar del header.
-              </p>
-
-              <span
-                className="header-avatar-borde"
-                style={{
-                  borderColor: BORDE_HEADER_OPTIONS.find((o) => o.value === (profile?.borde_header ?? "negro"))
-                    ?.colorHex,
-                }}
-              >
-                <Avatar
-                  url={profile?.avatar_url}
-                  nombre={profile?.nick ?? profile?.nombre}
-                  className="header-avatar"
-                  forma="redondo"
-                />
-              </span>
-
-              {errorBordeHeader && <div className="form-error">{errorBordeHeader}</div>}
-
-              <div className="borde-basico-options">
-                {BORDE_HEADER_OPTIONS.map((opcion) => (
-                  <button
-                    key={opcion.value}
-                    type="button"
-                    className={`borde-basico-swatch ${profile?.borde_header === opcion.value ? "selected" : ""}`}
-                    style={{ backgroundColor: opcion.colorHex }}
-                    disabled={guardandoBordeHeader}
-                    onClick={() => handleGuardarBordeHeader(opcion.value)}
-                    title={opcion.label}
-                  />
-                ))}
-              </div>
-            </>
-          )}
         </div>
       )}
 
@@ -2975,5 +2651,6 @@ export default function ProfilePage() {
       )}
 
     </section>
+    </div>
   );
 }

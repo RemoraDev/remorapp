@@ -141,38 +141,16 @@
     radial-gradient(circle at 85% 20%, rgba(var(--h-accent-rgb), 0.08), transparent 40%);
 }
 
-/* ---------- SkinWeb: paleta de acento de toda la app (Apariencia) ----------
+/* ---------- SkinWeb: paleta de acento de toda la app (Apariencias generales) ----------
    Mismo mecanismo que data-tema-equipo (más abajo en esta hoja,
    migración 033), que solo recolorea la página pública de un equipo,
    pero puesto en <html> (SkinWebContext) para que alcance a toda la
    app. "actual" no tiene bloque propio: cae en los valores base de
    :root de arriba, que ya son el cian original. Los colores oscuros
-   (Café, Azul petróleo, Azul, Verde oscuro) además pisan --color-on-accent con
-   un tono claro, para que el texto de los botones siga siendo legible
-   sobre un fondo oscuro -- el resto usa el texto oscuro por defecto. */
-:root[data-skin-web="cafe"] {
-  --h-accent: #92400e;
-  --h-accent-rgb: 146, 64, 14;
-  --h-accent-hover: #78350f;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #e3b78a;
-  --color-on-accent: var(--color-text);
-  --shadow-accent: 0 0 0 1px rgba(146, 64, 14, 0.4), 0 0 24px rgba(146, 64, 14, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(146, 64, 14, 0.55), 0 0 40px rgba(146, 64, 14, 0.35);
-}
-
-:root[data-skin-web="blanco"] {
-  --h-accent: #f8fafc;
-  --h-accent-rgb: 248, 250, 252;
-  --h-accent-hover: #e2e8f0;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #ffffff;
-  --shadow-accent: 0 0 0 1px rgba(248, 250, 252, 0.4), 0 0 24px rgba(248, 250, 252, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(248, 250, 252, 0.55), 0 0 40px rgba(248, 250, 252, 0.35);
-}
-
+   (Azul petróleo, Azul, Verde oscuro, y los morados/ciruela nuevos de
+   la migración 149) además pisan --color-on-accent con un tono claro,
+   para que el texto de los botones siga siendo legible sobre un fondo
+   oscuro -- el resto usa el texto oscuro por defecto. */
 :root[data-skin-web="azul-petroleo"] {
   --h-accent: #0f766e;
   --h-accent-rgb: 15, 118, 110;
@@ -194,17 +172,6 @@
   --color-accent-soft: #fef08a;
   --shadow-accent: 0 0 0 1px rgba(250, 204, 21, 0.4), 0 0 24px rgba(250, 204, 21, 0.25);
   --shadow-accent-lg: 0 0 0 1px rgba(250, 204, 21, 0.55), 0 0 40px rgba(250, 204, 21, 0.35);
-}
-
-:root[data-skin-web="rojo"] {
-  --h-accent: #f87171;
-  --h-accent-rgb: 248, 113, 113;
-  --h-accent-hover: #ef4444;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #fecaca;
-  --shadow-accent: 0 0 0 1px rgba(248, 113, 113, 0.4), 0 0 24px rgba(248, 113, 113, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(248, 113, 113, 0.55), 0 0 40px rgba(248, 113, 113, 0.35);
 }
 
 :root[data-skin-web="azul"] {
@@ -284,6 +251,87 @@
   --color-accent-soft: #fbcfe8;
   --shadow-accent: 0 0 0 1px rgba(244, 114, 182, 0.4), 0 0 24px rgba(244, 114, 182, 0.25);
   --shadow-accent-lg: 0 0 0 1px rgba(244, 114, 182, 0.55), 0 0 40px rgba(244, 114, 182, 0.35);
+}
+
+:root[data-skin-web="deep-violet"] {
+  --h-accent: #240046;
+  --h-accent-rgb: 36, 0, 70;
+  --h-accent-hover: #1e003b;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #c9bfe0;
+  --color-on-accent: var(--color-text);
+  --shadow-accent: 0 0 0 1px rgba(36, 0, 70, 0.4), 0 0 24px rgba(36, 0, 70, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(36, 0, 70, 0.55), 0 0 40px rgba(36, 0, 70, 0.35);
+}
+
+:root[data-skin-web="royal-purple"] {
+  --h-accent: #3c096c;
+  --h-accent-rgb: 60, 9, 108;
+  --h-accent-hover: #33085c;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #d0c2e0;
+  --color-on-accent: var(--color-text);
+  --shadow-accent: 0 0 0 1px rgba(60, 9, 108, 0.4), 0 0 24px rgba(60, 9, 108, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(60, 9, 108, 0.55), 0 0 40px rgba(60, 9, 108, 0.35);
+}
+
+:root[data-skin-web="amatista"] {
+  --h-accent: #5a189a;
+  --h-accent-rgb: 90, 24, 154;
+  --h-accent-hover: #4d1483;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #d5c5e6;
+  --color-on-accent: var(--color-text);
+  --shadow-accent: 0 0 0 1px rgba(90, 24, 154, 0.4), 0 0 24px rgba(90, 24, 154, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(90, 24, 154, 0.55), 0 0 40px rgba(90, 24, 154, 0.35);
+}
+
+:root[data-skin-web="rosa-vibrante"] {
+  --h-accent: #f72585;
+  --h-accent-rgb: 247, 37, 133;
+  --h-accent-hover: #d21f71;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #fdc8e0;
+  --shadow-accent: 0 0 0 1px rgba(247, 37, 133, 0.4), 0 0 24px rgba(247, 37, 133, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(247, 37, 133, 0.55), 0 0 40px rgba(247, 37, 133, 0.35);
+}
+
+:root[data-skin-web="azul-electrico"] {
+  --h-accent: #4cc9f0;
+  --h-accent-rgb: 76, 201, 240;
+  --h-accent-hover: #41abcc;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #d2f1fb;
+  --shadow-accent: 0 0 0 1px rgba(76, 201, 240, 0.4), 0 0 24px rgba(76, 201, 240, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(76, 201, 240, 0.55), 0 0 40px rgba(76, 201, 240, 0.35);
+}
+
+:root[data-skin-web="ciruela-oscura"] {
+  --h-accent: #8d155e;
+  --h-accent-rgb: 141, 21, 94;
+  --h-accent-hover: #781250;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #e2c4d7;
+  --color-on-accent: var(--color-text);
+  --shadow-accent: 0 0 0 1px rgba(141, 21, 94, 0.4), 0 0 24px rgba(141, 21, 94, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(141, 21, 94, 0.55), 0 0 40px rgba(141, 21, 94, 0.35);
+}
+
+:root[data-skin-web="magenta-puro"] {
+  --h-accent: #ff00ff;
+  --h-accent-rgb: 255, 0, 255;
+  --h-accent-hover: #d900d9;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #ffbfff;
+  --shadow-accent: 0 0 0 1px rgba(255, 0, 255, 0.4), 0 0 24px rgba(255, 0, 255, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(255, 0, 255, 0.55), 0 0 40px rgba(255, 0, 255, 0.35);
 }
 
 * {
@@ -2890,6 +2938,30 @@ html.es-escritorio .player-detail-panel-inline {
   overflow-y: auto;
   margin-top: 0;
   border: 1px solid var(--color-accent);
+  box-shadow: 0 0 44px rgba(var(--h-accent-rgb), 0.3), 0 24px 60px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(160deg, rgba(var(--h-accent-rgb), 0.08), transparent 55%), var(--color-panel);
+}
+
+/* Migración 149: "Configuración" del Header abre Mi perfil como
+   ventana superpuesta (modal-backdrop + esta clase) sobre la página en
+   la que ya estaba el usuario, en vez de navegar de lleno a /perfil --
+   mismo tratamiento que .team-leader-panel-propio arriba. Sin overlay,
+   ProfilePage sigue envuelta en .profile-page-plain-wrap (display:
+   contents, no genera caja propia) para no alterar el layout de
+   siempre de la página completa. */
+.profile-page-plain-wrap {
+  display: contents;
+}
+
+.profile-overlay-panel {
+  position: relative;
+  width: min(92vw, 40rem);
+  max-height: 85vh;
+  overflow-y: auto;
+  margin: 0;
+  padding-top: 3rem;
+  border: 1px solid var(--color-accent);
+  border-radius: 0.9rem;
   box-shadow: 0 0 44px rgba(var(--h-accent-rgb), 0.3), 0 24px 60px rgba(0, 0, 0, 0.55);
   background: linear-gradient(160deg, rgba(var(--h-accent-rgb), 0.08), transparent 55%), var(--color-panel);
 }

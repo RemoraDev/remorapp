@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
@@ -254,6 +254,9 @@ export default function StaffPage() {
 
   return (
     <section className="section section-page">
+      <Link to="/perfil" className="team-panel-back">
+        ← Volver a Mi perfil
+      </Link>
       <div className="section-head">
         <h1 className="section-title">Panel Staff</h1>
       </div>

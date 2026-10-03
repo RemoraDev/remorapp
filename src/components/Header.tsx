@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Settings, LogOut, Search } from "lucide-react";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
@@ -14,8 +14,19 @@ export default function Header() {
   const { abrirBuscador } = useSearch();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   const cerrarMenu = () => setMenuAbierto(false);
+
+  // Migración 149: "Configuración" ya no navega de lleno a /perfil --
+  // manda el location actual como backgroundLocation (ver ProfilePage),
+  // así Mi perfil se abre como ventana superpuesta sobre lo que se
+  // estaba viendo, igual que el Panel de control de Mi Clan.
+  const handleAbrirConfiguracion = () => {
+    cerrarMenu();
+    navigate("/perfil?tab=configuracion", { state: { backgroundLocation: location } });
+  };
 
   const handleCerrarSesion = async () => {
     cerrarMenu();
@@ -148,10 +159,10 @@ export default function Header() {
 
                 <div className="header-user-menu-divider" />
 
-                <Link to="/perfil?tab=configuracion" className="header-user-menu-item" onClick={cerrarMenu}>
+                <button type="button" className="header-user-menu-item" onClick={handleAbrirConfiguracion}>
                   <Settings className="icon-inline" />
                   Configuración
-                </Link>
+                </button>
 
                 <div className="header-user-menu-divider" />
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
@@ -91,6 +91,15 @@ function tituloMasRelevante(
 export default function PlayerDetailPage() {
   const { nick, uniqueId } = useParams<{ nick: string; uniqueId: string }>();
   const { user, profile } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Migración 149: mismo tratamiento que el "Configuración" del Header
+  // -- se abre como ventana superpuesta sobre esta vitrina en vez de
+  // navegar de lleno a /perfil (ver ProfilePage).
+  const handleAbrirConfiguracion = () => {
+    navigate("/perfil?tab=configuracion", { state: { backgroundLocation: location } });
+  };
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
   const [skinAvatarClave, setSkinAvatarClave] = useState<SkinAvatarClave | null>(null);
@@ -454,15 +463,13 @@ export default function PlayerDetailPage() {
         </span>
         <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que jugaste</span>
       </Link>
-      <Link to="/perfil?tab=configuracion" className="team-panel-menu-item">
+      <button type="button" className="team-panel-menu-item" onClick={handleAbrirConfiguracion}>
         <span className="team-panel-menu-item-title">
           <Settings className="icon-inline" />
           Configuración
         </span>
-        <span className="team-panel-menu-item-desc">
-          Editar datos, transmisión, apariencia, juegos e idioma
-        </span>
-      </Link>
+        <span className="team-panel-menu-item-desc">Editar datos, apariencia, juegos e idioma</span>
+      </button>
       {/* Corrección: "Panel de Administración" vivía como un botón
           grande aparte, debajo del Panel de control -- pasa a ser un
           acceso más dentro del mismo menú, solo visible para es_admin

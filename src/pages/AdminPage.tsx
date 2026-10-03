@@ -1803,6 +1803,9 @@ export default function AdminPage() {
 
   return (
     <section className="section section-page">
+      <Link to="/perfil" className="team-panel-back">
+        ← Volver a Mi perfil
+      </Link>
       <h1 className="section-title">Administración</h1>
 
       <div className="admin-shell">
