@@ -2929,6 +2929,13 @@ html.es-escritorio .player-detail-panel-inline {
   background: linear-gradient(160deg, rgba(var(--h-accent-rgb), 0.08), transparent 55%), var(--color-panel);
 }
 
+/* Variante más ancha, para el Panel de Administración (migración 151)
+   -- su barra lateral + tablas necesitan más espacio horizontal que el
+   resto de los paneles superpuestos. */
+.team-leader-panel-propio-ancho {
+  width: min(95vw, 75rem);
+}
+
 /* Migración 149: "Configuración" del Header abre Mi perfil como
    ventana superpuesta (modal-backdrop + esta clase) sobre la página en
    la que ya estaba el usuario, en vez de navegar de lleno a /perfil --
@@ -7512,8 +7519,11 @@ body.overlay-obs {
    .player-tab-bio-edit-btn). */
 .modal-close {
   position: absolute;
-  top: 0.85rem;
-  right: 0.85rem;
+  /* Más adentro que antes (0.85rem -> 1.1rem): pegado justo al borde
+     quedaba mal posicionado, la esquina redondeada del panel (y su
+     overflow-y:auto, que recorta en X también) lo cortaba un poco. */
+  top: 1.1rem;
+  right: 1.1rem;
   z-index: 2;
   display: flex;
   align-items: center;
@@ -7521,17 +7531,19 @@ body.overlay-obs {
   width: 2.1rem;
   height: 2.1rem;
   border-radius: 50%;
-  border: 1px solid rgba(var(--h-accent-rgb), 0.35);
+  /* Brillo siempre prendido (no solo al pasar el mouse) -- a pedido
+     del usuario, mismo criterio que el resto de los botones "siempre
+     activos" de la app. */
+  border: 1px solid var(--color-accent);
   background: var(--color-panel);
-  color: var(--color-text-muted);
+  color: var(--color-text);
+  box-shadow: var(--shadow-accent);
   font-size: 1.1rem;
   line-height: 1;
 }
 
 .modal-close:hover {
-  color: var(--color-text);
-  border-color: var(--color-accent);
-  box-shadow: var(--shadow-accent);
+  transform: scale(1.08);
 }
 
 .modal-title {

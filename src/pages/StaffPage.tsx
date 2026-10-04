@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import ListaNoticiasReordenable from "../components/ListaNoticiasReordenable";
+import { useOverlayPanel } from "../hooks/useOverlayPanel";
 
 interface ReporteStaff {
   id: string;
@@ -44,6 +46,12 @@ const BUG_STATUS_LABEL: Record<BugReportado["status"], string> = {
 // página, así que no hace falta repetirlas acá.
 export default function StaffPage() {
   const { user, profile, loading: authLoading } = useAuth();
+  // Migración 151: mismo tratamiento de "ventana superpuesta" que Mi
+  // perfil -- si se llegó acá desde el menú de Mi perfil (con un
+  // backgroundLocation en el state), se muestra como modal sobre la
+  // página de fondo en vez de navegar de lleno. Entrando directo por
+  // URL/marcador, sigue siendo una página completa como siempre.
+  const { esOverlay, cerrarOverlay } = useOverlayPanel();
 
   // --- Crear liga de clanes (mismo mecanismo que ya usa cualquier
   // cuenta autenticada desde /tournaments/create, ver crear_liga()) ---
@@ -253,10 +261,28 @@ export default function StaffPage() {
   const reportesVisibles = verReportesResueltos ? reportes : pendientes;
 
   return (
-    <section className="section section-page">
-      <Link to="/perfil" className="team-panel-back">
-        ← Volver a Mi perfil
-      </Link>
+    <div
+      className={esOverlay ? "modal-backdrop" : "profile-page-plain-wrap"}
+      onClick={esOverlay ? cerrarOverlay : undefined}
+    >
+    <section
+      className={esOverlay ? "section section-page team-leader-panel team-leader-panel-propio" : "section section-page"}
+      onClick={esOverlay ? (e) => e.stopPropagation() : undefined}
+    >
+      {esOverlay ? (
+        <>
+          <button type="button" className="modal-close" onClick={cerrarOverlay} aria-label="Cerrar panel Staff">
+            <X size={18} />
+          </button>
+          <button type="button" className="team-panel-back" onClick={cerrarOverlay}>
+            ← Volver
+          </button>
+        </>
+      ) : (
+        <Link to="/perfil" className="team-panel-back">
+          ← Volver a Mi perfil
+        </Link>
+      )}
       <div className="section-head">
         <h1 className="section-title">Panel Staff</h1>
       </div>
@@ -427,5 +453,6 @@ export default function StaffPage() {
         </div>
       </div>
     </section>
+    </div>
   );
 }

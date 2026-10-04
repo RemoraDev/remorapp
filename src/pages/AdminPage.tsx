@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import ListaNoticiasReordenable from "../components/ListaNoticiasReordenable";
 import { useAuth } from "../context/AuthContext";
+import { useOverlayPanel } from "../hooks/useOverlayPanel";
 import { formatFecha } from "../lib/formatters";
 import { datetimeLocalAIso } from "../lib/clanWars";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
@@ -227,6 +228,9 @@ interface AlianzaPendienteConNombres {
 export default function AdminPage() {
   const { user, profile, loading } = useAuth();
   const [tab, setTab] = useState<Tab>("resumen");
+  // Migración 151: mismo tratamiento de "ventana superpuesta" que Mi
+  // perfil y Panel Staff -- ver StaffPage.tsx.
+  const { esOverlay, cerrarOverlay } = useOverlayPanel();
 
   // --- Torneos por confirmar ---
   const [torneos, setTorneos] = useState<TournamentRow[]>([]);
@@ -1802,10 +1806,32 @@ export default function AdminPage() {
   };
 
   return (
-    <section className="section section-page">
-      <Link to="/perfil" className="team-panel-back">
-        ← Volver a Mi perfil
-      </Link>
+    <div
+      className={esOverlay ? "modal-backdrop" : "profile-page-plain-wrap"}
+      onClick={esOverlay ? cerrarOverlay : undefined}
+    >
+    <section
+      className={
+        esOverlay
+          ? "section section-page team-leader-panel team-leader-panel-propio team-leader-panel-propio-ancho"
+          : "section section-page"
+      }
+      onClick={esOverlay ? (e) => e.stopPropagation() : undefined}
+    >
+      {esOverlay ? (
+        <>
+          <button type="button" className="modal-close" onClick={cerrarOverlay} aria-label="Cerrar Administración">
+            <X size={18} />
+          </button>
+          <button type="button" className="team-panel-back" onClick={cerrarOverlay}>
+            ← Volver
+          </button>
+        </>
+      ) : (
+        <Link to="/perfil" className="team-panel-back">
+          ← Volver a Mi perfil
+        </Link>
+      )}
       <h1 className="section-title">Administración</h1>
 
       <div className="admin-shell">
@@ -3064,5 +3090,6 @@ export default function AdminPage() {
         </div>
       </div>
     </section>
+    </div>
   );
 }

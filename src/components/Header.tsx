@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Settings, LogOut, Search } from "lucide-react";
 import Logo from "./Logo";
 import Avatar from "./Avatar";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { useSearch } from "../context/SearchContext";
+import { useOverlayPanel } from "../hooks/useOverlayPanel";
 import { BORDE_HEADER_OPTIONS, ESTADO_PRESENCIA_OPTIONS } from "../types/profile";
 
 export default function Header() {
@@ -14,18 +15,18 @@ export default function Header() {
   const { abrirBuscador } = useSearch();
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [cambiandoEstado, setCambiandoEstado] = useState(false);
-  const location = useLocation();
-  const navigate = useNavigate();
+  const { abrirOverlay } = useOverlayPanel();
 
   const cerrarMenu = () => setMenuAbierto(false);
 
-  // Migración 149: "Configuración" ya no navega de lleno a /perfil --
-  // manda el location actual como backgroundLocation (ver ProfilePage),
-  // así Mi perfil se abre como ventana superpuesta sobre lo que se
-  // estaba viendo, igual que el Panel de control de Mi Clan.
+  // Migración 149/151: "Configuración" ya no navega de lleno a
+  // /perfil -- manda el location actual como backgroundLocation (ver
+  // ProfilePage y useOverlayPanel), así Mi perfil se abre como
+  // ventana superpuesta sobre lo que se estaba viendo, igual que el
+  // Panel de control de Mi Clan.
   const handleAbrirConfiguracion = () => {
     cerrarMenu();
-    navigate("/perfil?tab=configuracion", { state: { backgroundLocation: location } });
+    abrirOverlay("/perfil?tab=configuracion");
   };
 
   const handleCerrarSesion = async () => {

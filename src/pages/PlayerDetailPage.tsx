@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
+import { useOverlayPanel } from "../hooks/useOverlayPanel";
+import { sonidoAbrirPanel, sonidoClickMenu } from "../lib/sound";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import Carrusel from "../components/Carrusel";
@@ -91,14 +93,14 @@ function tituloMasRelevante(
 export default function PlayerDetailPage() {
   const { nick, uniqueId } = useParams<{ nick: string; uniqueId: string }>();
   const { user, profile } = useAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
 
-  // Migración 149: mismo tratamiento que el "Configuración" del Header
-  // -- se abre como ventana superpuesta sobre esta vitrina en vez de
-  // navegar de lleno a /perfil (ver ProfilePage).
+  // Migración 149/151: mismo tratamiento que el "Configuración" del
+  // Header -- se abre como ventana superpuesta sobre esta vitrina (o
+  // sobre lo que sea que haya de fondo, si esta vitrina YA se está
+  // mostrando como overlay) en vez de navegar de lleno a /perfil.
+  const { abrirOverlay } = useOverlayPanel();
   const handleAbrirConfiguracion = (tab: string = "configuracion") => {
-    navigate(`/perfil?tab=${tab}`, { state: { backgroundLocation: location } });
+    abrirOverlay(`/perfil?tab=${tab}`);
   };
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
@@ -437,8 +439,8 @@ export default function PlayerDetailPage() {
   // Compartido entre las dos versiones del Panel de control de más
   // abajo (en línea para mobile/PWA, desplegable para escritorio).
   const contenidoPanelMenu = (
-    <div className="team-panel-menu">
-      <Link to="/perfil?tab=estadisticas" className="team-panel-menu-item">
+    <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+      <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/perfil?tab=estadisticas")}>
         <span className="team-panel-menu-item-title">
           <BarChart3 className="icon-inline" />
           Estadísticas
@@ -446,8 +448,8 @@ export default function PlayerDetailPage() {
         <span className="team-panel-menu-item-desc">
           Valentía del jugador y Responsabilidad en Torneos y Clan War
         </span>
-      </Link>
-      <Link to="/perfil?tab=logros" className="team-panel-menu-item">
+      </button>
+      <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/perfil?tab=logros")}>
         <span className="team-panel-menu-item-title">
           <Award className="icon-inline" />
           Logros
@@ -455,14 +457,14 @@ export default function PlayerDetailPage() {
         <span className="team-panel-menu-item-desc">
           Títulos por nivel y el gestor de títulos Padre/Hijo
         </span>
-      </Link>
-      <Link to="/perfil?tab=historial" className="team-panel-menu-item">
+      </button>
+      <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/perfil?tab=historial")}>
         <span className="team-panel-menu-item-title">
           <History className="icon-inline" />
           Historial de eventos
         </span>
         <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que jugaste</span>
-      </Link>
+      </button>
       <button type="button" className="team-panel-menu-item" onClick={() => handleAbrirConfiguracion()}>
         <span className="team-panel-menu-item-title">
           <Settings className="icon-inline" />
@@ -475,13 +477,13 @@ export default function PlayerDetailPage() {
           acceso más dentro del mismo menú, solo visible para es_admin
           mirando el propio perfil. */}
       {profile?.es_admin && (
-        <Link to="/admin" className="team-panel-menu-item">
+        <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/admin")}>
           <span className="team-panel-menu-item-title">
             <Shield className="icon-inline" />
             Panel de Administración
           </span>
           <span className="team-panel-menu-item-desc">Gestión de la plataforma</span>
-        </Link>
+        </button>
       )}
     </div>
   );
@@ -536,7 +538,14 @@ export default function PlayerDetailPage() {
               derecha. El contenido desplegable sigue más abajo. */}
           {esMiPropioPerfil && (
             <div className="team-panel-toggle-header">
-              <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  if (!panelAbierto) sonidoAbrirPanel();
+                  setPanelAbierto((a) => !a);
+                }}
+              >
                 {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
               </button>
             </div>
@@ -598,7 +607,14 @@ export default function PlayerDetailPage() {
           </div>
           {esMiPropioPerfil && (
             <div className="player-hero-panel-btn">
-              <button type="button" className="btn btn-primary" onClick={() => setPanelAbierto((a) => !a)}>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  if (!panelAbierto) sonidoAbrirPanel();
+                  setPanelAbierto((a) => !a);
+                }}
+              >
                 {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
               </button>
 

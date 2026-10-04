@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, useLocation, Navigate } from "react-router-dom";
+import type { Location } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { useTheme } from "./context/ThemeContext";
@@ -64,6 +65,24 @@ function AppContent() {
   // Source" en OBS sin que aparezca nada de la interfaz normal.
   const esOverlay = location.pathname.startsWith("/overlay/");
 
+  // Migración 151: patrón estándar de React Router para "ruta como
+  // modal" -- Mi perfil / Panel Staff / Administración, al abrirse
+  // desde el menú de otra página (Header.tsx, PlayerDetailPage.tsx),
+  // mandan el location de ESA página como backgroundLocation en el
+  // state de la navegación. Antes solo se leía ese backgroundLocation
+  // DENTRO de cada página para decidir si mostrarse como ventana
+  // superpuesta -- pero acá, el <Routes> principal, seguía
+  // reemplazando la página de fondo por la nueva (ProfilePage, etc),
+  // así que atrás del modal no quedaba nada montado: se veía negro.
+  // Con esto, el <Routes> de <main> sigue mostrando la página de fondo
+  // (backgroundLocation) tal cual estaba, y un <Routes> extra --
+  // montado más abajo, fuera de <main>, solo cuando hay
+  // backgroundLocation -- agrega la página real (ubicada en el
+  // location actual de verdad) por encima, como overlay de posición
+  // fija. Sin backgroundLocation (entrar directo por URL, refrescar,
+  // o un <Link> común) todo sigue exactamente igual que antes.
+  const backgroundLocation = (location.state as { backgroundLocation?: Location } | null)?.backgroundLocation;
+
   if (esOverlay) {
     return (
       <Suspense fallback={<PageFallback />}>
@@ -101,7 +120,7 @@ function AppContent() {
           <EscritorioColumnaLateral />
           <main>
             <Suspense fallback={<PageFallback />}>
-              <Routes>
+              <Routes location={backgroundLocation ?? location}>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/tournaments" element={<TournamentsPage />} />
                 <Route path="/tournaments/create" element={<CreateTournamentPage />} />
@@ -141,6 +160,23 @@ function AppContent() {
           <EscritorioColumnaDerecha />
         </div>
         <BottomNav />
+        {/* Las tres páginas que saben mostrarse como ventana superpuesta
+            (esOverlay/backgroundLocation adentro de cada una) -- montadas
+            acá, fuera de <main>, en el location REAL (no el de fondo), y
+            solo cuando hay backgroundLocation. Cada una ya se renderiza a
+            sí misma con position:fixed (modal-backdrop), así que da lo
+            mismo dónde cuelga del árbol -- lo único que importa es que se
+            monte DESPUÉS de <main> (para quedar arriba en el z-index) y
+            en un <Routes> con el location verdadero. */}
+        {backgroundLocation && (
+          <Suspense fallback={null}>
+            <Routes location={location}>
+              <Route path="/perfil" element={<ProfilePage />} />
+              <Route path="/staff" element={<StaffPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+            </Routes>
+          </Suspense>
+        )}
         {/* Migración 098: notificaciones flotantes (sonner) -- arriba a la
             derecha para no chocar con la barra de navegación inferior,
             mismo tema claro/oscuro que el resto de la app. */}

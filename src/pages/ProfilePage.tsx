@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { BarChart3, Settings, Award, History, Shield, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
@@ -10,6 +10,8 @@ import { useTheme } from "../context/ThemeContext";
 import { useSkinWeb, SKINS_WEB } from "../context/SkinWebContext";
 import { validarNick } from "../lib/nickValidation";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
+import { useOverlayPanel } from "../hooks/useOverlayPanel";
+import { sonidoClickMenu } from "../lib/sound";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { formatFecha } from "../lib/formatters";
 import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
@@ -191,7 +193,6 @@ export default function ProfilePage() {
   const { tema, setTema } = useTheme();
   const { skinWeb, setSkinWeb } = useSkinWeb();
   const location = useLocation();
-  const navigate = useNavigate();
   // El Panel de control de /jugador/:nick/:uniqueId (vitrina propia)
   // manda acá con ?tab=... -- sin el parámetro (o con cualquier otro
   // valor), arranca mostrando solo los cuadritos del Panel de control.
@@ -216,22 +217,14 @@ export default function ProfilePage() {
   // intentó entrar o registrarse de nuevo (ver Navigate en esas páginas).
   const avisoRedireccion = (location.state as { aviso?: string } | null)?.aviso ?? null;
 
-  // Migración 149: "Configuración" desde el menú del Header manda acá
-  // con un backgroundLocation en el state (ver Header.tsx) -- en ese
-  // caso Mi perfil se muestra como ventana superpuesta sobre la página
-  // en la que ya estaba el usuario, en vez de navegar de lleno a /perfil
-  // y perder su lugar. Sin ese state (entrar directo por URL, recargar,
+  // Migración 149/151: "Configuración" desde el menú del Header (o
+  // "Panel Staff"/"Panel de Administración" desde este mismo panel)
+  // manda acá con un backgroundLocation en el state -- en ese caso Mi
+  // perfil se muestra como ventana superpuesta sobre la página en la
+  // que ya estaba el usuario, en vez de navegar de lleno a /perfil y
+  // perder su lugar. Sin ese state (entrar directo por URL, recargar,
   // o venir de un <Link> normal) se sigue viendo como página completa.
-  const backgroundLocation = (location.state as { backgroundLocation?: { pathname: string; search?: string } } | null)
-    ?.backgroundLocation;
-  const esOverlay = Boolean(backgroundLocation);
-  const cerrarOverlay = () => {
-    if (backgroundLocation) {
-      navigate(`${backgroundLocation.pathname}${backgroundLocation.search ?? ""}`, { replace: true });
-    } else {
-      navigate(-1);
-    }
-  };
+  const { esOverlay, abrirOverlay, cerrarOverlay } = useOverlayPanel();
 
   // --- Estadísticas (nuevo botón de primer nivel): solo hace falta
   // saber si el usuario pertenece a un equipo, para decidir si
@@ -1418,7 +1411,7 @@ export default function ProfilePage() {
           control. */}
       <h2 className="detail-subtitle">Panel de control</h2>
       {seccionActiva === null ? (
-        <div className="team-panel-menu">
+        <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
           <button
             type="button"
             className="team-panel-menu-item"
@@ -1472,13 +1465,13 @@ export default function ProfilePage() {
               visible si la cuenta tiene es_staff (o es admin/dueño de
               la plataforma, que ya ven todo lo que ve Staff y más). */}
           {(profile?.es_staff || profile?.es_admin) && (
-            <Link to="/staff" className="team-panel-menu-item">
+            <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/staff")}>
               <span className="team-panel-menu-item-title">
                 <Shield className="icon-inline" />
                 Panel Staff
               </span>
               <span className="team-panel-menu-item-desc">Crear liga de clanes, reportes al staff y bugs</span>
-            </Link>
+            </button>
           )}
         </div>
       ) : (
@@ -1520,7 +1513,7 @@ export default function ProfilePage() {
       {seccionActiva === "configuracion" && (
         <div className="settings-panel">
           {subseccion === null && (
-            <div className="team-panel-menu">
+            <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
               <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("datos")}>
                 <span className="team-panel-menu-item-title">Editar Datos</span>
                 <span className="team-panel-menu-item-desc">
@@ -2027,7 +2020,7 @@ export default function ProfilePage() {
           )}
 
           {subseccion === "juegos" && subsubseccion === null && (
-            <div className="team-panel-menu">
+            <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
               <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
                 ← Volver
               </button>
@@ -2287,7 +2280,7 @@ export default function ProfilePage() {
                 </label>
               </div>
 
-              <div className="team-panel-menu">
+              <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
                 <button
                   type="button"
                   className="team-panel-menu-item"
@@ -2345,7 +2338,7 @@ export default function ProfilePage() {
       {seccionActiva === "logros" && (
         <div className="settings-panel">
           {subseccion === null && (
-            <div className="team-panel-menu">
+            <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
               <button
                 type="button"
                 className="team-panel-menu-item"
@@ -2513,7 +2506,7 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              <div className="team-panel-menu">
+              <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
                 <button
                   type="button"
                   className="team-panel-menu-item"
@@ -2570,7 +2563,7 @@ export default function ProfilePage() {
       {seccionActiva === "historial" && (
         <div className="settings-panel">
           {subseccion === null && (
-            <div className="team-panel-menu">
+            <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
               <button
                 type="button"
                 className="team-panel-menu-item"

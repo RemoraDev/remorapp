@@ -33,6 +33,7 @@ import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
+import { sonidoAbrirPanel, sonidoClickMenu } from "../lib/sound";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import type { EquipoDelUsuario } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
@@ -3457,6 +3458,7 @@ export default function TeamDetailPage() {
               type="button"
               className="btn btn-primary"
               onClick={() => {
+                if (!panelAbierto) sonidoAbrirPanel();
                 setPanelAbierto((abierto) => !abierto);
                 setSeccionPanel(null);
               }}
@@ -3788,7 +3790,7 @@ export default function TeamDetailPage() {
                       {codigoCopiado ? "¡Copiado!" : "Copiar código"}
                     </button>
                   </div>
-                  <div className="team-panel-menu team-panel-menu-2col">
+                  <div className="team-panel-menu team-panel-menu-2col" onClickCapture={sonidoClickMenu}>
                   {/* Configuración (logo/banner/tema/eliminar equipo) y
                       Títulos de clan quedan fuera de lo delegado a un
                       capitán -- solo el dueño las ve. */}
