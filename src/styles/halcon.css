@@ -18,14 +18,17 @@
      --h-accent-rgb es el mismo color en formato "r, g, b" (sin rgba()
      alrededor), para poder armar rgba(var(--h-accent-rgb), alpha) en
      bordes/brillos/fondos con transparencia en toda la hoja -- así
-     esos ~70 usos seguían el acento en vez de quedar en cian fijo sin
-     importar el SkinWeb o el tema de equipo elegidos. */
-  --h-accent: #22d3ee;
-  --h-accent-rgb: 34, 211, 238;
-  --h-accent-hover: #06b6d4;
+     esos ~70 usos seguían el acento en vez de quedar fijo sin importar
+     el SkinWeb o el tema de equipo elegidos. Migración 160: el acento
+     por defecto pasa de cian a celeste (a pedido del usuario) -- mismo
+     valor que ya tenía :root[data-skin-web="celeste"] más abajo, así
+     que quien no eligió ningún SkinWeb ahora ve exactamente eso. */
+  --h-accent: #38bdf8;
+  --h-accent-rgb: 56, 189, 248;
+  --h-accent-hover: #0ea5e9;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #a5f3fc;
+  --color-accent-soft: #bae6fd;
   /* Color de texto sobre fondos de acento (botón primario, badges de
      notificación): por defecto el mismo --color-bg oscuro de siempre,
      porque el acento de marca y casi todos los SkinWeb son claros/neón.
@@ -2050,17 +2053,15 @@ main {
   gap: 0.75rem;
 }
 
+/* Corrección: overflow-y:auto (aunque no hubiera scroll real) recorta
+   el box-shadow del brillo en el borde -- por eso "Información del
+   clan" se veía más apagada que "Stream" (que no tenía overflow). Sin
+   scroll en ninguna de las dos, a pedido del usuario -- si el texto es
+   largo, crece la caja, no aparece una barra de scroll. */
 .team-general-grid .team-general-card {
   flex: 1;
   height: auto;
-  overflow-y: auto;
-}
-
-/* La tarjeta de Stream no necesita el scroll de seguridad de la de
-   Información del clan (esa sí puede llevar una descripción larga) --
-   a pedido del usuario, sin scroll y sin espacio de sobra. */
-.team-general-grid .team-general-stream-card {
-  overflow-y: visible;
+  overflow: visible;
 }
 
 @media (max-width: 640px) {
@@ -6372,24 +6373,36 @@ html.es-escritorio .player-detail-panel-inline {
   background: rgba(248, 113, 113, 0.1);
 }
 
-/* ---------- Apariencia del equipo: 7 paletas fijas (migración 033) ----------
-   Se aplican vía atributo data-tema-equipo en la raíz de la página
-   pública del equipo (/equipos/:tag) -- solo redefinen los tokens de
-   acento, y solo alcanzan a los descendientes de ese elemento (nunca
-   al resto de la app). "cian" es el acento original, se deja explícito
-   igual para que el catálogo sea completo y fácil de mantener. */
-[data-tema-equipo="cian"] {
-  --h-accent: #22d3ee;
-  --h-accent-rgb: 34, 211, 238;
-  --h-accent-hover: #06b6d4;
+/* ---------- Apariencia del equipo: 5 paletas fijas (migración 033,
+   recortada en la 160) ---------- Se aplican vía atributo
+   data-tema-equipo en la raíz de la página pública del equipo
+   (/equipos/:tag) -- solo redefinen los tokens de acento, y solo
+   alcanzan a los descendientes de ese elemento (nunca al resto de la
+   app). "celeste" es el acento por defecto de toda la app (ver :root
+   arriba), se deja explícito igual para que el catálogo sea completo. */
+[data-tema-equipo="celeste"] {
+  --h-accent: #38bdf8;
+  --h-accent-rgb: 56, 189, 248;
+  --h-accent-hover: #0ea5e9;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #a5f3fc;
+  --color-accent-soft: #bae6fd;
   --shadow-accent: 0 0 0 1px rgba(var(--h-accent-rgb), 0.4), 0 0 24px rgba(var(--h-accent-rgb), 0.25);
   --shadow-accent-lg: 0 0 0 1px rgba(var(--h-accent-rgb), 0.55), 0 0 40px rgba(var(--h-accent-rgb), 0.35);
 }
 
-[data-tema-equipo="purpura"] {
+[data-tema-equipo="verde_claro"] {
+  --h-accent: #4ade80;
+  --h-accent-rgb: 74, 222, 128;
+  --h-accent-hover: #22c55e;
+  --color-accent: var(--h-accent);
+  --color-accent-dim: var(--h-accent-hover);
+  --color-accent-soft: #bbf7d0;
+  --shadow-accent: 0 0 0 1px rgba(74, 222, 128, 0.4), 0 0 24px rgba(74, 222, 128, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(74, 222, 128, 0.55), 0 0 40px rgba(74, 222, 128, 0.35);
+}
+
+[data-tema-equipo="violeta"] {
   --h-accent: #a78bfa;
   --h-accent-rgb: 167, 139, 250;
   --h-accent-hover: #8b5cf6;
@@ -6398,28 +6411,6 @@ html.es-escritorio .player-detail-panel-inline {
   --color-accent-soft: #ddd6fe;
   --shadow-accent: 0 0 0 1px rgba(167, 139, 250, 0.4), 0 0 24px rgba(167, 139, 250, 0.25);
   --shadow-accent-lg: 0 0 0 1px rgba(167, 139, 250, 0.55), 0 0 40px rgba(167, 139, 250, 0.35);
-}
-
-[data-tema-equipo="esmeralda"] {
-  --h-accent: #34d399;
-  --h-accent-rgb: 52, 211, 153;
-  --h-accent-hover: #10b981;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #a7f3d0;
-  --shadow-accent: 0 0 0 1px rgba(52, 211, 153, 0.4), 0 0 24px rgba(52, 211, 153, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(52, 211, 153, 0.55), 0 0 40px rgba(52, 211, 153, 0.35);
-}
-
-[data-tema-equipo="ambar"] {
-  --h-accent: #fbbf24;
-  --h-accent-rgb: 251, 191, 36;
-  --h-accent-hover: #f59e0b;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #fde68a;
-  --shadow-accent: 0 0 0 1px rgba(251, 191, 36, 0.4), 0 0 24px rgba(251, 191, 36, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(251, 191, 36, 0.55), 0 0 40px rgba(251, 191, 36, 0.35);
 }
 
 [data-tema-equipo="rosa"] {
@@ -6433,26 +6424,15 @@ html.es-escritorio .player-detail-panel-inline {
   --shadow-accent-lg: 0 0 0 1px rgba(244, 114, 182, 0.55), 0 0 40px rgba(244, 114, 182, 0.35);
 }
 
-[data-tema-equipo="carmesi"] {
-  --h-accent: #fb7185;
-  --h-accent-rgb: 251, 113, 133;
-  --h-accent-hover: #f43f5e;
+[data-tema-equipo="cyan"] {
+  --h-accent: #22d3ee;
+  --h-accent-rgb: 34, 211, 238;
+  --h-accent-hover: #06b6d4;
   --color-accent: var(--h-accent);
   --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #fecdd3;
-  --shadow-accent: 0 0 0 1px rgba(251, 113, 133, 0.4), 0 0 24px rgba(251, 113, 133, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(251, 113, 133, 0.55), 0 0 40px rgba(251, 113, 133, 0.35);
-}
-
-[data-tema-equipo="azul"] {
-  --h-accent: #60a5fa;
-  --h-accent-rgb: 96, 165, 250;
-  --h-accent-hover: #3b82f6;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #bfdbfe;
-  --shadow-accent: 0 0 0 1px rgba(96, 165, 250, 0.4), 0 0 24px rgba(96, 165, 250, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(96, 165, 250, 0.55), 0 0 40px rgba(96, 165, 250, 0.35);
+  --color-accent-soft: #a5f3fc;
+  --shadow-accent: 0 0 0 1px rgba(34, 211, 238, 0.4), 0 0 24px rgba(34, 211, 238, 0.25);
+  --shadow-accent-lg: 0 0 0 1px rgba(34, 211, 238, 0.55), 0 0 40px rgba(34, 211, 238, 0.35);
 }
 
 /* ---------- Selector visual de tema del equipo (Configuración) ---------- */

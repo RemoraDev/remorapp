@@ -21,6 +21,25 @@ import type { TituloActivoTodos } from "../types/titulos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
 
+// Colores de marca oficiales -- antes los 3 íconos de Stream heredaban
+// el mismo color de texto genérico (currentColor), a pedido del
+// usuario pasan a verse con su color real. Mismo mapa que
+// TeamDetailPage.tsx.
+const COLOR_PLATAFORMA_STREAM: Record<string, string> = {
+  Twitch: "#9146FF",
+  Discord: "#5865F2",
+  YouTube: "#FF0000",
+};
+
+// A pedido del usuario: si pega una URL completa (ej.
+// "twitch.com/grankefka"), mostrar el nombre de canal/usuario en vez
+// del nombre genérico de la plataforma.
+function extraerNombreCanal(valor: string): string {
+  const limpio = valor.trim().split("?")[0].split("#")[0].replace(/\/+$/, "");
+  const partes = limpio.split("/").filter(Boolean);
+  return partes[partes.length - 1] || valor;
+}
+
 interface PerfilPublico {
   id: string;
   nick: string;
@@ -979,8 +998,8 @@ export default function PlayerDetailPage() {
                             rel="noreferrer noopener"
                             className="player-tab-stream-link"
                           >
-                            <Icono size={18} />
-                            {plataforma}
+                            <Icono size={18} style={{ color: COLOR_PLATAFORMA_STREAM[plataforma] }} />
+                            {extraerNombreCanal(link.url)}
                           </a>
                         ) : (
                           <span key={plataforma} className="player-tab-stream-link player-tab-stream-link-vacio">

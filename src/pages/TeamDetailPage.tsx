@@ -73,6 +73,25 @@ import LogrosClanWarList from "../components/LogrosClanWarList";
 const LOGO_MAX_BYTES = 15 * 1024 * 1024;
 const BANNER_MAX_BYTES = 15 * 1024 * 1024;
 
+// Colores de marca oficiales -- antes los 3 íconos de Stream heredaban
+// el mismo color de texto genérico (currentColor), a pedido del
+// usuario pasan a verse con su color real.
+const COLOR_PLATAFORMA_STREAM: Record<string, string> = {
+  Twitch: "#9146FF",
+  Discord: "#5865F2",
+  YouTube: "#FF0000",
+};
+
+// A pedido del usuario: si pega una URL completa (ej.
+// "twitch.com/grankefka"), mostrar el nombre de canal/usuario en vez
+// del nombre genérico de la plataforma -- toma el último segmento de
+// la ruta, sin query ni hash.
+function extraerNombreCanal(valor: string): string {
+  const limpio = valor.trim().split("?")[0].split("#")[0].replace(/\/+$/, "");
+  const partes = limpio.split("/").filter(Boolean);
+  return partes[partes.length - 1] || valor;
+}
+
 // Mismos emblemas oficiales que usa TarjetaLineupClanWar.tsx (public/razas/)
 // -- se muestra solo la raza principal, sin la secundaria, y con el logo en
 // vez del nombre para que el roster se lea de un vistazo.
@@ -377,16 +396,19 @@ interface TorneoParticipadoConResultado {
 // "estadisticas"/"ranking" se sacaron del menú (simplificación a
 // pedido del usuario: solo Configuración/Reportar un problema/
 // Mercenarios y Alianzas) junto con su contenido y sus datos.
-// "amistades" ya no es un ítem propio -- vive como sub-pestaña dentro
-// de "temporada" (Mercenarios y Alianzas).
+// "editar-equipo" tampoco -- vive como pestaña "equipo" dentro de
+// "configuracion" (migración 160). Mercenarios y Alianzas se separa en
+// dos destinos (migración 160): "temporada" (Panel de control) es solo
+// para VER y ELIMINAR lo ya fichado/aliado/amigo; "agregar"
+// (Solicitudes) es solo para fichar/proponer/enviar cosas nuevas.
 type SeccionPanel =
   | "configuracion"
-  | "editar-equipo"
   | "solicitudes-unirse"
   | "eventos"
   | "titulos"
   | "reportar"
-  | "temporada";
+  | "temporada"
+  | "agregar";
 
 // Migración 047: una temporada es "la actual" cuando hoy cae dentro
 // de su fecha_inicio/fecha_fin -- sin esto, "de la temporada actual"
@@ -607,9 +629,13 @@ export default function TeamDetailPage() {
   // seccionPanel === null muestra el menú, no una sección puntual.
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [seccionPanel, setSeccionPanel] = useState<SeccionPanel | null>(null);
-  // Pestañas de medios dentro de Configuración (migración 158): antes
-  // Logo/Banner/Franja lateral iban apiladas en una sola pantalla larga.
-  const [tabConfigMedia, setTabConfigMedia] = useState<"logo" | "banner" | "franja">("logo");
+  // Pestañas de Configuración (migración 158, ampliada en la 160): antes
+  // Apariencia/Logo/Banner/Franja lateral/Editar equipo/Eliminar equipo
+  // iban todas apiladas (o, en el caso de "Editar equipo", colgando de
+  // un botón suelto en el medio) en una sola pantalla larga.
+  const [tabConfig, setTabConfig] = useState<
+    "apariencia" | "logo" | "banner" | "franja" | "equipo" | "eliminar"
+  >("apariencia");
   // Vista dentro de "Clan War"/"Reprogramar fecha" (migración 158):
   // "guerras" muestra cada Clan War en preparación completa (sin
   // reprogramación/extensión, que se sacaron de acá); "reprogramar"
@@ -622,10 +648,9 @@ export default function TeamDetailPage() {
   // para reprogramar y Extensión del plazo de lineup iban las dos
   // juntas, apiladas por cada guerra.
   const [subtabReprogramar, setSubtabReprogramar] = useState<"fecha" | "extension">("fecha");
-  // Mercenarios y Alianzas pasa a tener 2 sub-pestañas (migración 159):
-  // Mercenarios (fichar + alianzas) y Clanes amigos (ex "Equipos
-  // amigos", ahora con opción de eliminar la amistad).
-  const [tabMercenarios, setTabMercenarios] = useState<"mercenarios" | "amigos">("mercenarios");
+  // Mercenarios y Alianzas (migración 159, separada en dos destinos en
+  // la 160): opción de quitar un mercenario fichado o eliminar una
+  // amistad ya aceptada.
   const [quitandoMercenarioId, setQuitandoMercenarioId] = useState<string | null>(null);
   const [errorQuitarMercenario, setErrorQuitarMercenario] = useState<string | null>(null);
   const [eliminandoAmistadId, setEliminandoAmistadId] = useState<string | null>(null);
@@ -3849,8 +3874,8 @@ export default function TeamDetailPage() {
                         rel="noreferrer noopener"
                         className="player-tab-stream-link"
                       >
-                        <Icono size={18} />
-                        {plataforma}
+                        <Icono size={18} style={{ color: COLOR_PLATAFORMA_STREAM[plataforma] }} />
+                        {extraerNombreCanal(link.url)}
                       </a>
                     ) : (
                       <span key={plataforma} className="player-tab-stream-link player-tab-stream-link-vacio">
@@ -4084,7 +4109,10 @@ export default function TeamDetailPage() {
                     <button
                       type="button"
                       className="team-panel-menu-item"
-                      onClick={() => setSeccionPanel("configuracion")}
+                      onClick={() => {
+                        setSeccionPanel("configuracion");
+                        setTabConfig("apariencia");
+                      }}
                     >
                       <span className="team-panel-menu-item-title">
                         <Settings className="icon-inline" />
@@ -4105,7 +4133,7 @@ export default function TeamDetailPage() {
                       Mercenarios y Alianzas
                     </span>
                     <span className="team-panel-menu-item-desc">
-                      Fichar mercenarios y gestionar los equipos amigos del clan
+                      Ver y quitar mercenarios, alianzas y clanes amigos
                     </span>
                   </button>
                   <button
@@ -4130,7 +4158,9 @@ export default function TeamDetailPage() {
                   </div>
 
               {/* Barra de pestañas de "Solicitudes" (migración 158). */}
-              {(seccionPanel === "eventos" || seccionPanel === "solicitudes-unirse") && (
+              {(seccionPanel === "eventos" ||
+                seccionPanel === "solicitudes-unirse" ||
+                seccionPanel === "agregar") && (
                 <div className="team-config-media-tabs">
                   <button
                     type="button"
@@ -4146,13 +4176,10 @@ export default function TeamDetailPage() {
                   </button>
                   <button
                     type="button"
-                    className="team-config-media-tab"
-                    onClick={() => {
-                      setSeccionPanel("temporada");
-                      setTabMercenarios("amigos");
-                    }}
+                    className={`team-config-media-tab ${seccionPanel === "agregar" ? "is-active" : ""}`}
+                    onClick={() => setSeccionPanel("agregar")}
                   >
-                    Amistad
+                    Mercenarios y Alianzas
                   </button>
                   <button
                     type="button"
@@ -4177,6 +4204,62 @@ export default function TeamDetailPage() {
                 </div>
               )}
 
+              {seccionPanel === "configuracion" && (
+                <>
+                  <h3 className="detail-subtitle">Configuración</h3>
+                  {/* A pedido del usuario: Apariencia, Logo, Banner,
+                      Banner lateral, Editar equipo y Eliminar equipo son
+                      todas pestañas hermanas -- antes era una mezcla de
+                      secciones siempre visibles, pestañas solo para
+                      media, y "Editar equipo" como un botón suelto en
+                      el medio. */}
+                  <div className="team-config-media-tabs">
+                    <button
+                      type="button"
+                      className={`team-config-media-tab ${tabConfig === "apariencia" ? "is-active" : ""}`}
+                      onClick={() => setTabConfig("apariencia")}
+                    >
+                      Apariencia
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-config-media-tab ${tabConfig === "logo" ? "is-active" : ""}`}
+                      onClick={() => setTabConfig("logo")}
+                    >
+                      Logo
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-config-media-tab ${tabConfig === "banner" ? "is-active" : ""}`}
+                      onClick={() => setTabConfig("banner")}
+                    >
+                      Banner
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-config-media-tab ${tabConfig === "franja" ? "is-active" : ""}`}
+                      onClick={() => setTabConfig("franja")}
+                    >
+                      Banner lateral
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-config-media-tab ${tabConfig === "equipo" ? "is-active" : ""}`}
+                      onClick={() => setTabConfig("equipo")}
+                    >
+                      Editar equipo
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-config-media-tab ${tabConfig === "eliminar" ? "is-active" : ""}`}
+                      onClick={() => setTabConfig("eliminar")}
+                    >
+                      Eliminar equipo
+                    </button>
+                  </div>
+                </>
+              )}
+
               {/* El dueño no puede simplemente "salir": si hay más
                   miembros, primero tiene que transferir el liderazgo.
                   Recién cuando queda como único miembro, salir del
@@ -4184,7 +4267,7 @@ export default function TeamDetailPage() {
                   dueño. Exclusivo de esDueño -- un capitán que entra a
                   "Editar equipo" no ve esto, transferir liderazgo
                   sigue siendo solo del dueño. */}
-              {seccionPanel === "editar-equipo" && esDueño && (miembros.length > 1 ? (
+              {seccionPanel === "configuracion" && tabConfig === "equipo" && esDueño && (miembros.length > 1 ? (
                 <>
                   <h3 className="detail-subtitle">Transferir liderazgo</h3>
                   {errorTransferir && <div className="form-error">{errorTransferir}</div>}
@@ -4238,7 +4321,7 @@ export default function TeamDetailPage() {
                 </>
               ))}
 
-              {seccionPanel === "configuracion" && (
+              {seccionPanel === "configuracion" && tabConfig === "apariencia" && (
                 <>
                   <h3 className="detail-subtitle">Apariencia</h3>
                   {errorTema && <div className="form-error">{errorTema}</div>}
@@ -4256,56 +4339,16 @@ export default function TeamDetailPage() {
                       </button>
                     ))}
                   </div>
-
-                  {/* A pedido del usuario: "Editar equipo" deja de ser un
-                      ítem propio del Panel de control y pasa a vivir
-                      acá adentro, sin duplicar esa sección. */}
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-block team-config-equipo-btn"
-                    onClick={() => setSeccionPanel("editar-equipo")}
-                  >
-                    <Users className="icon-inline" />
-                    Editar equipo
-                  </button>
                 </>
               )}
 
-              {seccionPanel === "configuracion" && (
+              {seccionPanel === "configuracion" &&
+                (tabConfig === "logo" || tabConfig === "banner" || tabConfig === "franja") && (
               <form className="auth-form" onSubmit={handleGuardarEquipo}>
             {errorEquipo && <div className="form-error">{errorEquipo}</div>}
             {equipoGuardado && <div className="form-success">Los cambios del equipo se guardaron.</div>}
 
-            {/* A pedido del usuario: logo/banner/franja lateral pasan a
-                ser pestañas (antes iban las tres apiladas en una sola
-                pantalla larga) -- Descripción se saca de acá porque ya
-                se edita desde "Información del clan" en la pestaña
-                General, quedaba duplicado. */}
-            <div className="team-config-media-tabs">
-              <button
-                type="button"
-                className={`team-config-media-tab ${tabConfigMedia === "logo" ? "is-active" : ""}`}
-                onClick={() => setTabConfigMedia("logo")}
-              >
-                Logo
-              </button>
-              <button
-                type="button"
-                className={`team-config-media-tab ${tabConfigMedia === "banner" ? "is-active" : ""}`}
-                onClick={() => setTabConfigMedia("banner")}
-              >
-                Banner
-              </button>
-              <button
-                type="button"
-                className={`team-config-media-tab ${tabConfigMedia === "franja" ? "is-active" : ""}`}
-                onClick={() => setTabConfigMedia("franja")}
-              >
-                Imagen lateral
-              </button>
-            </div>
-
-            {tabConfigMedia === "logo" && (
+            {tabConfig === "logo" && (
               <div className="form-group">
                 <label className="form-label" htmlFor="team-edit-logo">
                   Logo (opcional, máx. 15MB, se recorta a 1:1)
@@ -4336,7 +4379,7 @@ export default function TeamDetailPage() {
               </div>
             )}
 
-            {tabConfigMedia === "banner" && (
+            {tabConfig === "banner" && (
               <div className="form-group">
                 <label className="form-label" htmlFor="team-edit-banner">
                   Banner (opcional, máx. 15MB, se recorta a 4:1)
@@ -4367,7 +4410,7 @@ export default function TeamDetailPage() {
               </div>
             )}
 
-            {tabConfigMedia === "franja" && (
+            {tabConfig === "franja" && (
               /* Migración 156: reemplaza el panal de hexágonos de la
                   columna lateral de escritorio de cada miembro que elija
                   "usar la de mi clan" (ver ProfilePage.tsx) -- mismo
@@ -4513,7 +4556,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {seccionPanel === "editar-equipo" && (
+              {seccionPanel === "configuracion" && tabConfig === "equipo" && (
               <>
               <h3 className="detail-subtitle">Miembros del equipo</h3>
               {errorQuitar && <div className="form-error">{errorQuitar}</div>}
@@ -5901,7 +5944,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {seccionPanel === "configuracion" && (
+              {seccionPanel === "configuracion" && tabConfig === "eliminar" && (
               <div className="team-panel-danger-zone">
                 <h3 className="detail-subtitle">Zona de peligro</h3>
                 <p className="tournament-card-meta">
@@ -5920,30 +5963,104 @@ export default function TeamDetailPage() {
               </div>
               )}
 
+              {/* Migración 160: Mercenarios y Alianzas se separa en dos
+                  destinos a pedido del usuario -- "temporada" (Panel de
+                  control) es solo para VER y ELIMINAR lo ya fichado,
+                  aliado o amigo; "agregar" (Solicitudes) es solo para
+                  fichar/proponer/enviar cosas nuevas. Nada de formularios
+                  acá, nada de botones "Quitar"/"Eliminar" allá. */}
               {seccionPanel === "temporada" && (
                 <>
                   <h3 className="detail-subtitle">Mercenarios y Alianzas</h3>
-                  <div className="team-info-subtabs">
-                    <button
-                      type="button"
-                      className={`team-info-subtab ${tabMercenarios === "mercenarios" ? "is-active" : ""}`}
-                      onClick={() => setTabMercenarios("mercenarios")}
-                    >
-                      Mercenarios
-                    </button>
-                    <button
-                      type="button"
-                      className={`team-info-subtab ${tabMercenarios === "amigos" ? "is-active" : ""}`}
-                      onClick={() => setTabMercenarios("amigos")}
-                    >
-                      Clanes amigos
-                    </button>
-                  </div>
-                  </>
+
+                  {mercenariosPropios.length > 0 ? (
+                    <>
+                      <h3 className="detail-subtitle">Mercenarios</h3>
+                      {errorQuitarMercenario && <div className="form-error">{errorQuitarMercenario}</div>}
+                      <div className="detail-participant-list">
+                        {mercenariosPropios.map((m) => (
+                          <div key={m.id} className="detail-participant-item">
+                            {m.jugadorNombre}
+                            <span className="team-temp-badge">Mercenario</span>
+                            <span className="tournament-card-meta">{m.temporadaNombre}</span>
+                            {esDueño && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                disabled={quitandoMercenarioId === m.id}
+                                onClick={() => handleQuitarMercenario(m.id)}
+                              >
+                                {quitandoMercenarioId === m.id ? "Quitando..." : "Quitar"}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <p className="detail-empty">Todavía no fichaste ningún mercenario.</p>
+                  )}
+
+                  {alianzasPropias.length > 0 && (
+                    <>
+                      <h3 className="detail-subtitle">Alianzas de este equipo</h3>
+                      <div className="detail-participant-list">
+                        {alianzasPropias.map((a) => {
+                          const estadoTexto =
+                            a.status === "aprobada"
+                              ? "Aprobada"
+                              : a.status === "rechazada"
+                                ? "Rechazada"
+                                : a.aprobadoPorEquipoB
+                                  ? "Confirmada -- pendiente de un administrador"
+                                  : a.propuestaPorMi
+                                    ? "Esperando confirmación del equipo aliado"
+                                    : "Pendiente de tu confirmación";
+                          return (
+                            <div key={a.id} className="detail-participant-item">
+                              {a.aliadoNombre}
+                              <span className="tournament-card-meta">{a.temporadaNombre}</span>
+                              <span className="reto-status">{estadoTexto}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+
+                  <h3 className="detail-subtitle">Clanes amigos</h3>
+                  {errorEliminarAmistad && <div className="form-error">{errorEliminarAmistad}</div>}
+                  {amistadesPropias.filter((a) => a.status === "aceptada").length === 0 ? (
+                    <p className="detail-empty">Todavía no tienes clanes amigos.</p>
+                  ) : (
+                    <div className="detail-participant-list">
+                      {amistadesPropias
+                        .filter((a) => a.status === "aceptada")
+                        .map((a) => (
+                          <div key={a.id} className="detail-participant-item">
+                            {a.otroEquipoNombre}
+                            <span className="reto-status">Amigos</span>
+                            {esDueño && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                disabled={eliminandoAmistadId === a.id}
+                                onClick={() => handleEliminarAmistad(a.id)}
+                              >
+                                {eliminandoAmistadId === a.id ? "Eliminando..." : "Eliminar amistad"}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </>
               )}
 
-              {seccionPanel === "temporada" && tabMercenarios === "mercenarios" && (
+              {seccionPanel === "agregar" && (
                 <>
+                  <h3 className="detail-subtitle">Mercenarios y Alianzas</h3>
+
                   <h3 className="detail-subtitle">Fichar un mercenario</h3>
                   <p className="detail-empty">
                     Un mercenario queda disponible para el lineup durante toda la temporada elegida,
@@ -6018,32 +6135,6 @@ export default function TeamDetailPage() {
                         </div>
                       )}
                     </form>
-                  )}
-
-                  {mercenariosPropios.length > 0 && (
-                    <>
-                      <h3 className="detail-subtitle">Mercenarios de la temporada actual</h3>
-                      {errorQuitarMercenario && <div className="form-error">{errorQuitarMercenario}</div>}
-                      <div className="detail-participant-list">
-                        {mercenariosPropios.map((m) => (
-                          <div key={m.id} className="detail-participant-item">
-                            {m.jugadorNombre}
-                            <span className="team-temp-badge">Mercenario</span>
-                            <span className="tournament-card-meta">{m.temporadaNombre}</span>
-                            {esDueño && (
-                              <button
-                                type="button"
-                                className="btn btn-ghost"
-                                disabled={quitandoMercenarioId === m.id}
-                                onClick={() => handleQuitarMercenario(m.id)}
-                              >
-                                {quitandoMercenarioId === m.id ? "Quitando..." : "Quitar"}
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </>
                   )}
 
                   <h3 className="detail-subtitle">Proponer una alianza</h3>
@@ -6146,15 +6237,7 @@ export default function TeamDetailPage() {
                       </div>
                     </>
                   )}
-                </>
-              )}
 
-              {/* Amistad entre equipos + invitaciones a torneos
-                  (migración 073) -- migración 159: deja de ser un ítem
-                  propio del Panel de control y pasa a ser la
-                  sub-pestaña "Clanes amigos" de Mercenarios y Alianzas. */}
-              {seccionPanel === "temporada" && tabMercenarios === "amigos" && (
-                <>
                   <h3 className="detail-subtitle">Enviar solicitud de amistad</h3>
                   {esDueño ? (
                     <form className="auth-form" onSubmit={handleSolicitarAmistad}>
@@ -6183,65 +6266,53 @@ export default function TeamDetailPage() {
                     <p className="detail-empty">Solo el dueño del equipo puede enviar solicitudes de amistad.</p>
                   )}
 
-                  <h3 className="detail-subtitle">Clanes amigos</h3>
-                  {errorEliminarAmistad && <div className="form-error">{errorEliminarAmistad}</div>}
-                  {amistadesPropias.length === 0 ? (
-                    <p className="detail-empty">Todavía no hay solicitudes de amistad con otros equipos.</p>
-                  ) : (
-                    <div className="detail-participant-list">
-                      {amistadesPropias.map((a) => {
-                        const estadoTexto =
-                          a.status === "aceptada"
-                            ? "Amigos"
-                            : a.status === "rechazada"
-                              ? "Rechazada"
-                              : a.propuestaPorMi
-                                ? "Esperando respuesta del otro equipo"
-                                : "Te mandaron una solicitud";
-                        const puedeResponder = esDueño && a.status === "pendiente" && !a.propuestaPorMi;
-                        const puedeEliminar = esDueño && a.status === "aceptada";
+                  {amistadesPropias.filter((a) => a.status !== "aceptada").length > 0 && (
+                    <>
+                      <h3 className="detail-subtitle">Solicitudes de amistad</h3>
+                      <div className="detail-participant-list">
+                        {amistadesPropias
+                          .filter((a) => a.status !== "aceptada")
+                          .map((a) => {
+                            const estadoTexto =
+                              a.status === "rechazada"
+                                ? "Rechazada"
+                                : a.propuestaPorMi
+                                  ? "Esperando respuesta del otro equipo"
+                                  : "Te mandaron una solicitud";
+                            const puedeResponder = esDueño && a.status === "pendiente" && !a.propuestaPorMi;
 
-                        return (
-                          <div key={a.id} className="detail-participant-item">
-                            {a.otroEquipoNombre}
-                            <span className="reto-status">{estadoTexto}</span>
-                            {puedeResponder && (
-                              <div className="invitation-actions">
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                  disabled={respondiendoAmistadId === a.id}
-                                  onClick={() => handleResponderAmistad(a.id, true)}
-                                >
-                                  Aceptar
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost"
-                                  disabled={respondiendoAmistadId === a.id}
-                                  onClick={() => handleResponderAmistad(a.id, false)}
-                                >
-                                  Rechazar
-                                </button>
+                            return (
+                              <div key={a.id} className="detail-participant-item">
+                                {a.otroEquipoNombre}
+                                <span className="reto-status">{estadoTexto}</span>
+                                {puedeResponder && (
+                                  <div className="invitation-actions">
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary"
+                                      disabled={respondiendoAmistadId === a.id}
+                                      onClick={() => handleResponderAmistad(a.id, true)}
+                                    >
+                                      Aceptar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn-ghost"
+                                      disabled={respondiendoAmistadId === a.id}
+                                      onClick={() => handleResponderAmistad(a.id, false)}
+                                    >
+                                      Rechazar
+                                    </button>
+                                  </div>
+                                )}
+                                {erroresResponderAmistad[a.id] && (
+                                  <div className="form-error">{erroresResponderAmistad[a.id]}</div>
+                                )}
                               </div>
-                            )}
-                            {puedeEliminar && (
-                              <button
-                                type="button"
-                                className="btn btn-ghost"
-                                disabled={eliminandoAmistadId === a.id}
-                                onClick={() => handleEliminarAmistad(a.id)}
-                              >
-                                {eliminandoAmistadId === a.id ? "Eliminando..." : "Eliminar amistad"}
-                              </button>
-                            )}
-                            {erroresResponderAmistad[a.id] && (
-                              <div className="form-error">{erroresResponderAmistad[a.id]}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
+                            );
+                          })}
+                      </div>
+                    </>
                   )}
 
                   <h3 className="detail-subtitle">Invitaciones a torneos</h3>

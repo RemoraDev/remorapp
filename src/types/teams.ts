@@ -41,20 +41,19 @@ export interface TeamRow {
   tema_equipo: TemaEquipo;
 }
 
-// Apariencia del equipo (migración 033): 7 paletas fijas, sin editor
-// de color libre -- "cian" es la opción por defecto (el acento
-// original de toda la app). El nombre de cada valor coincide con el
-// check constraint de teams.tema_equipo.
-export type TemaEquipo = "cian" | "purpura" | "esmeralda" | "ambar" | "rosa" | "carmesi" | "azul";
+// Apariencia del equipo (migración 033, recortada en la 160): 5
+// paletas fijas, sin editor de color libre -- "celeste" es la opción
+// por defecto (nuevo acento base de toda la app, antes era "cian"). El
+// nombre de cada valor coincide con el check constraint de
+// teams.tema_equipo.
+export type TemaEquipo = "celeste" | "verde_claro" | "violeta" | "rosa" | "cyan";
 
 export const TEMAS_EQUIPO: { value: TemaEquipo; label: string; color: string }[] = [
-  { value: "cian", label: "Cian", color: "#22d3ee" },
-  { value: "purpura", label: "Púrpura", color: "#a78bfa" },
-  { value: "esmeralda", label: "Esmeralda", color: "#34d399" },
-  { value: "ambar", label: "Ámbar", color: "#fbbf24" },
+  { value: "celeste", label: "Celeste", color: "#38bdf8" },
+  { value: "verde_claro", label: "Verde claro", color: "#4ade80" },
+  { value: "violeta", label: "Violeta", color: "#a78bfa" },
   { value: "rosa", label: "Rosa", color: "#f472b6" },
-  { value: "carmesi", label: "Carmesí", color: "#fb7185" },
-  { value: "azul", label: "Azul", color: "#60a5fa" },
+  { value: "cyan", label: "Cyan", color: "#22d3ee" },
 ];
 
 // Jugador temporal (migración 033): un puesto del roster sin cuenta
