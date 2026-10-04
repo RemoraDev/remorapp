@@ -6,12 +6,14 @@
 // usuario), las funciones simplemente no hacen nada -- nunca rompen
 // la interacción.
 //
-// Migración 158: el barrido de un solo tono (migración 155) terminó
-// sonando parecido al click genérico de Windows -- a pedido del
-// usuario, pasa a ser un arpegio de varias notas DISCRETAS (no un
-// barrido continuo) con onda diente de sierra (más brillante/áspera
-// que la cuadrada), para que se sienta claramente "de videojuego" y
-// no un simple click de sistema operativo.
+// Migración 158 (segunda vuelta): ni el barrido de un tono (155) ni el
+// arpegio con onda diente de sierra (158, primera vuelta) convencieron
+// -- seguían sonando "ásperos"/baratos. Este tercer intento cambia de
+// enfoque: dos osciladores triangulares (más suaves que cuadrada o
+// sierra) ligeramente desafinados entre sí (richness/chorus) pasando
+// por un filtro pasabajos (saca el brillo áspero de los armónicos
+// altos), con una envolvente de ataque/caída más suave. Mucho más
+// cercano a un timbre "de campana suave" que a un beep de sistema.
 let audioCtx: AudioContext | null = null;
 
 function obtenerContexto(): AudioContext | null {
@@ -24,47 +26,54 @@ function obtenerContexto(): AudioContext | null {
   return audioCtx;
 }
 
-// Una nota corta y seca, onda diente de sierra (sawtooth) -- más
-// áspera/brillante que una cuadrada o una sinusoide, lectura típica de
-// HUD de videojuego.
-function nota(frecuencia: number, duracionMs: number, volumen: number, demoraMs = 0) {
+// Nota "rica": dos triangulares desafinadas + filtro pasabajos +
+// envolvente suave -- el bloque base de ambos sonidos de acá abajo.
+function notaRica(frecuencia: number, duracionMs: number, volumen: number, demoraMs = 0) {
   const ctx = obtenerContexto();
   if (!ctx) return;
   const inicio = ctx.currentTime + demoraMs / 1000;
   const fin = inicio + duracionMs / 1000;
-  const osc = ctx.createOscillator();
+
+  const filtro = ctx.createBiquadFilter();
+  filtro.type = "lowpass";
+  filtro.frequency.setValueAtTime(frecuencia * 3.2, inicio);
+  filtro.Q.value = 0.6;
+
   const gain = ctx.createGain();
-  osc.type = "sawtooth";
-  osc.frequency.setValueAtTime(frecuencia, inicio);
   gain.gain.setValueAtTime(0.0001, inicio);
-  // Ataque rápido (no instantáneo, para evitar un "click" de corte
-  // seco al arrancar) + caída exponencial -- envolvente percusiva.
-  gain.gain.exponentialRampToValueAtTime(volumen, inicio + 0.008);
+  gain.gain.exponentialRampToValueAtTime(volumen, inicio + 0.015);
   gain.gain.exponentialRampToValueAtTime(0.0001, fin);
-  osc.connect(gain);
+
+  filtro.connect(gain);
   gain.connect(ctx.destination);
-  osc.start(inicio);
-  osc.stop(fin);
+
+  for (const desafine of [1, 1.006]) {
+    const osc = ctx.createOscillator();
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(frecuencia * desafine, inicio);
+    osc.connect(filtro);
+    osc.start(inicio);
+    osc.stop(fin);
+  }
 }
 
-// Al abrir un panel de control (Mi perfil / Mi Clan) -- arpegio corto
-// de tres notas ascendentes, tipo "power up" de HUD de videojuego.
+// Al abrir un panel de control (Mi perfil / Mi Clan) -- tres notas
+// cortas ascendentes, suaves.
 export function sonidoAbrirPanel() {
   try {
-    nota(392, 55, 0.05, 0);
-    nota(523, 55, 0.05, 50);
-    nota(784, 90, 0.06, 100);
+    notaRica(349, 90, 0.07, 0);
+    notaRica(440, 90, 0.07, 70);
+    notaRica(587, 130, 0.08, 140);
   } catch {
     // Nunca romper la apertura del panel por esto.
   }
 }
 
-// Al tocar cualquier acceso del menú (team-panel-menu-item) -- dos
-// notas muy cortas, tipo "blip" de selección de menú de videojuego.
+// Al tocar cualquier acceso del menú (team-panel-menu-item) -- una
+// sola nota corta y suave.
 export function sonidoClickMenu() {
   try {
-    nota(660, 28, 0.045, 0);
-    nota(990, 32, 0.045, 24);
+    notaRica(523, 55, 0.055, 0);
   } catch {
     // Nunca romper el click por esto.
   }

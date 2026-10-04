@@ -267,24 +267,38 @@ export default function ProfilePage() {
       });
   }, [user]);
 
+  const [archivoParaRecortarFranjaLateral, setArchivoParaRecortarFranjaLateral] = useState<File | null>(null);
   const [subiendoFranjaLateral, setSubiendoFranjaLateral] = useState(false);
   const [errorFranjaLateral, setErrorFranjaLateral] = useState<string | null>(null);
 
-  const handleSubirFranjaLateral = async (event: ChangeEvent<HTMLInputElement>) => {
+  // Mismo recortador interactivo que avatar/banner (RecortadorImagenModal)
+  // -- antes subía la imagen tal cual, sin dejar elegir qué parte
+  // encuadrar. 1/5: proporción angosta/alta, parecida a la columna
+  // real (140px de ancho x alto de pantalla completo) sin ser tan
+  // extrema que sea incómoda de recortar a mano.
+  const handleFranjaLateralFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const archivo = event.target.files?.[0] ?? null;
     event.target.value = "";
-    if (!archivo || !user) return;
+    if (!archivo) return;
 
     if (archivo.size > 15 * 1024 * 1024) {
       setErrorFranjaLateral("La imagen no puede pesar más de 15MB.");
       return;
     }
 
+    setErrorFranjaLateral(null);
+    setArchivoParaRecortarFranjaLateral(archivo);
+  };
+
+  const handleConfirmarRecorteFranjaLateral = async (recorte: Blob) => {
+    setArchivoParaRecortarFranjaLateral(null);
+    if (!user) return;
+
     setSubiendoFranjaLateral(true);
     setErrorFranjaLateral(null);
 
     try {
-      const comprimida = await comprimirImagen(archivo, "franja-lateral");
+      const comprimida = await comprimirImagen(recorte, "franja-lateral");
       const extension = comprimida.type === "image/png" ? "png" : "jpg";
       const ruta = `${user.id}/${Date.now()}-franja-lateral.${extension}`;
 
@@ -2462,9 +2476,20 @@ export default function ProfilePage() {
                   type="file"
                   accept="image/*"
                   disabled={subiendoFranjaLateral}
-                  onChange={handleSubirFranjaLateral}
+                  onChange={handleFranjaLateralFileChange}
                 />
+                <p className="form-hint">Recomendado: formato WebP, pesa bastante menos que JPG o PNG.</p>
               </div>
+
+              {archivoParaRecortarFranjaLateral && (
+                <RecortadorImagenModal
+                  archivo={archivoParaRecortarFranjaLateral}
+                  aspecto={1 / 5}
+                  titulo="Ajustar franja lateral de escritorio"
+                  onConfirmar={handleConfirmarRecorteFranjaLateral}
+                  onCancelar={() => setArchivoParaRecortarFranjaLateral(null)}
+                />
+              )}
 
               {equipoFranjaLateralUrl && (
                 <button

@@ -1993,15 +1993,23 @@ main {
   /* Esquina recta, igual que .player-tab-foto-wrap/.player-tab-standalone-card
      -- esta tarjeta también lleva el marco "corner bracket". */
   border-radius: 0;
-  /* Brillo siempre prendido, no solo al pasar el mouse -- a pedido del
-     usuario, para que se vea igual de iluminada que "Sobre mí" en Mi
-     perfil (antes caía en el borde tenue por default de .detail-card). */
-  border-color: var(--color-accent);
-  box-shadow: var(--shadow-accent);
   padding-bottom: 3.25rem;
 }
 
-.team-general-card:hover {
+/* Brillo siempre prendido, no solo al pasar el mouse -- a pedido del
+   usuario, para que se vea igual de iluminada que "Sobre mí" en Mi
+   perfil. Selector compuesto (no solo .team-general-card): con la
+   misma especificidad que .detail-card, quien gana es quien aparece
+   último en la hoja -- .detail-card estaba despues en el archivo y
+   pisaba el borde tenue por encima de este, aunque este override
+   existiera. .detail-card.team-general-card tiene más especificidad y
+   gana siempre, sin importar el orden. */
+.detail-card.team-general-card {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+}
+
+.detail-card.team-general-card:hover {
   box-shadow: var(--shadow-accent-lg);
 }
 
@@ -2011,9 +2019,14 @@ main {
    de "vistas previas", acá no hace falta). */
 .team-general-grid {
   display: grid;
-  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  /* 9rem, no 13rem como en Mi perfil -- a pedido del usuario: con
+     13rem (9:16 de ancho) la fila terminaba midiendo ~23rem de alto,
+     entre el banner/header/pestañas de arriba generaba scroll de
+     página. 9rem de ancho = ~16rem de alto, bastante más razonable. */
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: stretch;
+  max-height: 20rem;
 }
 
 /* .player-tab-col-main acá adentro suma el título ARRIBA de la caja
@@ -2031,6 +2044,7 @@ main {
 .team-general-grid .team-general-card {
   flex: 1;
   height: auto;
+  overflow-y: auto;
 }
 
 @media (max-width: 640px) {
@@ -2456,13 +2470,20 @@ html.es-escritorio .player-detail-panel-inline {
   display: flex;
   flex-direction: column;
   border-radius: 0;
-  border: 1px solid var(--color-accent);
-  box-shadow: var(--shadow-accent);
   padding-bottom: 3.25rem;
   overflow-y: auto;
 }
 
-.player-tab-stream-card:hover {
+/* Selector compuesto -- ver el mismo comentario en
+   .detail-card.team-general-card sobre por qué hace falta (si no,
+   .detail-card, declarada más abajo en el archivo, pisaba el borde
+   tenue encima de este aunque tuviera la misma regla). */
+.detail-card.player-tab-stream-card {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+}
+
+.detail-card.player-tab-stream-card:hover {
   box-shadow: var(--shadow-accent-lg);
 }
 

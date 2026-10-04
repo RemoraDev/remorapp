@@ -517,11 +517,11 @@ export default function TeamDetailPage() {
   const [archivoParaRecortarBanner, setArchivoParaRecortarBanner] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<Blob | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
-  // Migración 156: franja lateral de escritorio -- a diferencia de
-  // logo/banner, sin recortador (es una imagen libre, se adapta con
-  // cover a una franja angosta de cualquier alto), por eso va directo
-  // de File a franjaLateralFile sin pasar por RecortadorImagenModal.
-  const [franjaLateralFile, setFranjaLateralFile] = useState<File | null>(null);
+  // Migración 158: franja lateral de escritorio -- mismo recortador
+  // interactivo que logo/banner (antes se subía la imagen tal cual,
+  // sin dejar elegir qué parte encuadrar).
+  const [archivoParaRecortarFranjaLateral, setArchivoParaRecortarFranjaLateral] = useState<File | null>(null);
+  const [franjaLateralFile, setFranjaLateralFile] = useState<Blob | null>(null);
   const [franjaLateralPreview, setFranjaLateralPreview] = useState<string | null>(null);
   const [guardandoEquipo, setGuardandoEquipo] = useState(false);
   const [errorEquipo, setErrorEquipo] = useState<string | null>(null);
@@ -2119,8 +2119,13 @@ export default function TeamDetailPage() {
       return;
     }
 
-    setFranjaLateralFile(archivo);
-    setFranjaLateralPreview(URL.createObjectURL(archivo));
+    setArchivoParaRecortarFranjaLateral(archivo);
+  };
+
+  const handleConfirmarRecorteFranjaLateral = (recorte: Blob) => {
+    setFranjaLateralFile(recorte);
+    setFranjaLateralPreview(URL.createObjectURL(recorte));
+    setArchivoParaRecortarFranjaLateral(null);
   };
 
   const handleGuardarEquipo = async (event: FormEvent) => {
@@ -4348,10 +4353,10 @@ export default function TeamDetailPage() {
               )}
             </div>
 
-            {/* Migración 156: reemplaza el panal de hexágonos de la
+            {/* Migración 156/158: reemplaza el panal de hexágonos de la
                 columna lateral de escritorio de cada miembro que elija
-                "usar la de mi clan" (ver ProfilePage.tsx) -- sin
-                recortador, a diferencia de logo/banner. */}
+                "usar la de mi clan" (ver ProfilePage.tsx) -- mismo
+                recortador interactivo que logo/banner. */}
             <div className="form-group">
               <label className="form-label" htmlFor="team-edit-franja-lateral">
                 Franja lateral de escritorio (opcional, máx. 15MB)
@@ -4365,8 +4370,18 @@ export default function TeamDetailPage() {
               />
               <p className="form-hint">
                 Reemplaza el panal de hexágonos de la columna lateral en la versión de escritorio, para
-                quien elija usar la del clan desde su propio perfil.
+                quien elija usar la del clan desde su propio perfil. Recomendado: formato WebP, pesa
+                bastante menos que JPG o PNG.
               </p>
+              {archivoParaRecortarFranjaLateral && (
+                <RecortadorImagenModal
+                  archivo={archivoParaRecortarFranjaLateral}
+                  aspecto={1 / 5}
+                  titulo="Ajustar franja lateral de escritorio"
+                  onConfirmar={handleConfirmarRecorteFranjaLateral}
+                  onCancelar={() => setArchivoParaRecortarFranjaLateral(null)}
+                />
+              )}
               {(franjaLateralPreview ?? equipo.escritorio_lateral_url) && (
                 <img
                   src={franjaLateralPreview ?? equipo.escritorio_lateral_url ?? ""}
