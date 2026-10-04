@@ -2043,7 +2043,8 @@ main {
    genérico de .player-tab-col-main .detail-card, que asume que la
    caja es el único hijo y se pisaría con el título). Escopeado bajo
    .team-general-grid para no tocar el de Mi perfil. */
-.team-general-grid .player-tab-col-main {
+.team-general-grid .player-tab-col-main,
+.team-general-grid .player-tab-col-stream {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -2053,6 +2054,13 @@ main {
   flex: 1;
   height: auto;
   overflow-y: auto;
+}
+
+/* La tarjeta de Stream no necesita el scroll de seguridad de la de
+   Información del clan (esa sí puede llevar una descripción larga) --
+   a pedido del usuario, sin scroll y sin espacio de sobra. */
+.team-general-grid .team-general-stream-card {
+  overflow-y: visible;
 }
 
 @media (max-width: 640px) {

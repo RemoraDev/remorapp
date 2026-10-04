@@ -17,11 +17,7 @@ import {
   Crown,
   Award,
   Settings,
-  BarChart3,
-  TrendingUp,
-  CalendarClock,
   Handshake,
-  UserPlus,
   Flag,
   Trophy,
   GripVertical,
@@ -67,7 +63,6 @@ import {
 } from "../lib/clanWars";
 import type { InvestigacionJugador } from "../types/investigacion";
 import Avatar from "../components/Avatar";
-import PercentBar from "../components/PercentBar";
 import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
 import TitulosActivosList from "../components/TitulosActivosList";
 import LogrosClanWarList from "../components/LogrosClanWarList";
@@ -90,21 +85,6 @@ const ICONO_RAZA_MIEMBRO: Record<RazaSc2, string> = {
 function IconoRazaMiembro({ raza }: { raza: RazaSc2 | null }) {
   if (!raza) return null;
   return <img src={ICONO_RAZA_MIEMBRO[raza]} alt={raza} title={raza} className="miembro-raza-icono" />;
-}
-
-// Ranking de jugadores: torneosGanados + clanWarsGanadas = total, el
-// criterio de orden. torneosGanados incluye tanto los 1v1 ganados
-// individualmente por ese jugador como los torneos por equipo
-// (2v2/3v3/4v4) que ganó este equipo -- ver el comentario largo en
-// cargarRanking() sobre por qué esos se le cuentan completos a cada
-// miembro ACTUAL, no repartidos.
-interface JugadorRanking {
-  userId: string;
-  nick: string | null;
-  uniqueId: string | null;
-  torneosGanados: number;
-  clanWarsGanadas: number;
-  total: number;
 }
 
 interface MiembroConNombre {
@@ -394,6 +374,11 @@ interface TorneoParticipadoConResultado {
 // configurado) -- la sección queda sin usarse, no se borró su
 // contenido por si se retoma más adelante. "logros" y el link a Hall
 // of Fame se mudaron a sub-pestañas de "Historial" (seccionPublica).
+// "estadisticas"/"ranking" se sacaron del menú (simplificación a
+// pedido del usuario: solo Configuración/Reportar un problema/
+// Mercenarios y Alianzas) junto con su contenido y sus datos.
+// "amistades" ya no es un ítem propio -- vive como sub-pestaña dentro
+// de "temporada" (Mercenarios y Alianzas).
 type SeccionPanel =
   | "configuracion"
   | "editar-equipo"
@@ -401,10 +386,7 @@ type SeccionPanel =
   | "eventos"
   | "titulos"
   | "reportar"
-  | "temporada"
-  | "ranking"
-  | "estadisticas"
-  | "amistades";
+  | "temporada";
 
 // Migración 047: una temporada es "la actual" cuando hoy cae dentro
 // de su fecha_inicio/fecha_fin -- sin esto, "de la temporada actual"
@@ -619,10 +601,6 @@ export default function TeamDetailPage() {
   const [asignandoCapitan, setAsignandoCapitan] = useState<string | null>(null);
   const [errorCapitan, setErrorCapitan] = useState<string | null>(null);
 
-  // --- Ranking de jugadores: torneos + Clan Wars ganadas, se carga
-  // recién al abrir la sección. ---
-  const [rankingJugadores, setRankingJugadores] = useState<JugadorRanking[]>([]);
-  const [cargandoRanking, setCargandoRanking] = useState(false);
   // El panel entero vive colapsado atrás de un botón -- nada de esto
   // se ve desperdigado en la página, solo cuando el dueño lo abre.
   // Adentro, el panel es un menú de 5 secciones (más "configuracion");
@@ -640,6 +618,18 @@ export default function TeamDetailPage() {
   const [vistaEventos, setVistaEventos] = useState<"pendientes" | "propuestos" | "guerras" | "reprogramar">(
     "pendientes"
   );
+  // Sub-pestañas de "Reprogramar fecha" (migración 158): antes Guerras
+  // para reprogramar y Extensión del plazo de lineup iban las dos
+  // juntas, apiladas por cada guerra.
+  const [subtabReprogramar, setSubtabReprogramar] = useState<"fecha" | "extension">("fecha");
+  // Mercenarios y Alianzas pasa a tener 2 sub-pestañas (migración 159):
+  // Mercenarios (fichar + alianzas) y Clanes amigos (ex "Equipos
+  // amigos", ahora con opción de eliminar la amistad).
+  const [tabMercenarios, setTabMercenarios] = useState<"mercenarios" | "amigos">("mercenarios");
+  const [quitandoMercenarioId, setQuitandoMercenarioId] = useState<string | null>(null);
+  const [errorQuitarMercenario, setErrorQuitarMercenario] = useState<string | null>(null);
+  const [eliminandoAmistadId, setEliminandoAmistadId] = useState<string | null>(null);
+  const [errorEliminarAmistad, setErrorEliminarAmistad] = useState<string | null>(null);
 
   // Reorganización: 3 accesos públicos (Lista de Jugadores/Líderes de
   // clan/Logros), independientes del Panel de control de arriba (ese
@@ -2298,99 +2288,6 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
-  // Ranking de jugadores: torneos ganados + Clan Wars ganadas, de
-  // mayor a menor. Se carga recién al abrir la sección.
-  const cargarRanking = async () => {
-    setCargandoRanking(true);
-
-    // Clan Wars ganadas: clan_war_lineup ya guarda, partido por
-    // partido, quién jugó de cada lado -- se cuenta cuántas veces
-    // aparece cada jugador del lado que resultó ganador. Exacto,
-    // histórico de verdad (a diferencia de los torneos por equipo, ver
-    // más abajo).
-    const { data: lineupData } = await supabase
-      .from("clan_war_lineup")
-      .select("jugador_id, clan_wars!inner(status, ganador_team_id)")
-      .eq("team_id", equipo.id)
-      .eq("clan_wars.status", "finalizada")
-      .eq("clan_wars.ganador_team_id", equipo.id);
-
-    const clanWarsPorJugador: Record<string, number> = {};
-    for (const fila of lineupData ?? []) {
-      if (!fila.jugador_id) continue;
-      clanWarsPorJugador[fila.jugador_id] = (clanWarsPorJugador[fila.jugador_id] ?? 0) + 1;
-    }
-
-    const idsMiembros = miembros.map((m) => m.userId);
-    const torneosPorJugador: Record<string, number> = {};
-
-    if (idsMiembros.length > 0) {
-      // Torneos 1v1 ganados por cada jugador individualmente --
-      // tournament_participants.user_id es exacto, un jugador se
-      // representa a sí mismo en un torneo 1v1.
-      const { data: participacionesData } = await supabase
-        .from("tournament_participants")
-        .select(
-          "id, user_id, tournaments!tournament_participants_tournament_id_fkey(estado, campeon_participant_id)"
-        )
-        .in("user_id", idsMiembros);
-
-      for (const p of participacionesData ?? []) {
-        const torneo = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
-        const t = torneo as { estado: string; campeon_participant_id: string | null } | undefined;
-        if (t?.estado === "finalizado" && t.campeon_participant_id === p.id && p.user_id) {
-          torneosPorJugador[p.user_id] = (torneosPorJugador[p.user_id] ?? 0) + 1;
-        }
-      }
-
-      // Torneos POR EQUIPO (2v2/3v3/4v4) ganados por este equipo: a
-      // diferencia de Clan Wars, acá no existe un roster histórico por
-      // torneo -- tournament_participants.team_id es el equipo
-      // completo, no dice quién jugó. Sin esa información, cada torneo
-      // por equipo ganado se le cuenta COMPLETO a cada miembro ACTUAL
-      // del equipo (no repartido ni excluido) -- la aproximación más
-      // razonable disponible con los datos que existen hoy.
-      const { data: participacionesEquipoData } = await supabase
-        .from("tournament_participants")
-        .select(
-          "id, tournaments!tournament_participants_tournament_id_fkey(estado, campeon_participant_id)"
-        )
-        .eq("team_id", equipo.id);
-
-      let torneosEquipoGanados = 0;
-      for (const p of participacionesEquipoData ?? []) {
-        const torneo = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
-        const t = torneo as { estado: string; campeon_participant_id: string | null } | undefined;
-        if (t?.estado === "finalizado" && t.campeon_participant_id === p.id) {
-          torneosEquipoGanados += 1;
-        }
-      }
-      if (torneosEquipoGanados > 0) {
-        for (const id of idsMiembros) {
-          torneosPorJugador[id] = (torneosPorJugador[id] ?? 0) + torneosEquipoGanados;
-        }
-      }
-    }
-
-    const ranking: JugadorRanking[] = miembros
-      .map((m) => {
-        const torneosGanados = torneosPorJugador[m.userId] ?? 0;
-        const clanWarsGanadas = clanWarsPorJugador[m.userId] ?? 0;
-        return {
-          userId: m.userId,
-          nick: m.nick,
-          uniqueId: m.uniqueId,
-          torneosGanados,
-          clanWarsGanadas,
-          total: torneosGanados + clanWarsGanadas,
-        };
-      })
-      .sort((a, b) => b.total - a.total);
-
-    setRankingJugadores(ranking);
-    setCargandoRanking(false);
-  };
-
   const handleSalirEquipo = async () => {
     const soyUnicoMiembro = miembros.length === 1;
     const mensaje = soyUnicoMiembro
@@ -3278,6 +3175,23 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
+  // Migración 159: antes no había forma de deshacer un fichaje.
+  const handleQuitarMercenario = async (mercenarioId: string) => {
+    setQuitandoMercenarioId(mercenarioId);
+    setErrorQuitarMercenario(null);
+
+    const { error } = await supabase.rpc("quitar_mercenario", { p_mercenario_id: mercenarioId });
+
+    setQuitandoMercenarioId(null);
+
+    if (error) {
+      setErrorQuitarMercenario(error.message);
+      return;
+    }
+
+    await cargar();
+  };
+
   // --- Amistad entre equipos + invitaciones a torneos (migración 073) ---
   const handleSolicitarAmistad = async (event: FormEvent) => {
     event.preventDefault();
@@ -3361,6 +3275,24 @@ export default function TeamDetailPage() {
 
     if (error) {
       setErroresResponderAmistad((prev) => ({ ...prev, [amistadId]: error.message }));
+      return;
+    }
+
+    await cargar();
+  };
+
+  // Migración 159: antes una amistad aceptada no se podía deshacer.
+  const handleEliminarAmistad = async (amistadId: string) => {
+    if (!window.confirm("¿Eliminar la amistad con este equipo?")) return;
+    setEliminandoAmistadId(amistadId);
+    setErrorEliminarAmistad(null);
+
+    const { error } = await supabase.rpc("eliminar_amistad_equipo", { p_amistad_id: amistadId });
+
+    setEliminandoAmistadId(null);
+
+    if (error) {
+      setErrorEliminarAmistad(error.message);
       return;
     }
 
@@ -3848,16 +3780,18 @@ export default function TeamDetailPage() {
           {/* Migración 158: reemplaza la caja de "foto de presentación"
               (migración 154, creada por error) -- mismo patrón de la
               tarjeta Stream de Mi perfil (PlayerDetailPage.tsx), ahora
-              a la derecha. */}
+              a la derecha. Título AFUERA de la caja, igual que
+              "Información del clan" -- a pedido del usuario. */}
+          <div className="player-tab-col-stream">
+            <h3 className="detail-subtitle">
+              <Radio size={16} className="icon-inline" aria-hidden="true" />
+              Stream
+            </h3>
           <div className="detail-card team-general-card team-general-stream-card">
             <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
             <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
             <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
             <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-            <h3 className="detail-subtitle">
-              <Radio size={16} className="icon-inline" aria-hidden="true" />
-              Stream
-            </h3>
             {editandoLinksRapidosEquipo ? (
               <>
                 {errorLinksRapidosEquipo && <div className="form-error">{errorLinksRapidosEquipo}</div>}
@@ -3939,6 +3873,7 @@ export default function TeamDetailPage() {
                 )}
               </>
             )}
+          </div>
           </div>
         </div>
       )}
@@ -4160,45 +4095,6 @@ export default function TeamDetailPage() {
                       </span>
                     </button>
                   )}
-                  {/* Reorganización: Valentía del clan se sacó de la
-                      vista pública -- mismo criterio que Estadísticas
-                      en el Panel de control del jugador (Mi perfil). */}
-                  <button
-                    type="button"
-                    className="team-panel-menu-item"
-                    onClick={() => setSeccionPanel("estadisticas")}
-                  >
-                    <span className="team-panel-menu-item-title">
-                      <BarChart3 className="icon-inline" />
-                      Estadísticas
-                    </span>
-                    <span className="team-panel-menu-item-desc">Valentía del clan</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="team-panel-menu-item"
-                    onClick={() => {
-                      setSeccionPanel("ranking");
-                      cargarRanking();
-                    }}
-                  >
-                    <span className="team-panel-menu-item-title">
-                      <TrendingUp className="icon-inline" />
-                      Ranking de jugadores
-                    </span>
-                    <span className="team-panel-menu-item-desc">
-                      Torneos y Clan Wars ganadas, jugador por jugador
-                    </span>
-                  </button>
-                  <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("eventos")}>
-                    <span className="team-panel-menu-item-title">
-                      <CalendarClock className="icon-inline" />
-                      Gestor de eventos
-                    </span>
-                    <span className="team-panel-menu-item-desc">
-                      Solicitudes de Clan War, retos y su historial
-                    </span>
-                  </button>
                   <button
                     type="button"
                     className="team-panel-menu-item"
@@ -4209,20 +4105,7 @@ export default function TeamDetailPage() {
                       Mercenarios y Alianzas
                     </span>
                     <span className="team-panel-menu-item-desc">
-                      Fichar un mercenario y proponer una alianza con otro equipo
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    className="team-panel-menu-item"
-                    onClick={() => setSeccionPanel("amistades")}
-                  >
-                    <span className="team-panel-menu-item-title">
-                      <UserPlus className="icon-inline" />
-                      Equipos amigos
-                    </span>
-                    <span className="team-panel-menu-item-desc">
-                      Enviar y responder solicitudes de amistad, e invitaciones a torneos
+                      Fichar mercenarios y gestionar los equipos amigos del clan
                     </span>
                   </button>
                   <button
@@ -4247,9 +4130,7 @@ export default function TeamDetailPage() {
                   </div>
 
               {/* Barra de pestañas de "Solicitudes" (migración 158). */}
-              {(seccionPanel === "eventos" ||
-                seccionPanel === "amistades" ||
-                seccionPanel === "solicitudes-unirse") && (
+              {(seccionPanel === "eventos" || seccionPanel === "solicitudes-unirse") && (
                 <div className="team-config-media-tabs">
                   <button
                     type="button"
@@ -4265,8 +4146,11 @@ export default function TeamDetailPage() {
                   </button>
                   <button
                     type="button"
-                    className={`team-config-media-tab ${seccionPanel === "amistades" ? "is-active" : ""}`}
-                    onClick={() => setSeccionPanel("amistades")}
+                    className="team-config-media-tab"
+                    onClick={() => {
+                      setSeccionPanel("temporada");
+                      setTabMercenarios("amigos");
+                    }}
                   >
                     Amistad
                   </button>
@@ -4278,6 +4162,7 @@ export default function TeamDetailPage() {
                     onClick={() => {
                       setSeccionPanel("eventos");
                       setVistaEventos("reprogramar");
+                      setSubtabReprogramar("fecha");
                     }}
                   >
                     Reprogramar fecha
@@ -4289,15 +4174,6 @@ export default function TeamDetailPage() {
                   >
                     Unirse al equipo
                   </button>
-                </div>
-              )}
-
-              {/* Estadísticas (reorganización): Valentía del clan, sacada
-                  de la vista pública -- mismo espíritu que Estadísticas
-                  en el Panel de control del jugador. */}
-              {seccionPanel === "estadisticas" && (
-                <div className="stats-card-group">
-                  <PercentBar label="Valentía del clan" value={equipo.valentia} vertical />
                 </div>
               )}
 
@@ -4727,35 +4603,6 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {seccionPanel === "ranking" && (
-                <>
-                  <h3 className="detail-subtitle">Ranking de jugadores</h3>
-                  <p className="tournament-card-meta">
-                    Suma de torneos ganados y Clan Wars ganadas, de mayor a menor.
-                  </p>
-                  {cargandoRanking ? (
-                    <p className="tournament-card-meta">Cargando...</p>
-                  ) : rankingJugadores.length === 0 ? (
-                    <p className="detail-empty">Este equipo todavía no tiene miembros.</p>
-                  ) : (
-                    <div className="detail-participant-list">
-                      {rankingJugadores.map((r, i) => (
-                        <div key={r.userId} className="detail-participant-item">
-                          <span className="liga-badge">{i + 1}</span>
-                          {r.nick ?? "Jugador de RemorApp"}
-                          {r.uniqueId && <span className="profile-nick-id">#{r.uniqueId}</span>}
-                          <span className="team-owner-badge">{r.total}</span>
-                          <span className="tournament-card-meta">
-                            {r.torneosGanados} torneo{r.torneosGanados === 1 ? "" : "s"} · {r.clanWarsGanadas} Clan
-                            War{r.clanWarsGanadas === 1 ? "" : "s"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
-
               {seccionPanel === "eventos" && (
               <>
               {vistaEventos !== "reprogramar" && solicitudesHistoricas.length > 0 && (
@@ -4942,9 +4789,27 @@ export default function TeamDetailPage() {
 
               {(vistaEventos === "guerras" || vistaEventos === "reprogramar") && (
               <>
-              <h4 className="detail-subtitle">
-                {vistaEventos === "reprogramar" ? "Guerras para reprogramar" : "Guerras en preparación"}
-              </h4>
+              {vistaEventos === "guerras" && <h4 className="detail-subtitle">Guerras en preparación</h4>}
+
+              {vistaEventos === "reprogramar" && (
+                <div className="team-info-subtabs">
+                  <button
+                    type="button"
+                    className={`team-info-subtab ${subtabReprogramar === "fecha" ? "is-active" : ""}`}
+                    onClick={() => setSubtabReprogramar("fecha")}
+                  >
+                    Guerras para reprogramar
+                  </button>
+                  <button
+                    type="button"
+                    className={`team-info-subtab ${subtabReprogramar === "extension" ? "is-active" : ""}`}
+                    onClick={() => setSubtabReprogramar("extension")}
+                  >
+                    Extensión del plazo de lineup
+                  </button>
+                </div>
+              )}
+
               {retosActivos.length === 0 ? (
                 <p className="detail-empty">
                   {vistaEventos === "reprogramar"
@@ -5072,7 +4937,7 @@ export default function TeamDetailPage() {
                             llega a 'en_curso' ya no aplica. A pedido del
                             usuario, vive solo en la pestaña "Reprogramar
                             fecha", no mezclada con el resto de Clan War. */}
-                        {vistaEventos === "reprogramar" && r.status === "aceptada" && (
+                        {vistaEventos === "reprogramar" && subtabReprogramar === "fecha" && r.status === "aceptada" && (
                           <>
                             <h5 className="detail-subtitle">Reprogramación</h5>
                             {erroresReprogramacion[r.id] && (
@@ -5168,7 +5033,7 @@ export default function TeamDetailPage() {
                             CW 'aceptada' y una vez vencido el plazo --
                             antes de eso todavía se puede editar sin
                             pedir nada. */}
-                        {vistaEventos === "reprogramar" && r.status === "aceptada" && vencioPlazoLineup && !lineupAprobado && (
+                        {vistaEventos === "reprogramar" && subtabReprogramar === "extension" && r.status === "aceptada" && vencioPlazoLineup && !lineupAprobado && (
                           <>
                             <h5 className="detail-subtitle">Extensión del plazo de lineup</h5>
                             <p className="tournament-card-meta">
@@ -6057,6 +5922,28 @@ export default function TeamDetailPage() {
 
               {seccionPanel === "temporada" && (
                 <>
+                  <h3 className="detail-subtitle">Mercenarios y Alianzas</h3>
+                  <div className="team-info-subtabs">
+                    <button
+                      type="button"
+                      className={`team-info-subtab ${tabMercenarios === "mercenarios" ? "is-active" : ""}`}
+                      onClick={() => setTabMercenarios("mercenarios")}
+                    >
+                      Mercenarios
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-info-subtab ${tabMercenarios === "amigos" ? "is-active" : ""}`}
+                      onClick={() => setTabMercenarios("amigos")}
+                    >
+                      Clanes amigos
+                    </button>
+                  </div>
+                  </>
+              )}
+
+              {seccionPanel === "temporada" && tabMercenarios === "mercenarios" && (
+                <>
                   <h3 className="detail-subtitle">Fichar un mercenario</h3>
                   <p className="detail-empty">
                     Un mercenario queda disponible para el lineup durante toda la temporada elegida,
@@ -6136,12 +6023,23 @@ export default function TeamDetailPage() {
                   {mercenariosPropios.length > 0 && (
                     <>
                       <h3 className="detail-subtitle">Mercenarios de la temporada actual</h3>
+                      {errorQuitarMercenario && <div className="form-error">{errorQuitarMercenario}</div>}
                       <div className="detail-participant-list">
                         {mercenariosPropios.map((m) => (
                           <div key={m.id} className="detail-participant-item">
                             {m.jugadorNombre}
                             <span className="team-temp-badge">Mercenario</span>
                             <span className="tournament-card-meta">{m.temporadaNombre}</span>
+                            {esDueño && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                disabled={quitandoMercenarioId === m.id}
+                                onClick={() => handleQuitarMercenario(m.id)}
+                              >
+                                {quitandoMercenarioId === m.id ? "Quitando..." : "Quitar"}
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -6252,8 +6150,10 @@ export default function TeamDetailPage() {
               )}
 
               {/* Amistad entre equipos + invitaciones a torneos
-                  (migración 073). */}
-              {seccionPanel === "amistades" && (
+                  (migración 073) -- migración 159: deja de ser un ítem
+                  propio del Panel de control y pasa a ser la
+                  sub-pestaña "Clanes amigos" de Mercenarios y Alianzas. */}
+              {seccionPanel === "temporada" && tabMercenarios === "amigos" && (
                 <>
                   <h3 className="detail-subtitle">Enviar solicitud de amistad</h3>
                   {esDueño ? (
@@ -6283,7 +6183,8 @@ export default function TeamDetailPage() {
                     <p className="detail-empty">Solo el dueño del equipo puede enviar solicitudes de amistad.</p>
                   )}
 
-                  <h3 className="detail-subtitle">Equipos amigos</h3>
+                  <h3 className="detail-subtitle">Clanes amigos</h3>
+                  {errorEliminarAmistad && <div className="form-error">{errorEliminarAmistad}</div>}
                   {amistadesPropias.length === 0 ? (
                     <p className="detail-empty">Todavía no hay solicitudes de amistad con otros equipos.</p>
                   ) : (
@@ -6298,6 +6199,7 @@ export default function TeamDetailPage() {
                                 ? "Esperando respuesta del otro equipo"
                                 : "Te mandaron una solicitud";
                         const puedeResponder = esDueño && a.status === "pendiente" && !a.propuestaPorMi;
+                        const puedeEliminar = esDueño && a.status === "aceptada";
 
                         return (
                           <div key={a.id} className="detail-participant-item">
@@ -6322,6 +6224,16 @@ export default function TeamDetailPage() {
                                   Rechazar
                                 </button>
                               </div>
+                            )}
+                            {puedeEliminar && (
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                disabled={eliminandoAmistadId === a.id}
+                                onClick={() => handleEliminarAmistad(a.id)}
+                              >
+                                {eliminandoAmistadId === a.id ? "Eliminando..." : "Eliminar amistad"}
+                              </button>
                             )}
                             {erroresResponderAmistad[a.id] && (
                               <div className="form-error">{erroresResponderAmistad[a.id]}</div>
