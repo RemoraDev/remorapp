@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -27,6 +27,7 @@ import {
   GripVertical,
   Info,
   Pencil,
+  Radio,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,10 +37,11 @@ import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import { sonidoAbrirPanel, sonidoClickMenu } from "../lib/sound";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
+import { TwitchIcon, DiscordIcon, YoutubeIcon } from "../components/IconosRedes";
 import type { EquipoDelUsuario } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
 import { SC2_REGION_OPTIONS } from "../types/profile";
-import type { AvatarForma } from "../types/profile";
+import type { AvatarForma, LinkTransmision } from "../types/profile";
 import { CLAN_WAR_MOTIVO_RECHAZO_OPTIONS, CLAN_WAR_REPORTE_MOTIVO_OPTIONS, TEMAS_EQUIPO } from "../types/teams";
 import type {
   ClanWarMotivoRechazo,
@@ -387,15 +389,17 @@ interface TorneoParticipadoConResultado {
   resultado: string;
 }
 
-// Las secciones del Panel de control (más el acceso directo a Hall of
-// Fame, que no es una sección con contenido propio, solo un link).
-// null = se ve el menú con las tarjetas, no una sección puntual.
+// Las secciones del Panel de control. null = se ve el menú con las
+// tarjetas, no una sección puntual. "titulos" ya no tiene ítem propio
+// en el menú (el minievento Título Padre/Hijo todavía no está
+// configurado) -- la sección queda sin usarse, no se borró su
+// contenido por si se retoma más adelante. "logros" y el link a Hall
+// of Fame se mudaron a sub-pestañas de "Historial" (seccionPublica).
 type SeccionPanel =
   | "configuracion"
   | "editar-equipo"
   | "eventos"
   | "titulos"
-  | "logros"
   | "reportar"
   | "temporada"
   | "ranking"
@@ -527,69 +531,54 @@ export default function TeamDetailPage() {
   const [errorEquipo, setErrorEquipo] = useState<string | null>(null);
   const [equipoGuardado, setEquipoGuardado] = useState(false);
 
-  // Migración 154: foto de presentación del equipo (vertical, 9:16) --
-  // mismo mecanismo de edición rápida (sin "Guardar", se sube sola) que
-  // ya tiene PlayerDetailPage.tsx para la de Mi perfil, acá separado
-  // del formulario grande de logo/banner/descripción. Solo dueño o
-  // capitán, mismo criterio (puedeGestionar) que el resto de la
-  // configuración del equipo.
-  const FOTO_PRESENTACION_MAX_BYTES = 15 * 1024 * 1024;
-  const fotoPresentacionEquipoInputRef = useRef<HTMLInputElement | null>(null);
-  const [archivoParaRecortarFotoEquipo, setArchivoParaRecortarFotoEquipo] = useState<File | null>(null);
-  const [subiendoFotoEquipo, setSubiendoFotoEquipo] = useState(false);
-  const [errorFotoEquipo, setErrorFotoEquipo] = useState<string | null>(null);
+  // Migración 158: Stream del equipo -- reemplaza la caja de "foto de
+  // presentación" (migración 154, creada por error) por el mismo
+  // mecanismo de edición rápida de 3 plataformas fijas que ya tiene
+  // PlayerDetailPage.tsx para la de Mi perfil, guardando sobre
+  // teams.links_transmision. Solo dueño o capitán (puedeGestionar).
+  const PLATAFORMAS_STREAM_RAPIDO_EQUIPO = ["Twitch", "Discord", "YouTube"] as const;
+  const [editandoLinksRapidosEquipo, setEditandoLinksRapidosEquipo] = useState(false);
+  const [linksRapidosEditadosEquipo, setLinksRapidosEditadosEquipo] = useState<Record<string, string>>({});
+  const [guardandoLinksRapidosEquipo, setGuardandoLinksRapidosEquipo] = useState(false);
+  const [errorLinksRapidosEquipo, setErrorLinksRapidosEquipo] = useState<string | null>(null);
 
-  const handleFotoEquipoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const archivo = event.target.files?.[0] ?? null;
-    setErrorFotoEquipo(null);
-    event.target.value = "";
-    if (!archivo) return;
-    if (archivo.size > FOTO_PRESENTACION_MAX_BYTES) {
-      setErrorFotoEquipo("La foto no puede pesar más de 15MB.");
-      return;
+  const handleAbrirEdicionLinksRapidosEquipo = () => {
+    const valores: Record<string, string> = {};
+    for (const plataforma of PLATAFORMAS_STREAM_RAPIDO_EQUIPO) {
+      const existente = equipo?.links_transmision.find(
+        (l) => l.plataforma.toLowerCase() === plataforma.toLowerCase()
+      );
+      valores[plataforma] = existente?.url ?? "";
     }
-    setArchivoParaRecortarFotoEquipo(archivo);
+    setLinksRapidosEditadosEquipo(valores);
+    setErrorLinksRapidosEquipo(null);
+    setEditandoLinksRapidosEquipo(true);
   };
 
-  const handleConfirmarRecorteFotoEquipo = async (recorte: Blob) => {
-    setArchivoParaRecortarFotoEquipo(null);
-    if (!user || !equipo) return;
+  const handleGuardarLinksRapidosEquipo = async () => {
+    if (!equipo) return;
+    setGuardandoLinksRapidosEquipo(true);
+    setErrorLinksRapidosEquipo(null);
 
-    setSubiendoFotoEquipo(true);
-    setErrorFotoEquipo(null);
+    const otrosLinks = equipo.links_transmision.filter(
+      (l) => !PLATAFORMAS_STREAM_RAPIDO_EQUIPO.some((p) => p.toLowerCase() === l.plataforma.toLowerCase())
+    );
+    const nuevosLinks: LinkTransmision[] = PLATAFORMAS_STREAM_RAPIDO_EQUIPO.filter(
+      (p) => linksRapidosEditadosEquipo[p]?.trim()
+    ).map((p) => ({ plataforma: p, url: linksRapidosEditadosEquipo[p].trim(), tipo: "personal" }));
+    const linksTransmision = [...otrosLinks, ...nuevosLinks];
 
-    try {
-      const recorteComprimido = await comprimirImagen(recorte, "presentacion-equipo");
-      const extension = recorteComprimido.type === "image/png" ? "png" : "jpg";
-      const ruta = `${user.id}/${Date.now()}-presentacion.${extension}`;
+    const { error } = await supabase.from("teams").update({ links_transmision: linksTransmision }).eq("id", equipo.id);
 
-      const { error: uploadError } = await supabase.storage
-        .from("team-banners")
-        .upload(ruta, recorteComprimido, { contentType: recorteComprimido.type });
-
-      if (uploadError) {
-        setErrorFotoEquipo("No se pudo subir la foto: " + uploadError.message);
-        return;
-      }
-
-      const fotoPresentacionUrl = supabase.storage.from("team-banners").getPublicUrl(ruta).data.publicUrl;
-
-      const { error: updateError } = await supabase
-        .from("teams")
-        .update({ foto_presentacion_url: fotoPresentacionUrl })
-        .eq("id", equipo.id);
-
-      if (updateError) {
-        setErrorFotoEquipo(updateError.message);
-        return;
-      }
-
-      setEquipo((prev) => (prev ? { ...prev, foto_presentacion_url: fotoPresentacionUrl } : prev));
-    } catch {
-      setErrorFotoEquipo("No se pudo procesar la foto, prueba con otra imagen.");
-    } finally {
-      setSubiendoFotoEquipo(false);
+    if (error) {
+      setErrorLinksRapidosEquipo(error.message);
+      setGuardandoLinksRapidosEquipo(false);
+      return;
     }
+
+    setEquipo((prev) => (prev ? { ...prev, links_transmision: linksTransmision } : prev));
+    setGuardandoLinksRapidosEquipo(false);
+    setEditandoLinksRapidosEquipo(false);
   };
 
   // Edición rápida de "Información del clan" (pestaña General) -- mismo
@@ -640,6 +629,9 @@ export default function TeamDetailPage() {
   // seccionPanel === null muestra el menú, no una sección puntual.
   const [panelAbierto, setPanelAbierto] = useState(false);
   const [seccionPanel, setSeccionPanel] = useState<SeccionPanel | null>(null);
+  // Pestañas de medios dentro de Configuración (migración 158): antes
+  // Logo/Banner/Franja lateral iban apiladas en una sola pantalla larga.
+  const [tabConfigMedia, setTabConfigMedia] = useState<"logo" | "banner" | "franja">("logo");
 
   // Reorganización: 3 accesos públicos (Lista de Jugadores/Líderes de
   // clan/Logros), independientes del Panel de control de arriba (ese
@@ -653,6 +645,9 @@ export default function TeamDetailPage() {
   // clan, antes mostrada siempre debajo del banner (ahora vive acá,
   // como primera pestaña).
   const [seccionPublica, setSeccionPublica] = useState<"general" | "jugadores" | "lideres" | "logros">("general");
+  // Sub-pestañas de "Historial" (migración 158): Logros y Hall of Fame
+  // dejan de ser ítems del Panel de control y pasan a vivir acá.
+  const [subtabHistorial, setSubtabHistorial] = useState<"actividad" | "logros" | "fama">("actividad");
 
   // Acceso rápido desde "Check-in" en el abanico: ?panel=eventos abre
   // el Panel de control directo en Gestor de eventos, para no tener
@@ -3599,6 +3594,24 @@ export default function TeamDetailPage() {
             lugar de siempre, más abajo -- solo se movió el botón. */}
         {puedeGestionar && (
           <div className="team-panel-toggle-header">
+            {/* Acceso directo a "Solicitudes recibidas" (vive dentro de
+                Editar equipo, dentro de Configuración) al lado del botón
+                de Panel de control -- a pedido del usuario, sin duplicar
+                esa sección. */}
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                sonidoAbrirPanel();
+                setPanelAbierto(true);
+                setSeccionPanel("editar-equipo");
+              }}
+            >
+              Solicitudes
+              {solicitudesUnionRecibidas.length > 0 && (
+                <span className="team-panel-badge">{solicitudesUnionRecibidas.length}</span>
+              )}
+            </button>
             <button
               type="button"
               className="btn btn-primary"
@@ -3760,54 +3773,6 @@ export default function TeamDetailPage() {
 
       {seccionPublica === "general" && (
         <div className="team-general-grid">
-          {/* Migración 154: foto de presentación del equipo -- mismo
-              marco "corner bracket" y mecanismo de edición rápida que
-              la de Mi perfil (PlayerDetailPage.tsx), solo que acá el
-              lápiz únicamente lo ve dueño/capitán (puedeGestionar). */}
-          <div className="player-tab-col-foto">
-            <div className="player-tab-foto-wrap">
-              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-              {equipo.foto_presentacion_url ? (
-                <Avatar
-                  url={equipo.foto_presentacion_url}
-                  nombre={equipo.name}
-                  className="player-tab-foto"
-                  forma="cuadrado"
-                />
-              ) : (
-                <div className="player-tab-foto player-tab-foto-vacia">
-                  <span>Foto del clan aquí</span>
-                  <span className="player-tab-foto-vacia-proporcion">(9:16)</span>
-                </div>
-              )}
-              {puedeGestionar && (
-                <button
-                  type="button"
-                  className="player-detail-foto-presentacion-edit-btn"
-                  onClick={() => fotoPresentacionEquipoInputRef.current?.click()}
-                  disabled={subiendoFotoEquipo}
-                  aria-label="Cambiar foto de presentación del clan"
-                  title="Cambiar foto de presentación del clan"
-                >
-                  <Pencil size={14} />
-                </button>
-              )}
-            </div>
-            {errorFotoEquipo && <div className="form-error">{errorFotoEquipo}</div>}
-            {puedeGestionar && (
-              <input
-                ref={fotoPresentacionEquipoInputRef}
-                type="file"
-                accept="image/*"
-                className="visually-hidden"
-                onChange={handleFotoEquipoFileChange}
-              />
-            )}
-          </div>
-
           <div className="player-tab-col-main">
             {/* A pedido del usuario: el título pasa a vivir arriba de la
                 caja (como "Panel de control"/otros títulos de sección
@@ -3874,15 +3839,101 @@ export default function TeamDetailPage() {
             </div>
           </div>
 
-          {archivoParaRecortarFotoEquipo && (
-            <RecortadorImagenModal
-              archivo={archivoParaRecortarFotoEquipo}
-              aspecto={9 / 16}
-              titulo="Ajustar foto de presentación del clan"
-              onConfirmar={handleConfirmarRecorteFotoEquipo}
-              onCancelar={() => setArchivoParaRecortarFotoEquipo(null)}
-            />
-          )}
+          {/* Migración 158: reemplaza la caja de "foto de presentación"
+              (migración 154, creada por error) -- mismo patrón de la
+              tarjeta Stream de Mi perfil (PlayerDetailPage.tsx), ahora
+              a la derecha. */}
+          <div className="detail-card team-general-card team-general-stream-card">
+            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+            <h3 className="detail-subtitle">
+              <Radio size={16} className="icon-inline" aria-hidden="true" />
+              Stream
+            </h3>
+            {editandoLinksRapidosEquipo ? (
+              <>
+                {errorLinksRapidosEquipo && <div className="form-error">{errorLinksRapidosEquipo}</div>}
+                {PLATAFORMAS_STREAM_RAPIDO_EQUIPO.map((plataforma) => (
+                  <div className="form-group" key={plataforma}>
+                    <label className="form-label" htmlFor={`team-stream-rapido-${plataforma}`}>
+                      {plataforma}
+                    </label>
+                    <input
+                      id={`team-stream-rapido-${plataforma}`}
+                      className="form-input"
+                      type="text"
+                      placeholder={`Link de ${plataforma}`}
+                      value={linksRapidosEditadosEquipo[plataforma] ?? ""}
+                      onChange={(e) =>
+                        setLinksRapidosEditadosEquipo((prev) => ({ ...prev, [plataforma]: e.target.value }))
+                      }
+                      disabled={guardandoLinksRapidosEquipo}
+                    />
+                  </div>
+                ))}
+                <div className="player-tab-bio-acciones">
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={guardandoLinksRapidosEquipo}
+                    onClick={handleGuardarLinksRapidosEquipo}
+                  >
+                    {guardandoLinksRapidosEquipo ? "Guardando..." : "Guardar"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={guardandoLinksRapidosEquipo}
+                    onClick={() => setEditandoLinksRapidosEquipo(false)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="player-tab-stream-links">
+                  {PLATAFORMAS_STREAM_RAPIDO_EQUIPO.map((plataforma) => {
+                    const link = equipo.links_transmision.find(
+                      (l) => l.plataforma.toLowerCase() === plataforma.toLowerCase()
+                    );
+                    const Icono =
+                      plataforma === "Twitch" ? TwitchIcon : plataforma === "Discord" ? DiscordIcon : YoutubeIcon;
+                    return link ? (
+                      <a
+                        key={plataforma}
+                        href={link.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="player-tab-stream-link"
+                      >
+                        <Icono size={18} />
+                        {plataforma}
+                      </a>
+                    ) : (
+                      <span key={plataforma} className="player-tab-stream-link player-tab-stream-link-vacio">
+                        <Icono size={18} />
+                        {plataforma}
+                      </span>
+                    );
+                  })}
+                </div>
+                {puedeGestionar && (
+                  <button
+                    type="button"
+                    className="player-tab-bio-edit-btn"
+                    onClick={handleAbrirEdicionLinksRapidosEquipo}
+                    aria-label="Editar links de Stream"
+                    title="Editar links de Stream"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -3951,9 +4002,48 @@ export default function TeamDetailPage() {
 
       {seccionPublica === "logros" && (
         <>
-          <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
-          <h4 className="detail-subtitle">Clan Wars amistosas</h4>
-          <LogrosClanWarList teamId={equipo.id} className="detail-participant-list" />
+          <div className="team-info-subtabs">
+            <button
+              type="button"
+              className={`team-info-subtab ${subtabHistorial === "actividad" ? "is-active" : ""}`}
+              onClick={() => setSubtabHistorial("actividad")}
+            >
+              Actividad
+            </button>
+            <button
+              type="button"
+              className={`team-info-subtab ${subtabHistorial === "logros" ? "is-active" : ""}`}
+              onClick={() => setSubtabHistorial("logros")}
+            >
+              Logros
+            </button>
+            <button
+              type="button"
+              className="team-info-subtab"
+              onClick={() => navigate(`/sala-de-la-fama?clan=${equipo.tag}`)}
+            >
+              <Trophy size={14} className="icon-inline" />
+              Hall of Fame
+            </button>
+          </div>
+
+          {subtabHistorial === "actividad" && (
+            <>
+              <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
+              <h4 className="detail-subtitle">Clan Wars amistosas</h4>
+              <LogrosClanWarList teamId={equipo.id} className="detail-participant-list" />
+            </>
+          )}
+
+          {subtabHistorial === "logros" && (
+            <>
+              <h3 className="detail-subtitle">Desbloqueadas por nivel</h3>
+              <p className="detail-empty">
+                Todavía no existe un catálogo de skins por nivel -- esta vitrina va a mostrarlas acá en
+                cuanto ese catálogo esté listo.
+              </p>
+            </>
+          )}
         </>
       )}
 
@@ -4060,7 +4150,7 @@ export default function TeamDetailPage() {
                         Configuración
                       </span>
                       <span className="team-panel-menu-item-desc">
-                        Logo, banner, título Padre/Hijo activo y eliminar equipo
+                        Apariencia, logo, banner, imagen lateral, equipo y eliminar equipo
                       </span>
                     </button>
                   )}
@@ -4077,19 +4167,6 @@ export default function TeamDetailPage() {
                       Estadísticas
                     </span>
                     <span className="team-panel-menu-item-desc">Valentía del clan</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="team-panel-menu-item"
-                    onClick={() => setSeccionPanel("editar-equipo")}
-                  >
-                    <span className="team-panel-menu-item-title">
-                      <Users className="icon-inline" />
-                      Editar equipo
-                    </span>
-                    <span className="team-panel-menu-item-desc">
-                      Lista de jugadores, invitar, quitar e investigar jugador
-                    </span>
                   </button>
                   <button
                     type="button"
@@ -4116,15 +4193,6 @@ export default function TeamDetailPage() {
                       Solicitudes de Clan War, retos y su historial
                     </span>
                   </button>
-                  {esDueño && (
-                    <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("titulos")}>
-                      <span className="team-panel-menu-item-title">
-                        <Award className="icon-inline" />
-                        Títulos
-                      </span>
-                      <span className="team-panel-menu-item-desc">Responder, proponer y ver Títulos Padre/Hijo</span>
-                    </button>
-                  )}
                   <button
                     type="button"
                     className="team-panel-menu-item"
@@ -4151,13 +4219,6 @@ export default function TeamDetailPage() {
                       Enviar y responder solicitudes de amistad, e invitaciones a torneos
                     </span>
                   </button>
-                  <button type="button" className="team-panel-menu-item" onClick={() => setSeccionPanel("logros")}>
-                    <span className="team-panel-menu-item-title">
-                      <Award className="icon-inline" />
-                      Logros
-                    </span>
-                    <span className="team-panel-menu-item-desc">Skins desbloqueadas por nivel</span>
-                  </button>
                   <button
                     type="button"
                     className="team-panel-menu-item"
@@ -4169,13 +4230,6 @@ export default function TeamDetailPage() {
                     </span>
                     <span className="team-panel-menu-item-desc">Avisa al staff sobre algo puntual</span>
                   </button>
-                  <Link to={`/sala-de-la-fama?clan=${equipo.tag}`} className="team-panel-menu-item">
-                    <span className="team-panel-menu-item-title">
-                      <Trophy className="icon-inline" />
-                      Hall of Fame
-                    </span>
-                    <span className="team-panel-menu-item-desc">Ver este equipo en la Sala de la Fama</span>
-                  </Link>
                   </div>
                 </>
               ) : (
@@ -4274,6 +4328,18 @@ export default function TeamDetailPage() {
                       </button>
                     ))}
                   </div>
+
+                  {/* A pedido del usuario: "Editar equipo" deja de ser un
+                      ítem propio del Panel de control y pasa a vivir
+                      acá adentro, sin duplicar esa sección. */}
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-block team-config-equipo-btn"
+                    onClick={() => setSeccionPanel("editar-equipo")}
+                  >
+                    <Users className="icon-inline" />
+                    Editar equipo
+                  </button>
                 </>
               )}
 
@@ -4282,114 +4348,136 @@ export default function TeamDetailPage() {
             {errorEquipo && <div className="form-error">{errorEquipo}</div>}
             {equipoGuardado && <div className="form-success">Los cambios del equipo se guardaron.</div>}
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="team-edit-descripcion">
-                Descripción
-              </label>
-              <textarea
-                id="team-edit-descripcion"
-                className="form-textarea"
-                maxLength={280}
-                value={descEquipo}
-                onChange={(e) => setDescEquipo(e.target.value)}
-              />
+            {/* A pedido del usuario: logo/banner/franja lateral pasan a
+                ser pestañas (antes iban las tres apiladas en una sola
+                pantalla larga) -- Descripción se saca de acá porque ya
+                se edita desde "Información del clan" en la pestaña
+                General, quedaba duplicado. */}
+            <div className="team-config-media-tabs">
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfigMedia === "logo" ? "is-active" : ""}`}
+                onClick={() => setTabConfigMedia("logo")}
+              >
+                Logo
+              </button>
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfigMedia === "banner" ? "is-active" : ""}`}
+                onClick={() => setTabConfigMedia("banner")}
+              >
+                Banner
+              </button>
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfigMedia === "franja" ? "is-active" : ""}`}
+                onClick={() => setTabConfigMedia("franja")}
+              >
+                Imagen lateral
+              </button>
             </div>
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="team-edit-logo">
-                Logo (opcional, máx. 15MB, se recorta a 1:1)
-              </label>
-              <input
-                id="team-edit-logo"
-                className="form-input"
-                type="file"
-                accept="image/*"
-                onChange={handleLogoChange}
-              />
-              {archivoParaRecortarLogo && (
-                <RecortadorImagenModal
-                  archivo={archivoParaRecortarLogo}
-                  aspecto={1}
-                  titulo="Ajustar logo del equipo"
-                  onConfirmar={handleConfirmarRecorteLogo}
-                  onCancelar={() => setArchivoParaRecortarLogo(null)}
+            {tabConfigMedia === "logo" && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-edit-logo">
+                  Logo (opcional, máx. 15MB, se recorta a 1:1)
+                </label>
+                <input
+                  id="team-edit-logo"
+                  className="form-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleLogoChange}
                 />
-              )}
-              {(logoPreview ?? equipo.logo_url) && (
-                <img
-                  src={logoPreview ?? equipo.logo_url ?? ""}
-                  alt="Vista previa del logo"
-                  className="team-logo-preview"
-                />
-              )}
-            </div>
+                {archivoParaRecortarLogo && (
+                  <RecortadorImagenModal
+                    archivo={archivoParaRecortarLogo}
+                    aspecto={1}
+                    titulo="Ajustar logo del equipo"
+                    onConfirmar={handleConfirmarRecorteLogo}
+                    onCancelar={() => setArchivoParaRecortarLogo(null)}
+                  />
+                )}
+                {(logoPreview ?? equipo.logo_url) && (
+                  <img
+                    src={logoPreview ?? equipo.logo_url ?? ""}
+                    alt="Vista previa del logo"
+                    className="team-logo-preview"
+                  />
+                )}
+              </div>
+            )}
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="team-edit-banner">
-                Banner (opcional, máx. 15MB, se recorta a 4:1)
-              </label>
-              <input
-                id="team-edit-banner"
-                className="form-input"
-                type="file"
-                accept="image/*"
-                onChange={handleBannerChange}
-              />
-              {archivoParaRecortarBanner && (
-                <RecortadorImagenModal
-                  archivo={archivoParaRecortarBanner}
-                  aspecto={4}
-                  titulo="Ajustar banner del equipo"
-                  onConfirmar={handleConfirmarRecorteBanner}
-                  onCancelar={() => setArchivoParaRecortarBanner(null)}
+            {tabConfigMedia === "banner" && (
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-edit-banner">
+                  Banner (opcional, máx. 15MB, se recorta a 4:1)
+                </label>
+                <input
+                  id="team-edit-banner"
+                  className="form-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleBannerChange}
                 />
-              )}
-              {(bannerPreview ?? equipo.banner_url) && (
-                <img
-                  src={bannerPreview ?? equipo.banner_url ?? ""}
-                  alt="Vista previa del banner"
-                  className="team-banner-preview"
-                />
-              )}
-            </div>
+                {archivoParaRecortarBanner && (
+                  <RecortadorImagenModal
+                    archivo={archivoParaRecortarBanner}
+                    aspecto={4}
+                    titulo="Ajustar banner del equipo"
+                    onConfirmar={handleConfirmarRecorteBanner}
+                    onCancelar={() => setArchivoParaRecortarBanner(null)}
+                  />
+                )}
+                {(bannerPreview ?? equipo.banner_url) && (
+                  <img
+                    src={bannerPreview ?? equipo.banner_url ?? ""}
+                    alt="Vista previa del banner"
+                    className="team-banner-preview"
+                  />
+                )}
+              </div>
+            )}
 
-            {/* Migración 156/158: reemplaza el panal de hexágonos de la
-                columna lateral de escritorio de cada miembro que elija
-                "usar la de mi clan" (ver ProfilePage.tsx) -- mismo
-                recortador interactivo que logo/banner. */}
-            <div className="form-group">
-              <label className="form-label" htmlFor="team-edit-franja-lateral">
-                Franja lateral de escritorio (opcional, máx. 15MB)
-              </label>
-              <input
-                id="team-edit-franja-lateral"
-                className="form-input"
-                type="file"
-                accept="image/*"
-                onChange={handleFranjaLateralChange}
-              />
-              <p className="form-hint">
-                Reemplaza el panal de hexágonos de la columna lateral en la versión de escritorio, para
-                quien elija usar la del clan desde su propio perfil. Recomendado: formato WebP, pesa
-                bastante menos que JPG o PNG.
-              </p>
-              {archivoParaRecortarFranjaLateral && (
-                <RecortadorImagenModal
-                  archivo={archivoParaRecortarFranjaLateral}
-                  aspecto={1 / 5}
-                  titulo="Ajustar franja lateral de escritorio"
-                  onConfirmar={handleConfirmarRecorteFranjaLateral}
-                  onCancelar={() => setArchivoParaRecortarFranjaLateral(null)}
+            {tabConfigMedia === "franja" && (
+              /* Migración 156: reemplaza el panal de hexágonos de la
+                  columna lateral de escritorio de cada miembro que elija
+                  "usar la de mi clan" (ver ProfilePage.tsx) -- mismo
+                  recortador interactivo que logo/banner. */
+              <div className="form-group">
+                <label className="form-label" htmlFor="team-edit-franja-lateral">
+                  Franja lateral de escritorio (opcional, máx. 15MB)
+                </label>
+                <input
+                  id="team-edit-franja-lateral"
+                  className="form-input"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleFranjaLateralChange}
                 />
-              )}
-              {(franjaLateralPreview ?? equipo.escritorio_lateral_url) && (
-                <img
-                  src={franjaLateralPreview ?? equipo.escritorio_lateral_url ?? ""}
-                  alt="Vista previa de la franja lateral"
-                  className="team-franja-lateral-preview"
-                />
-              )}
-            </div>
+                <p className="form-hint">
+                  Reemplaza el panal de hexágonos de la columna lateral en la versión de escritorio, para
+                  quien elija usar la del clan desde su propio perfil. Recomendado: formato WebP, pesa
+                  bastante menos que JPG o PNG.
+                </p>
+                {archivoParaRecortarFranjaLateral && (
+                  <RecortadorImagenModal
+                    archivo={archivoParaRecortarFranjaLateral}
+                    aspecto={1 / 5}
+                    titulo="Ajustar franja lateral de escritorio"
+                    onConfirmar={handleConfirmarRecorteFranjaLateral}
+                    onCancelar={() => setArchivoParaRecortarFranjaLateral(null)}
+                  />
+                )}
+                {(franjaLateralPreview ?? equipo.escritorio_lateral_url) && (
+                  <img
+                    src={franjaLateralPreview ?? equipo.escritorio_lateral_url ?? ""}
+                    alt="Vista previa de la franja lateral"
+                    className="team-franja-lateral-preview"
+                  />
+                )}
+              </div>
+            )}
 
             <p className="form-hint">
               El nombre y el tag del equipo no se pueden cambiar por ahora.
@@ -4399,13 +4487,6 @@ export default function TeamDetailPage() {
               {guardandoEquipo ? "Guardando..." : "Guardar cambios"}
             </button>
           </form>
-              )}
-
-              {seccionPanel === "configuracion" && (
-                <>
-                  <h3 className="detail-subtitle">Título Padre/Hijo activo</h3>
-                  <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
-                </>
               )}
 
               {seccionPanel === "editar-equipo" && (
@@ -6183,16 +6264,6 @@ export default function TeamDetailPage() {
                       })}
                     </div>
                   )}
-                </>
-              )}
-
-              {seccionPanel === "logros" && (
-                <>
-                  <h3 className="detail-subtitle">Desbloqueadas por nivel</h3>
-                  <p className="detail-empty">
-                    Todavía no existe un catálogo de skins por nivel -- esta vitrina va a mostrarlas acá
-                    en cuanto ese catálogo esté listo.
-                  </p>
                 </>
               )}
 

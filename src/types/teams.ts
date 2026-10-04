@@ -1,4 +1,4 @@
-import type { Sc2Region } from "./profile";
+import type { LinkTransmision, Sc2Region } from "./profile";
 
 export interface TeamRow {
   id: string;
@@ -14,6 +14,9 @@ export interface TeamRow {
   // Migración 156: franja lateral de escritorio del equipo -- mismo
   // campo que profiles.escritorio_lateral_url, ahora para equipos.
   escritorio_lateral_url: string | null;
+  // Migración 158: links de Stream del equipo (Twitch/Discord/YouTube)
+  // -- mismo campo que profiles.links_transmision, ahora para equipos.
+  links_transmision: LinkTransmision[];
   // Sistema de MMR y ligas oficiales de StarCraft II (migración 020,
   // reemplaza al de experiencia/nivel de la migración 013). mmr es el
   // rating del clan como unidad (nace en 1441, Bronce 1); banca_rota y

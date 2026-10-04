@@ -1864,6 +1864,18 @@ main {
   border: 1px solid var(--color-border);
 }
 
+/* El banner de la ficha de equipo pasa a tener el mismo brillo de
+   acento que el del perfil de jugador -- pedido varias veces. */
+.team-detail-banner {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+  transition: box-shadow 0.15s ease;
+}
+
+.team-detail-banner-wrap:hover .team-detail-banner {
+  box-shadow: var(--shadow-accent-lg);
+}
+
 /* Fondo genérico cuando no hay banner subido: oscuro, con el mismo
    patrón sutil de rombos que ambienta la Sala de la Fama, en vez de
    un degradado cualquiera -- para que se sienta parte del proyecto. */
@@ -1889,11 +1901,10 @@ main {
   line-height: 0;
 }
 
-/* Corrección: el avatar del perfil de jugador pasa a tener el mismo
-   color de borde que el banner (acento cian), en vez del borde
-   "invisible" (mismo color que el fondo) de siempre -- separado de
-   .team-detail-logo-overlap porque ese cambio es solo para el perfil
-   de jugador, no para la ficha de equipo. */
+/* El logo del equipo y el avatar del jugador comparten el mismo brillo
+   de acento (cian) en vez del borde "invisible" (mismo color que el
+   fondo) de siempre. */
+.team-detail-logo-overlap,
 .player-detail-avatar-overlap {
   /* Brillo completo, no atenuado -- mismo criterio que .player-hero-banner. */
   border-color: var(--color-accent);
@@ -1901,6 +1912,7 @@ main {
   transition: box-shadow 0.15s ease;
 }
 
+.team-detail-logo-overlap:hover,
 .player-detail-avatar-overlap:hover {
   box-shadow: var(--shadow-accent-lg);
 }
@@ -2013,20 +2025,16 @@ main {
   box-shadow: var(--shadow-accent-lg);
 }
 
-/* Migración 154: columna de la foto de presentación del equipo +
-   "Información del clan" -- mismo patrón de dos columnas que
-   .player-tab-grid (Mi perfil), simplificado (sin la tercera columna
-   de "vistas previas", acá no hace falta). */
+/* Migración 158: "Información del clan" + tarjeta de Stream -- antes
+   era foto de presentación (9:16) a la izquierda, ahora es Stream a
+   la derecha (a pedido del usuario), con "Información del clan" como
+   columna principal. Sin el límite de alto de la 154 (era por el
+   ancho fijo de la foto 9:16, ya no aplica). */
 .team-general-grid {
   display: grid;
-  /* 9rem, no 13rem como en Mi perfil -- a pedido del usuario: con
-     13rem (9:16 de ancho) la fila terminaba midiendo ~23rem de alto,
-     entre el banner/header/pestañas de arriba generaba scroll de
-     página. 9rem de ancho = ~16rem de alto, bastante más razonable. */
-  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
   gap: 1.5rem;
-  align-items: stretch;
-  max-height: 20rem;
+  align-items: start;
 }
 
 /* .player-tab-col-main acá adentro suma el título ARRIBA de la caja
@@ -3005,6 +3013,25 @@ html.es-escritorio .player-detail-panel-inline {
    la vez). */
 .team-panel-toggle-header {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.team-panel-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  padding: 0 0.35rem;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-bg);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 @media (max-width: 640px) {
@@ -6246,6 +6273,77 @@ html.es-escritorio .player-detail-panel-inline {
 .team-info-tab.is-active .icon-inline {
   color: rgb(var(--h-accent-rgb));
   filter: drop-shadow(0 0 4px rgba(var(--h-accent-rgb), 0.7));
+}
+
+/* Sub-pestañas de "Historial" (migración 158): Actividad/Logros/Hall
+   of Fame -- versión más chica de .team-info-tabs, anidada adentro de
+   esa pestaña. */
+.team-info-subtabs {
+  display: flex;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+}
+
+.team-info-subtab {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.team-info-subtab:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.team-info-subtab.is-active {
+  color: var(--color-text);
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.32), rgba(var(--h-accent-rgb), 0.1));
+  box-shadow: var(--shadow-accent);
+}
+
+/* Pestañas de Logo/Banner/Imagen lateral dentro de Configuración
+   (migración 158) -- mismo lenguaje visual que .team-info-subtab. */
+.team-config-media-tabs {
+  display: flex;
+  gap: 0.3rem;
+  margin: 0.25rem 0 1rem;
+}
+
+.team-config-media-tab {
+  flex: 1;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.team-config-media-tab:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.team-config-media-tab.is-active {
+  color: var(--color-text);
+  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.32), rgba(var(--h-accent-rgb), 0.1));
+  box-shadow: var(--shadow-accent);
+}
+
+.team-config-equipo-btn {
+  margin-top: 1rem;
 }
 
 /* Botón "Eliminar equipo" (irreversible), separado del resto de
