@@ -1393,22 +1393,27 @@ export default function ProfilePage() {
         <p className="auth-sub">{profile?.nombre ?? "Jugador de RemorApp"}</p>
       )}
 
-      <div className="profile-progress">
-        <div className="profile-progress-bar">
-          <div
-            className="profile-progress-fill"
-            style={{ width: `${(progreso.completos / progreso.total) * 100}%` }}
-          />
-        </div>
-        <p className="profile-progress-text">
-          {progreso.completos} de {progreso.total} datos completos — {progreso.mensaje}
-        </p>
-      </div>
-
+      {/* Con el perfil completo, la barra y el texto "X de X" ya no
+          aportan nada -- a pedido del usuario, se ocultan apenas llega
+          a 100%. */}
       {!completo && (
-        <div className="form-hint profile-gate-banner">
-          Completa tu perfil para acceder a más funciones
-        </div>
+        <>
+          <div className="profile-progress">
+            <div className="profile-progress-bar">
+              <div
+                className="profile-progress-fill"
+                style={{ width: `${(progreso.completos / progreso.total) * 100}%` }}
+              />
+            </div>
+            <p className="profile-progress-text">
+              {progreso.completos} de {progreso.total} datos completos — {progreso.mensaje}
+            </p>
+          </div>
+
+          <div className="form-hint profile-gate-banner">
+            Completa tu perfil para acceder a más funciones
+          </div>
+        </>
       )}
 
       {/* Migración 152: "Estadísticas", "Logros" e "Historial de

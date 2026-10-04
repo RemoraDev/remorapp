@@ -146,11 +146,10 @@
    migración 033), que solo recolorea la página pública de un equipo,
    pero puesto en <html> (SkinWebContext) para que alcance a toda la
    app. "actual" no tiene bloque propio: cae en los valores base de
-   :root de arriba, que ya son el cian original. Los colores oscuros
-   (Azul petróleo, Azul, Verde oscuro, y los morados/ciruela nuevos de
-   la migración 149) además pisan --color-on-accent con un tono claro,
-   para que el texto de los botones siga siendo legible sobre un fondo
-   oscuro -- el resto usa el texto oscuro por defecto. */
+   :root de arriba, que ya son el cian original. Migración 153: paleta
+   recortada a 7 -- Azul petróleo pisa --color-on-accent con un tono
+   claro para que el texto de los botones siga siendo legible sobre un
+   fondo oscuro; el resto usa el texto oscuro por defecto. */
 :root[data-skin-web="azul-petroleo"] {
   --h-accent: #0f766e;
   --h-accent-rgb: 15, 118, 110;
@@ -163,29 +162,6 @@
   --shadow-accent-lg: 0 0 0 1px rgba(15, 118, 110, 0.55), 0 0 40px rgba(15, 118, 110, 0.35);
 }
 
-:root[data-skin-web="amarillo"] {
-  --h-accent: #facc15;
-  --h-accent-rgb: 250, 204, 21;
-  --h-accent-hover: #eab308;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #fef08a;
-  --shadow-accent: 0 0 0 1px rgba(250, 204, 21, 0.4), 0 0 24px rgba(250, 204, 21, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(250, 204, 21, 0.55), 0 0 40px rgba(250, 204, 21, 0.35);
-}
-
-:root[data-skin-web="azul"] {
-  --h-accent: #4f46e5;
-  --h-accent-rgb: 79, 70, 229;
-  --h-accent-hover: #4338ca;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #c7d2fe;
-  --color-on-accent: var(--color-text);
-  --shadow-accent: 0 0 0 1px rgba(79, 70, 229, 0.4), 0 0 24px rgba(79, 70, 229, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(79, 70, 229, 0.55), 0 0 40px rgba(79, 70, 229, 0.35);
-}
-
 :root[data-skin-web="verde-claro"] {
   --h-accent: #84cc16;
   --h-accent-rgb: 132, 204, 22;
@@ -195,29 +171,6 @@
   --color-accent-soft: #d9f99d;
   --shadow-accent: 0 0 0 1px rgba(132, 204, 22, 0.4), 0 0 24px rgba(132, 204, 22, 0.25);
   --shadow-accent-lg: 0 0 0 1px rgba(132, 204, 22, 0.55), 0 0 40px rgba(132, 204, 22, 0.35);
-}
-
-:root[data-skin-web="verde-oscuro"] {
-  --h-accent: #047857;
-  --h-accent-rgb: 4, 120, 87;
-  --h-accent-hover: #065f46;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #a7f3d0;
-  --color-on-accent: var(--color-text);
-  --shadow-accent: 0 0 0 1px rgba(4, 120, 87, 0.4), 0 0 24px rgba(4, 120, 87, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(4, 120, 87, 0.55), 0 0 40px rgba(4, 120, 87, 0.35);
-}
-
-:root[data-skin-web="naranja"] {
-  --h-accent: #fb923c;
-  --h-accent-rgb: 251, 146, 60;
-  --h-accent-hover: #f97316;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #fed7aa;
-  --shadow-accent: 0 0 0 1px rgba(251, 146, 60, 0.4), 0 0 24px rgba(251, 146, 60, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(251, 146, 60, 0.55), 0 0 40px rgba(251, 146, 60, 0.35);
 }
 
 :root[data-skin-web="violeta"] {
@@ -253,42 +206,6 @@
   --shadow-accent-lg: 0 0 0 1px rgba(244, 114, 182, 0.55), 0 0 40px rgba(244, 114, 182, 0.35);
 }
 
-:root[data-skin-web="deep-violet"] {
-  --h-accent: #240046;
-  --h-accent-rgb: 36, 0, 70;
-  --h-accent-hover: #1e003b;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #c9bfe0;
-  --color-on-accent: var(--color-text);
-  --shadow-accent: 0 0 0 1px rgba(36, 0, 70, 0.4), 0 0 24px rgba(36, 0, 70, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(36, 0, 70, 0.55), 0 0 40px rgba(36, 0, 70, 0.35);
-}
-
-:root[data-skin-web="royal-purple"] {
-  --h-accent: #3c096c;
-  --h-accent-rgb: 60, 9, 108;
-  --h-accent-hover: #33085c;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #d0c2e0;
-  --color-on-accent: var(--color-text);
-  --shadow-accent: 0 0 0 1px rgba(60, 9, 108, 0.4), 0 0 24px rgba(60, 9, 108, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(60, 9, 108, 0.55), 0 0 40px rgba(60, 9, 108, 0.35);
-}
-
-:root[data-skin-web="amatista"] {
-  --h-accent: #5a189a;
-  --h-accent-rgb: 90, 24, 154;
-  --h-accent-hover: #4d1483;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #d5c5e6;
-  --color-on-accent: var(--color-text);
-  --shadow-accent: 0 0 0 1px rgba(90, 24, 154, 0.4), 0 0 24px rgba(90, 24, 154, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(90, 24, 154, 0.55), 0 0 40px rgba(90, 24, 154, 0.35);
-}
-
 :root[data-skin-web="rosa-vibrante"] {
   --h-accent: #f72585;
   --h-accent-rgb: 247, 37, 133;
@@ -298,40 +215,6 @@
   --color-accent-soft: #fdc8e0;
   --shadow-accent: 0 0 0 1px rgba(247, 37, 133, 0.4), 0 0 24px rgba(247, 37, 133, 0.25);
   --shadow-accent-lg: 0 0 0 1px rgba(247, 37, 133, 0.55), 0 0 40px rgba(247, 37, 133, 0.35);
-}
-
-:root[data-skin-web="azul-electrico"] {
-  --h-accent: #4cc9f0;
-  --h-accent-rgb: 76, 201, 240;
-  --h-accent-hover: #41abcc;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #d2f1fb;
-  --shadow-accent: 0 0 0 1px rgba(76, 201, 240, 0.4), 0 0 24px rgba(76, 201, 240, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(76, 201, 240, 0.55), 0 0 40px rgba(76, 201, 240, 0.35);
-}
-
-:root[data-skin-web="ciruela-oscura"] {
-  --h-accent: #8d155e;
-  --h-accent-rgb: 141, 21, 94;
-  --h-accent-hover: #781250;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #e2c4d7;
-  --color-on-accent: var(--color-text);
-  --shadow-accent: 0 0 0 1px rgba(141, 21, 94, 0.4), 0 0 24px rgba(141, 21, 94, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(141, 21, 94, 0.55), 0 0 40px rgba(141, 21, 94, 0.35);
-}
-
-:root[data-skin-web="magenta-puro"] {
-  --h-accent: #ff00ff;
-  --h-accent-rgb: 255, 0, 255;
-  --h-accent-hover: #d900d9;
-  --color-accent: var(--h-accent);
-  --color-accent-dim: var(--h-accent-hover);
-  --color-accent-soft: #ffbfff;
-  --shadow-accent: 0 0 0 1px rgba(255, 0, 255, 0.4), 0 0 24px rgba(255, 0, 255, 0.25);
-  --shadow-accent-lg: 0 0 0 1px rgba(255, 0, 255, 0.55), 0 0 40px rgba(255, 0, 255, 0.35);
 }
 
 * {
@@ -2012,7 +1895,14 @@ main {
    .team-detail-logo-overlap porque ese cambio es solo para el perfil
    de jugador, no para la ficha de equipo. */
 .player-detail-avatar-overlap {
-  border-color: rgba(var(--h-accent-rgb), 0.5);
+  /* Brillo completo, no atenuado -- mismo criterio que .player-hero-banner. */
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+  transition: box-shadow 0.15s ease;
+}
+
+.player-detail-avatar-overlap:hover {
+  box-shadow: var(--shadow-accent-lg);
 }
 
 .team-detail-header,
@@ -2111,6 +2001,27 @@ main {
   border-radius: 0;
 }
 
+/* Migración 154: columna de la foto de presentación del equipo +
+   "Información del clan" -- mismo patrón de dos columnas que
+   .player-tab-grid (Mi perfil), simplificado (sin la tercera columna
+   de "vistas previas", acá no hace falta). */
+.team-general-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.team-general-grid .team-general-card {
+  height: 100%;
+}
+
+@media (max-width: 640px) {
+  .team-general-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 /* Utilidad estándar: oculta visualmente un elemento sin sacarlo del
    flujo accesible (lectores de pantalla lo siguen viendo) -- el input
    de archivo real detrás del lápiz de editar foto. */
@@ -2173,8 +2084,15 @@ html.es-escritorio .player-detail-vista-escritorio {
 .player-hero-banner {
   aspect-ratio: 5 / 1;
   max-height: 200px;
-  border-color: rgba(var(--h-accent-rgb), 0.45);
+  /* Brillo completo, no atenuado -- a pedido del usuario, se veía más
+     apagado que el resto de las cajas de Mi perfil. */
+  border-color: var(--color-accent);
   box-shadow: var(--shadow-accent);
+  transition: box-shadow 0.15s ease;
+}
+
+.player-hero-banner-wrap:hover .player-hero-banner {
+  box-shadow: var(--shadow-accent-lg);
 }
 
 .player-hero-panel-btn {
@@ -2222,40 +2140,6 @@ html.es-escritorio .player-detail-panel-inline {
    chato a un selector tipo "píldora" (mismo lenguaje que
    .guerra-razas-tab), bien marcado el que está activo con fondo sólido
    de acento en vez de apenas un trazo de color. */
-.player-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1.25rem;
-}
-
-.player-tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 1rem;
-  border-radius: 999px;
-  border: 1px solid var(--color-border);
-  background: var(--color-card);
-  color: var(--color-text-muted);
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
-}
-
-.player-tab-btn:hover {
-  color: var(--color-text);
-  border-color: rgba(var(--h-accent-rgb), 0.5);
-}
-
-.player-tab-btn-activo,
-.player-tab-btn-activo:hover {
-  color: var(--color-on-accent);
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-}
 
 /* Grilla de la pestaña "Perfil": foto angosta / descripción ancha /
    vistas previas angostas -- la del medio es la que realmente crece. */
@@ -2292,6 +2176,11 @@ html.es-escritorio .player-detail-panel-inline {
   position: relative;
   border: 1px solid var(--color-accent);
   box-shadow: var(--shadow-accent);
+  transition: box-shadow 0.15s ease;
+}
+
+.player-tab-foto-wrap:hover {
+  box-shadow: var(--shadow-accent-lg);
 }
 
 /* La foto de presentación (migración 128) es vertical (9:16) --
@@ -2435,6 +2324,37 @@ html.es-escritorio .player-detail-panel-inline {
   cursor: wait;
 }
 
+/* Migración 154: "Usar la foto de mi clan" -- mismo botón circular que
+   el lápiz de arriba, pero del lado izquierdo y en un tono neutro
+   (no el color de acento) para no competir visualmente con el lápiz,
+   que sigue siendo la acción principal. */
+.player-detail-foto-presentacion-clan-btn {
+  position: absolute;
+  left: 0.4rem;
+  bottom: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg);
+  background: var(--color-panel);
+  color: var(--color-text);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-detail-foto-presentacion-clan-btn:hover {
+  transform: scale(1.08);
+  box-shadow: var(--shadow-accent);
+}
+
+.player-detail-foto-presentacion-clan-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
 .player-tab-col-main .detail-card,
 .player-tab-col-side {
   height: 100%;
@@ -2455,6 +2375,10 @@ html.es-escritorio .player-detail-panel-inline {
    .foto-presentacion-corner), que también se usa acá. */
 .player-tab-preview-card {
   position: relative;
+  /* flex: 1 -- a pedido del usuario: sin esto quedaba mucho más baja
+     que "Sobre mí"/la foto, con un hueco vacío debajo dentro de
+     .player-tab-col-side (que sí ocupa el 100% de la fila). */
+  flex: 1;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -2472,6 +2396,11 @@ html.es-escritorio .player-detail-panel-inline {
   background: var(--color-card);
   padding: 0.85rem 1.1rem;
   cursor: pointer;
+  transition: box-shadow 0.15s ease;
+}
+
+.player-tab-preview-card:hover {
+  box-shadow: var(--shadow-accent-lg);
 }
 
 .player-tab-preview-card-info {
@@ -2511,7 +2440,10 @@ html.es-escritorio .player-detail-panel-inline {
 
 .detail-card:hover {
   border-color: var(--color-accent);
-  box-shadow: var(--shadow-accent);
+  /* -lg (brillo más grande/fuerte), no el mismo --shadow-accent base --
+     a pedido del usuario: en las cajas que ya tienen el brillo siempre
+     prendido, pasar el mouse no sumaba nada notorio. */
+  box-shadow: var(--shadow-accent-lg);
 }
 
 .detail-card .team-detail-description {
@@ -6094,7 +6026,7 @@ html.es-escritorio .player-detail-panel-inline {
 
 .team-panel-menu-item:hover {
   border-color: var(--color-accent);
-  box-shadow: var(--shadow-accent);
+  box-shadow: var(--shadow-accent-lg);
 }
 
 /* De a dos (migración 147) -- el menú del Panel de control de Mi Clan

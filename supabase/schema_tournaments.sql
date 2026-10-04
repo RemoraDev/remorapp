@@ -22782,3 +22782,12 @@ delete from public.ligas where id = 'c52cda72-ba4f-4a31-8814-8c0c344845db';
 delete from public.guerra_razas where id = 'e116dc1f-735a-4ae6-a0ae-be96a97cc9de';
 delete from public.tournaments where id = '900ba3ef-07f3-4330-8659-d92bd8e6484a';
 -- ------------------------------------------------------------
+-- Migración 154: foto de presentación (vertical, 9:16) también para
+-- equipos -- a pedido del usuario, mismo campo que ya tiene profiles
+-- (foto_presentacion_url), ahora en teams. Se sube igual que logo_url/
+-- banner_url (storage, update directo desde el cliente) -- las mismas
+-- políticas RLS de teams que ya dejan a dueño/capitán actualizar logo
+-- y banner alcanzan para esta columna nueva también, sin tocar nada
+-- más.
+alter table public.teams add column foto_presentacion_url text;
+-- ------------------------------------------------------------

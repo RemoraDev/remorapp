@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -26,6 +26,7 @@ import {
   Trophy,
   GripVertical,
   Info,
+  Pencil,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -519,6 +520,71 @@ export default function TeamDetailPage() {
   const [guardandoEquipo, setGuardandoEquipo] = useState(false);
   const [errorEquipo, setErrorEquipo] = useState<string | null>(null);
   const [equipoGuardado, setEquipoGuardado] = useState(false);
+
+  // Migración 154: foto de presentación del equipo (vertical, 9:16) --
+  // mismo mecanismo de edición rápida (sin "Guardar", se sube sola) que
+  // ya tiene PlayerDetailPage.tsx para la de Mi perfil, acá separado
+  // del formulario grande de logo/banner/descripción. Solo dueño o
+  // capitán, mismo criterio (puedeGestionar) que el resto de la
+  // configuración del equipo.
+  const FOTO_PRESENTACION_MAX_BYTES = 15 * 1024 * 1024;
+  const fotoPresentacionEquipoInputRef = useRef<HTMLInputElement | null>(null);
+  const [archivoParaRecortarFotoEquipo, setArchivoParaRecortarFotoEquipo] = useState<File | null>(null);
+  const [subiendoFotoEquipo, setSubiendoFotoEquipo] = useState(false);
+  const [errorFotoEquipo, setErrorFotoEquipo] = useState<string | null>(null);
+
+  const handleFotoEquipoFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const archivo = event.target.files?.[0] ?? null;
+    setErrorFotoEquipo(null);
+    event.target.value = "";
+    if (!archivo) return;
+    if (archivo.size > FOTO_PRESENTACION_MAX_BYTES) {
+      setErrorFotoEquipo("La foto no puede pesar más de 15MB.");
+      return;
+    }
+    setArchivoParaRecortarFotoEquipo(archivo);
+  };
+
+  const handleConfirmarRecorteFotoEquipo = async (recorte: Blob) => {
+    setArchivoParaRecortarFotoEquipo(null);
+    if (!user || !equipo) return;
+
+    setSubiendoFotoEquipo(true);
+    setErrorFotoEquipo(null);
+
+    try {
+      const recorteComprimido = await comprimirImagen(recorte, "presentacion-equipo");
+      const extension = recorteComprimido.type === "image/png" ? "png" : "jpg";
+      const ruta = `${user.id}/${Date.now()}-presentacion.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("team-banners")
+        .upload(ruta, recorteComprimido, { contentType: recorteComprimido.type });
+
+      if (uploadError) {
+        setErrorFotoEquipo("No se pudo subir la foto: " + uploadError.message);
+        return;
+      }
+
+      const fotoPresentacionUrl = supabase.storage.from("team-banners").getPublicUrl(ruta).data.publicUrl;
+
+      const { error: updateError } = await supabase
+        .from("teams")
+        .update({ foto_presentacion_url: fotoPresentacionUrl })
+        .eq("id", equipo.id);
+
+      if (updateError) {
+        setErrorFotoEquipo(updateError.message);
+        return;
+      }
+
+      setEquipo((prev) => (prev ? { ...prev, foto_presentacion_url: fotoPresentacionUrl } : prev));
+    } catch {
+      setErrorFotoEquipo("No se pudo procesar la foto, prueba con otra imagen.");
+    } finally {
+      setSubiendoFotoEquipo(false);
+    }
+  };
 
   // --- Panel de control: código de invitación y quitar miembros ---
   const [codigoCopiado, setCodigoCopiado] = useState(false);
@@ -3614,19 +3680,79 @@ export default function TeamDetailPage() {
       </div>
 
       {seccionPublica === "general" && (
-        <div className="detail-card team-general-card">
-          <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
-          <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
-          <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
-          <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-          <h3 className="detail-subtitle">
-            <Info size={16} className="icon-inline" aria-hidden="true" />
-            Información del clan
-          </h3>
-          {equipo.description ? (
-            <p className="team-detail-description">{equipo.description}</p>
-          ) : (
-            <p className="detail-empty">Todavía no escribió una descripción del clan.</p>
+        <div className="team-general-grid">
+          {/* Migración 154: foto de presentación del equipo -- mismo
+              marco "corner bracket" y mecanismo de edición rápida que
+              la de Mi perfil (PlayerDetailPage.tsx), solo que acá el
+              lápiz únicamente lo ve dueño/capitán (puedeGestionar). */}
+          <div className="player-tab-col-foto">
+            <div className="player-tab-foto-wrap">
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+              {equipo.foto_presentacion_url ? (
+                <Avatar
+                  url={equipo.foto_presentacion_url}
+                  nombre={equipo.name}
+                  className="player-tab-foto"
+                  forma="cuadrado"
+                />
+              ) : (
+                <div className="player-tab-foto player-tab-foto-vacia">
+                  <span>Foto del clan aquí</span>
+                  <span className="player-tab-foto-vacia-proporcion">(9:16)</span>
+                </div>
+              )}
+              {puedeGestionar && (
+                <button
+                  type="button"
+                  className="player-detail-foto-presentacion-edit-btn"
+                  onClick={() => fotoPresentacionEquipoInputRef.current?.click()}
+                  disabled={subiendoFotoEquipo}
+                  aria-label="Cambiar foto de presentación del clan"
+                  title="Cambiar foto de presentación del clan"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+            </div>
+            {errorFotoEquipo && <div className="form-error">{errorFotoEquipo}</div>}
+            {puedeGestionar && (
+              <input
+                ref={fotoPresentacionEquipoInputRef}
+                type="file"
+                accept="image/*"
+                className="visually-hidden"
+                onChange={handleFotoEquipoFileChange}
+              />
+            )}
+          </div>
+
+          <div className="detail-card team-general-card">
+            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+            <h3 className="detail-subtitle">
+              <Info size={16} className="icon-inline" aria-hidden="true" />
+              Información del clan
+            </h3>
+            {equipo.description ? (
+              <p className="team-detail-description">{equipo.description}</p>
+            ) : (
+              <p className="detail-empty">Todavía no escribió una descripción del clan.</p>
+            )}
+          </div>
+
+          {archivoParaRecortarFotoEquipo && (
+            <RecortadorImagenModal
+              archivo={archivoParaRecortarFotoEquipo}
+              aspecto={9 / 16}
+              titulo="Ajustar foto de presentación del clan"
+              onConfirmar={handleConfirmarRecorteFotoEquipo}
+              onCancelar={() => setArchivoParaRecortarFotoEquipo(null)}
+            />
           )}
         </div>
       )}

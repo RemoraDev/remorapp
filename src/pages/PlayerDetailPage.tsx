@@ -66,6 +66,9 @@ interface EquipoActual {
   name: string;
   tag: string;
   logoUrl: string | null;
+  // Migración 154: para el botón "Usar la foto de mi clan" del lápiz
+  // de la foto de presentación propia.
+  fotoPresentacionUrl: string | null;
 }
 
 type TabPerfil = "perfil" | "stream" | "logros";
@@ -223,6 +226,33 @@ export default function PlayerDetailPage() {
     }
   };
 
+  // Migración 154: "Usar la foto de mi clan" -- copia directa de la
+  // URL ya subida del equipo a mi propia foto de presentación (no se
+  // vuelve a subir nada). Es una copia puntual, no una sincronización
+  // en vivo: si el equipo cambia su foto después, la mía no cambia
+  // sola -- se puede volver a tocar este botón cuando se quiera.
+  const handleUsarFotoDelClan = async () => {
+    if (!user || !equipoActual?.fotoPresentacionUrl) return;
+    const fotoPresentacionUrl = equipoActual.fotoPresentacionUrl;
+
+    setSubiendoFotoPresentacion(true);
+    setErrorFotoPresentacion(null);
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({ foto_presentacion_url: fotoPresentacionUrl })
+      .eq("id", user.id);
+
+    setSubiendoFotoPresentacion(false);
+
+    if (error) {
+      setErrorFotoPresentacion(error.message);
+      return;
+    }
+
+    setPerfil((prev) => (prev ? { ...prev, fotoPresentacionUrl } : prev));
+  };
+
   useEffect(() => {
     const cargarPerfilPublico = async () => {
       if (!nick || !uniqueId) return;
@@ -328,7 +358,7 @@ export default function PlayerDetailPage() {
       // Equipo actual (si tiene) -- team_members.user_id -> teams.id.
       const { data: miembroData } = await supabase
         .from("team_members")
-        .select("teams(name, tag, logo_url, disuelto)")
+        .select("teams(name, tag, logo_url, foto_presentacion_url, disuelto)")
         .eq("user_id", perfilCargado.id)
         .maybeSingle();
       const equipo = miembroData
@@ -336,10 +366,17 @@ export default function PlayerDetailPage() {
           ? miembroData.teams[0]
           : miembroData.teams
         : null;
-      const equipoTipado = equipo as { name: string; tag: string; logo_url: string | null; disuelto: boolean } | null;
+      const equipoTipado = equipo as
+        | { name: string; tag: string; logo_url: string | null; foto_presentacion_url: string | null; disuelto: boolean }
+        | null;
       setEquipoActual(
         equipoTipado && !equipoTipado.disuelto
-          ? { name: equipoTipado.name, tag: equipoTipado.tag, logoUrl: equipoTipado.logo_url }
+          ? {
+              name: equipoTipado.name,
+              tag: equipoTipado.tag,
+              logoUrl: equipoTipado.logo_url,
+              fotoPresentacionUrl: equipoTipado.foto_presentacion_url,
+            }
           : null
       );
 
@@ -642,12 +679,16 @@ export default function PlayerDetailPage() {
           )}
         </div>
 
-        <div className="player-tabs" role="tablist">
+        {/* Migración 153: mismo diseño de pestañas que Mi Clan
+            (.team-info-tabs/.team-info-tab, antes .player-tabs/
+            .player-tab-btn propios) -- a pedido del usuario, para que
+            las dos páginas se vean consistentes. */}
+        <div className="team-info-tabs" role="tablist">
           <button
             type="button"
             role="tab"
             aria-selected={tabEscritorio === "perfil"}
-            className={`player-tab-btn ${tabEscritorio === "perfil" ? "player-tab-btn-activo" : ""}`}
+            className={`team-info-tab ${tabEscritorio === "perfil" ? "is-active" : ""}`}
             onClick={() => setTabEscritorio("perfil")}
           >
             <User size={16} className="icon-inline" aria-hidden="true" />
@@ -657,7 +698,7 @@ export default function PlayerDetailPage() {
             type="button"
             role="tab"
             aria-selected={tabEscritorio === "stream"}
-            className={`player-tab-btn ${tabEscritorio === "stream" ? "player-tab-btn-activo" : ""}`}
+            className={`team-info-tab ${tabEscritorio === "stream" ? "is-active" : ""}`}
             onClick={() => setTabEscritorio("stream")}
           >
             <Radio size={16} className="icon-inline" aria-hidden="true" />
@@ -667,7 +708,7 @@ export default function PlayerDetailPage() {
             type="button"
             role="tab"
             aria-selected={tabEscritorio === "logros"}
-            className={`player-tab-btn ${tabEscritorio === "logros" ? "player-tab-btn-activo" : ""}`}
+            className={`team-info-tab ${tabEscritorio === "logros" ? "is-active" : ""}`}
             onClick={() => setTabEscritorio("logros")}
           >
             <Award size={16} className="icon-inline" aria-hidden="true" />
@@ -708,10 +749,26 @@ export default function PlayerDetailPage() {
                     className="player-detail-foto-presentacion-edit-btn"
                     onClick={() => fotoPresentacionInputRef.current?.click()}
                     disabled={subiendoFotoPresentacion}
-                    aria-label="Cambiar foto de presentación"
-                    title="Cambiar foto de presentación"
+                    aria-label="Subir una foto propia"
+                    title="Subir una foto propia"
                   >
                     <Pencil size={14} />
+                  </button>
+                )}
+                {/* Migración 154: solo aparece si pertenezco a un clan
+                    y ese clan ya tiene su propia foto de presentación
+                    subida -- copia esa URL a la mía, un click, sin
+                    pasar por el recortador de nuevo. */}
+                {esMiPropioPerfil && equipoActual?.fotoPresentacionUrl && (
+                  <button
+                    type="button"
+                    className="player-detail-foto-presentacion-clan-btn"
+                    onClick={handleUsarFotoDelClan}
+                    disabled={subiendoFotoPresentacion}
+                    aria-label="Usar la foto de mi clan"
+                    title="Usar la foto de mi clan"
+                  >
+                    <Shield size={14} />
                   </button>
                 )}
               </div>
