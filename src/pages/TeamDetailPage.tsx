@@ -632,6 +632,14 @@ export default function TeamDetailPage() {
   // Pestañas de medios dentro de Configuración (migración 158): antes
   // Logo/Banner/Franja lateral iban apiladas en una sola pantalla larga.
   const [tabConfigMedia, setTabConfigMedia] = useState<"logo" | "banner" | "franja">("logo");
+  // Vista dentro de "Clan War"/"Reprogramar fecha" (migración 158):
+  // "guerras" muestra cada Clan War en preparación completa (sin
+  // reprogramación/extensión, que se sacaron de acá); "reprogramar"
+  // reusa la misma lista pero muestra SOLO esas dos acciones por
+  // guerra -- mismo map(), sin duplicar el cálculo de cada guerra.
+  const [vistaEventos, setVistaEventos] = useState<"pendientes" | "propuestos" | "guerras" | "reprogramar">(
+    "pendientes"
+  );
 
   // Reorganización: 3 accesos públicos (Lista de Jugadores/Líderes de
   // clan/Logros), independientes del Panel de control de arriba (ese
@@ -4238,20 +4246,20 @@ export default function TeamDetailPage() {
                     </button>
                   </div>
 
-              {/* Barra de pestañas de "Solicitudes" (migración 158):
-                  Clan War y Reprogramar fecha apuntan las dos a
-                  "eventos" -- ahí es donde vive hoy la reprogramación,
-                  dentro de cada Clan War en preparación. Todo dentro
-                  del mismo panel superpuesto, sin navegar a otra
-                  página -- a pedido del usuario. */}
+              {/* Barra de pestañas de "Solicitudes" (migración 158). */}
               {(seccionPanel === "eventos" ||
                 seccionPanel === "amistades" ||
                 seccionPanel === "solicitudes-unirse") && (
                 <div className="team-config-media-tabs">
                   <button
                     type="button"
-                    className={`team-config-media-tab ${seccionPanel === "eventos" ? "is-active" : ""}`}
-                    onClick={() => setSeccionPanel("eventos")}
+                    className={`team-config-media-tab ${
+                      seccionPanel === "eventos" && vistaEventos !== "reprogramar" ? "is-active" : ""
+                    }`}
+                    onClick={() => {
+                      setSeccionPanel("eventos");
+                      setVistaEventos("pendientes");
+                    }}
                   >
                     Clan War
                   </button>
@@ -4264,8 +4272,13 @@ export default function TeamDetailPage() {
                   </button>
                   <button
                     type="button"
-                    className="team-config-media-tab"
-                    onClick={() => setSeccionPanel("eventos")}
+                    className={`team-config-media-tab ${
+                      seccionPanel === "eventos" && vistaEventos === "reprogramar" ? "is-active" : ""
+                    }`}
+                    onClick={() => {
+                      setSeccionPanel("eventos");
+                      setVistaEventos("reprogramar");
+                    }}
                   >
                     Reprogramar fecha
                   </button>
@@ -4745,7 +4758,7 @@ export default function TeamDetailPage() {
 
               {seccionPanel === "eventos" && (
               <>
-              {solicitudesHistoricas.length > 0 && (
+              {vistaEventos !== "reprogramar" && solicitudesHistoricas.length > 0 && (
                 <>
                   <h3 className="detail-subtitle">Torneos Históricos: consentimiento pendiente</h3>
                   <div className="detail-participant-list">
@@ -4781,8 +4794,41 @@ export default function TeamDetailPage() {
                 </>
               )}
 
-              <h3 className="detail-subtitle">Clan Wars</h3>
+              <h3 className="detail-subtitle">{vistaEventos === "reprogramar" ? "Reprogramar fecha" : "Clan Wars"}</h3>
 
+              {/* Sub-pestañas de Clan War (migración 158): Retos
+                  pendientes/Retos propuestos/Guerras en preparación,
+                  antes todo apilado en una sola pantalla larga. No se
+                  muestran en modo "reprogramar" -- ese es un acceso
+                  directo aparte, no una cuarta sub-pestaña. */}
+              {vistaEventos !== "reprogramar" && (
+                <div className="team-info-subtabs">
+                  <button
+                    type="button"
+                    className={`team-info-subtab ${vistaEventos === "pendientes" ? "is-active" : ""}`}
+                    onClick={() => setVistaEventos("pendientes")}
+                  >
+                    Retos pendientes
+                  </button>
+                  <button
+                    type="button"
+                    className={`team-info-subtab ${vistaEventos === "propuestos" ? "is-active" : ""}`}
+                    onClick={() => setVistaEventos("propuestos")}
+                  >
+                    Retos propuestos
+                  </button>
+                  <button
+                    type="button"
+                    className={`team-info-subtab ${vistaEventos === "guerras" ? "is-active" : ""}`}
+                    onClick={() => setVistaEventos("guerras")}
+                  >
+                    Guerras en preparación
+                  </button>
+                </div>
+              )}
+
+              {vistaEventos === "pendientes" && (
+              <>
               <h4 className="detail-subtitle">Retos pendientes de responder</h4>
               {retosPendientesResponder.length === 0 ? (
                 <p className="detail-empty">No tienes retos pendientes de responder.</p>
@@ -4859,7 +4905,11 @@ export default function TeamDetailPage() {
                   ))}
                 </div>
               )}
+              </>
+              )}
 
+              {vistaEventos === "propuestos" && (
+              <>
               <h4 className="detail-subtitle">Retos propuestos por mí</h4>
               {retosPropuestosPorMi.length === 0 ? (
                 <p className="detail-empty">No tienes retos esperando respuesta.</p>
@@ -4887,10 +4937,20 @@ export default function TeamDetailPage() {
                   ))}
                 </div>
               )}
+              </>
+              )}
 
-              <h4 className="detail-subtitle">Guerras en preparación</h4>
+              {(vistaEventos === "guerras" || vistaEventos === "reprogramar") && (
+              <>
+              <h4 className="detail-subtitle">
+                {vistaEventos === "reprogramar" ? "Guerras para reprogramar" : "Guerras en preparación"}
+              </h4>
               {retosActivos.length === 0 ? (
-                <p className="detail-empty">No tienes ninguna guerra en preparación.</p>
+                <p className="detail-empty">
+                  {vistaEventos === "reprogramar"
+                    ? "No tienes ninguna guerra para reprogramar."
+                    : "No tienes ninguna guerra en preparación."}
+                </p>
               ) : (
                 <div className="detail-participant-list">
                   {retosActivos.map((r) => {
@@ -4958,6 +5018,8 @@ export default function TeamDetailPage() {
                           {formatearHoraCet(r.fechaHoraCet)}
                         </p>
 
+                        {vistaEventos === "guerras" && (
+                        <>
                         {/* Migración 108: solo el equipo que propuso la
                             Clan War Amistosa puede eliminarla -- sin
                             ninguna condición de "debe estar vacío". */}
@@ -5002,11 +5064,15 @@ export default function TeamDetailPage() {
                             enfrentamientos -- solo se ve una vez que el lineup se revela.
                           </p>
                         </div>
+                        </>
+                        )}
 
                         {/* Reprogramar (migración 045): solo tiene
                             sentido con la CW 'aceptada' -- una vez que
-                            llega a 'en_curso' ya no aplica. */}
-                        {r.status === "aceptada" && (
+                            llega a 'en_curso' ya no aplica. A pedido del
+                            usuario, vive solo en la pestaña "Reprogramar
+                            fecha", no mezclada con el resto de Clan War. */}
+                        {vistaEventos === "reprogramar" && r.status === "aceptada" && (
                           <>
                             <h5 className="detail-subtitle">Reprogramación</h5>
                             {erroresReprogramacion[r.id] && (
@@ -5102,7 +5168,7 @@ export default function TeamDetailPage() {
                             CW 'aceptada' y una vez vencido el plazo --
                             antes de eso todavía se puede editar sin
                             pedir nada. */}
-                        {r.status === "aceptada" && vencioPlazoLineup && !lineupAprobado && (
+                        {vistaEventos === "reprogramar" && r.status === "aceptada" && vencioPlazoLineup && !lineupAprobado && (
                           <>
                             <h5 className="detail-subtitle">Extensión del plazo de lineup</h5>
                             <p className="tournament-card-meta">
@@ -5185,6 +5251,8 @@ export default function TeamDetailPage() {
                           </>
                         )}
 
+                        {vistaEventos === "guerras" && (
+                        <>
                         {/* Fondo de la sala de lineup (migración 051, con imágenes del
                             catálogo admin desde la 067): envuelve tanto el armado del
                             lineup como el check-in posterior, para que la decoración se
@@ -5685,12 +5753,18 @@ export default function TeamDetailPage() {
                             )}
                           </>
                         )}
+                        </>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )}
+              </>
+              )}
 
+              {vistaEventos === "propuestos" && (
+              <>
               <h4 className="detail-subtitle">Proponer un reto</h4>
               <form className="auth-form" onSubmit={handleProponerReto}>
                 {errorReto && <div className="form-error">{errorReto}</div>}
@@ -5794,8 +5868,10 @@ export default function TeamDetailPage() {
               </form>
               </>
               )}
+              </>
+              )}
 
-              {seccionPanel === "eventos" && (
+              {seccionPanel === "eventos" && vistaEventos !== "reprogramar" && (
               <>
               <h4 className="detail-subtitle">Historial de retos</h4>
               {historialRetos.length === 0 ? (

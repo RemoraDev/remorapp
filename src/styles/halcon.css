@@ -8930,6 +8930,14 @@ html.es-escritorio ::-webkit-scrollbar-thumb:hover {
   background-color: rgba(255, 255, 255, 0.28);
   background-clip: content-box;
 }
+/* Corrección: faltaba esto -- Chrome/WebView2 pintan de blanco por
+   defecto la esquina donde se juntan el scroll vertical y el
+   horizontal (ej.: las tarjetas con overflow-y:auto como Información
+   del clan/Stream), un "cuadrito blanco" bien visible sobre fondo
+   oscuro si no se estiliza explícitamente. */
+html.es-escritorio ::-webkit-scrollbar-corner {
+  background: transparent;
+}
 
 /* ------------------------------------------------------------
    Layout de 3 columnas, exclusivo de la versión de escritorio (Tauri):
