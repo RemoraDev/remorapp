@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight } from "lucide-react";
+import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
@@ -602,29 +602,29 @@ export default function PlayerDetailPage() {
                 {panelAbierto ? "Cerrar panel de control" : "Panel de control"}
               </button>
 
-              {/* Catcher transparente en document.body: detecta el click
-                  afuera del desplegable y lo cierra (mismo patrón que
-                  .header-user-menu en Header.tsx). */}
-              {createPortal(
-                <div
-                  className={`player-panel-dropdown-catcher ${panelAbierto ? "is-open" : ""}`}
-                  aria-hidden={!panelAbierto}
-                  onClick={() => setPanelAbierto(false)}
-                />,
-                document.body
-              )}
-
-              {/* Desplegable anclado al botón (a pedido del usuario, en
-                  vez de empujar el resto de la ficha hacia abajo como
-                  antes). Mismo contenido que la versión en línea de
-                  mobile/PWA (contenidoPanelMenu), solo cambia cómo se
-                  posiciona. */}
-              <div
-                className={`player-panel-dropdown ${panelAbierto ? "is-open" : ""}`}
-                aria-hidden={!panelAbierto}
-              >
-                {contenidoPanelMenu}
-              </div>
+              {/* Ventana centrada con borde iluminado, a pedido del
+                  usuario -- mismo tratamiento que el Panel de control de
+                  Mi Clan (.team-leader-panel-propio en TeamDetailPage.tsx),
+                  en vez del desplegable anclado al botón que tenía antes.
+                  Mismo contenido que la versión en línea de mobile/PWA
+                  (contenidoPanelMenu). */}
+              {panelAbierto &&
+                createPortal(
+                  <div className="modal-backdrop" onClick={() => setPanelAbierto(false)}>
+                    <div className="team-leader-panel team-leader-panel-propio" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="modal-close"
+                        onClick={() => setPanelAbierto(false)}
+                        aria-label="Cerrar panel de control"
+                      >
+                        <X size={18} />
+                      </button>
+                      {contenidoPanelMenu}
+                    </div>
+                  </div>,
+                  document.body
+                )}
             </div>
           )}
         </div>
