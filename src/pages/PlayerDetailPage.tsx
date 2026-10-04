@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router-dom";
-import { BarChart3, Award, History, Settings, Shield, Pencil, User, Radio, ChevronRight, X } from "lucide-react";
+import { Award, Settings, Shield, Pencil, User, Radio, ChevronRight, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
@@ -442,39 +442,14 @@ export default function PlayerDetailPage() {
     </Link>
   );
 
-  // Reorganización: 4 accesos, en línea con el Panel de control de
-  // ProfilePage.tsx (esta página se mantiene de solo lectura, acá
-  // solo se navega con ?tab=). "Editar datos" y "Editar datos de
-  // juego" ya no son accesos sueltos -- viven dentro de Configuración.
-  // Compartido entre las dos versiones del Panel de control de más
-  // abajo (en línea para mobile/PWA, desplegable para escritorio).
+  // Migración 152: "Estadísticas", "Logros" e "Historial de eventos"
+  // se sacaron de este menú -- a pedido del usuario, ya están (o
+  // alcanza con lo que ya hay) en esta misma vitrina. "Logros" en
+  // particular todavía responde retos de título Padre/Hijo que la
+  // pestaña Logros de acá arriba no tiene, pero sigue siendo
+  // alcanzable con /perfil?tab=logros aunque no haya acceso visible.
   const contenidoPanelMenu = (
     <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
-      <button type="button" className="team-panel-menu-item" onClick={() => irA("/perfil?tab=estadisticas")}>
-        <span className="team-panel-menu-item-title">
-          <BarChart3 className="icon-inline" />
-          Estadísticas
-        </span>
-        <span className="team-panel-menu-item-desc">
-          Valentía del jugador y Responsabilidad en Torneos y Clan War
-        </span>
-      </button>
-      <button type="button" className="team-panel-menu-item" onClick={() => irA("/perfil?tab=logros")}>
-        <span className="team-panel-menu-item-title">
-          <Award className="icon-inline" />
-          Logros
-        </span>
-        <span className="team-panel-menu-item-desc">
-          Títulos por nivel y el gestor de títulos Padre/Hijo
-        </span>
-      </button>
-      <button type="button" className="team-panel-menu-item" onClick={() => irA("/perfil?tab=historial")}>
-        <span className="team-panel-menu-item-title">
-          <History className="icon-inline" />
-          Historial de eventos
-        </span>
-        <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que jugaste</span>
-      </button>
       <button type="button" className="team-panel-menu-item" onClick={() => handleAbrirConfiguracion()}>
         <span className="team-panel-menu-item-title">
           <Settings className="icon-inline" />

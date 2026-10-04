@@ -3,7 +3,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { BarChart3, Settings, Award, History, Shield, X } from "lucide-react";
+import { Settings, Shield, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
@@ -1411,27 +1411,19 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Las barras de Valentía/Responsabilidad ya no se muestran
-          directo en la vitrina pública (/jugador/:nick/:uniqueId,
-          "Mi perfil" en la barra inferior) -- viven acá, dentro del
-          botón "Estadísticas", igual que el resto del Panel de
-          control. */}
+      {/* Migración 152: "Estadísticas", "Logros" e "Historial de
+          eventos" se sacaron del menú -- a pedido del usuario, ya
+          estaban (o alcanza con lo que ya hay) en la vitrina pública
+          (/jugador/:nick/:uniqueId). Sus secciones siguen existiendo
+          acá (seccionActiva "estadisticas"/"logros"/"historial"),
+          solo que ya no tienen botón propio en este menú -- "Logros"
+          en particular todavía responde retos de título Padre/Hijo
+          que la pestaña Logros de la vitrina no tiene, así que sigue
+          siendo alcanzable con /perfil?tab=logros aunque no haya
+          acceso visible. */}
       <h2 className="detail-subtitle">Panel de control</h2>
       {seccionActiva === null ? (
         <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
-          <button
-            type="button"
-            className="team-panel-menu-item"
-            onClick={() => setSeccionActiva("estadisticas")}
-          >
-            <span className="team-panel-menu-item-title">
-              <BarChart3 className="icon-inline" />
-              Estadísticas
-            </span>
-            <span className="team-panel-menu-item-desc">
-              Valentía del jugador y Responsabilidad en Torneos y Clan War
-            </span>
-          </button>
           <button
             type="button"
             className="team-panel-menu-item"
@@ -1444,28 +1436,6 @@ export default function ProfilePage() {
             <span className="team-panel-menu-item-desc">
               Datos, apariencia, juegos e idioma
             </span>
-          </button>
-          <button
-            type="button"
-            className="team-panel-menu-item"
-            onClick={() => setSeccionActiva("logros")}
-          >
-            <span className="team-panel-menu-item-title">
-              <Award className="icon-inline" />
-              Logros
-            </span>
-            <span className="team-panel-menu-item-desc">Títulos Padre/Hijo activos, pendientes y adquiridos</span>
-          </button>
-          <button
-            type="button"
-            className="team-panel-menu-item"
-            onClick={() => setSeccionActiva("historial")}
-          >
-            <span className="team-panel-menu-item-title">
-              <History className="icon-inline" />
-              Historial de eventos
-            </span>
-            <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que participaste</span>
           </button>
           {/* Migración 094: Panel Staff -- distinto del Panel de
               Administración completo, con permisos acotados. Solo
