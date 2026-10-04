@@ -187,6 +187,11 @@ function resolverDestino(valor: string | null): DestinoPerfil {
   if (valor === "juego") {
     return { seccion: "configuracion", subseccion: "juegos", subsubseccion: "sc2" };
   }
+  // Migración 158: el lápiz de la franja lateral de escritorio
+  // (EscritorioColumnaLateral.tsx) manda acá con ?tab=franja-lateral.
+  if (valor === "franja-lateral") {
+    return { seccion: "configuracion", subseccion: "apariencia", subsubseccion: "franja-lateral" };
+  }
   return { seccion: resolverSeccion(valor), subseccion: null, subsubseccion: null };
 }
 

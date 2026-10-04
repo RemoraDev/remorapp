@@ -2392,10 +2392,11 @@ html.es-escritorio .player-detail-panel-inline {
    .foto-presentacion-corner), que también se usa acá. */
 .player-tab-preview-card {
   position: relative;
-  /* flex: 1 -- a pedido del usuario: sin esto quedaba mucho más baja
-     que "Sobre mí"/la foto, con un hueco vacío debajo dentro de
-     .player-tab-col-side (que sí ocupa el 100% de la fila). */
-  flex: 1;
+  /* Migración 158: 30% del alto disponible de la columna -- el 70%
+     restante es para .player-tab-stream-card, debajo. Proporción vía
+     flex-grow con flex-basis 0 (no depende de cuánto contenido tenga
+     cada una). */
+  flex: 30 30 0%;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -2442,6 +2443,52 @@ html.es-escritorio .player-detail-panel-inline {
 .player-tab-preview-card-desc {
   font-size: 0.8rem;
   color: var(--color-text-muted);
+}
+
+/* Tarjeta rápida de Stream (migración 158), debajo de "Clan" dentro de
+   .player-tab-col-side -- 70% del alto disponible (ver flex: 30/70 con
+   .player-tab-preview-card), mismo marco "corner bracket" y brillo
+   siempre prendido que el resto. padding-bottom reserva lugar para el
+   lápiz (.player-tab-bio-edit-btn, mismo que "Sobre mí"). */
+.player-tab-stream-card {
+  position: relative;
+  flex: 70 70 0%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 0;
+  border: 1px solid var(--color-accent);
+  box-shadow: var(--shadow-accent);
+  padding-bottom: 3.25rem;
+  overflow-y: auto;
+}
+
+.player-tab-stream-card:hover {
+  box-shadow: var(--shadow-accent-lg);
+}
+
+.player-tab-stream-links {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.player-tab-stream-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.player-tab-stream-link:hover {
+  color: var(--color-accent);
+}
+
+.player-tab-stream-link-vacio {
+  color: var(--color-text-faint);
+  font-weight: 500;
 }
 
 /* Tarjeta genérica de contenido ("Sobre mí" en "Perfil", y el
@@ -8871,6 +8918,38 @@ html.es-escritorio .escritorio-columna-derecha {
 html.es-escritorio .escritorio-columna-lateral .logo-mark {
   width: 30px;
   height: 30px;
+}
+
+/* Lápiz para cambiar la franja lateral (migración 158) -- oculto hasta
+   que se pasa el mouse por la columna, para no competir todo el
+   tiempo con el panal/la imagen de fondo. */
+.escritorio-columna-lateral-edit-btn {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  border: 2px solid var(--color-bg);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.escritorio-columna-lateral:hover .escritorio-columna-lateral-edit-btn {
+  opacity: 1;
+}
+
+.escritorio-columna-lateral-edit-btn:hover {
+  transform: translateX(-50%) scale(1.1);
+  box-shadow: var(--shadow-accent);
 }
 
 .escritorio-chat-fijo {

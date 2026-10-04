@@ -13,6 +13,7 @@ import AvatarSkin from "../components/AvatarSkin";
 import Carrusel from "../components/Carrusel";
 import FondoParticulas from "../components/FondoParticulas";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
+import { TwitchIcon, DiscordIcon, YoutubeIcon } from "../components/IconosRedes";
 import TitulosActivosList from "../components/TitulosActivosList";
 import { COUNTRY_OPTIONS } from "../types/profile";
 import type { Country, LinkTransmision } from "../types/profile";
@@ -183,6 +184,58 @@ export default function PlayerDetailPage() {
     }
     setPerfil((prev) => (prev ? { ...prev, bio: nuevaBio } : prev));
     setEditandoBio(false);
+  };
+
+  // Migración 158: tarjeta rápida de Stream (Twitch/Discord/YouTube),
+  // debajo de la tarjeta "Clan" -- mismo criterio de edición rápida que
+  // "Sobre mí" (textarea/inputs + Guardar, sin pasar por Configuración).
+  // Guarda sobre la MISMA columna links_transmision que ya usa el
+  // editor grande (tipo "personal", sin días/horario) -- actualiza
+  // solo las 3 plataformas fijas, conserva cualquier otro link que ya
+  // hubiera ahí (ej. links de transmisión "de verdad", con horario).
+  const PLATAFORMAS_STREAM_RAPIDO = ["Twitch", "Discord", "YouTube"] as const;
+  const [editandoLinksRapidos, setEditandoLinksRapidos] = useState(false);
+  const [linksRapidosEditados, setLinksRapidosEditados] = useState<Record<string, string>>({});
+  const [guardandoLinksRapidos, setGuardandoLinksRapidos] = useState(false);
+  const [errorLinksRapidos, setErrorLinksRapidos] = useState<string | null>(null);
+
+  const handleAbrirEdicionLinksRapidos = () => {
+    const valores: Record<string, string> = {};
+    for (const plataforma of PLATAFORMAS_STREAM_RAPIDO) {
+      const existente = perfil?.linksTransmision.find(
+        (l) => l.plataforma.toLowerCase() === plataforma.toLowerCase()
+      );
+      valores[plataforma] = existente?.url ?? "";
+    }
+    setLinksRapidosEditados(valores);
+    setErrorLinksRapidos(null);
+    setEditandoLinksRapidos(true);
+  };
+
+  const handleGuardarLinksRapidos = async () => {
+    if (!user || !perfil) return;
+    setGuardandoLinksRapidos(true);
+    setErrorLinksRapidos(null);
+
+    const otrosLinks = perfil.linksTransmision.filter(
+      (l) => !PLATAFORMAS_STREAM_RAPIDO.some((p) => p.toLowerCase() === l.plataforma.toLowerCase())
+    );
+    const nuevosLinks: LinkTransmision[] = PLATAFORMAS_STREAM_RAPIDO.filter(
+      (p) => linksRapidosEditados[p]?.trim()
+    ).map((p) => ({ plataforma: p, url: linksRapidosEditados[p].trim(), tipo: "personal" }));
+    const linksTransmision = [...otrosLinks, ...nuevosLinks];
+
+    const { error } = await supabase.from("profiles").update({ links_transmision: linksTransmision }).eq("id", user.id);
+
+    setGuardandoLinksRapidos(false);
+
+    if (error) {
+      setErrorLinksRapidos(error.message);
+      return;
+    }
+
+    setPerfil((prev) => (prev ? { ...prev, linksTransmision } : prev));
+    setEditandoLinksRapidos(false);
   };
 
   const handleConfirmarRecorteFotoPresentacion = async (recorte: Blob) => {
@@ -702,7 +755,7 @@ export default function PlayerDetailPage() {
             onClick={() => setTabEscritorio("stream")}
           >
             <Radio size={16} className="icon-inline" aria-hidden="true" />
-            Stream
+            Actividades
           </button>
           <button
             type="button"
@@ -858,6 +911,102 @@ export default function PlayerDetailPage() {
                   <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
                 </Link>
               )}
+
+              {/* Migración 158: tarjeta rápida de Stream, debajo de
+                  "Clan" -- Twitch/Discord/YouTube con ícono propio
+                  (ver IconosRedes.tsx), edición rápida con el mismo
+                  lápiz de siempre. */}
+              <div className="detail-card player-tab-stream-card">
+                <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+                <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+                <h3 className="detail-subtitle">
+                  <Radio size={16} className="icon-inline" aria-hidden="true" />
+                  Stream
+                </h3>
+                {editandoLinksRapidos ? (
+                  <>
+                    {errorLinksRapidos && <div className="form-error">{errorLinksRapidos}</div>}
+                    {PLATAFORMAS_STREAM_RAPIDO.map((plataforma) => (
+                      <div className="form-group" key={plataforma}>
+                        <label className="form-label" htmlFor={`stream-rapido-${plataforma}`}>
+                          {plataforma}
+                        </label>
+                        <input
+                          id={`stream-rapido-${plataforma}`}
+                          className="form-input"
+                          type="text"
+                          placeholder={`Link de ${plataforma}`}
+                          value={linksRapidosEditados[plataforma] ?? ""}
+                          onChange={(e) =>
+                            setLinksRapidosEditados((prev) => ({ ...prev, [plataforma]: e.target.value }))
+                          }
+                          disabled={guardandoLinksRapidos}
+                        />
+                      </div>
+                    ))}
+                    <div className="player-tab-bio-acciones">
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={guardandoLinksRapidos}
+                        onClick={handleGuardarLinksRapidos}
+                      >
+                        {guardandoLinksRapidos ? "Guardando..." : "Guardar"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={guardandoLinksRapidos}
+                        onClick={() => setEditandoLinksRapidos(false)}
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="player-tab-stream-links">
+                      {PLATAFORMAS_STREAM_RAPIDO.map((plataforma) => {
+                        const link = perfil.linksTransmision.find(
+                          (l) => l.plataforma.toLowerCase() === plataforma.toLowerCase()
+                        );
+                        const Icono =
+                          plataforma === "Twitch" ? TwitchIcon : plataforma === "Discord" ? DiscordIcon : YoutubeIcon;
+                        return link ? (
+                          <a
+                            key={plataforma}
+                            href={link.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                            className="player-tab-stream-link"
+                          >
+                            <Icono size={18} />
+                            {plataforma}
+                          </a>
+                        ) : (
+                          <span key={plataforma} className="player-tab-stream-link player-tab-stream-link-vacio">
+                            <Icono size={18} />
+                            {plataforma}
+                          </span>
+                        );
+                      })}
+                    </div>
+                    {esMiPropioPerfil && (
+                      <button
+                        type="button"
+                        className="player-tab-bio-edit-btn"
+                        onClick={handleAbrirEdicionLinksRapidos}
+                        aria-label="Editar links de Stream"
+                        title="Editar links de Stream"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}

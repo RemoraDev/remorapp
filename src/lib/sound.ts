@@ -6,10 +6,12 @@
 // usuario), las funciones simplemente no hacen nada -- nunca rompen
 // la interacción.
 //
-// Migración 155: pasaron de ser dos notas suaves (sine) a ondas
-// cuadradas con barrido de frecuencia -- a pedido del usuario, quería
-// algo "más gaming/electrónico" (el sonido típico de HUD/menú de
-// videojuego) en vez de un timbre suave tipo campanita.
+// Migración 158: el barrido de un solo tono (migración 155) terminó
+// sonando parecido al click genérico de Windows -- a pedido del
+// usuario, pasa a ser un arpegio de varias notas DISCRETAS (no un
+// barrido continuo) con onda diente de sierra (más brillante/áspera
+// que la cuadrada), para que se sienta claramente "de videojuego" y
+// no un simple click de sistema operativo.
 let audioCtx: AudioContext | null = null;
 
 function obtenerContexto(): AudioContext | null {
@@ -22,19 +24,22 @@ function obtenerContexto(): AudioContext | null {
   return audioCtx;
 }
 
-// Barrido de frecuencia (de -> hasta) con onda cuadrada -- el timbre
-// "chiptune"/retro-gamer, mucho más electrónico que una sinusoide lisa.
-function barrido(desde: number, hasta: number, duracionMs: number, volumen: number, demoraMs = 0) {
+// Una nota corta y seca, onda diente de sierra (sawtooth) -- más
+// áspera/brillante que una cuadrada o una sinusoide, lectura típica de
+// HUD de videojuego.
+function nota(frecuencia: number, duracionMs: number, volumen: number, demoraMs = 0) {
   const ctx = obtenerContexto();
   if (!ctx) return;
   const inicio = ctx.currentTime + demoraMs / 1000;
   const fin = inicio + duracionMs / 1000;
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
-  osc.type = "square";
-  osc.frequency.setValueAtTime(desde, inicio);
-  osc.frequency.exponentialRampToValueAtTime(Math.max(hasta, 1), fin);
-  gain.gain.setValueAtTime(volumen, inicio);
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(frecuencia, inicio);
+  gain.gain.setValueAtTime(0.0001, inicio);
+  // Ataque rápido (no instantáneo, para evitar un "click" de corte
+  // seco al arrancar) + caída exponencial -- envolvente percusiva.
+  gain.gain.exponentialRampToValueAtTime(volumen, inicio + 0.008);
   gain.gain.exponentialRampToValueAtTime(0.0001, fin);
   osc.connect(gain);
   gain.connect(ctx.destination);
@@ -42,22 +47,24 @@ function barrido(desde: number, hasta: number, duracionMs: number, volumen: numb
   osc.stop(fin);
 }
 
-// Al abrir un panel de control (Mi perfil / Mi Clan) -- dos barridos
-// ascendentes cortos, tipo "power up" de HUD de videojuego.
+// Al abrir un panel de control (Mi perfil / Mi Clan) -- arpegio corto
+// de tres notas ascendentes, tipo "power up" de HUD de videojuego.
 export function sonidoAbrirPanel() {
   try {
-    barrido(220, 520, 70, 0.05);
-    barrido(440, 1040, 90, 0.05, 55);
+    nota(392, 55, 0.05, 0);
+    nota(523, 55, 0.05, 50);
+    nota(784, 90, 0.06, 100);
   } catch {
     // Nunca romper la apertura del panel por esto.
   }
 }
 
-// Al tocar cualquier acceso del menú (team-panel-menu-item) -- un
-// "tick" corto y seco, tipo selección de menú de videojuego.
+// Al tocar cualquier acceso del menú (team-panel-menu-item) -- dos
+// notas muy cortas, tipo "blip" de selección de menú de videojuego.
 export function sonidoClickMenu() {
   try {
-    barrido(700, 900, 35, 0.045);
+    nota(660, 28, 0.045, 0);
+    nota(990, 32, 0.045, 24);
   } catch {
     // Nunca romper el click por esto.
   }
