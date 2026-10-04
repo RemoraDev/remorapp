@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Link, Navigate } from "react-router-dom";
 import { Check, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
@@ -1805,7 +1806,9 @@ export default function AdminPage() {
     alianzas: alianzas.length,
   };
 
-  return (
+  // Migración 151: se porta a document.body cuando es overlay -- ver
+  // el mismo comentario en ProfilePage.tsx.
+  const panelContenido = (
     <div
       className={esOverlay ? "modal-backdrop" : "profile-page-plain-wrap"}
       onClick={esOverlay ? cerrarOverlay : undefined}
@@ -3092,4 +3095,6 @@ export default function AdminPage() {
     </section>
     </div>
   );
+
+  return esOverlay ? createPortal(panelContenido, document.body) : panelContenido;
 }

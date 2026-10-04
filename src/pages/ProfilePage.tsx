@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { BarChart3, Settings, Award, History, Shield, X } from "lucide-react";
@@ -1319,7 +1320,13 @@ export default function ProfilePage() {
   const completo = perfilEstaCompleto(profile);
   const progreso = calcularProgresoPerfil(profile);
 
-  return (
+  // Migración 151: cuando se muestra como overlay, se porta a
+  // document.body (igual que los modales locales de la app, como el
+  // Panel de control de Mi perfil/Mi Clan en escritorio) -- si no, un
+  // modal local que ya estaba abierto (ej. el de PlayerDetailPage.tsx)
+  // le gana el empate de z-index por estar montado afuera de #root,
+  // sin importar cuál se abrió último.
+  const contenido = (
     <div
       className={esOverlay ? "modal-backdrop" : "profile-page-plain-wrap"}
       onClick={esOverlay ? cerrarOverlay : undefined}
@@ -2646,4 +2653,6 @@ export default function ProfilePage() {
     </section>
     </div>
   );
+
+  return esOverlay ? createPortal(contenido, document.body) : contenido;
 }

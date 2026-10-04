@@ -99,8 +99,18 @@ export default function PlayerDetailPage() {
   // sobre lo que sea que haya de fondo, si esta vitrina YA se está
   // mostrando como overlay) en vez de navegar de lleno a /perfil.
   const { abrirOverlay } = useOverlayPanel();
+  // Corrección: el Panel de control propio de esta página (el que abre
+  // y cierra panelAbierto, por createPortal a document.body) se quedaba
+  // montado ARRIBA del nuevo overlay al abrir otro desde adentro (ej.
+  // Configuración) -- dos portales separados, el que ya estaba abierto
+  // ganaba el empate de z-index por orden de montaje en el DOM. Hay que
+  // cerrar este ANTES de abrir el otro.
+  const irA = (path: string) => {
+    setPanelAbierto(false);
+    abrirOverlay(path);
+  };
   const handleAbrirConfiguracion = (tab: string = "configuracion") => {
-    abrirOverlay(`/perfil?tab=${tab}`);
+    irA(`/perfil?tab=${tab}`);
   };
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
@@ -440,7 +450,7 @@ export default function PlayerDetailPage() {
   // abajo (en línea para mobile/PWA, desplegable para escritorio).
   const contenidoPanelMenu = (
     <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
-      <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/perfil?tab=estadisticas")}>
+      <button type="button" className="team-panel-menu-item" onClick={() => irA("/perfil?tab=estadisticas")}>
         <span className="team-panel-menu-item-title">
           <BarChart3 className="icon-inline" />
           Estadísticas
@@ -449,7 +459,7 @@ export default function PlayerDetailPage() {
           Valentía del jugador y Responsabilidad en Torneos y Clan War
         </span>
       </button>
-      <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/perfil?tab=logros")}>
+      <button type="button" className="team-panel-menu-item" onClick={() => irA("/perfil?tab=logros")}>
         <span className="team-panel-menu-item-title">
           <Award className="icon-inline" />
           Logros
@@ -458,7 +468,7 @@ export default function PlayerDetailPage() {
           Títulos por nivel y el gestor de títulos Padre/Hijo
         </span>
       </button>
-      <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/perfil?tab=historial")}>
+      <button type="button" className="team-panel-menu-item" onClick={() => irA("/perfil?tab=historial")}>
         <span className="team-panel-menu-item-title">
           <History className="icon-inline" />
           Historial de eventos
@@ -477,7 +487,7 @@ export default function PlayerDetailPage() {
           acceso más dentro del mismo menú, solo visible para es_admin
           mirando el propio perfil. */}
       {profile?.es_admin && (
-        <button type="button" className="team-panel-menu-item" onClick={() => abrirOverlay("/admin")}>
+        <button type="button" className="team-panel-menu-item" onClick={() => irA("/admin")}>
           <span className="team-panel-menu-item-title">
             <Shield className="icon-inline" />
             Panel de Administración

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { createPortal } from "react-dom";
 import { Link, Navigate } from "react-router-dom";
 import { X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
@@ -260,7 +261,9 @@ export default function StaffPage() {
   const pendientes = reportes.filter((r) => !r.resuelto);
   const reportesVisibles = verReportesResueltos ? reportes : pendientes;
 
-  return (
+  // Migración 151: se porta a document.body cuando es overlay -- ver
+  // el mismo comentario en ProfilePage.tsx.
+  const contenido = (
     <div
       className={esOverlay ? "modal-backdrop" : "profile-page-plain-wrap"}
       onClick={esOverlay ? cerrarOverlay : undefined}
@@ -455,4 +458,6 @@ export default function StaffPage() {
     </section>
     </div>
   );
+
+  return esOverlay ? createPortal(contenido, document.body) : contenido;
 }
