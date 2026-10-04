@@ -1,6 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import type { Location } from "react-router-dom";
-import { sonidoAbrirPanel } from "../lib/sound";
 
 // Migración 151: patrón compartido de "página como ventana superpuesta"
 // (Mi perfil, Panel Staff, Administración) -- centraliza acá la lógica
@@ -19,7 +18,6 @@ export function useOverlayPanel() {
   const esOverlay = Boolean(backgroundLocation);
 
   const abrirOverlay = (path: string) => {
-    sonidoAbrirPanel();
     navigate(path, { state: { backgroundLocation: backgroundLocation ?? location } });
   };
 

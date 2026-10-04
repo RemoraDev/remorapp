@@ -35,7 +35,6 @@ import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
-import { sonidoAbrirPanel, sonidoClickMenu } from "../lib/sound";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { TwitchIcon, DiscordIcon, YoutubeIcon } from "../components/IconosRedes";
 import type { EquipoDelUsuario } from "../lib/teams";
@@ -398,6 +397,7 @@ interface TorneoParticipadoConResultado {
 type SeccionPanel =
   | "configuracion"
   | "editar-equipo"
+  | "solicitudes-unirse"
   | "eventos"
   | "titulos"
   | "reportar"
@@ -3594,17 +3594,16 @@ export default function TeamDetailPage() {
             lugar de siempre, más abajo -- solo se movió el botón. */}
         {puedeGestionar && (
           <div className="team-panel-toggle-header">
-            {/* Acceso directo a "Solicitudes recibidas" (vive dentro de
-                Editar equipo, dentro de Configuración) al lado del botón
-                de Panel de control -- a pedido del usuario, sin duplicar
-                esa sección. */}
+            {/* Acceso directo a Solicitudes (Clan War/Amistad/Reprogramar
+                fecha/Unirse al equipo) al lado del botón de Panel de
+                control -- a pedido del usuario, todo dentro del mismo
+                panel superpuesto, sin navegar a otra página. */}
             <button
               type="button"
               className="btn btn-ghost"
               onClick={() => {
-                sonidoAbrirPanel();
                 setPanelAbierto(true);
-                setSeccionPanel("editar-equipo");
+                setSeccionPanel("solicitudes-unirse");
               }}
             >
               Solicitudes
@@ -3616,7 +3615,6 @@ export default function TeamDetailPage() {
               type="button"
               className="btn btn-primary"
               onClick={() => {
-                if (!panelAbierto) sonidoAbrirPanel();
                 setPanelAbierto((abierto) => !abierto);
                 setSeccionPanel(null);
               }}
@@ -4135,7 +4133,7 @@ export default function TeamDetailPage() {
                       {codigoCopiado ? "¡Copiado!" : "Copiar código"}
                     </button>
                   </div>
-                  <div className="team-panel-menu team-panel-menu-2col" onClickCapture={sonidoClickMenu}>
+                  <div className="team-panel-menu team-panel-menu-2col">
                   {/* Configuración (logo/banner/tema/eliminar equipo) y
                       Títulos de clan quedan fuera de lo delegado a un
                       capitán -- solo el dueño las ve. */}
@@ -4239,6 +4237,47 @@ export default function TeamDetailPage() {
                       ← Volver al panel
                     </button>
                   </div>
+
+              {/* Barra de pestañas de "Solicitudes" (migración 158):
+                  Clan War y Reprogramar fecha apuntan las dos a
+                  "eventos" -- ahí es donde vive hoy la reprogramación,
+                  dentro de cada Clan War en preparación. Todo dentro
+                  del mismo panel superpuesto, sin navegar a otra
+                  página -- a pedido del usuario. */}
+              {(seccionPanel === "eventos" ||
+                seccionPanel === "amistades" ||
+                seccionPanel === "solicitudes-unirse") && (
+                <div className="team-config-media-tabs">
+                  <button
+                    type="button"
+                    className={`team-config-media-tab ${seccionPanel === "eventos" ? "is-active" : ""}`}
+                    onClick={() => setSeccionPanel("eventos")}
+                  >
+                    Clan War
+                  </button>
+                  <button
+                    type="button"
+                    className={`team-config-media-tab ${seccionPanel === "amistades" ? "is-active" : ""}`}
+                    onClick={() => setSeccionPanel("amistades")}
+                  >
+                    Amistad
+                  </button>
+                  <button
+                    type="button"
+                    className="team-config-media-tab"
+                    onClick={() => setSeccionPanel("eventos")}
+                  >
+                    Reprogramar fecha
+                  </button>
+                  <button
+                    type="button"
+                    className={`team-config-media-tab ${seccionPanel === "solicitudes-unirse" ? "is-active" : ""}`}
+                    onClick={() => setSeccionPanel("solicitudes-unirse")}
+                  >
+                    Unirse al equipo
+                  </button>
+                </div>
+              )}
 
               {/* Estadísticas (reorganización): Valentía del clan, sacada
                   de la vista pública -- mismo espíritu que Estadísticas
@@ -4489,7 +4528,7 @@ export default function TeamDetailPage() {
           </form>
               )}
 
-              {seccionPanel === "editar-equipo" && (
+              {seccionPanel === "solicitudes-unirse" && (
               <>
               <h3 className="detail-subtitle">Invitar jugador</h3>
               <form className="auth-form" onSubmit={handleBuscarJugador}>
@@ -4582,7 +4621,11 @@ export default function TeamDetailPage() {
                   ))}
                 </div>
               )}
+              </>
+              )}
 
+              {seccionPanel === "editar-equipo" && (
+              <>
               <h3 className="detail-subtitle">Miembros del equipo</h3>
               {errorQuitar && <div className="form-error">{errorQuitar}</div>}
               {errorCapitan && <div className="form-error">{errorCapitan}</div>}

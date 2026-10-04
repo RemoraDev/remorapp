@@ -7,7 +7,6 @@ import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import { useOverlayPanel } from "../hooks/useOverlayPanel";
-import { sonidoAbrirPanel, sonidoClickMenu } from "../lib/sound";
 import Avatar from "../components/Avatar";
 import AvatarSkin from "../components/AvatarSkin";
 import Carrusel from "../components/Carrusel";
@@ -539,7 +538,7 @@ export default function PlayerDetailPage() {
   // pestaña Logros de acá arriba no tiene, pero sigue siendo
   // alcanzable con /perfil?tab=logros aunque no haya acceso visible.
   const contenidoPanelMenu = (
-    <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+    <div className="team-panel-menu">
       <button type="button" className="team-panel-menu-item" onClick={() => handleAbrirConfiguracion()}>
         <span className="team-panel-menu-item-title">
           <Settings className="icon-inline" />
@@ -617,7 +616,6 @@ export default function PlayerDetailPage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
-                  if (!panelAbierto) sonidoAbrirPanel();
                   setPanelAbierto((a) => !a);
                 }}
               >
@@ -686,7 +684,6 @@ export default function PlayerDetailPage() {
                 type="button"
                 className="btn btn-primary"
                 onClick={() => {
-                  if (!panelAbierto) sonidoAbrirPanel();
                   setPanelAbierto((a) => !a);
                 }}
               >

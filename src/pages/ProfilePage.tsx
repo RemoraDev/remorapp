@@ -12,7 +12,6 @@ import { useSkinWeb, SKINS_WEB } from "../context/SkinWebContext";
 import { validarNick } from "../lib/nickValidation";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import { useOverlayPanel } from "../hooks/useOverlayPanel";
-import { sonidoClickMenu } from "../lib/sound";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { formatFecha } from "../lib/formatters";
 import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
@@ -1549,7 +1548,7 @@ export default function ProfilePage() {
           acceso visible. */}
       <h2 className="detail-subtitle">Panel de control</h2>
       {seccionActiva === null ? (
-        <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+        <div className="team-panel-menu">
           <button
             type="button"
             className="team-panel-menu-item"
@@ -1616,7 +1615,7 @@ export default function ProfilePage() {
       {seccionActiva === "configuracion" && (
         <div className="settings-panel">
           {subseccion === null && (
-            <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+            <div className="team-panel-menu">
               <button type="button" className="team-panel-menu-item" onClick={() => setSubseccion("datos")}>
                 <span className="team-panel-menu-item-title">Editar Datos</span>
                 <span className="team-panel-menu-item-desc">
@@ -2123,7 +2122,7 @@ export default function ProfilePage() {
           )}
 
           {subseccion === "juegos" && subsubseccion === null && (
-            <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+            <div className="team-panel-menu">
               <button type="button" className="team-panel-back" onClick={() => setSubseccion(null)}>
                 ← Volver
               </button>
@@ -2383,7 +2382,7 @@ export default function ProfilePage() {
                 </label>
               </div>
 
-              <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+              <div className="team-panel-menu">
                 <button
                   type="button"
                   className="team-panel-menu-item"
@@ -2521,7 +2520,7 @@ export default function ProfilePage() {
       {seccionActiva === "logros" && (
         <div className="settings-panel">
           {subseccion === null && (
-            <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+            <div className="team-panel-menu">
               <button
                 type="button"
                 className="team-panel-menu-item"
@@ -2689,7 +2688,7 @@ export default function ProfilePage() {
                 </div>
               )}
 
-              <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+              <div className="team-panel-menu">
                 <button
                   type="button"
                   className="team-panel-menu-item"
@@ -2746,7 +2745,7 @@ export default function ProfilePage() {
       {seccionActiva === "historial" && (
         <div className="settings-panel">
           {subseccion === null && (
-            <div className="team-panel-menu" onClickCapture={sonidoClickMenu}>
+            <div className="team-panel-menu">
               <button
                 type="button"
                 className="team-panel-menu-item"
