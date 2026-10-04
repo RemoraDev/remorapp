@@ -517,6 +517,12 @@ export default function TeamDetailPage() {
   const [archivoParaRecortarBanner, setArchivoParaRecortarBanner] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<Blob | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  // Migración 156: franja lateral de escritorio -- a diferencia de
+  // logo/banner, sin recortador (es una imagen libre, se adapta con
+  // cover a una franja angosta de cualquier alto), por eso va directo
+  // de File a franjaLateralFile sin pasar por RecortadorImagenModal.
+  const [franjaLateralFile, setFranjaLateralFile] = useState<File | null>(null);
+  const [franjaLateralPreview, setFranjaLateralPreview] = useState<string | null>(null);
   const [guardandoEquipo, setGuardandoEquipo] = useState(false);
   const [errorEquipo, setErrorEquipo] = useState<string | null>(null);
   const [equipoGuardado, setEquipoGuardado] = useState(false);
@@ -2101,6 +2107,22 @@ export default function TeamDetailPage() {
     setArchivoParaRecortarBanner(null);
   };
 
+  const handleFranjaLateralChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const archivo = event.target.files?.[0] ?? null;
+    setErrorEquipo(null);
+    event.target.value = "";
+
+    if (!archivo) return;
+
+    if (archivo.size > BANNER_MAX_BYTES) {
+      setErrorEquipo("La franja lateral no puede pesar más de 15MB.");
+      return;
+    }
+
+    setFranjaLateralFile(archivo);
+    setFranjaLateralPreview(URL.createObjectURL(archivo));
+  };
+
   const handleGuardarEquipo = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
@@ -2109,7 +2131,12 @@ export default function TeamDetailPage() {
     setErrorEquipo(null);
     setEquipoGuardado(false);
 
-    const cambios: { description: string | null; logo_url?: string; banner_url?: string } = {
+    const cambios: {
+      description: string | null;
+      logo_url?: string;
+      banner_url?: string;
+      escritorio_lateral_url?: string;
+    } = {
       description: descEquipo.trim() || null,
     };
 
@@ -2149,6 +2176,24 @@ export default function TeamDetailPage() {
 
         cambios.banner_url = supabase.storage.from("team-banners").getPublicUrl(ruta).data.publicUrl;
       }
+
+      if (franjaLateralFile) {
+        const franjaComprimida = await comprimirImagen(franjaLateralFile, "franja-lateral");
+        const extension = franjaComprimida.type === "image/png" ? "png" : "jpg";
+        const ruta = `${user.id}/${Date.now()}-franja-lateral.${extension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("team-banners")
+          .upload(ruta, franjaComprimida, { contentType: franjaComprimida.type });
+
+        if (uploadError) {
+          setErrorEquipo("No se pudo subir la franja lateral: " + uploadError.message);
+          setGuardandoEquipo(false);
+          return;
+        }
+
+        cambios.escritorio_lateral_url = supabase.storage.from("team-banners").getPublicUrl(ruta).data.publicUrl;
+      }
     } catch {
       setErrorEquipo("No se pudo procesar alguna de las imágenes, prueba con otra.");
       setGuardandoEquipo(false);
@@ -2168,6 +2213,8 @@ export default function TeamDetailPage() {
     setLogoPreview(null);
     setBannerFile(null);
     setBannerPreview(null);
+    setFranjaLateralFile(null);
+    setFranjaLateralPreview(null);
     setEquipoGuardado(true);
     await cargar();
   };
@@ -4297,6 +4344,34 @@ export default function TeamDetailPage() {
                   src={bannerPreview ?? equipo.banner_url ?? ""}
                   alt="Vista previa del banner"
                   className="team-banner-preview"
+                />
+              )}
+            </div>
+
+            {/* Migración 156: reemplaza el panal de hexágonos de la
+                columna lateral de escritorio de cada miembro que elija
+                "usar la de mi clan" (ver ProfilePage.tsx) -- sin
+                recortador, a diferencia de logo/banner. */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="team-edit-franja-lateral">
+                Franja lateral de escritorio (opcional, máx. 15MB)
+              </label>
+              <input
+                id="team-edit-franja-lateral"
+                className="form-input"
+                type="file"
+                accept="image/*"
+                onChange={handleFranjaLateralChange}
+              />
+              <p className="form-hint">
+                Reemplaza el panal de hexágonos de la columna lateral en la versión de escritorio, para
+                quien elija usar la del clan desde su propio perfil.
+              </p>
+              {(franjaLateralPreview ?? equipo.escritorio_lateral_url) && (
+                <img
+                  src={franjaLateralPreview ?? equipo.escritorio_lateral_url ?? ""}
+                  alt="Vista previa de la franja lateral"
+                  className="team-franja-lateral-preview"
                 />
               )}
             </div>

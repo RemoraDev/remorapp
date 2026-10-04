@@ -206,6 +206,10 @@ export interface Profile {
   // es un valor de esta columna: se infiere en el cliente cuando no hay
   // sesión activa, nunca se guarda en la base.
   estado_presencia: EstadoPresencia;
+  // Migración 156: reemplaza el panal de hexágonos de la franja lateral
+  // de escritorio (EscritorioColumnaLateral.tsx) por esta imagen -- null
+  // mantiene el panal de siempre.
+  escritorio_lateral_url: string | null;
 }
 
 export type BordeHeader = "negro" | "cyan" | "amarillo" | "verde";

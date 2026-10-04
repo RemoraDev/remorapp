@@ -11,6 +11,9 @@ export interface TeamRow {
   // Migración 154: foto de presentación lateral (vertical, 9:16) --
   // mismo campo que profiles.foto_presentacion_url, ahora para equipos.
   foto_presentacion_url: string | null;
+  // Migración 156: franja lateral de escritorio del equipo -- mismo
+  // campo que profiles.escritorio_lateral_url, ahora para equipos.
+  escritorio_lateral_url: string | null;
   // Sistema de MMR y ligas oficiales de StarCraft II (migración 020,
   // reemplaza al de experiencia/nivel de la migración 013). mmr es el
   // rating del clan como unidad (nace en 1441, Bronce 1); banca_rota y

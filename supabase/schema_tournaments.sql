@@ -22791,3 +22791,31 @@ delete from public.tournaments where id = '900ba3ef-07f3-4330-8659-d92bd8e6484a'
 -- más.
 alter table public.teams add column foto_presentacion_url text;
 -- ------------------------------------------------------------
+-- Migración 156: franja lateral de escritorio personalizable -- a
+-- pedido del usuario, la columna izquierda decorativa de la versión
+-- de escritorio (panal de hexágonos, EscritorioColumnaLateral.tsx)
+-- pasa a poder reemplazarse por una imagen propia, "como un papel
+-- tapiz lateral". Sin imagen subida, se sigue viendo el panal de
+-- hexágonos de siempre (fallback en el frontend, no acá). Tanto
+-- profiles como teams suman su propia columna -- un jugador puede
+-- subir la suya propia o copiar la de su clan (si pertenece a uno y
+-- ese clan ya subió la suya), mismo mecanismo de copia puntual que
+-- foto_presentacion_url (migración 154).
+alter table public.profiles add column escritorio_lateral_url text;
+alter table public.teams add column escritorio_lateral_url text;
+-- ------------------------------------------------------------
+-- Migración 157: corrige permisos faltantes de las migraciones 154 y
+-- 156. profiles usa grants por columna (no "grant select on
+-- profiles" general) -- cada columna nueva necesita su propio grant
+-- explícito, y se me pasó agregarlo para escritorio_lateral_url.
+-- teams en cambio tiene el select general, pero el UPDATE sí es por
+-- columna (ver la migración original) -- ahí se me pasaron DOS
+-- columnas: foto_presentacion_url (migración 154) y
+-- escritorio_lateral_url (migración 156), ninguna de las dos había
+-- quedado en la lista de columnas actualizables.
+grant select (escritorio_lateral_url) on public.profiles to anon, authenticated;
+grant update (escritorio_lateral_url) on public.profiles to authenticated;
+
+grant update (description, logo_url, banner_url, tema_equipo, foto_presentacion_url, escritorio_lateral_url)
+  on public.teams to authenticated;
+-- ------------------------------------------------------------

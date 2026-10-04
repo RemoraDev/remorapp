@@ -2969,6 +2969,17 @@ html.es-escritorio .player-detail-panel-inline {
   border: 1px solid var(--color-border);
 }
 
+/* Vista previa de la franja lateral de escritorio (migración 156) --
+   angosta y alta, como la columna real que va a reemplazar. */
+.team-franja-lateral-preview {
+  margin-top: 0.6rem;
+  width: 6rem;
+  height: 10rem;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+}
+
 /* ---------- Llave de eliminación simple ---------- */
 
 .bracket {
@@ -6278,6 +6289,17 @@ html.es-escritorio .player-detail-panel-inline {
   gap: 0.6rem;
 }
 
+/* Vista previa de la franja lateral de escritorio propia (migración
+   156) -- mismas proporciones angostas/altas que .team-franja-lateral-preview. */
+.franja-lateral-preview {
+  margin-bottom: 0.75rem;
+  width: 6rem;
+  height: 10rem;
+  object-fit: cover;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+}
+
 .team-tema-option {
   display: flex;
   flex-direction: column;
@@ -8788,6 +8810,13 @@ html.es-escritorio .escritorio-columna-lateral {
      panal más marcado de abajo. */
   width: 140px;
   background-color: var(--color-bg);
+  /* Migración 156: cuando hay franja lateral propia (background-image
+     puesto inline desde el componente), cubre todo el ancho/alto de
+     la columna, "papel tapiz" -- sin imagen, estas tres propiedades no
+     hacen nada (no hay background-image). */
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   overflow: hidden;
 }
 

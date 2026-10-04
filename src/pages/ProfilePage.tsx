@@ -160,6 +160,7 @@ type SubsubseccionPerfil =
   | "bordes-avatar"
   | "borde-header"
   | "skin-web"
+  | "franja-lateral"
   | "sc2"
   | null;
 
@@ -237,6 +238,107 @@ export default function ProfilePage() {
     if (!user) return;
     obtenerEquipoDelUsuario(user.id).then((equipo) => setTieneEquipo(!!equipo));
   }, [user]);
+
+  // Migración 156: franja lateral de escritorio -- la del clan propio
+  // se busca aparte (obtenerEquipoDelUsuario no trae
+  // escritorio_lateral_url, es compartida con otras pantallas que no
+  // la necesitan), solo cuando hace falta mostrar el botón "Usar la de
+  // mi clan".
+  const [equipoFranjaLateralUrl, setEquipoFranjaLateralUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user) return;
+    supabase
+      .from("team_members")
+      .select("teams(escritorio_lateral_url)")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        const equipoData = data?.teams
+          ? Array.isArray(data.teams)
+            ? data.teams[0]
+            : data.teams
+          : null;
+        setEquipoFranjaLateralUrl((equipoData as { escritorio_lateral_url?: string } | null)?.escritorio_lateral_url ?? null);
+      });
+  }, [user]);
+
+  const [subiendoFranjaLateral, setSubiendoFranjaLateral] = useState(false);
+  const [errorFranjaLateral, setErrorFranjaLateral] = useState<string | null>(null);
+
+  const handleSubirFranjaLateral = async (event: ChangeEvent<HTMLInputElement>) => {
+    const archivo = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!archivo || !user) return;
+
+    if (archivo.size > 15 * 1024 * 1024) {
+      setErrorFranjaLateral("La imagen no puede pesar más de 15MB.");
+      return;
+    }
+
+    setSubiendoFranjaLateral(true);
+    setErrorFranjaLateral(null);
+
+    try {
+      const comprimida = await comprimirImagen(archivo, "franja-lateral");
+      const extension = comprimida.type === "image/png" ? "png" : "jpg";
+      const ruta = `${user.id}/${Date.now()}-franja-lateral.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(ruta, comprimida, { contentType: comprimida.type });
+
+      if (uploadError) {
+        setErrorFranjaLateral("No se pudo subir la imagen: " + uploadError.message);
+        return;
+      }
+
+      const escritorioLateralUrl = supabase.storage.from("avatars").getPublicUrl(ruta).data.publicUrl;
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ escritorio_lateral_url: escritorioLateralUrl })
+        .eq("id", user.id);
+
+      if (updateError) {
+        setErrorFranjaLateral(updateError.message);
+        return;
+      }
+
+      await refreshProfile();
+    } catch {
+      setErrorFranjaLateral("No se pudo procesar la imagen, prueba con otra.");
+    } finally {
+      setSubiendoFranjaLateral(false);
+    }
+  };
+
+  const handleUsarFranjaDelClan = async () => {
+    if (!user || !equipoFranjaLateralUrl) return;
+    setSubiendoFranjaLateral(true);
+    setErrorFranjaLateral(null);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ escritorio_lateral_url: equipoFranjaLateralUrl })
+      .eq("id", user.id);
+    setSubiendoFranjaLateral(false);
+    if (error) {
+      setErrorFranjaLateral(error.message);
+      return;
+    }
+    await refreshProfile();
+  };
+
+  const handleQuitarFranjaLateral = async () => {
+    if (!user) return;
+    setSubiendoFranjaLateral(true);
+    setErrorFranjaLateral(null);
+    const { error } = await supabase.from("profiles").update({ escritorio_lateral_url: null }).eq("id", user.id);
+    setSubiendoFranjaLateral(false);
+    if (error) {
+      setErrorFranjaLateral(error.message);
+      return;
+    }
+    await refreshProfile();
+  };
 
   // --- Identidad de jugador: nick (obligatorio) y país (opcional,
   // migración 107) -- servidor SC2 e ID SC2 viven aparte en "Editar
@@ -2285,6 +2387,16 @@ export default function ProfilePage() {
                     Cambia el color de acento de toda la web (botones, bordes, brillos)
                   </span>
                 </button>
+                <button
+                  type="button"
+                  className="team-panel-menu-item"
+                  onClick={() => setSubsubseccion("franja-lateral")}
+                >
+                  <span className="team-panel-menu-item-title">Franja lateral de escritorio</span>
+                  <span className="team-panel-menu-item-desc">
+                    Reemplaza el panal de hexágonos de la versión de escritorio por una imagen propia
+                  </span>
+                </button>
               </div>
             </>
           )}
@@ -2311,6 +2423,65 @@ export default function ProfilePage() {
                   </button>
                 ))}
               </div>
+            </>
+          )}
+
+          {subseccion === "apariencia" && subsubseccion === "franja-lateral" && (
+            <>
+              <button type="button" className="team-panel-back" onClick={() => setSubsubseccion(null)}>
+                ← Volver
+              </button>
+              <h3 className="detail-subtitle">Franja lateral de escritorio</h3>
+              <p className="tournament-card-meta">
+                Reemplaza el panal de hexágonos de la columna izquierda, solo en la versión de
+                escritorio. Sin ninguna imagen subida, se sigue viendo el panal de siempre.
+              </p>
+
+              {errorFranjaLateral && <div className="form-error">{errorFranjaLateral}</div>}
+
+              {profile?.escritorio_lateral_url && (
+                <img
+                  src={profile.escritorio_lateral_url}
+                  alt="Vista previa de tu franja lateral"
+                  className="franja-lateral-preview"
+                />
+              )}
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="perfil-franja-lateral">
+                  Subir una imagen propia (opcional, máx. 15MB)
+                </label>
+                <input
+                  id="perfil-franja-lateral"
+                  className="form-input"
+                  type="file"
+                  accept="image/*"
+                  disabled={subiendoFranjaLateral}
+                  onChange={handleSubirFranjaLateral}
+                />
+              </div>
+
+              {equipoFranjaLateralUrl && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-block"
+                  disabled={subiendoFranjaLateral}
+                  onClick={handleUsarFranjaDelClan}
+                >
+                  Usar la de mi clan
+                </button>
+              )}
+
+              {profile?.escritorio_lateral_url && (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-block"
+                  disabled={subiendoFranjaLateral}
+                  onClick={handleQuitarFranjaLateral}
+                >
+                  Quitar (volver al panal de hexágonos)
+                </button>
+              )}
             </>
           )}
 
