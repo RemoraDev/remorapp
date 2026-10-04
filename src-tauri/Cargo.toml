@@ -1,6 +1,6 @@
 [package]
 name = "remorapp"
-version = "0.1.39"
+version = "0.1.40"
 description = "RemorApp -- gestor de torneos y clanes de StarCraft II"
 authors = ["RemoraDev"]
 license = ""
