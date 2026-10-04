@@ -586,6 +586,37 @@ export default function TeamDetailPage() {
     }
   };
 
+  // Edición rápida de "Información del clan" (pestaña General) -- mismo
+  // criterio que "Sobre mí" en Mi perfil: un textarea + Guardar, sin
+  // pasar por el formulario grande de Configuración solo para esto.
+  // Aparte de descEquipo (ese es el que usa ese formulario grande).
+  const [editandoDescripcionGeneral, setEditandoDescripcionGeneral] = useState(false);
+  const [descripcionGeneralEditada, setDescripcionGeneralEditada] = useState("");
+  const [guardandoDescripcionGeneral, setGuardandoDescripcionGeneral] = useState(false);
+  const [errorDescripcionGeneral, setErrorDescripcionGeneral] = useState<string | null>(null);
+
+  const handleAbrirEdicionDescripcionGeneral = () => {
+    setDescripcionGeneralEditada(equipo?.description ?? "");
+    setErrorDescripcionGeneral(null);
+    setEditandoDescripcionGeneral(true);
+  };
+
+  const handleGuardarDescripcionGeneral = async () => {
+    if (!equipo) return;
+    setGuardandoDescripcionGeneral(true);
+    setErrorDescripcionGeneral(null);
+    const nuevaDescripcion = descripcionGeneralEditada.trim() || null;
+    const { error } = await supabase.from("teams").update({ description: nuevaDescripcion }).eq("id", equipo.id);
+    setGuardandoDescripcionGeneral(false);
+    if (error) {
+      setErrorDescripcionGeneral(error.message);
+      return;
+    }
+    setEquipo((prev) => (prev ? { ...prev, description: nuevaDescripcion } : prev));
+    setDescEquipo(nuevaDescripcion ?? "");
+    setEditandoDescripcionGeneral(false);
+  };
+
   // --- Panel de control: código de invitación y quitar miembros ---
   const [codigoCopiado, setCodigoCopiado] = useState(false);
   const [quitando, setQuitando] = useState<string | null>(null);
@@ -3499,14 +3530,10 @@ export default function TeamDetailPage() {
 
       <div className="team-detail-header">
         <div>
-          <div className="team-detail-title-row">
-            {equipo.logo_url ? (
-              <img src={equipo.logo_url} alt="" className="clan-name-logo" />
-            ) : (
-              <span className="clan-name-logo clan-name-logo-placeholder">{equipo.tag.charAt(0)}</span>
-            )}
-            <h1 className="section-title">{equipo.name}</h1>
-          </div>
+          {/* Corrección: el logo quedaba duplicado -- este chico, acá al
+              lado del nombre, Y el grande de arriba superpuesto al
+              banner. Se saca este, a pedido del usuario. */}
+          <h1 className="section-title">{equipo.name}</h1>
           <p className="tournament-card-meta">
             [{equipo.tag}] · {miembros.length} {miembros.length === 1 ? "miembro" : "miembros"}
           </p>
@@ -3729,20 +3756,70 @@ export default function TeamDetailPage() {
             )}
           </div>
 
-          <div className="detail-card team-general-card">
-            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
-            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
-            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
-            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+          <div className="player-tab-col-main">
+            {/* A pedido del usuario: el título pasa a vivir arriba de la
+                caja (como "Panel de control"/otros títulos de sección
+                de la app), no adentro. */}
             <h3 className="detail-subtitle">
               <Info size={16} className="icon-inline" aria-hidden="true" />
               Información del clan
             </h3>
-            {equipo.description ? (
-              <p className="team-detail-description">{equipo.description}</p>
-            ) : (
-              <p className="detail-empty">Todavía no escribió una descripción del clan.</p>
-            )}
+            <div className="detail-card team-general-card">
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+              {editandoDescripcionGeneral ? (
+                <>
+                  <textarea
+                    className="form-textarea player-tab-bio-textarea"
+                    value={descripcionGeneralEditada}
+                    onChange={(e) => setDescripcionGeneralEditada(e.target.value)}
+                    maxLength={500}
+                    disabled={guardandoDescripcionGeneral}
+                    autoFocus
+                  />
+                  {errorDescripcionGeneral && <div className="form-error">{errorDescripcionGeneral}</div>}
+                  <div className="player-tab-bio-acciones">
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={guardandoDescripcionGeneral}
+                      onClick={handleGuardarDescripcionGeneral}
+                    >
+                      {guardandoDescripcionGeneral ? "Guardando..." : "Guardar"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost"
+                      disabled={guardandoDescripcionGeneral}
+                      onClick={() => setEditandoDescripcionGeneral(false)}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {equipo.description ? (
+                    <p className="team-detail-description">{equipo.description}</p>
+                  ) : (
+                    <p className="detail-empty">Todavía no escribió una descripción del clan.</p>
+                  )}
+                  {puedeGestionar && (
+                    <button
+                      type="button"
+                      className="player-tab-bio-edit-btn"
+                      onClick={handleAbrirEdicionDescripcionGeneral}
+                      aria-label="Editar información del clan"
+                      title="Editar información del clan"
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           {archivoParaRecortarFotoEquipo && (

@@ -1921,17 +1921,11 @@ main {
   overflow-wrap: anywhere;
 }
 
-/* Logo del clan al lado de su nombre -- mismo tamaño en la ficha del
-   equipo (.team-detail-title-row) y en la tarjeta "Clan" del perfil
-   del jugador (.player-tab-preview-card), para que las dos se vean
-   consistentes entre sí. Distinto del logo grande que ya se superpone
-   al banner (.team-detail-logo-overlap, 7rem): este es chico, a
-   propósito, para ir en línea junto al texto. */
-.team-detail-title-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
+/* Logo del clan chico, en línea junto a texto -- usado en la tarjeta
+   "Clan" del perfil del jugador (.player-tab-preview-card). Ya NO se
+   usa en la ficha del propio equipo (se sacó de ahí por quedar
+   duplicado con el logo grande superpuesto al banner,
+   .team-detail-logo-overlap). */
 
 /* 3rem (48px), no 2rem -- a pedido del usuario, un logo de equipo
    real pierde calidad visible a 32px. */
@@ -1999,6 +1993,16 @@ main {
   /* Esquina recta, igual que .player-tab-foto-wrap/.player-tab-standalone-card
      -- esta tarjeta también lleva el marco "corner bracket". */
   border-radius: 0;
+  /* Brillo siempre prendido, no solo al pasar el mouse -- a pedido del
+     usuario, para que se vea igual de iluminada que "Sobre mí" en Mi
+     perfil (antes caía en el borde tenue por default de .detail-card). */
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+  padding-bottom: 3.25rem;
+}
+
+.team-general-card:hover {
+  box-shadow: var(--shadow-accent-lg);
 }
 
 /* Migración 154: columna de la foto de presentación del equipo +
@@ -2012,8 +2016,21 @@ main {
   align-items: stretch;
 }
 
+/* .player-tab-col-main acá adentro suma el título ARRIBA de la caja
+   (a pedido del usuario, no adentro como en Mi perfil) -- por eso
+   necesita ser columna flex con la caja en flex:1 (no el height:100%
+   genérico de .player-tab-col-main .detail-card, que asume que la
+   caja es el único hijo y se pisaría con el título). Escopeado bajo
+   .team-general-grid para no tocar el de Mi perfil. */
+.team-general-grid .player-tab-col-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .team-general-grid .team-general-card {
-  height: 100%;
+  flex: 1;
+  height: auto;
 }
 
 @media (max-width: 640px) {
