@@ -16,6 +16,9 @@ export default function RankingPage() {
   // Migración 148: "Mini eventos" -- pestaña privada, solo visible
   // para quien pertenece a un clan (oculta al público, a propósito).
   const [seccion, setSeccion] = useState<"ranking" | "minieventos">("ranking");
+  // Migración 150: Race War y Clan War Amistosa ya no van mezcladas en
+  // una sola lista -- sub-pestañas separadas dentro de "Mini eventos".
+  const [subTipoMinievento, setSubTipoMinievento] = useState<MiniEvento["tipo"]>("race_war");
   const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
   const [minieventos, setMinieventos] = useState<MiniEvento[]>([]);
   const [rankingMinieventos, setRankingMinieventos] = useState<RankingMinievento[]>([]);
@@ -140,78 +143,110 @@ export default function RankingPage() {
             fuera de tu clan ve esta pestaña.
           </p>
 
-          <h2 className="section-title ranking-jugadores-titulo">Tus mini eventos</h2>
-          {cargandoMinieventos ? (
-            <p className="tournament-card-meta">Cargando...</p>
-          ) : minieventos.length === 0 ? (
-            <p className="detail-empty">
-              Todavía no creaste ninguna Race War ni jugaste ninguna Clan War Amistosa.
-            </p>
-          ) : (
-            <div className="table-scroll">
-              <table className="group-standings-table ranking-table">
-                <thead>
-                  <tr>
-                    <th>Tipo</th>
-                    <th>Nombre</th>
-                    <th>Fecha</th>
-                    <th>Rival</th>
-                    <th>Resultado</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {minieventos.map((ev) => (
-                    <tr key={ev.id}>
-                      <td>{ev.tipo === "race_war" ? "Race War" : "Clan War Amistosa"}</td>
-                      <td>{ev.titulo}</td>
-                      <td>{new Date(ev.fecha).toLocaleDateString("es")}</td>
-                      <td>{ev.rival_nombre ?? "--"}</td>
-                      <td>{ev.resultado ?? "--"}</td>
-                      <td>
-                        <Link
-                          to={ev.tipo === "race_war" ? `/guerra-razas/${ev.id}` : `/clan-war/${ev.id}`}
-                          className="btn btn-ghost"
-                        >
-                          Ver
-                        </Link>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          <div className="pill-radio-group">
+            <label className={`pill-radio-option ${subTipoMinievento === "race_war" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="sub-tipo-minievento"
+                checked={subTipoMinievento === "race_war"}
+                onChange={() => setSubTipoMinievento("race_war")}
+              />
+              Race War
+            </label>
+            <label className={`pill-radio-option ${subTipoMinievento === "clan_war_amistosa" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="sub-tipo-minievento"
+                checked={subTipoMinievento === "clan_war_amistosa"}
+                onChange={() => setSubTipoMinievento("clan_war_amistosa")}
+              />
+              Clan War Amistosa
+            </label>
+          </div>
 
-          <h2 className="section-title ranking-jugadores-titulo">Ranking privado</h2>
-          <p className="tournament-card-meta">
-            Puntos acumulados de tus jugadores a través de todas las Race War de tu clan.
-          </p>
-          {cargandoMinieventos ? (
-            <p className="tournament-card-meta">Cargando...</p>
-          ) : rankingMinieventos.length === 0 ? (
-            <p className="detail-empty">Todavía no hay puntos registrados en ninguna Race War de tu clan.</p>
-          ) : (
-            <div className="table-scroll">
-              <table className="group-standings-table ranking-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Jugador</th>
-                    <th>Puntos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rankingMinieventos.map((fila, indice) => (
-                    <tr key={fila.jugador_nombre}>
-                      <td>{indice + 1}</td>
-                      <td>{fila.jugador_nombre}</td>
-                      <td>{fila.puntos}</td>
+          <h2 className="section-title ranking-jugadores-titulo">Tus mini eventos</h2>
+          {(() => {
+            const filtrados = minieventos.filter((ev) => ev.tipo === subTipoMinievento);
+            if (cargandoMinieventos) return <p className="tournament-card-meta">Cargando...</p>;
+            if (filtrados.length === 0) {
+              return (
+                <p className="detail-empty">
+                  {subTipoMinievento === "race_war"
+                    ? "Todavía no creaste ninguna Race War."
+                    : "Todavía no jugaste ninguna Clan War Amistosa."}
+                </p>
+              );
+            }
+            return (
+              <div className="table-scroll">
+                <table className="group-standings-table ranking-table">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Fecha</th>
+                      <th>Rival</th>
+                      <th>Resultado</th>
+                      <th></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filtrados.map((ev) => (
+                      <tr key={ev.id}>
+                        <td>{ev.titulo}</td>
+                        <td>{new Date(ev.fecha).toLocaleDateString("es")}</td>
+                        <td>{ev.rival_nombre ?? "--"}</td>
+                        <td>{ev.resultado ?? "--"}</td>
+                        <td>
+                          <Link
+                            to={ev.tipo === "race_war" ? `/guerra-razas/${ev.id}` : `/clan-war/${ev.id}`}
+                            className="btn btn-ghost"
+                          >
+                            Ver
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+
+          {subTipoMinievento === "race_war" && (
+            <>
+              <h2 className="section-title ranking-jugadores-titulo">Ranking privado</h2>
+              <p className="tournament-card-meta">
+                Puntos acumulados de tus jugadores a través de todas las Race War de tu clan.
+              </p>
+              {cargandoMinieventos ? (
+                <p className="tournament-card-meta">Cargando...</p>
+              ) : rankingMinieventos.length === 0 ? (
+                <p className="detail-empty">Todavía no hay puntos registrados en ninguna Race War de tu clan.</p>
+              ) : (
+                <div className="table-scroll">
+                  <table className="group-standings-table ranking-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Jugador</th>
+                        <th>Puntos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rankingMinieventos.map((fila, indice) => (
+                        <tr key={fila.jugador_nombre}>
+                          <td>{indice + 1}</td>
+                          <td>{fila.jugador_nombre}</td>
+                          <td>{fila.puntos}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
           )}
         </>
       ) : (

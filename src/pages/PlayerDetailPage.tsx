@@ -97,8 +97,8 @@ export default function PlayerDetailPage() {
   // Migración 149: mismo tratamiento que el "Configuración" del Header
   // -- se abre como ventana superpuesta sobre esta vitrina en vez de
   // navegar de lleno a /perfil (ver ProfilePage).
-  const handleAbrirConfiguracion = () => {
-    navigate("/perfil?tab=configuracion", { state: { backgroundLocation: location } });
+  const handleAbrirConfiguracion = (tab: string = "configuracion") => {
+    navigate(`/perfil?tab=${tab}`, { state: { backgroundLocation: location } });
   };
 
   const [perfil, setPerfil] = useState<PerfilPublico | null>(null);
@@ -463,7 +463,7 @@ export default function PlayerDetailPage() {
         </span>
         <span className="team-panel-menu-item-desc">Clan Wars y torneos en los que jugaste</span>
       </Link>
-      <button type="button" className="team-panel-menu-item" onClick={handleAbrirConfiguracion}>
+      <button type="button" className="team-panel-menu-item" onClick={() => handleAbrirConfiguracion()}>
         <span className="team-panel-menu-item-title">
           <Settings className="icon-inline" />
           Configuración
@@ -820,6 +820,17 @@ export default function PlayerDetailPage() {
                 </h3>
                 <p className="detail-empty">Este jugador no transmite.</p>
               </>
+            )}
+            {esMiPropioPerfil && (
+              <button
+                type="button"
+                className="player-tab-bio-edit-btn"
+                onClick={() => handleAbrirConfiguracion("transmision")}
+                aria-label="Editar links de transmisión"
+                title="Editar links de transmisión"
+              >
+                <Pencil size={14} />
+              </button>
             )}
           </div>
         )}

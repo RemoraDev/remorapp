@@ -779,6 +779,16 @@ main {
   color: var(--color-accent);
 }
 
+.logo-word-version {
+  margin-left: 0.35rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  font-size: 0.65rem;
+  letter-spacing: 0;
+  color: var(--color-text-muted);
+  vertical-align: middle;
+}
+
 /* ---------- Noticias dentro de Inicio ---------- */
 
 .home-news-section {
@@ -2096,6 +2106,9 @@ main {
    con el contenido, nunca genera scroll propio en escritorio. */
 .team-general-card {
   position: relative;
+  /* Esquina recta, igual que .player-tab-foto-wrap/.player-tab-standalone-card
+     -- esta tarjeta también lleva el marco "corner bracket". */
+  border-radius: 0;
 }
 
 /* Utilidad estándar: oculta visualmente un elemento sin sacarlo del
@@ -2483,7 +2496,10 @@ html.es-escritorio .player-detail-panel-inline {
   width: 100%;
   text-align: left;
   text-decoration: none;
-  border-radius: var(--radius-md);
+  /* Esquina recta, igual que .player-tab-foto-wrap -- ver comentario en
+     .player-tab-standalone-card sobre por qué el radio redondeado
+     deformaba el marco "corner bracket". */
+  border-radius: 0;
   /* Brillo siempre prendido (no solo al pasar el mouse) -- a pedido
      del usuario, mismas tres cajas que .player-tab-foto-wrap. */
   border: 1px solid var(--color-accent);
@@ -2546,6 +2562,12 @@ html.es-escritorio .player-detail-panel-inline {
 .player-tab-standalone-card {
   position: relative;
   flex: 1;
+  /* Esquina recta a propósito, igual que .player-tab-foto-wrap -- a
+     pedido del usuario: el marco "corner bracket" de abajo es de
+     esquina recta, y con el radio de esquina redondeado heredado de
+     .detail-card quedaba deformado (el brillo del borde no coincidía
+     con las marcas rectas de las puntas). */
+  border-radius: 0;
   border-color: var(--color-accent);
   box-shadow: var(--shadow-accent);
 }
@@ -6114,9 +6136,12 @@ html.es-escritorio .player-detail-panel-inline {
   gap: 0.75rem;
 }
 
+/* A pedido del usuario: mismo estilo plano de .team-panel-menu-item
+   que ya usa el Panel de control de Mi perfil -- antes estas tarjetas
+   tenían un borde y degradado propios (más "iluminados") que
+   resultaban menos modernos/prolijos en contraste con las de Mi
+   perfil. Solo se agrega el levantamiento sutil al pasar el mouse. */
 .team-panel-menu-2col .team-panel-menu-item {
-  border-color: rgba(var(--h-accent-rgb), 0.35);
-  background: linear-gradient(135deg, rgba(var(--h-accent-rgb), 0.08), transparent 65%), var(--color-card);
   transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
 }
 
@@ -7514,20 +7539,34 @@ body.overlay-obs {
   box-shadow: var(--shadow-accent-lg);
 }
 
+/* Modernizado a pedido del usuario: antes era solo una "X" de texto
+   sin fondo, apenas visible sobre paneles oscuros (Mi perfil y Mi
+   Clan) -- ahora es un botón circular con fondo propio, mismo
+   lenguaje visual que los botones de editar (Pencil) redondos del
+   resto de la app (.player-detail-foto-presentacion-edit-btn /
+   .player-tab-bio-edit-btn). */
 .modal-close {
   position: absolute;
   top: 0.85rem;
   right: 0.85rem;
-  background: none;
-  border: none;
-  color: var(--color-text-faint);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--h-accent-rgb), 0.35);
+  background: var(--color-panel);
+  color: var(--color-text-muted);
   font-size: 1.1rem;
   line-height: 1;
-  padding: 0.25rem;
 }
 
 .modal-close:hover {
   color: var(--color-text);
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
 }
 
 .modal-title {

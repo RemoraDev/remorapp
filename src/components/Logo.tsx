@@ -1,3 +1,5 @@
+import packageJson from "../../package.json";
+
 interface LogoProps {
   className?: string;
   withWordmark?: boolean;
@@ -32,6 +34,11 @@ export default function Logo({ className = "h-9 w-9", withWordmark = false }: Lo
       {withWordmark && (
         <span className="logo-word">
           Remor<span className="logo-word-accent">App</span>
+          {/* A pedido del usuario: la versión al lado del wordmark, para
+              saber de un vistazo si la instalación de escritorio (o la
+              pestaña web) tiene la última. Viene de package.json, que ya
+              se mantiene sincronizado con src-tauri en cada release. */}
+          <span className="logo-word-version">v{packageJson.version}</span>
         </span>
       )}
     </div>

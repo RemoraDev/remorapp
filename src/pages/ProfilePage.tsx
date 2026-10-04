@@ -177,7 +177,7 @@ interface DestinoPerfil {
 // marcador viejo siga llevando directo al contenido, en vez de
 // rebotar al menú principal del Panel de control.
 function resolverDestino(valor: string | null): DestinoPerfil {
-  if (valor === "datos") {
+  if (valor === "datos" || valor === "transmision") {
     return { seccion: "configuracion", subseccion: "datos", subsubseccion: null };
   }
   if (valor === "juego") {
