@@ -11,14 +11,18 @@ import GuerraRazasEnfrentamiento from "../components/GuerraRazasEnfrentamiento";
 import GuerraRazasTablaPosiciones from "../components/GuerraRazasTablaPosiciones";
 import TarjetaCompartirGuerraDeRazas from "../components/TarjetaCompartirGuerraDeRazas";
 import TarjetaResumenEnfrentamientos from "../components/TarjetaResumenEnfrentamientos";
+import LineupFondoPicker from "../components/LineupFondoPicker";
+import EfectoClimaOverlay from "../components/EfectoClimaOverlay";
 import {
   CATEGORIAS_GUERRA,
+  EFECTO_CLIMA_OPTIONS,
   EFECTO_NEON_COLOR_OPTIONS,
   EFECTO_NEON_OPTIONS,
   RAZAS_GUERRA,
 } from "../types/guerraRazas";
 import type {
   CategoriaGuerra,
+  EfectoClima,
   EfectoNeon,
   EfectoNeonColor,
   GuerraRazasEncuentroRow,
@@ -26,6 +30,7 @@ import type {
   GuerraRazasRow,
   RazaGuerra,
 } from "../types/guerraRazas";
+import type { FondoLineup } from "../types/teams";
 
 const IMAGEN_DEFAULT: Record<RazaGuerra, string> = {
   protoss: "/razas/protoss.webp",
@@ -60,6 +65,10 @@ export default function GuerraDeRazasPage() {
   const navigate = useNavigate();
 
   const [guerra, setGuerra] = useState<GuerraRazasRow | null>(null);
+  // "Look" (migración 161): catálogo de imágenes de fondo subidas
+  // desde /admin -- mismo catálogo que usa la sala de lineup de Clan
+  // War (catalogo_fondos_lineup), se carga una sola vez al entrar.
+  const [fondosImagenPorId, setFondosImagenPorId] = useState<Record<string, string>>({});
   // guerra_razas.creado_por ya existe desde la migración 106, pero
   // hasta ahora no se mostraba en ningún lado -- con varias cuentas de
   // prueba dando vueltas no había forma de distinguir cuál Race War
@@ -256,6 +265,20 @@ export default function GuerraDeRazasPage() {
   useEffect(() => {
     cargarDatos();
   }, [cargarDatos]);
+
+  // Migración 161: catálogo de imágenes de fondo (mismo que usa la
+  // sala de lineup de Clan War) -- es global, se carga una sola vez,
+  // no depende del id de esta Race War en particular.
+  useEffect(() => {
+    supabase
+      .from("catalogo_fondos_lineup")
+      .select("id, image_url")
+      .then(({ data }) => {
+        const mapa: Record<string, string> = {};
+        for (const f of data ?? []) mapa[f.id as string] = f.image_url as string;
+        setFondosImagenPorId(mapa);
+      });
+  }, []);
 
   // Migración 111: quién ya jugó (tiene puntos guardados) en el ciclo
   // ACTUAL de la categoría activa -- se recalcula al cambiar de
@@ -464,6 +487,42 @@ export default function GuerraDeRazasPage() {
     setGuerra((g) => (g ? { ...g, ...cambios } : g));
   };
 
+  // Migración 161: "Look" -- fondo (catálogo clásico o imagen subida,
+  // mutuamente excluyentes) y efecto de clima encima. Mismo mecanismo
+  // que el efecto neón: update directo a guerra_razas, sin RPC propia
+  // (la política de update ya es solo por creado_por = auth.uid()).
+  const handleElegirFondoClasico = async (nuevoFondo: FondoLineup) => {
+    if (!guerra) return;
+    const cambios = { fondo_lineup: nuevoFondo, fondo_lineup_imagen_id: null };
+    const { error } = await supabase.from("guerra_razas").update(cambios).eq("id", guerra.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setGuerra((g) => (g ? { ...g, ...cambios } : g));
+  };
+
+  const handleElegirFondoImagen = async (imagenId: string) => {
+    if (!guerra) return;
+    const cambios = { fondo_lineup_imagen_id: imagenId };
+    const { error } = await supabase.from("guerra_razas").update(cambios).eq("id", guerra.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setGuerra((g) => (g ? { ...g, ...cambios } : g));
+  };
+
+  const handleCambiarEfectoClima = async (efecto_clima: EfectoClima) => {
+    if (!guerra) return;
+    const { error } = await supabase.from("guerra_razas").update({ efecto_clima }).eq("id", guerra.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setGuerra((g) => (g ? { ...g, efecto_clima } : g));
+  };
+
   const handleGuardarTitulo = async () => {
     if (!guerra) return;
     const nuevoTitulo = tituloEditado.trim() || null;
@@ -573,7 +632,22 @@ export default function GuerraDeRazasPage() {
   };
 
   return (
-    <section className="guerra-razas-page">
+    <section
+      className="guerra-razas-page"
+      data-fondo-lineup={guerra.fondo_lineup_imagen_id ? undefined : guerra.fondo_lineup}
+      style={
+        guerra.fondo_lineup_imagen_id && fondosImagenPorId[guerra.fondo_lineup_imagen_id]
+          ? {
+              backgroundImage: `url(${fondosImagenPorId[guerra.fondo_lineup_imagen_id]})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center",
+            }
+          : undefined
+      }
+    >
+      <EfectoClimaOverlay efecto={guerra.efecto_clima} />
+
+      <div className="guerra-razas-contenido">
       <Link to="/" className="guerra-razas-volver">
         ← Volver a Inicio
       </Link>
@@ -676,6 +750,40 @@ export default function GuerraDeRazasPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Migración 161: "Look" -- fondo y efecto de clima, visible
+          únicamente para el organizador (modoEdicionActivo ya exige
+          esOrganizador && !vistaPrevia). A diferencia de la sala de
+          lineup de Clan War, Race War NO tiene Estructura ni
+          Dimensión -- esos tabs son exclusivos de Clan War. */}
+      {modoEdicionActivo && (
+        <div className="guerra-razas-efecto-panel">
+          <LineupFondoPicker
+            fondo={guerra.fondo_lineup}
+            fondoImagenId={guerra.fondo_lineup_imagen_id}
+            onElegirClasico={handleElegirFondoClasico}
+            onElegirImagen={handleElegirFondoImagen}
+          />
+        </div>
+      )}
+
+      {modoEdicionActivo && (
+        <div className="guerra-razas-efecto-panel">
+          <p className="form-label">Efectos</p>
+          <div className="guerra-razas-efecto-opciones">
+            {EFECTO_CLIMA_OPTIONS.map((opcion) => (
+              <button
+                key={opcion.value}
+                type="button"
+                className={`guerra-razas-tab ${guerra.efecto_clima === opcion.value ? "selected" : ""}`}
+                onClick={() => handleCambiarEfectoClima(opcion.value)}
+              >
+                {opcion.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -955,6 +1063,7 @@ export default function GuerraDeRazasPage() {
         {resumenEncuentros && (
           <TarjetaResumenEnfrentamientos ref={resumenRef} guerra={guerra} jugadores={jugadores} encuentros={resumenEncuentros} />
         )}
+      </div>
       </div>
     </section>
   );

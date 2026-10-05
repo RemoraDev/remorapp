@@ -3818,7 +3818,8 @@ html.es-escritorio .player-detail-panel-inline {
    contenido de la tarjeta ni el borde de la miniatura del selector,
    solo el patrón detrás. */
 .lineup-card[data-fondo-lineup]:not([data-fondo-lineup="ninguno"])::before,
-.lineup-fondo-preview[data-fondo-lineup]:not([data-fondo-lineup="ninguno"])::before {
+.lineup-fondo-preview[data-fondo-lineup]:not([data-fondo-lineup="ninguno"])::before,
+.guerra-razas-page[data-fondo-lineup]:not([data-fondo-lineup="ninguno"])::before {
   content: "";
   position: absolute;
   inset: -20%;
@@ -3827,6 +3828,7 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 .lineup-card[data-fondo-lineup="estrellas"]::before,
+.guerra-razas-page[data-fondo-lineup="estrellas"]::before,
 .lineup-fondo-preview[data-fondo-lineup="estrellas"]::before {
   background-image:
     radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
@@ -3864,6 +3866,7 @@ html.es-escritorio .player-detail-panel-inline {
    (chicas rápidas en ::before, grandes y más brillantes y lentas en
    ::after), cada una con su propio giro. */
 .lineup-card[data-fondo-lineup="estrellado"]::before,
+.guerra-razas-page[data-fondo-lineup="estrellado"]::before,
 .lineup-fondo-preview[data-fondo-lineup="estrellado"]::before {
   background-image:
     radial-gradient(1.5px 1.5px at 60% 8%, rgba(255, 255, 255, 0.62), transparent 60%),
@@ -3913,6 +3916,7 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 .lineup-card[data-fondo-lineup="estrellado"]::after,
+.guerra-razas-page[data-fondo-lineup="estrellado"]::after,
 .lineup-fondo-preview[data-fondo-lineup="estrellado"]::after {
   content: "";
   position: absolute;
@@ -3968,6 +3972,7 @@ html.es-escritorio .player-detail-panel-inline {
    es perfecto porque cada capa se traslada exactamente un tile completo
    (background-size), no un valor cualquiera. */
 .lineup-card[data-fondo-lineup="estrellado_2"]::before,
+.guerra-razas-page[data-fondo-lineup="estrellado_2"]::before,
 .lineup-fondo-preview[data-fondo-lineup="estrellado_2"]::before {
   background-image:
     radial-gradient(1px 1px at 5% 10%, #fff, transparent 60%),
@@ -3987,6 +3992,7 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 .lineup-card[data-fondo-lineup="estrellado_2"]::after,
+.guerra-razas-page[data-fondo-lineup="estrellado_2"]::after,
 .lineup-fondo-preview[data-fondo-lineup="estrellado_2"]::after {
   content: "";
   position: absolute;
@@ -4021,6 +4027,7 @@ html.es-escritorio .player-detail-panel-inline {
    (el mismo truco de "acercarse volando" que un warp speed clásico):
    arrancan chicas y juntas, terminan grandes y separadas, en loop. */
 .lineup-card[data-fondo-lineup="viaje"]::before,
+.guerra-razas-page[data-fondo-lineup="viaje"]::before,
 .lineup-fondo-preview[data-fondo-lineup="viaje"]::before {
   background-image:
     radial-gradient(1.5px 1.5px at 10% 20%, rgba(255, 255, 255, 0.95), transparent 60%),
@@ -4052,6 +4059,7 @@ html.es-escritorio .player-detail-panel-inline {
    al borde de abajo) y un pulso más orgánico (6 pasos en vez de 3, ya
    no en alternate parejo).*/
 .lineup-card[data-fondo-lineup="fuego"]::before,
+.guerra-razas-page[data-fondo-lineup="fuego"]::before,
 .lineup-fondo-preview[data-fondo-lineup="fuego"]::before {
   background-image:
     radial-gradient(50% 65% at 18% 105%, rgba(251, 146, 60, 0.6), transparent 70%),
@@ -4078,6 +4086,7 @@ html.es-escritorio .player-detail-panel-inline {
    cantidad y un tile más chico (más denso) para que de verdad se vean
    subir. */
 .lineup-card[data-fondo-lineup="fuego"]::after,
+.guerra-razas-page[data-fondo-lineup="fuego"]::after,
 .lineup-fondo-preview[data-fondo-lineup="fuego"]::after {
   content: "";
   position: absolute;
@@ -4105,6 +4114,7 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 .lineup-card[data-fondo-lineup="nova"]::before,
+.guerra-razas-page[data-fondo-lineup="nova"]::before,
 .lineup-fondo-preview[data-fondo-lineup="nova"]::before {
   background-image: radial-gradient(
     circle at 50% 45%,
@@ -4121,6 +4131,7 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 .lineup-card[data-fondo-lineup="planeta"]::before,
+.guerra-razas-page[data-fondo-lineup="planeta"]::before,
 .lineup-fondo-preview[data-fondo-lineup="planeta"]::before {
   background-image:
     radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.3), transparent 40%),
@@ -8051,6 +8062,37 @@ body.overlay-obs {
   color: transparent;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
   filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+
+/* "Look" de Guerra de Razas (migración 161): mismo catálogo de fondos
+   clásicos que la sala de lineup de Clan War ([data-fondo-lineup], ver
+   más abajo en esta hoja) -- position:relative para poder anclar
+   EfectoClimaOverlay encima. Cuando hay una imagen subida del
+   catálogo, background-image inline pisa el fondo de estrellas fijo
+   de abajo; con "ninguno" seleccionado, queda el de siempre. */
+.guerra-razas-page {
+  position: relative;
+  overflow: hidden;
+}
+
+.guerra-razas-page[data-fondo-lineup]:not([data-fondo-lineup="ninguno"]) {
+  background-image: none;
+}
+
+.efecto-clima-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Todo el contenido real de la página va encima del overlay de clima
+   (absolute, pinta por sobre el flujo normal sin esto). */
+.guerra-razas-contenido {
+  position: relative;
+  z-index: 2;
 }
 
 .guerra-razas-franja {

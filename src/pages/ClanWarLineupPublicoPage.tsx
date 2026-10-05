@@ -782,10 +782,22 @@ export default function ClanWarLineupPublicoPage() {
                        consulta aparte, así que el cambio de fondo nunca
                        le llegaba. */
                     <LineupFondoPicker
-                      clanWarId={id!}
                       fondo={editor.fondo_lineup}
                       fondoImagenId={editor.fondo_lineup_imagen_id}
-                      onCambio={recargarTodo}
+                      onElegirClasico={async (nuevoFondo) => {
+                        const { error } = await supabase.rpc("cambiar_fondo_lineup_cw", {
+                          p_clan_war_id: id!,
+                          p_fondo: nuevoFondo,
+                        });
+                        if (!error) await recargarTodo();
+                      }}
+                      onElegirImagen={async (imagenId) => {
+                        const { error } = await supabase.rpc("cambiar_fondo_lineup_imagen_cw", {
+                          p_clan_war_id: id!,
+                          p_imagen_id: imagenId,
+                        });
+                        if (!error) await recargarTodo();
+                      }}
                     />
                   )}
                   {seccionLook === "estructura" && (

@@ -1,6 +1,7 @@
 // Tipos que reflejan supabase/migration_102_guerra_de_razas.sql --
 // marcador en vivo con temática StarCraft II (Protoss/Terran/Zerg),
 // complemento opcional de un torneo.
+import type { FondoLineup } from "./teams";
 
 export type RazaGuerra = "protoss" | "terran" | "zerg";
 
@@ -37,6 +38,22 @@ export const EFECTO_NEON_COLOR_OPTIONS: { value: EfectoNeonColor; label: string 
   { value: "dorado", label: "Dorado" },
 ];
 
+// "Look" de Guerra de Razas (migración 161): mismo catálogo de fondos
+// clásicos que la sala de lineup de Clan War (FONDO_LINEUP_OPTIONS en
+// types/teams.ts) más el catálogo de imágenes subidas
+// (catalogo_fondos_lineup) -- a diferencia de Clan War, acá no hay
+// Estructura ni Dimensión, solo Fondo y Efectos. Efectos de clima son
+// propios de Guerra de Razas, no existen en Clan War.
+export type EfectoClima = "ninguno" | "rayos" | "lluvia" | "soleado" | "nevado";
+
+export const EFECTO_CLIMA_OPTIONS: { value: EfectoClima; label: string }[] = [
+  { value: "ninguno", label: "Ninguno" },
+  { value: "rayos", label: "Rayos" },
+  { value: "lluvia", label: "Lluvia" },
+  { value: "soleado", label: "Soleado" },
+  { value: "nevado", label: "Nevado" },
+];
+
 export interface GuerraRazasRow {
   id: string;
   tournament_id: string;
@@ -53,6 +70,11 @@ export interface GuerraRazasRow {
   creado_en: string;
   efecto_neon: EfectoNeon;
   efecto_neon_color: EfectoNeonColor;
+  // Migración 161: "Look" -- fondo (clásico o imagen del catálogo) y
+  // efecto de clima superpuesto.
+  fondo_lineup: FondoLineup;
+  fondo_lineup_imagen_id: string | null;
+  efecto_clima: EfectoClima;
 }
 
 export interface GuerraRazasJugadorRow {

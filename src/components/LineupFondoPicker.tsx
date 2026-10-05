@@ -5,19 +5,25 @@ import type { FondoLineup } from "../types/teams";
 import type { FondoLineupImagen } from "../types/clanWars";
 
 interface LineupFondoPickerProps {
-  clanWarId: string;
   fondo: FondoLineup;
   fondoImagenId: string | null;
-  onCambio: () => void;
+  onElegirClasico: (fondo: FondoLineup) => void | Promise<void>;
+  onElegirImagen: (imagenId: string) => void | Promise<void>;
 }
 
-// Selector de fondo para la sala de lineup de una Clan War -- catálogo
-// clásico (migración 051, en CSS) más el catálogo de imágenes subidas
-// por el dueño/admin desde /admin (migración 067). Ambos son
-// mutuamente excluyentes: elegir uno de un catálogo limpia la
-// selección del otro (lo resuelve cambiar_fondo_lineup_cw()/
-// cambiar_fondo_lineup_imagen_cw() en la base).
-export default function LineupFondoPicker({ clanWarId, fondo, fondoImagenId, onCambio }: LineupFondoPickerProps) {
+// Selector de fondo -- catálogo clásico (migración 051, en CSS) más el
+// catálogo de imágenes subidas por el dueño/admin desde /admin
+// (migración 067). Ambos son mutuamente excluyentes: elegir uno de un
+// catálogo limpia la selección del otro. Compartido entre la sala de
+// lineup de Clan War y "Look" de Guerra de Razas (migración 161) --
+// quién guarda el cambio (y con qué RPC/columna) lo decide quien lo
+// use, acá solo está el selector.
+export default function LineupFondoPicker({
+  fondo,
+  fondoImagenId,
+  onElegirClasico,
+  onElegirImagen,
+}: LineupFondoPickerProps) {
   const [fondosImagen, setFondosImagen] = useState<FondoLineupImagen[]>([]);
 
   useEffect(() => {
@@ -28,27 +34,14 @@ export default function LineupFondoPicker({ clanWarId, fondo, fondoImagenId, onC
       .then(({ data }) => setFondosImagen((data ?? []) as FondoLineupImagen[]));
   }, []);
 
-  const handleCambiarFondoClasico = async (nuevoFondo: FondoLineup) => {
+  const handleCambiarFondoClasico = (nuevoFondo: FondoLineup) => {
     if (nuevoFondo === fondo && !fondoImagenId) return;
-
-    // cambiar_fondo_lineup_cw() (en la base) es la que de verdad
-    // chequea que seas dueño o capitán y que la Clan War siga
-    // aceptada/en curso -- esto de acá es solo el selector.
-    const { error } = await supabase.rpc("cambiar_fondo_lineup_cw", {
-      p_clan_war_id: clanWarId,
-      p_fondo: nuevoFondo,
-    });
-    if (!error) onCambio();
+    onElegirClasico(nuevoFondo);
   };
 
-  const handleElegirFondoImagen = async (imagenId: string) => {
+  const handleElegirFondoImagen = (imagenId: string) => {
     if (imagenId === fondoImagenId) return;
-
-    const { error } = await supabase.rpc("cambiar_fondo_lineup_imagen_cw", {
-      p_clan_war_id: clanWarId,
-      p_imagen_id: imagenId,
-    });
-    if (!error) onCambio();
+    onElegirImagen(imagenId);
   };
 
   return (
