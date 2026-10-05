@@ -380,13 +380,6 @@ interface TempPlayerConNombre {
   reemplazadoPorAvatarForma: AvatarForma;
 }
 
-interface TorneoParticipadoConResultado {
-  id: string;
-  nombre: string;
-  fechaInicio: string;
-  resultado: string;
-}
-
 // Las secciones del Panel de control. null = se ve el menú con las
 // tarjetas, no una sección puntual. "titulos" ya no tiene ítem propio
 // en el menú (el minievento Título Padre/Hijo todavía no está
@@ -399,8 +392,9 @@ interface TorneoParticipadoConResultado {
 // "editar-equipo" tampoco -- vive como pestaña "equipo" dentro de
 // "configuracion" (migración 160). Mercenarios y Alianzas se separa en
 // dos destinos (migración 160): "temporada" (Panel de control) es solo
-// para VER y ELIMINAR lo ya fichado/aliado/amigo; "agregar"
-// (Solicitudes) es solo para fichar/proponer/enviar cosas nuevas.
+// para VER y ELIMINAR lo ya fichado/aliado/amigo; "agregar-mercenarios"/
+// "agregar-alianzas" (Solicitudes, separadas en pestañas propias en la
+// 162) son solo para fichar/proponer/enviar cosas nuevas.
 type SeccionPanel =
   | "configuracion"
   | "solicitudes-unirse"
@@ -408,7 +402,8 @@ type SeccionPanel =
   | "titulos"
   | "reportar"
   | "temporada"
-  | "agregar";
+  | "agregar-mercenarios"
+  | "agregar-alianzas";
 
 // Migración 047: una temporada es "la actual" cuando hoy cae dentro
 // de su fecha_inicio/fecha_fin -- sin esto, "de la temporada actual"
@@ -641,9 +636,9 @@ export default function TeamDetailPage() {
   // reprogramación/extensión, que se sacaron de acá); "reprogramar"
   // reusa la misma lista pero muestra SOLO esas dos acciones por
   // guerra -- mismo map(), sin duplicar el cálculo de cada guerra.
-  const [vistaEventos, setVistaEventos] = useState<"pendientes" | "propuestos" | "guerras" | "reprogramar">(
-    "pendientes"
-  );
+  const [vistaEventos, setVistaEventos] = useState<
+    "pendientes" | "propuestos" | "guerras" | "historial" | "reprogramar"
+  >("pendientes");
   // Sub-pestañas de "Reprogramar fecha" (migración 158): antes Guerras
   // para reprogramar y Extensión del plazo de lineup iban las dos
   // juntas, apiladas por cada guerra.
@@ -963,7 +958,6 @@ export default function TeamDetailPage() {
 
   // --- Mi historial de eventos: torneos (dentro de la plataforma) en
   // los que participó este equipo, ya finalizados, con su resultado ---
-  const [torneosParticipados, setTorneosParticipados] = useState<TorneoParticipadoConResultado[]>([]);
 
   // --- Apariencia del equipo: 7 paletas fijas (migración 033) ---
   const [guardandoTema, setGuardandoTema] = useState(false);
@@ -1312,7 +1306,6 @@ export default function TeamDetailPage() {
         setTitulosPendientesResponder([]);
         setTitulosPropuestosPorMi([]);
         setSolicitudesHistoricas([]);
-        setTorneosParticipados([]);
         return;
       }
 
@@ -1877,74 +1870,11 @@ export default function TeamDetailPage() {
         );
       };
 
-      // Mi historial de eventos: torneos DENTRO de la plataforma en
-      // los que participó este equipo, ya finalizados. Solo hace
-      // falta el resultado de LA PROPIA fila de participación -- el
-      // ranking completo de cada torneo ya se ve en /tournaments/:id.
-      // tournaments!tournament_participants_tournament_id_fkey: hace
-      // falta calificar la relación desde la migración 046 -- tournaments
-      // ganó una segunda FK hacia tournament_participants
-      // (tercer_lugar_participant_id, además de campeon_participant_id),
-      // así que el embed sin calificar quedó ambiguo (PGRST201) y esta
-      // consulta dejó de funcionar en silencio hasta este arreglo.
-      const cargarParticipaciones = async () => {
-        const { data: participacionesData } = await supabase
-          .from("tournament_participants")
-          .select(
-            "id, tournaments!tournament_participants_tournament_id_fkey(id, nombre, fecha_inicio, estado, modo, campeon_participant_id)"
-          )
-          .eq("team_id", equipoData.id);
-
-        const finalizadas = (participacionesData ?? [])
-          .map((p) => {
-            const torneo = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
-            return {
-              participantId: p.id as string,
-              torneo: torneo as
-                | { id: string; nombre: string; fecha_inicio: string; estado: string; modo: string; campeon_participant_id: string | null }
-                | undefined,
-            };
-          })
-          .filter((p) => p.torneo?.estado === "finalizado");
-
-        // El resultado de cada torneo finalizado es independiente del
-        // de los demás -- se piden todos juntos en vez de uno por uno.
-        const torneosResueltos: TorneoParticipadoConResultado[] = await Promise.all(
-          finalizadas
-            .filter((f): f is typeof f & { torneo: NonNullable<typeof f.torneo> } => !!f.torneo)
-            .map(async ({ participantId, torneo }) => {
-              let resultado = "Participó";
-              if (torneo.modo === "eliminacion_simple") {
-                resultado = torneo.campeon_participant_id === participantId ? "Campeón 🏆" : "Participó";
-              } else {
-                const { data: resultadosData } = await supabase
-                  .from("tournament_results")
-                  .select("gano")
-                  .eq("tournament_id", torneo.id)
-                  .eq("participant_id", participantId);
-                if (resultadosData && resultadosData.length > 0) {
-                  resultado = resultadosData.some((r) => r.gano) ? "Ganó" : "Perdió";
-                }
-              }
-              return {
-                id: torneo.id,
-                nombre: torneo.nombre,
-                fechaInicio: torneo.fecha_inicio,
-                resultado,
-              };
-            })
-        );
-
-        torneosResueltos.sort((a, b) => new Date(b.fechaInicio).getTime() - new Date(a.fechaInicio).getTime());
-        setTorneosParticipados(torneosResueltos);
-      };
-
       await Promise.all([
         cargarExpulsados(),
         cargarRetos(),
         cargarTitulos(),
         cargarSolicitudesHistoricas(),
-        cargarParticipaciones(),
       ]);
     };
 
@@ -2002,6 +1932,16 @@ export default function TeamDetailPage() {
   // ver los usos puntuales más abajo.
   const esCapitan = !!user && miembros.some((m) => m.userId === user.id && m.esCapitan);
   const puedeGestionar = esDueño || esCapitan;
+
+  // "Solicitudes" (Clan War/Mercenarios/Alianzas/Reprogramar fecha/
+  // Unirse al equipo) se entra directo desde su propio botón, sin pasar
+  // por el menú de Panel de control -- el botón Volver de esas pestañas
+  // usa esto para cerrar el panel en vez de mandar a ese menú.
+  const esSeccionSolicitudes =
+    seccionPanel === "eventos" ||
+    seccionPanel === "solicitudes-unirse" ||
+    seccionPanel === "agregar-mercenarios" ||
+    seccionPanel === "agregar-alianzas";
 
   // Migración 047: vitrina pública -- solo alianzas ya aprobadas y de
   // una temporada vigente hoy, distinto de alianzasPropias (que
@@ -4152,15 +4092,29 @@ export default function TeamDetailPage() {
               ) : (
                 <div className="team-panel-section">
                   <div className="team-panel-section-header">
-                    <button type="button" className="team-panel-back" onClick={() => setSeccionPanel(null)}>
-                      ← Volver al panel
+                    {/* Corrección: "Solicitudes" (Clan War/Mercenarios/
+                        Alianzas/Reprogramar fecha/Unirse al equipo) se
+                        entra directo, saltando el menú de Panel de
+                        control -- "Volver al panel" ahí era confuso
+                        (prometía volver a un menú por el que nunca se
+                        pasó). Para ese grupo de pestañas, Volver cierra
+                        el panel entero en vez de mandar al menú de
+                        Panel de control. */}
+                    <button
+                      type="button"
+                      className="team-panel-back"
+                      onClick={() =>
+                        esSeccionSolicitudes ? setPanelAbierto(false) : setSeccionPanel(null)
+                      }
+                    >
+                      {esSeccionSolicitudes ? "✕ Cerrar" : "← Volver al panel"}
                     </button>
                   </div>
 
-              {/* Barra de pestañas de "Solicitudes" (migración 158). */}
-              {(seccionPanel === "eventos" ||
-                seccionPanel === "solicitudes-unirse" ||
-                seccionPanel === "agregar") && (
+              {/* Barra de pestañas de "Solicitudes" (migración 158,
+                  Mercenarios y Alianzas separadas en pestañas propias
+                  en la 162). */}
+              {esSeccionSolicitudes && (
                 <div className="team-config-media-tabs">
                   <button
                     type="button"
@@ -4176,10 +4130,17 @@ export default function TeamDetailPage() {
                   </button>
                   <button
                     type="button"
-                    className={`team-config-media-tab ${seccionPanel === "agregar" ? "is-active" : ""}`}
-                    onClick={() => setSeccionPanel("agregar")}
+                    className={`team-config-media-tab ${seccionPanel === "agregar-mercenarios" ? "is-active" : ""}`}
+                    onClick={() => setSeccionPanel("agregar-mercenarios")}
                   >
-                    Mercenarios y Alianzas
+                    Mercenarios
+                  </button>
+                  <button
+                    type="button"
+                    className={`team-config-media-tab ${seccionPanel === "agregar-alianzas" ? "is-active" : ""}`}
+                    onClick={() => setSeccionPanel("agregar-alianzas")}
+                  >
+                    Alianzas
                   </button>
                   <button
                     type="button"
@@ -4713,6 +4674,13 @@ export default function TeamDetailPage() {
                     onClick={() => setVistaEventos("guerras")}
                   >
                     Guerras en preparación
+                  </button>
+                  <button
+                    type="button"
+                    className={`team-info-subtab ${vistaEventos === "historial" ? "is-active" : ""}`}
+                    onClick={() => setVistaEventos("historial")}
+                  >
+                    Historial de retos
                   </button>
                 </div>
               )}
@@ -5779,7 +5747,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {seccionPanel === "eventos" && vistaEventos !== "reprogramar" && (
+              {seccionPanel === "eventos" && vistaEventos === "historial" && (
               <>
               <h4 className="detail-subtitle">Historial de retos</h4>
               {historialRetos.length === 0 ? (
@@ -5815,26 +5783,6 @@ export default function TeamDetailPage() {
                           Se cerró sola por inactividad -- nadie la cerró a mano a tiempo, sin resultado.
                         </p>
                       )}
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <h4 className="detail-subtitle">Torneos jugados</h4>
-              {torneosParticipados.length === 0 ? (
-                <p className="detail-empty">Todavía no participaste en ningún torneo finalizado.</p>
-              ) : (
-                <div className="detail-participant-list">
-                  {torneosParticipados.map((t) => (
-                    <div key={t.id} className="reto-item">
-                      <p className="reto-desc">
-                        {t.nombre}
-                        <span className="reto-status">{t.resultado}</span>
-                      </p>
-                      <p className="reto-fecha">{formatFecha(t.fechaInicio)}</p>
-                      <Link to={`/tournaments/${t.id}`} className="btn-link">
-                        Ver torneo
-                      </Link>
                     </div>
                   ))}
                 </div>
@@ -5966,9 +5914,11 @@ export default function TeamDetailPage() {
               {/* Migración 160: Mercenarios y Alianzas se separa en dos
                   destinos a pedido del usuario -- "temporada" (Panel de
                   control) es solo para VER y ELIMINAR lo ya fichado,
-                  aliado o amigo; "agregar" (Solicitudes) es solo para
-                  fichar/proponer/enviar cosas nuevas. Nada de formularios
-                  acá, nada de botones "Quitar"/"Eliminar" allá. */}
+                  aliado o amigo; "agregar-mercenarios"/"agregar-alianzas"
+                  (Solicitudes, separadas en pestañas propias en la 162)
+                  son solo para fichar/proponer/enviar cosas nuevas. Nada
+                  de formularios acá, nada de botones "Quitar"/"Eliminar"
+                  allá. */}
               {seccionPanel === "temporada" && (
                 <>
                   <h3 className="detail-subtitle">Mercenarios y Alianzas</h3>
@@ -6057,10 +6007,8 @@ export default function TeamDetailPage() {
                 </>
               )}
 
-              {seccionPanel === "agregar" && (
+              {seccionPanel === "agregar-mercenarios" && (
                 <>
-                  <h3 className="detail-subtitle">Mercenarios y Alianzas</h3>
-
                   <h3 className="detail-subtitle">Fichar un mercenario</h3>
                   <p className="detail-empty">
                     Un mercenario queda disponible para el lineup durante toda la temporada elegida,
@@ -6136,7 +6084,11 @@ export default function TeamDetailPage() {
                       )}
                     </form>
                   )}
+                </>
+              )}
 
+              {seccionPanel === "agregar-alianzas" && (
+                <>
                   <h3 className="detail-subtitle">Proponer una alianza</h3>
                   {esDueño ? (
                     temporadas.length === 0 ? (
