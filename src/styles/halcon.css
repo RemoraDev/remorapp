@@ -4355,6 +4355,20 @@ html.es-escritorio .player-detail-panel-inline {
   gap: 1rem;
 }
 
+/* Corrección: el degradado de arriba se pensó para los 6 fondos
+   clásicos (patrones oscuros, necesitan mucho negro encima para que el
+   texto resalte) -- con una imagen subida del catálogo (foto real,
+   luminosa) el mismo degradado la apagaba por completo. Sin
+   [data-fondo-lineup] identifica justo ese caso (ver
+   TarjetaLineupClanWar.tsx: el atributo se omite solo cuando hay
+   imagen), así que acá se aclara bastante sin tocar los fondos
+   clásicos. Las filas de jugadores ya tienen su propio fondo sólido
+   (.lineup-card-fila), así que la legibilidad no depende solo de este
+   degradado. */
+.lineup-card:not([data-fondo-lineup]) .lineup-card-overlay {
+  background: linear-gradient(180deg, rgba(4, 6, 10, 0.5) 0%, rgba(4, 6, 10, 0.22) 40%, rgba(4, 6, 10, 0.55) 100%);
+}
+
 /* Ratios más angostos (menos alto relativo): recorta rellenos y
    espacios para que las 3 filas de un WTL sigan entrando sin que la
    tarjeta tenga que scrollear. */
@@ -4536,6 +4550,7 @@ html.es-escritorio .player-detail-panel-inline {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.9);
 }
 
 /* Stream propio de cada equipo (migración 125) -- chip chico, mismo
