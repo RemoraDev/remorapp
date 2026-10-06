@@ -288,7 +288,7 @@ export default function RankingPage() {
         </>
       ) : (
         <>
-          <div className="team-info-subtabs">
+          <div className="team-info-subtabs ranking-subtabs">
             <button
               type="button"
               className={`team-info-subtab ${subtabRanking === "clanes" ? "is-active" : ""}`}
@@ -327,16 +327,6 @@ export default function RankingPage() {
                     {liga.nombre}
                   </label>
                 ))}
-                <label className={`pill-radio-option ${categoria === null ? "selected" : ""}`}>
-                  <input
-                    type="radio"
-                    className="sr-only"
-                    name="categoria-ranking"
-                    checked={categoria === null}
-                    onChange={() => handleElegirLiga(null)}
-                  />
-                  General
-                </label>
               </div>
 
               {categoria && divisionesDeLaLiga.length > 0 && (

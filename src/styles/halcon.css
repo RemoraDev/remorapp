@@ -6523,6 +6523,15 @@ html.es-escritorio .fan-menu-item-label {
   box-shadow: var(--shadow-accent);
 }
 
+/* Ranking: "Ranking de clanes"/"Ranking de jugadores"/"Clanes más
+   activos" -- a pedido del usuario, mismo tamaño de letra que la
+   pestaña superior (.team-info-tab), no el más chico de una
+   sub-pestaña genérica. Escopeado a .ranking-subtabs para no tocar
+   las demás sub-pestañas de la app (Historial del clan, etc.). */
+.ranking-subtabs .team-info-subtab {
+  font-size: 0.85rem;
+}
+
 /* Pestañas de Logo/Banner/Imagen lateral dentro de Configuración
    (migración 158) -- mismo lenguaje visual que .team-info-subtab. */
 .team-config-media-tabs {

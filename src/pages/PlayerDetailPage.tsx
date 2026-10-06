@@ -13,7 +13,6 @@ import Carrusel from "../components/Carrusel";
 import FondoParticulas from "../components/FondoParticulas";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { TwitchIcon, DiscordIcon, YoutubeIcon } from "../components/IconosRedes";
-import TitulosActivosList from "../components/TitulosActivosList";
 import LogrosTorneosJugadorList from "../components/LogrosTorneosJugadorList";
 import { COUNTRY_OPTIONS } from "../types/profile";
 import type { Country, LinkTransmision } from "../types/profile";
@@ -1116,23 +1115,16 @@ export default function PlayerDetailPage() {
 
         {tabEscritorio === "logros" && (
           <>
+            {/* Migración 167, a pedido del usuario: Logros es solo lo
+                que GANÓ (torneos por ligas por ahora) -- Títulos
+                Padre/Hijo se saca de acá, ese sistema pasa a ser
+                privado entre quienes lo juegan, no una vidriera
+                pública de logros. */}
             <h3 className="detail-subtitle">
               <Award size={16} className="icon-inline" aria-hidden="true" />
               Torneos
             </h3>
             <LogrosTorneosJugadorList userId={perfil.id} className="detail-participant-list" />
-
-            <h3 className="detail-subtitle">Títulos Padre/Hijo</h3>
-            <div className="detail-card player-tab-standalone-card">
-              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-              <TitulosActivosList tipo="jugador" id={perfil.id} className="detail-map-list" />
-              {!tituloTexto && (
-                <p className="detail-empty">Todavía no tiene títulos Padre/Hijo activos.</p>
-              )}
-            </div>
           </>
         )}
       </div>
