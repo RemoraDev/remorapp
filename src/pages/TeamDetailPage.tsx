@@ -1409,6 +1409,21 @@ export default function TeamDetailPage() {
         const nombrePorTeamIdReto: Record<string, string> = Object.fromEntries(
           (equiposRetoResult.data ?? []).map((t) => [t.id, `${t.name} [${t.tag}]`])
         );
+        // Migración 162: Clan War interna (mismo clan de los dos lados,
+        // para practicar) -- con el mismo team_id en challenger_team_id
+        // y challenged_team_id, nombrePorTeamIdReto de arriba resolvería
+        // el MISMO nombre para los dos lados ("vs sí mismo" en pantalla,
+        // sin forma de distinguirlos). Acá se arma el nombre final
+        // tomando el tag en esos casos, "A" para el challenger y "B"
+        // para el challenged -- se decide una sola vez, acá, así el
+        // resto de la página (historial, roster rival, ACE, etc.) ya
+        // recibe challengerNombre/challengedNombre distintos sin tener
+        // que volver a chequear el caso en cada lugar que los usa.
+        const tagPorTeamIdReto: Record<string, string> = Object.fromEntries(
+          (equiposRetoResult.data ?? []).map((t) => [t.id, t.tag])
+        );
+        const nombreLadoReto = (teamId: string, lado: "A" | "B", esInterna: boolean) =>
+          esInterna ? `${tagPorTeamIdReto[teamId] ?? "Equipo"} ${lado}` : nombrePorTeamIdReto[teamId] ?? "Equipo";
 
         let ventanaPorClanWarId: Record<string, number> = {};
         let jugadoresPorSetPorClanWarId: Record<string, number> = {};
@@ -1440,12 +1455,14 @@ export default function TeamDetailPage() {
           }
         }
 
-        const retosResueltos: ClanWarConNombres[] = (retosData ?? []).map((r) => ({
+        const retosResueltos: ClanWarConNombres[] = (retosData ?? []).map((r) => {
+          const esInterna = r.challenger_team_id === r.challenged_team_id;
+          return {
           id: r.id,
           challengerTeamId: r.challenger_team_id,
-          challengerNombre: nombrePorTeamIdReto[r.challenger_team_id] ?? "Equipo",
+          challengerNombre: nombreLadoReto(r.challenger_team_id, "A", esInterna),
           challengedTeamId: r.challenged_team_id,
-          challengedNombre: nombrePorTeamIdReto[r.challenged_team_id] ?? "Equipo",
+          challengedNombre: nombreLadoReto(r.challenged_team_id, "B", esInterna),
           fechaHoraCet: r.fecha_hora_cet,
           status: r.status,
           motivoRechazo: r.motivo_rechazo,
@@ -1479,7 +1496,8 @@ export default function TeamDetailPage() {
           // clan_wars.jugadores_por_set, editable desde acá mismo.
           jugadoresPorSet: jugadoresPorSetPorClanWarId[r.id] ?? r.jugadores_por_set ?? 3,
           esDeTorneo: r.id in jugadoresPorSetPorClanWarId,
-        }));
+          };
+        });
 
         setRetosPendientesResponder(
           retosResueltos.filter((r) => r.status === "pendiente" && r.challengedTeamId === equipoData.id)

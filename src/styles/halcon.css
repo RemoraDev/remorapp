@@ -5951,6 +5951,30 @@ html.es-escritorio .player-detail-panel-inline {
   color: var(--color-text-muted);
 }
 
+/* FechaHoraInput.tsx: fecha y hora lado a lado -- reemplaza el
+   datetime-local único (muy incómodo en escritorio/Tauri, hay que
+   navegar segmento por segmento sin calendario visual). La fecha se
+   estira más (es el campo que más se usa con su propio calendario
+   desplegable), la hora queda más angosta a la derecha. */
+.fecha-hora-input {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.fecha-hora-input .form-input[type="date"] {
+  flex: 2;
+}
+
+.fecha-hora-input .form-input[type="time"] {
+  flex: 1;
+}
+
+@media (max-width: 480px) {
+  .fecha-hora-input {
+    flex-direction: column;
+  }
+}
+
 /* Vista previa del fondo de lineup (Panel de Administración) antes de
    confirmar la subida -- sin recorte, solo para chequear que la
    selección funcionó. */

@@ -374,6 +374,22 @@ export default function TarjetaLineupClanWar({ datos }: { datos: LineupPublicoCl
   const Maqueta = MAQUETAS[datos.estructura] ?? TarjetaClasica;
   const aspectoClase = `lineup-card-aspecto-${datos.aspecto.replace(":", "-")}`;
 
+  // Migración 162: Clan War interna (mismo clan retándose a sí mismo,
+  // para practicar) -- challenger_team_id === challenged_team_id, así
+  // que datos.challenger.nombre y datos.challenged.nombre vendrían
+  // idénticos ("vs sí mismo" en pantalla). Se resuelve una sola vez
+  // acá, antes de la maqueta, así las 4 (Clásica/Cascada/
+  // Enfrentamientos/Póster) y el StreamerBanner ya reciben nombres
+  // distintos sin que cada una tenga que volver a chequear el caso.
+  const esInterna = datos.challenger_team_id === datos.challenged_team_id;
+  const datosParaMostrar = esInterna
+    ? {
+        ...datos,
+        challenger: { ...datos.challenger, nombre: `${datos.challenger.tag} A` },
+        challenged: { ...datos.challenged, nombre: `${datos.challenged.tag} B` },
+      }
+    : datos;
+
   return (
     <div
       className={`lineup-card ${aspectoClase} ${datos.estructura === "cascada" ? "lineup-card-cascada" : ""}`}
@@ -383,7 +399,7 @@ export default function TarjetaLineupClanWar({ datos }: { datos: LineupPublicoCl
         ...(conFondoImagen ? { backgroundImage: `url(${datos.fondo_imagen_url})` } : {}),
       }}
     >
-      <Maqueta datos={datos} filas={filas} />
+      <Maqueta datos={datosParaMostrar} filas={filas} />
     </div>
   );
 }

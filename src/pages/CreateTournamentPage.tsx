@@ -7,15 +7,14 @@ import { useAuth } from "../context/AuthContext";
 import InfoTooltip from "../components/InfoTooltip";
 import ModoIcono from "../components/ModoIcono";
 import TipoEventoIcono from "../components/TipoEventoIcono";
-import { MODOS, getFormatoLabel } from "../lib/tournamentOptions";
+import FechaHoraInput from "../components/FechaHoraInput";
+import { MODOS } from "../lib/tournamentOptions";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
-import { datetimeLocalAIso, BO_OPTIONS } from "../lib/clanWars";
+import { datetimeLocalAIso } from "../lib/clanWars";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import type { TorneoFormato, TorneoModo } from "../types/tournaments";
 import type { DivisionLiga, Liga } from "../types/ranking";
-
-const FORMATOS: TorneoFormato[] = ["1v1", "2v2", "3v3", "4v4", "wtl"];
 
 // Migración 091: se simplifica de 3 opciones a 2 -- "Evento privado"
 // desaparece (un torneo por ligas siempre es público) y "Torneo
@@ -45,11 +44,19 @@ const TIPOS_EVENTO: { value: TipoEvento; label: string; descripcion: string }[] 
   },
   {
     value: "race_war",
-    label: "Race War",
+    // Migración 162: "Race War" pasa a ser una de dos sub-pestañas
+    // adentro de "MiniEvento" (la otra, "Reto: ¿Quién es el padre?",
+    // reusa el sistema de títulos Padre/Hijo que ya existe por clan --
+    // ver seccionPanel "titulos" en TeamDetailPage.tsx -- todavía sin
+    // trabajar desde acá, solo el lugar reservado).
+    label: "MiniEvento",
     descripcion:
-      "Marcador en vivo con temática StarCraft II (Protoss/Terran/Zerg): puntaje y jugadores destacados por raza, independiente de cualquier torneo.",
+      "Marcador en vivo (Race War) o reto de título entre clanes, independiente de cualquier torneo.",
   },
 ];
+
+// Sub-pestañas de "MiniEvento" (migración 162).
+type SubtabMiniEvento = "race_war" | "reto_padre";
 
 // Tolerancia de reloj/tiempo de carga del formulario -- mismo margen
 // que usa el trigger validar_fecha_inicio_torneo() en la base
@@ -84,7 +91,12 @@ export default function CreateTournamentPage() {
 
   const [nombre, setNombre] = useState("");
   const [tipoEvento, setTipoEvento] = useState<TipoEvento>("amistosa");
-  const [formato, setFormato] = useState<TorneoFormato>("1v1");
+  // Migración 162: a pedido del usuario, un torneo por ligas creado
+  // desde acá siempre es 1v1 -- se saca el selector de Formato (2v2/
+  // 3v3/4v4/Clan vs Clan WTL, con todo lo que dependía de él: First
+  // Stand, lineup de Clan War del fixture). Ya no hace falta que sea
+  // editable, así que deja de ser estado.
+  const formato: TorneoFormato = "1v1";
   const [modo, setModo] = useState<TorneoModo>("eliminacion_simple");
 
   // Migración 091/093: Clan War Amistosa -- formulario mínimo, sin
@@ -97,6 +109,14 @@ export default function CreateTournamentPage() {
   // con el "Bo" que se configure acá.
   const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
   const [cargandoMiEquipo, setCargandoMiEquipo] = useState(true);
+  // Migración 162: nombre opcional del evento -- toda Clan War
+  // Amistosa queda registrada en los clanes, así que vale la pena
+  // poder nombrarla (si se deja en blanco, se arma sola "{tag} vs
+  // {tag}" como siempre).
+  const [cwTituloEvento, setCwTituloEvento] = useState("");
+
+  // Migración 162: qué sub-pestaña de "MiniEvento" está activa.
+  const [subtabMiniEvento, setSubtabMiniEvento] = useState<SubtabMiniEvento>("race_war");
 
   // Migración 109: Race War -- sin formulario propio, crear_race_war()
   // no pide nada más que confirmar. Migración 137: sumó un nombre
@@ -104,7 +124,7 @@ export default function CreateTournamentPage() {
   const [creandoRaceWar, setCreandoRaceWar] = useState(false);
   const [raceWarTitulo, setRaceWarTitulo] = useState("");
   const [cwJugadoresPorSet, setCwJugadoresPorSet] = useState("3");
-  const [cwMapasPorSet, setCwMapasPorSet] = useState("2");
+  const [cwMapasPorSet, setCwMapasPorSet] = useState("");
   const [cwFechaHora, setCwFechaHora] = useState("");
   const [cwBusqueda, setCwBusqueda] = useState("");
   const [cwResultados, setCwResultados] = useState<{ id: string; name: string; tag: string }[]>([]);
@@ -112,55 +132,10 @@ export default function CreateTournamentPage() {
   const [cwEquipoElegido, setCwEquipoElegido] = useState<{ id: string; name: string; tag: string } | null>(null);
   const [cwEnviando, setCwEnviando] = useState(false);
 
-  // Migración 095: un torneo/liga por equipos (cualquier formato
-  // distinto de 1v1 -- 2v2/3v3/4v4/wtl, First Stand incluido, que
-  // siempre se arma sobre un formato de equipo) exige ser caster,
-  // dueño/capitán de algún clan, staff, admin, o dueño de la
-  // plataforma. Esto es solo la vista previa en el cliente (oculta las
-  // píldoras que igual la base rechazaría) -- la validación real vive
-  // en el trigger validar_creador_torneo(), ver la migración.
-  const [puedeCrearTorneoDeEquipo, setPuedeCrearTorneoDeEquipo] = useState(false);
-  useEffect(() => {
-    if (!user) return;
-    Promise.all([supabase.rpc("lidera_algun_equipo"), supabase.rpc("es_dueno_plataforma")]).then(
-      ([liderRes, duenoRes]) => {
-        setPuedeCrearTorneoDeEquipo(
-          !!(profile?.es_caster || profile?.es_admin || profile?.es_staff || liderRes.data || duenoRes.data)
-        );
-      }
-    );
-  }, [user, profile]);
-
-  // Etapa de grupos (migración 041) -- solo aplica con eliminación
-  // simple, ver el gate en el JSX.
-  const [tieneFaseGrupos, setTieneFaseGrupos] = useState(false);
-  const [cantidadGrupos, setCantidadGrupos] = useState("2");
-  const [avanzanPorGrupo, setAvanzanPorGrupo] = useState("2");
-
-  // Partido por el tercer lugar (migración 046) -- mismo gate que la
-  // etapa de grupos.
-  const [tieneTercerLugar, setTieneTercerLugar] = useState(false);
   // Migración 101: solo tiene sentido en eliminación doble -- el
   // default (true) es el comportamiento de siempre de
   // avanzar_ganador_doble(), esto solo agrega la opción de desactivarlo.
   const [granFinalConReset, setGranFinalConReset] = useState(true);
-
-  // Formato de liga "First Stand" (migración 057).
-  const [formatoLiga, setFormatoLiga] = useState(false);
-  const [puntosVictoria21, setPuntosVictoria21] = useState("3");
-  const [avanzanPlayoffsFirstStand, setAvanzanPlayoffsFirstStand] = useState("4");
-  // Formato de las Clan Wars que genera el fixture (migración 087):
-  // "simple" (reporte partida por partida, admite cualquier cantidad
-  // de jugadores) o "wtl" (3 sets fijos por posición, con ACE si
-  // empatan 3-3) -- WTL exige lineup de exactamente 3, así que solo se
-  // ofrece en 3v3 (ver el gate en el JSX).
-  const [formatoClanWar, setFormatoClanWar] = useState<"simple" | "wtl">("simple");
-
-  // Migración 090: solo aplican cuando formato === "wtl" -- cuántos
-  // jugadores por set (posiciones del lineup) y cuántos mapas gana
-  // cada set de cada Clan War que genera el bracket.
-  const [jugadoresPorSet, setJugadoresPorSet] = useState("3");
-  const [mapasPorSet, setMapasPorSet] = useState("2");
 
   // Suizo (migración 069): en blanco = generar_torneo_suizo() calcula
   // sola la cantidad de rondas.
@@ -174,10 +149,6 @@ export default function CreateTournamentPage() {
   // se junta esa cantidad de clanes, así que ahí el default baja a 8 --
   // sin pisar nunca un valor que el organizador ya haya tocado a mano.
   const [cuposTocados, setCuposTocados] = useState(false);
-  // Ventana de revelación del lineup de Clan War (migración 089): antes
-  // fija en 30 minutos para cualquier torneo -- solo aplica a formatos
-  // de equipo, donde cada partido puede jugarse como Clan War real.
-  const [ventanaRevelacionMinutos, setVentanaRevelacionMinutos] = useState("30");
   const [pozoPremio, setPozoPremio] = useState("");
 
   // Liga y divisiones (migración 079): al elegir "Torneo por ligas",
@@ -241,47 +212,14 @@ export default function CreateTournamentPage() {
       });
   }, [ligaId]);
 
-  // Si en algún momento se resuelve que el organizador NO puede crear
-  // un torneo por equipos (por ejemplo, la respuesta del permiso llega
-  // después de que ya había elegido un formato de equipo a mano), se
-  // lo vuelve a 1v1 -- mismo criterio que el resto de los efectos de
-  // limpieza de esta página.
-  useEffect(() => {
-    if (!puedeCrearTorneoDeEquipo && formato !== "1v1") {
-      setFormato("1v1");
-    }
-  }, [puedeCrearTorneoDeEquipo, formato]);
-
-  // Default de cupos según el formato -- pero solo mientras el
-  // organizador no haya tocado el campo a mano, para no pisarle un
-  // valor que ya eligió.
+  // Default de cupos -- solo mientras el organizador no haya tocado el
+  // campo a mano, para no pisarle un valor que ya eligió. Antes
+  // dependía del formato (2v2+ arrancaba en 8) -- ya no hace falta,
+  // todo torneo por ligas creado acá es 1v1.
   useEffect(() => {
     if (cuposTocados) return;
-    setCuposTotales(formato === "1v1" ? "16" : "8");
-  }, [formato, cuposTocados]);
-
-  // Si el organizador elige WTL y después cambia el formato a algo
-  // distinto de 3v3, el select de WTL desaparece (ver el gate en el
-  // JSX) -- este efecto evita mandar "wtl" igual con el valor viejo
-  // ya elegido, que el check de la base (tournaments_wtl_solo_3v3)
-  // rechazaría al crear el torneo.
-  useEffect(() => {
-    if (formato !== "3v3" && formatoClanWar === "wtl") {
-      setFormatoClanWar("simple");
-    }
-  }, [formato, formatoClanWar]);
-
-  // Migración 090: "Clan vs Clan (WTL)" siempre es una llave de
-  // eliminación normal, sin fase de grupos ni formato de liga First
-  // Stand (eso es otro sistema de fixture aparte, con su propio camino
-  // para jugar WTL) -- mismo criterio que exige el check de la base
-  // (tournaments_wtl_es_bracket_simple).
-  useEffect(() => {
-    if (formato === "wtl") {
-      setModo("eliminacion_simple");
-      setFormatoLiga(false);
-    }
-  }, [formato]);
+    setCuposTotales("16");
+  }, [cuposTocados]);
 
   // Migración 091: mi propio equipo, para saber si puedo proponer una
   // Clan War Amistosa (hace falta pertenecer a uno) y para no
@@ -317,7 +255,11 @@ export default function CreateTournamentPage() {
       supabase
         .rpc("buscar_equipos_publicos_cw", {
           p_query: termino,
-          p_excluir_team_id: miEquipo?.team_id ?? null,
+          // Migración 162: ya NO se excluye el propio equipo -- si el
+          // organizador busca y elige su propio tag, es a propósito:
+          // una Clan War Amistosa interna (practicar dividiendo el
+          // roster en dos lados).
+          p_excluir_team_id: null,
         })
         .then(({ data, error: buscarError }) => {
           if (cancelado) return;
@@ -360,7 +302,8 @@ export default function CreateTournamentPage() {
       p_formato: "wtl",
       p_temporada_id: null,
       p_jugadores_por_set: jugadores,
-      p_mapas_por_set: Number(cwMapasPorSet) || 2,
+      p_mapas_por_set: Number(cwMapasPorSet) || 1,
+      p_titulo: cwTituloEvento.trim() || null,
     });
 
     setCwEnviando(false);
@@ -376,6 +319,7 @@ export default function CreateTournamentPage() {
     setCwEquipoElegido(null);
     setCwBusqueda("");
     setCwFechaHora("");
+    setCwTituloEvento("");
   };
 
   const handleCrearRaceWar = async () => {
@@ -525,23 +469,24 @@ export default function CreateTournamentPage() {
       cupos_totales: Number(cuposTotales),
       fecha_inicio: new Date(fechaInicio).toISOString(),
       creador_id: user.id,
-      tiene_fase_grupos: modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos,
-      cantidad_grupos:
-        modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos ? Number(cantidadGrupos) : null,
-      avanzan_por_grupo:
-        modo === "eliminacion_simple" && formatoLiga
-          ? Number(avanzanPlayoffsFirstStand)
-          : modo === "eliminacion_simple" && !formatoLiga && tieneFaseGrupos
-            ? Number(avanzanPorGrupo)
-            : null,
-      tiene_tercer_lugar: modo === "eliminacion_simple" && !formatoLiga && tieneTercerLugar,
+      // Migración 162: etapa de grupos, tercer lugar y First Stand se
+      // sacan del formulario de creación -- a pedido del usuario, pasan
+      // a ser ajustes editables desde la propia ficha del torneo una
+      // vez creado, no algo que preguntar de entrada. Quedan en su
+      // valor "sin activar" acá; formato_clan_war/jugadores_por_set/
+      // mapas_por_set tampoco aplican más (eran solo para 2v2+/WTL, que
+      // ya no se puede elegir en este formulario).
+      tiene_fase_grupos: false,
+      cantidad_grupos: null,
+      avanzan_por_grupo: null,
+      tiene_tercer_lugar: false,
       gran_final_con_reset: modo === "eliminacion_doble" ? granFinalConReset : true,
-      formato_liga: modo === "eliminacion_simple" && formatoLiga ? "first_stand" : null,
-      puntos_victoria_2_1: modo === "eliminacion_simple" && formatoLiga ? Number(puntosVictoria21) : 3,
-      formato_clan_war: modo === "eliminacion_simple" && formatoLiga && formato === "3v3" ? formatoClanWar : "simple",
-      ventana_revelacion_minutos: formato !== "1v1" ? Number(ventanaRevelacionMinutos) || 30 : 30,
-      jugadores_por_set: formato === "wtl" ? Number(jugadoresPorSet) || 3 : 3,
-      mapas_por_set: formato === "wtl" ? Number(mapasPorSet) || 2 : 2,
+      formato_liga: null,
+      puntos_victoria_2_1: 3,
+      formato_clan_war: "simple",
+      ventana_revelacion_minutos: 30,
+      jugadores_por_set: 3,
+      mapas_por_set: 2,
       liga_id: esLiga ? ligaId || null : null,
       swiss_rondas_totales: modo === "suizo" && swissRondas ? Number(swissRondas) : null,
     };
@@ -623,13 +568,6 @@ export default function CreateTournamentPage() {
           Paso {paso} de {totalPasos}
         </p>
       )}
-      <p className="form-hint" style={{ marginBottom: "1.5rem" }}>
-        Un <strong>torneo por ligas</strong> tiene llave o tabla propia, para cualquier cantidad de
-        inscritos. Una <strong>Clan War Amistosa</strong> es un enfrentamiento directo entre tu clan y
-        otro -- sin llave ni cupos, es directamente esa Clan War. Un <strong>Race War</strong> es un
-        marcador en vivo por raza, independiente de cualquier torneo.
-      </p>
-
       <div className="form-group">
         <span className="form-label">Tipo de evento</span>
         <div className="modo-grid">
@@ -665,6 +603,21 @@ export default function CreateTournamentPage() {
 
           {miEquipo && (
             <div className="form-section">
+              <div className="form-group">
+                <label className="form-label" htmlFor="cw-titulo">
+                  Nombre del evento (opcional)
+                </label>
+                <input
+                  id="cw-titulo"
+                  className="form-input"
+                  type="text"
+                  placeholder={`${miEquipo.teamTag ?? "Tu clan"} vs ...`}
+                  maxLength={60}
+                  value={cwTituloEvento}
+                  onChange={(e) => setCwTituloEvento(e.target.value)}
+                />
+              </div>
+
               {/* Migración 093: un solo sistema de lineup para
                   cualquier cantidad de jugadores -- cada titular juega
                   su propio set 1v1 contra la posición equivalente del
@@ -692,23 +645,20 @@ export default function CreateTournamentPage() {
 
               <div className="form-group">
                 <label className="form-label" htmlFor="cw-mapas-por-set">
-                  "Bo" de cada set
+                  Best Of de cada set
                 </label>
-                <select
+                <input
                   id="cw-mapas-por-set"
-                  className="form-select"
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  placeholder="1"
                   value={cwMapasPorSet}
                   onChange={(e) => setCwMapasPorSet(e.target.value)}
-                >
-                  {BO_OPTIONS.map((bo) => (
-                    <option key={bo.value} value={bo.value}>
-                      {bo.label}
-                    </option>
-                  ))}
-                </select>
+                />
                 <p className="form-hint">
                   Cuántos mapas como máximo se juegan en cada set -- se cierra apenas alguien alcanza la
-                  mayoría necesaria, sin jugar de más.
+                  mayoría necesaria, sin jugar de más. En blanco queda en Bo1 (un solo mapa).
                 </p>
               </div>
 
@@ -716,13 +666,11 @@ export default function CreateTournamentPage() {
                 <label className="form-label" htmlFor="cw-fecha-hora">
                   Fecha y hora (tu hora local)
                 </label>
-                <input
+                <FechaHoraInput
                   id="cw-fecha-hora"
-                  className="form-input"
-                  type="datetime-local"
                   required
                   value={cwFechaHora}
-                  onChange={(e) => setCwFechaHora(e.target.value)}
+                  onChange={setCwFechaHora}
                 />
               </div>
 
@@ -773,32 +721,67 @@ export default function CreateTournamentPage() {
         </form>
       ) : esRaceWar ? (
         <div className="create-tournament-form">
-          <p className="form-hint">
-            Se crea al toque y te lleva directo al marcador, donde configuras los puntos iniciales, las
-            imágenes de cada raza y los jugadores destacados.
-          </p>
-          <div className="form-group">
-            <label className="form-label" htmlFor="race-war-titulo">
-              Nombre (opcional)
+          <div className="pill-radio-group" style={{ marginBottom: "1rem" }}>
+            <label className={`pill-radio-option ${subtabMiniEvento === "race_war" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="subtabMiniEvento"
+                checked={subtabMiniEvento === "race_war"}
+                onChange={() => setSubtabMiniEvento("race_war")}
+              />
+              Race War
             </label>
-            <input
-              id="race-war-titulo"
-              className="form-input"
-              type="text"
-              placeholder="Race War"
-              maxLength={60}
-              value={raceWarTitulo}
-              onChange={(e) => setRaceWarTitulo(e.target.value)}
-            />
+            <label className={`pill-radio-option ${subtabMiniEvento === "reto_padre" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="subtabMiniEvento"
+                checked={subtabMiniEvento === "reto_padre"}
+                onChange={() => setSubtabMiniEvento("reto_padre")}
+              />
+              Reto: ¿Quién es el padre?
+            </label>
           </div>
-          <button
-            type="button"
-            className="btn btn-primary btn-block"
-            disabled={creandoRaceWar}
-            onClick={handleCrearRaceWar}
-          >
-            {creandoRaceWar ? "Creando..." : "Crear Race War"}
-          </button>
+
+          {subtabMiniEvento === "race_war" ? (
+            <>
+              <p className="form-hint">
+                Se crea al toque y te lleva directo al marcador, donde configuras los puntos iniciales, las
+                imágenes de cada raza y los jugadores destacados.
+              </p>
+              <div className="form-group">
+                <label className="form-label" htmlFor="race-war-titulo">
+                  Nombre (opcional)
+                </label>
+                <input
+                  id="race-war-titulo"
+                  className="form-input"
+                  type="text"
+                  placeholder="Race War"
+                  maxLength={60}
+                  value={raceWarTitulo}
+                  onChange={(e) => setRaceWarTitulo(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-primary btn-block"
+                disabled={creandoRaceWar}
+                onClick={handleCrearRaceWar}
+              >
+                {creandoRaceWar ? "Creando..." : "Crear Race War"}
+              </button>
+            </>
+          ) : (
+            // Migración 162: todavía no se trabaja esta parte -- el
+            // reto de título Padre/Hijo entre clanes ya existe y
+            // funciona (ver seccionPanel "titulos" en
+            // TeamDetailPage.tsx, proponer_titulo_padre_hijo()), solo
+            // falta conectarlo acá. Por ahora, el lugar queda
+            // reservado para que no se pierda.
+            <p className="form-hint">Próximamente -- todavía no está disponible desde acá.</p>
+          )}
         </div>
       ) : (
       <form className="create-tournament-form" onSubmit={handleSubmit}>
@@ -824,88 +807,6 @@ export default function CreateTournamentPage() {
             </div>
 
             <div className="form-group">
-              <span className="form-label">Formato</span>
-              <div className="pill-radio-group">
-                {FORMATOS.map((f) => {
-                  const habilitado = f === "1v1" || puedeCrearTorneoDeEquipo;
-                  return (
-                    <label
-                      key={f}
-                      className={`pill-radio-option ${formato === f ? "selected" : ""} ${habilitado ? "" : "disabled"}`}
-                    >
-                      <input
-                        type="radio"
-                        className="sr-only"
-                        name="formato"
-                        checked={formato === f}
-                        disabled={!habilitado}
-                        onChange={() => setFormato(f)}
-                      />
-                      {getFormatoLabel(f)}
-                    </label>
-                  );
-                })}
-              </div>
-              {!puedeCrearTorneoDeEquipo && (
-                <p className="form-hint">
-                  Un torneo o liga por equipos (2v2/3v3/4v4/Clan vs Clan) requiere ser caster, dueño o
-                  capitán de un clan, staff, o administrador.
-                </p>
-              )}
-              {esLiga && formato !== "1v1" && (
-                <p className="form-hint">
-                  Los clanes entran por invitación tuya o pidiendo el ingreso -- no hay inscripción
-                  libre en un torneo de liga por equipos.
-                </p>
-              )}
-              {formato === "wtl" && (
-                <p className="form-hint">
-                  Cada cruce de la llave entre dos clanes se juega como una Clan War real, con lineup,
-                  visto bueno de los dos capitanes y check-in -- no con el botón "Ganó X" de siempre.
-                  Este formato siempre es una llave de eliminación simple, sin fase de grupos ni First
-                  Stand.
-                </p>
-              )}
-            </div>
-
-            {formato === "wtl" && (
-              <div className="form-group">
-                <label className="form-label" htmlFor="torneo-jugadores-por-set">
-                  Jugadores por set
-                </label>
-                <input
-                  id="torneo-jugadores-por-set"
-                  className="form-input"
-                  type="number"
-                  min={1}
-                  value={jugadoresPorSet}
-                  onChange={(e) => setJugadoresPorSet(e.target.value)}
-                />
-
-                <label className="form-label" htmlFor="torneo-mapas-por-set">
-                  "Bo" de cada set
-                </label>
-                <select
-                  id="torneo-mapas-por-set"
-                  className="form-select"
-                  value={mapasPorSet}
-                  onChange={(e) => setMapasPorSet(e.target.value)}
-                >
-                  {BO_OPTIONS.map((bo) => (
-                    <option key={bo.value} value={bo.value}>
-                      {bo.label}
-                    </option>
-                  ))}
-                </select>
-                <p className="form-hint">
-                  Cuántos jugadores de cada clan juegan sets 1v1 separados en cada Clan War, y cuántos
-                  mapas como máximo tiene cada set -- se cierra apenas alguien alcanza la mayoría
-                  necesaria.
-                </p>
-              </div>
-            )}
-
-            <div className="form-group">
               <span className="form-label">Modo de juego</span>
               <div className="modo-grid">
                 {/* "Rey de la colina" queda afuera del selector: es un
@@ -915,9 +816,7 @@ export default function CreateTournamentPage() {
                     arrancar. Sigue en MODOS (tournamentOptions.ts) para
                     no romper el label de algún torneo viejo que ya lo
                     tuviera, pero no se puede volver a elegir. */}
-                {MODOS.filter(
-                  (m) => m.value !== "rey_de_la_colina" && (formato !== "wtl" || m.value === "eliminacion_simple")
-                ).map((m) => (
+                {MODOS.filter((m) => m.value !== "rey_de_la_colina").map((m) => (
                   <div key={m.value} className={`modo-card ${modo === m.value ? "selected" : ""}`}>
                     <label className="modo-card-label">
                       <input
@@ -926,7 +825,6 @@ export default function CreateTournamentPage() {
                         name="modo"
                         checked={modo === m.value}
                         onChange={() => setModo(m.value)}
-                        disabled={formato === "wtl"}
                       />
                       <ModoIcono modo={m.value} />
                       <span>{m.label}</span>
@@ -935,9 +833,6 @@ export default function CreateTournamentPage() {
                   </div>
                 ))}
               </div>
-              {formato === "wtl" && (
-                <p className="form-hint">"Clan vs Clan (WTL)" solo está disponible en eliminación simple.</p>
-              )}
             </div>
 
             {modo === "eliminacion_doble" && (
@@ -983,135 +878,11 @@ export default function CreateTournamentPage() {
               </div>
             )}
 
-            {modo === "eliminacion_simple" && formato !== "1v1" && formato !== "wtl" && (
-              <div className="form-group">
-                <label className="form-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={formatoLiga}
-                    onChange={(e) => setFormatoLiga(e.target.checked)}
-                  />
-                  Formato de liga "First Stand"
-                </label>
-                <p className="form-hint">
-                  Fixture de todos contra todos completo (cada clan juega contra todos los demás una
-                  vez, nadie repite rival) y playoffs entre los mejores puestos, con la final al mejor
-                  de 5. Sirve para cualquier cantidad de clanes, no solo 7.
-                </p>
-
-                {formatoLiga && (
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="torneo-avanzan-playoffs">
-                      Cuántos avanzan a los playoffs
-                    </label>
-                    <input
-                      id="torneo-avanzan-playoffs"
-                      className="form-input"
-                      type="number"
-                      min={2}
-                      value={avanzanPlayoffsFirstStand}
-                      onChange={(e) => setAvanzanPlayoffsFirstStand(e.target.value)}
-                    />
-
-                    <label className="form-label" htmlFor="torneo-puntos-2-1">
-                      Puntos por una victoria 2-1
-                    </label>
-                    <select
-                      id="torneo-puntos-2-1"
-                      className="form-select"
-                      value={puntosVictoria21}
-                      onChange={(e) => setPuntosVictoria21(e.target.value)}
-                    >
-                      <option value="3">3 puntos (igual que una victoria 2-0)</option>
-                      <option value="2">2 puntos (sistema alternativo)</option>
-                    </select>
-                    <p className="form-hint">Una victoria 2-0 siempre vale 3 puntos.</p>
-
-                    <label className="form-label" htmlFor="torneo-formato-clan-war">
-                      Cómo se juega cada partido
-                    </label>
-                    <select
-                      id="torneo-formato-clan-war"
-                      className="form-select"
-                      value={formatoClanWar}
-                      onChange={(e) => setFormatoClanWar(e.target.value as "simple" | "wtl")}
-                    >
-                      <option value="simple">
-                        Clan War simple -- partida por partida, admite suplentes
-                      </option>
-                      {formato === "3v3" && <option value="wtl">WTL -- 3 sets fijos por posición, con ACE</option>}
-                    </select>
-                    <p className="form-hint">
-                      Cada partido del fixture se juega como una Clan War real: lineup, visto bueno de
-                      los dos capitanes y ventana de check-in antes de empezar.
-                      {formato !== "3v3" && " WTL solo está disponible en 3v3."}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {modo === "eliminacion_simple" && !formatoLiga && (
-              <div className="form-group">
-                <label className="form-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={tieneFaseGrupos}
-                    onChange={(e) => setTieneFaseGrupos(e.target.checked)}
-                  />
-                  Con etapa de grupos
-                </label>
-                <p className="form-hint">
-                  Los inscritos se reparten en grupos y juegan todos contra todos dentro de su grupo;
-                  los mejores de cada uno avanzan a la llave eliminatoria.
-                </p>
-
-                {tieneFaseGrupos && (
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="torneo-cantidad-grupos">
-                      Cantidad de grupos
-                    </label>
-                    <input
-                      id="torneo-cantidad-grupos"
-                      className="form-input"
-                      type="number"
-                      min={2}
-                      value={cantidadGrupos}
-                      onChange={(e) => setCantidadGrupos(e.target.value)}
-                    />
-
-                    <label className="form-label" htmlFor="torneo-avanzan-por-grupo">
-                      Cuántos avanzan por grupo
-                    </label>
-                    <input
-                      id="torneo-avanzan-por-grupo"
-                      className="form-input"
-                      type="number"
-                      min={1}
-                      value={avanzanPorGrupo}
-                      onChange={(e) => setAvanzanPorGrupo(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {modo === "eliminacion_simple" && !formatoLiga && (
-              <div className="form-group">
-                <label className="form-checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={tieneTercerLugar}
-                    onChange={(e) => setTieneTercerLugar(e.target.checked)}
-                  />
-                  Con partido por el tercer lugar
-                </label>
-                <p className="form-hint">
-                  Los dos perdedores de semifinal juegan aparte por el tercer puesto, en paralelo a la
-                  final.
-                </p>
-              </div>
-            )}
+            {/* Migración 162: "Formato de liga First Stand", "Con etapa
+                de grupos" y "Con partido por el tercer lugar" se sacan
+                de acá -- a pedido del usuario, pasan a ser ajustes
+                editables desde la propia ficha del torneo una vez
+                creado, no algo que preguntar de entrada. */}
           </div>
         )}
 
@@ -1126,14 +897,12 @@ export default function CreateTournamentPage() {
               <label className="form-label" htmlFor="torneo-fecha">
                 Fecha de inicio
               </label>
-              <input
+              <FechaHoraInput
                 id="torneo-fecha"
-                className="form-input"
-                type="datetime-local"
                 required
                 max={fechaMaximaDatetimeLocal()}
                 value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
+                onChange={setFechaInicio}
               />
               <p className="form-hint">
                 No puede ser más de {LIMITE_ANTICIPACION_DIAS} días en el futuro. Si necesitas programar
@@ -1159,26 +928,6 @@ export default function CreateTournamentPage() {
                 }}
               />
             </div>
-
-            {formato !== "1v1" && (
-              <div className="form-group">
-                <label className="form-label" htmlFor="torneo-ventana-revelacion">
-                  Ventana de revelación del lineup (minutos)
-                </label>
-                <input
-                  id="torneo-ventana-revelacion"
-                  className="form-input"
-                  type="number"
-                  min={1}
-                  value={ventanaRevelacionMinutos}
-                  onChange={(e) => setVentanaRevelacionMinutos(e.target.value)}
-                />
-                <p className="form-hint">
-                  Cuántos minutos antes de la hora de cada Clan War se traba la edición del lineup y se
-                  revela al rival. 30 por default.
-                </p>
-              </div>
-            )}
 
             <div className="form-group">
               <label className="form-label" htmlFor="torneo-pozo">
@@ -1359,14 +1108,12 @@ export default function CreateTournamentPage() {
               <label className="form-label" htmlFor="torneo-temporada-fin">
                 Fecha de fin de la temporada
               </label>
-              <input
+              <FechaHoraInput
                 id="torneo-temporada-fin"
-                className="form-input"
-                type="datetime-local"
                 required
                 min={fechaInicio || undefined}
                 value={temporadaFechaFin}
-                onChange={(e) => setTemporadaFechaFin(e.target.value)}
+                onChange={setTemporadaFechaFin}
               />
             </div>
           </div>
