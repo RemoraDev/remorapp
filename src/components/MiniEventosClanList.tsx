@@ -8,11 +8,16 @@ interface MiniEventoClan {
   tournamentId: string;
   nombre: string;
   creadoEn: string;
+  estado: string;
 }
 
 interface MiniEventosClanListProps {
   teamId: string;
   className?: string;
+  // Migración 165: la sub-pestaña "Finalizados" de Historial solo
+  // quiere las Race War ya terminadas -- "Minieventos" sigue siendo
+  // el catálogo completo, sin este filtro.
+  soloFinalizadas?: boolean;
 }
 
 // Migración 166, ítem 10: Race Wars creadas por este equipo, en su
@@ -22,7 +27,7 @@ interface MiniEventosClanListProps {
 // directo (guerra_razas_select_publico ya la deja pública) filtrando
 // por equipo_creador_id, para que sea visible en la ficha pública de
 // CUALQUIER equipo.
-export default function MiniEventosClanList({ teamId, className = "" }: MiniEventosClanListProps) {
+export default function MiniEventosClanList({ teamId, className = "", soloFinalizadas = false }: MiniEventosClanListProps) {
   const [eventos, setEventos] = useState<MiniEventoClan[]>([]);
   const [cargando, setCargando] = useState(true);
 
@@ -33,7 +38,7 @@ export default function MiniEventosClanList({ teamId, className = "" }: MiniEven
     const cargar = async () => {
       const { data } = await supabase
         .from("guerra_razas")
-        .select("id, creado_en, tournament_id, tournaments!guerra_razas_tournament_id_fkey(nombre)")
+        .select("id, creado_en, tournament_id, tournaments!guerra_razas_tournament_id_fkey(nombre, estado)")
         .eq("equipo_creador_id", teamId)
         .order("creado_en", { ascending: false });
 
@@ -41,11 +46,13 @@ export default function MiniEventosClanList({ teamId, className = "" }: MiniEven
 
       const lista: MiniEventoClan[] = (data ?? []).map((gr) => {
         const torneo = Array.isArray(gr.tournaments) ? gr.tournaments[0] : gr.tournaments;
+        const t = torneo as { nombre: string; estado: string } | undefined;
         return {
           id: gr.id as string,
           tournamentId: gr.tournament_id as string,
-          nombre: (torneo as { nombre: string } | undefined)?.nombre ?? "Race War",
+          nombre: t?.nombre ?? "Race War",
           creadoEn: gr.creado_en as string,
+          estado: t?.estado ?? "abierto",
         };
       });
 
@@ -59,15 +66,21 @@ export default function MiniEventosClanList({ teamId, className = "" }: MiniEven
     };
   }, [teamId]);
 
+  const eventosAMostrar = soloFinalizadas ? eventos.filter((e) => e.estado === "finalizado") : eventos;
+
   if (cargando) return <p className="tournament-card-meta">Cargando...</p>;
 
-  if (eventos.length === 0) {
-    return <p className="detail-empty">Todavía no organizó ninguna Race War.</p>;
+  if (eventosAMostrar.length === 0) {
+    return (
+      <p className="detail-empty">
+        {soloFinalizadas ? "Todavía no terminó ninguna Race War." : "Todavía no organizó ninguna Race War."}
+      </p>
+    );
   }
 
   return (
     <div className={className}>
-      {eventos.map((ev) => (
+      {eventosAMostrar.map((ev) => (
         <div key={ev.id} className="detail-participant-item">
           <Link to={`/tournaments/${ev.tournamentId}`}>{ev.nombre}</Link>
           <span className="tournament-card-meta"> · {formatFecha(ev.creadoEn)}</span>

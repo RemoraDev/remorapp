@@ -69,6 +69,7 @@ import TitulosActivosList from "../components/TitulosActivosList";
 import LogrosClanWarList from "../components/LogrosClanWarList";
 import LogrosTorneosList from "../components/LogrosTorneosList";
 import MiniEventosClanList from "../components/MiniEventosClanList";
+import ActividadClanList from "../components/ActividadClanList";
 
 // Migración 145: el límite subió de 2MB/3MB a 15MB -- comprimirImagen()
 // baja el peso antes de subir, así que acá solo hace falta cubrir una
@@ -696,7 +697,9 @@ export default function TeamDetailPage() {
   const [seccionPublica, setSeccionPublica] = useState<"general" | "jugadores" | "lideres" | "logros">("general");
   // Sub-pestañas de "Historial" (migración 158): Logros y Hall of Fame
   // dejan de ser ítems del Panel de control y pasan a vivir acá.
-  const [subtabHistorial, setSubtabHistorial] = useState<"actividad" | "minieventos" | "logros" | "fama">("actividad");
+  const [subtabHistorial, setSubtabHistorial] = useState<
+    "actividad" | "finalizados" | "minieventos" | "logros" | "fama"
+  >("actividad");
 
   // Acceso rápido desde "Check-in" en el abanico: ?panel=eventos abre
   // el Panel de control directo en Gestor de eventos, para no tener
@@ -3933,6 +3936,13 @@ export default function TeamDetailPage() {
             </button>
             <button
               type="button"
+              className={`team-info-subtab ${subtabHistorial === "finalizados" ? "is-active" : ""}`}
+              onClick={() => setSubtabHistorial("finalizados")}
+            >
+              Finalizados
+            </button>
+            <button
+              type="button"
               className={`team-info-subtab ${subtabHistorial === "minieventos" ? "is-active" : ""}`}
               onClick={() => setSubtabHistorial("minieventos")}
             >
@@ -3955,11 +3965,30 @@ export default function TeamDetailPage() {
             </button>
           </div>
 
+          {/* Migración 165, a pedido del usuario: "Actividad" deja de
+              ser el historial completo -- ahora es solo lo que está EN
+              CURSO (Clan War Amistosa, torneos y Race War en los que
+              el equipo está inscrito o que organizó, sin terminar).
+              Lo finalizado se mudó a "Finalizados"; lo finalizado Y
+              ganado sigue en "Logros". */}
           {subtabHistorial === "actividad" && (
             <>
               <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
+              <h4 className="detail-subtitle">En curso</h4>
+              <ActividadClanList teamId={equipo.id} className="detail-participant-list" />
+            </>
+          )}
+
+          {subtabHistorial === "finalizados" && (
+            <>
               <h4 className="detail-subtitle">Clan Wars amistosas</h4>
               <LogrosClanWarList teamId={equipo.id} className="detail-participant-list" />
+
+              <h4 className="detail-subtitle">Torneos por ligas</h4>
+              <LogrosTorneosList teamId={equipo.id} className="detail-participant-list" />
+
+              <h4 className="detail-subtitle">Race Wars</h4>
+              <MiniEventosClanList teamId={equipo.id} className="detail-participant-list" soloFinalizadas />
             </>
           )}
 
@@ -3975,13 +4004,15 @@ export default function TeamDetailPage() {
               {/* Migración 166: antes era un placeholder de un catálogo
                   de skins por nivel que nunca se construyó -- a pedido
                   del usuario, "Logros" pasa a ser nada más que esto:
-                  Clan Wars Amistosas GANADAS y torneos por ligas
-                  jugados, ambos ya finalizados. */}
+                  Clan Wars Amistosas GANADAS y ligas GANADAS
+                  (campeón), ambas ya finalizadas (migración 165:
+                  "Torneos por ligas" se acota a solo las ganadas, antes
+                  mostraba cualquier resultado). */}
               <h3 className="detail-subtitle">Clan Wars Amistosas ganadas</h3>
               <LogrosClanWarList teamId={equipo.id} className="detail-participant-list" soloGanadas />
 
-              <h3 className="detail-subtitle">Torneos por ligas</h3>
-              <LogrosTorneosList teamId={equipo.id} className="detail-participant-list" />
+              <h3 className="detail-subtitle">Ligas ganadas</h3>
+              <LogrosTorneosList teamId={equipo.id} className="detail-participant-list" soloCampeon />
             </>
           )}
         </>

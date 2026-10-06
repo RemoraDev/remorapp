@@ -8,20 +8,29 @@ interface LogroTorneo {
   nombre: string;
   fechaInicio: string;
   resultado: string;
+  esCampeon: boolean;
+  ligaNombre: string | null;
+  divisionNombre: string | null;
+  temporadaNombre: string | null;
 }
 
 interface LogrosTorneosListProps {
   teamId: string;
   className?: string;
+  // Migración 165, a pedido del usuario: "Logros" solo quiere mostrar
+  // las ligas GANADAS (campeón) -- "Finalizados" sigue mostrando
+  // todas las participaciones, sin este filtro.
+  soloCampeon?: boolean;
 }
 
-// Migración 166: torneos por ligas en los que este equipo participó,
-// ya finalizados, con su resultado -- misma lógica que
-// cargarHistorialTorneos() de ProfilePage.tsx (ahí es por user_id,
-// acá por team_id), pública (tournament_participants_select_publico
-// no restringe el select). Se muestra en la pestaña "Logros" de la
-// ficha pública del equipo, junto a las Clan Wars Amistosas ganadas.
-export default function LogrosTorneosList({ teamId, className = "" }: LogrosTorneosListProps) {
+// Migración 166 (ampliada en la 165): torneos por ligas en los que
+// este equipo participó, ya finalizados, con su resultado -- misma
+// lógica que cargarHistorialTorneos() de ProfilePage.tsx (ahí es por
+// user_id, acá por team_id), pública (tournament_participants_select_publico
+// no restringe el select). Suma liga/división/temporada al cartel
+// (ej. "Campeón -- StarLeague Latam, Diamond 1-2 · Temporada 5"), a
+// pedido del usuario.
+export default function LogrosTorneosList({ teamId, className = "", soloCampeon = false }: LogrosTorneosListProps) {
   const [torneos, setTorneos] = useState<LogroTorneo[]>([]);
   const [cargando, setCargando] = useState(true);
 
@@ -33,7 +42,7 @@ export default function LogrosTorneosList({ teamId, className = "" }: LogrosTorn
       const { data: participacionesData } = await supabase
         .from("tournament_participants")
         .select(
-          "id, tournament_id, tournaments!tournament_participants_tournament_id_fkey(id, nombre, fecha_inicio, estado, modo, campeon_participant_id)"
+          "id, tournament_id, tournaments!tournament_participants_tournament_id_fkey(id, nombre, fecha_inicio, estado, modo, campeon_participant_id, liga_id, division_id)"
         )
         .eq("team_id", teamId);
 
@@ -45,7 +54,16 @@ export default function LogrosTorneosList({ teamId, className = "" }: LogrosTorn
           return {
             participantId: p.id as string,
             torneo: torneo as
-              | { id: string; nombre: string; fecha_inicio: string; estado: string; modo: string; campeon_participant_id: string | null }
+              | {
+                  id: string;
+                  nombre: string;
+                  fecha_inicio: string;
+                  estado: string;
+                  modo: string;
+                  campeon_participant_id: string | null;
+                  liga_id: string | null;
+                  division_id: string | null;
+                }
               | undefined,
           };
         })
@@ -83,12 +101,36 @@ export default function LogrosTorneosList({ teamId, className = "" }: LogrosTorn
         }
       }
 
+      // Liga/división/temporada -- consultas aparte (no embebidas) para
+      // no depender de que PostgREST resuelva una relación inversa
+      // (temporadas.torneo_id -> tournaments.id) sin ambigüedad.
+      const ligaIds = [...new Set(finalizadas.map((p) => p.torneo!.liga_id).filter((id): id is string => !!id))];
+      const divisionIds = [...new Set(finalizadas.map((p) => p.torneo!.division_id).filter((id): id is string => !!id))];
+      const torneoIds = finalizadas.map((p) => p.torneo!.id);
+
+      const [ligasRes, divisionesRes, temporadasRes] = await Promise.all([
+        ligaIds.length > 0
+          ? supabase.from("ligas").select("id, nombre").in("id", ligaIds)
+          : Promise.resolve({ data: [] as { id: string; nombre: string }[] }),
+        divisionIds.length > 0
+          ? supabase.from("divisiones_liga").select("id, nombre").in("id", divisionIds)
+          : Promise.resolve({ data: [] as { id: string; nombre: string }[] }),
+        torneoIds.length > 0
+          ? supabase.from("temporadas").select("torneo_id, nombre").in("torneo_id", torneoIds)
+          : Promise.resolve({ data: [] as { torneo_id: string; nombre: string }[] }),
+      ]);
+
       if (cancelado) return;
+
+      const ligaPorId = Object.fromEntries((ligasRes.data ?? []).map((l) => [l.id, l.nombre]));
+      const divisionPorId = Object.fromEntries((divisionesRes.data ?? []).map((d) => [d.id, d.nombre]));
+      const temporadaPorTorneoId = Object.fromEntries((temporadasRes.data ?? []).map((t) => [t.torneo_id, t.nombre]));
 
       const lista: LogroTorneo[] = finalizadas.map(({ participantId, torneo }) => {
         const t = torneo!;
         let resultado = "Participó";
-        if (t.campeon_participant_id === participantId) {
+        const esCampeon = t.campeon_participant_id === participantId;
+        if (esCampeon) {
           resultado = "Campeón 🏆";
         } else if (t.modo === "eliminacion_simple") {
           // Torneo finalizado + no es el campeón = en algún momento
@@ -98,7 +140,16 @@ export default function LogrosTorneosList({ teamId, className = "" }: LogrosTorn
           const r = resultadosPorParticipante[participantId];
           if (r && r.jugados > 0) resultado = `${r.ganados} victorias, ${r.jugados - r.ganados} derrotas`;
         }
-        return { id: t.id, nombre: t.nombre, fechaInicio: t.fecha_inicio, resultado };
+        return {
+          id: t.id,
+          nombre: t.nombre,
+          fechaInicio: t.fecha_inicio,
+          resultado,
+          esCampeon,
+          ligaNombre: t.liga_id ? ligaPorId[t.liga_id] ?? null : null,
+          divisionNombre: t.division_id ? divisionPorId[t.division_id] ?? null : null,
+          temporadaNombre: temporadaPorTorneoId[t.id] ?? null,
+        };
       });
 
       lista.sort((a, b) => new Date(b.fechaInicio).getTime() - new Date(a.fechaInicio).getTime());
@@ -112,19 +163,31 @@ export default function LogrosTorneosList({ teamId, className = "" }: LogrosTorn
     };
   }, [teamId]);
 
+  const torneosAMostrar = soloCampeon ? torneos.filter((t) => t.esCampeon) : torneos;
+
   if (cargando) return <p className="tournament-card-meta">Cargando...</p>;
 
-  if (torneos.length === 0) {
-    return <p className="detail-empty">Todavía no participó en ningún torneo por ligas finalizado.</p>;
+  if (torneosAMostrar.length === 0) {
+    return (
+      <p className="detail-empty">
+        {soloCampeon
+          ? "Todavía no ganó ninguna liga."
+          : "Todavía no participó en ningún torneo por ligas finalizado."}
+      </p>
+    );
   }
 
   return (
     <div className={className}>
-      {torneos.map((t) => (
+      {torneosAMostrar.map((t) => (
         <div key={t.id} className="detail-participant-item">
           <Link to={`/tournaments/${t.id}`}>{t.nombre}</Link>
           <span className="reto-status">{t.resultado}</span>
-          <span className="tournament-card-meta"> · {formatFecha(t.fechaInicio)}</span>
+          <span className="tournament-card-meta">
+            {" "}
+            · {[t.ligaNombre, t.divisionNombre].filter(Boolean).join(" ")}
+            {t.temporadaNombre ? ` · ${t.temporadaNombre}` : ""} · {formatFecha(t.fechaInicio)}
+          </span>
         </div>
       ))}
     </div>
