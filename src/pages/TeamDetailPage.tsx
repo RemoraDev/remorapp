@@ -624,14 +624,33 @@ export default function TeamDetailPage() {
   const [tabConfig, setTabConfig] = useState<
     "apariencia" | "logo" | "banner" | "franja" | "equipo" | "eliminar"
   >("apariencia");
-  // Vista dentro de "Clan War"/"Reprogramar fecha" (migración 158):
-  // "guerras" muestra cada Clan War en preparación completa (sin
-  // reprogramación/extensión, que se sacaron de acá); "reprogramar"
-  // reusa la misma lista pero muestra SOLO esas dos acciones por
-  // guerra -- mismo map(), sin duplicar el cálculo de cada guerra.
+  // Vista dentro de "Retar"/"Reprogramar fecha" (migración 158,
+  // renombrada en la 165): "pendientes" ahora cubre tanto los retos
+  // que necesitan MI respuesta como los que yo propuse (fusionados en
+  // una sola sub-pestaña "Retos por aprobar", a pedido del usuario --
+  // "propuestos" ya no existe como valor propio). "guerras" muestra
+  // cada Clan War ya aprobada ("Retos aprobados" en la UI) completa
+  // (sin reprogramación/extensión, que se sacaron de acá);
+  // "reprogramar" reusa la misma lista pero muestra SOLO esas dos
+  // acciones por guerra -- mismo map(), sin duplicar el cálculo de
+  // cada guerra.
   const [vistaEventos, setVistaEventos] = useState<
-    "pendientes" | "propuestos" | "guerras" | "historial" | "reprogramar"
+    "pendientes" | "guerras" | "historial" | "reprogramar"
   >("pendientes");
+  // Sub-pestañas de "Editar equipo" (migración 165): Miembros del
+  // equipo/Jugadores temporales/Jugadores expulsados estaban todos
+  // apilados en una sola pantalla larga -- a pedido del usuario, cada
+  // uno pasa a tener su propia sub-pestaña.
+  const [subtabEquipoMiembros, setSubtabEquipoMiembros] = useState<
+    "miembros" | "temporales" | "expulsados"
+  >("miembros");
+  // Sub-pestañas de "Mercenarios y Alianzas" en Panel de control
+  // (migración 165) -- mismo criterio que ya se usó en Solicitudes:
+  // Mercenarios separado de Alianzas (que acá adentro agrupa "Alianzas
+  // de este equipo" + "Clanes amigos", igual que del otro lado).
+  const [subtabMercenariosAlianzas, setSubtabMercenariosAlianzas] = useState<"mercenarios" | "alianzas">(
+    "mercenarios"
+  );
   // Sub-pestañas de "Reprogramar fecha" (migración 158): antes Guerras
   // para reprogramar y Extensión del plazo de lineup iban las dos
   // juntas, apiladas por cada guerra.
@@ -1508,11 +1527,14 @@ export default function TeamDetailPage() {
 
         const activos = retosResueltos.filter((r) => r.status === "aceptada" || r.status === "en_curso");
         setRetosActivos(activos);
-        setHistorialRetos(
-          retosResueltos.filter(
-            (r) => r.status === "rechazada" || r.status === "cancelada" || r.status === "finalizada" || r.status === "empatada"
-          )
-        );
+        // Migración 165: a pedido del usuario, "Historial de retos" deja
+        // de ser solo los ya resueltos (rechazada/cancelada/finalizada/
+        // empatada) -- pasa a ser un registro completo de todo salvo lo
+        // que todavía está "por aprobar" (pendiente), que ya tiene su
+        // propia sub-pestaña. Incluye aceptada/en_curso para poder ver
+        // de un vistazo el estado de cualquier reto, no solo los
+        // cerrados.
+        setHistorialRetos(retosResueltos.filter((r) => r.status !== "pendiente"));
 
         // Roster de los DOS equipos de cada reto activo (no solo el
         // rival): hace falta el propio también para elegir jugadores al
@@ -2043,7 +2065,7 @@ export default function TeamDetailPage() {
           {errorEliminarEquipo && <div className="form-error">{errorEliminarEquipo}</div>}
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn btn-danger"
             disabled={eliminandoEquipoDefinitivo}
             onClick={handleEliminarEquipoDefinitivo}
           >
@@ -2947,7 +2969,7 @@ export default function TeamDetailPage() {
 
     const partes = busquedaNick.trim().split("#");
     if (partes.length !== 2 || !partes[0] || !partes[1]) {
-      setErrorBusqueda("Escribe el Nick#ID completo, por ejemplo CarpeDiem#12345.");
+      setErrorBusqueda("Escribe el Nick#ID completo, por ejemplo TuNick#BattleTag.");
       return;
     }
     const [nickBuscado, uniqueIdBuscado] = partes;
@@ -3079,7 +3101,7 @@ export default function TeamDetailPage() {
 
     const partes = busquedaMercenario.trim().split("#");
     if (partes.length !== 2 || !partes[0] || !partes[1]) {
-      setErrorMercenario("Escribe el Nick#ID completo, por ejemplo CarpeDiem#12345.");
+      setErrorMercenario("Escribe el Nick#ID completo, por ejemplo TuNick#BattleTag.");
       return;
     }
     const [nickBuscado, uniqueIdBuscado] = partes;
@@ -3387,7 +3409,7 @@ export default function TeamDetailPage() {
     if (partes.length !== 2 || !partes[0] || !partes[1]) {
       setErroresReemplazoPorTemp((prev) => ({
         ...prev,
-        [tempId]: "Escribe el Nick#ID completo, por ejemplo CarpeDiem#12345.",
+        [tempId]: "Escribe el Nick#ID completo, por ejemplo TuNick#BattleTag.",
       }));
       return;
     }
@@ -3439,8 +3461,6 @@ export default function TeamDetailPage() {
       {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
       {m.liga && <span className="liga-badge">{m.liga}</span>}
       <IconoRazaMiembro raza={m.razaPrincipal} />
-      <span className="liga-badge">Valentía {m.valentiaJugador}%</span>
-      <span className="liga-badge">Responsabilidad {m.responsabilidadCw}%</span>
       {m.bancaRota && <span className="nivel-badge nivel-badge-banca-rota">Banca rota</span>}
       {m.pocoConfiable && <span className="nivel-badge nivel-badge-banca-rota">Poco Responsable</span>}
       {m.roles.includes("owner") && <span className="team-owner-badge">Dueño</span>}
@@ -4159,7 +4179,7 @@ export default function TeamDetailPage() {
                   </div>
                 </>
               ) : (
-                <div className="team-panel-section">
+                <div className={`team-panel-section ${esSeccionSolicitudes ? "team-panel-section-sin-header" : ""}`}>
                   {/* Corrección: "Solicitudes" (Clan War/Mercenarios/
                       Alianzas/Reprogramar fecha/Unirse al equipo) se
                       entra directo, saltando el menú de Panel de
@@ -4170,7 +4190,13 @@ export default function TeamDetailPage() {
                       panel entero (arriba a la derecha): dos botones
                       distintos haciendo exactamente lo mismo. Ahora
                       para ese grupo de pestañas no se muestra ningún
-                      botón acá -- la X de siempre ya cierra. */}
+                      botón acá -- la X de siempre ya cierra. Sin esa
+                      cabecera, la barra de pestañas queda como primer
+                      elemento, justo a la misma altura que la X
+                      flotante -- team-panel-section-sin-header le suma
+                      el margen que antes daba gratis el header, para
+                      que la X no le tape el último botón (Unirse al
+                      equipo). */}
                   {!esSeccionSolicitudes && (
                     <div className="team-panel-section-header">
                       <button type="button" className="team-panel-back" onClick={() => setSeccionPanel(null)}>
@@ -4194,7 +4220,7 @@ export default function TeamDetailPage() {
                       setVistaEventos("pendientes");
                     }}
                   >
-                    Clan War
+                    Retar
                   </button>
                   <button
                     type="button"
@@ -4527,7 +4553,7 @@ export default function TeamDetailPage() {
                         id="team-invitar-nick"
                         className="form-input"
                         type="text"
-                        placeholder="CarpeDiem#12345"
+                        placeholder="TuNick#BattleTag"
                         value={busquedaNick}
                         onChange={(e) => setBusquedaNick(e.target.value)}
                       />
@@ -4639,77 +4665,111 @@ export default function TeamDetailPage() {
 
               {seccionPanel === "configuracion" && tabConfig === "equipo" && (
               <>
-              <h3 className="detail-subtitle">Miembros del equipo</h3>
-              {errorQuitar && <div className="form-error">{errorQuitar}</div>}
-              {errorCapitan && <div className="form-error">{errorCapitan}</div>}
-              <div className="detail-participant-list">{miembros.map((m) => renderMiembro(m, true))}</div>
-
-              <h3 className="detail-subtitle">Jugador temporal</h3>
-              <p className="tournament-card-meta">
-                Para el line-up cuando todavía no tienes la cuenta real del jugador. Sin Nick#ID, sin
-                MMR y sin historial hasta que lo reemplaces por una cuenta real.
-              </p>
-              {errorTemporal && <div className="form-error">{errorTemporal}</div>}
-              <form className="auth-form" onSubmit={handleCrearTemporal}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="team-nick-temporal">
-                    Nick temporal
-                  </label>
-                  <input
-                    id="team-nick-temporal"
-                    className="form-input"
-                    type="text"
-                    pattern={NICK_REGEX.source}
-                    value={nickTemporalNuevo}
-                    onChange={(e) => setNickTemporalNuevo(e.target.value)}
-                  />
-                </div>
-                <button type="submit" className="btn btn-ghost btn-block" disabled={creandoTemporal}>
-                  {creandoTemporal ? "Creando..." : "Crear jugador temporal"}
+              <div className="team-info-subtabs">
+                <button
+                  type="button"
+                  className={`team-info-subtab ${subtabEquipoMiembros === "miembros" ? "is-active" : ""}`}
+                  onClick={() => setSubtabEquipoMiembros("miembros")}
+                >
+                  Miembros del equipo
                 </button>
-              </form>
+                <button
+                  type="button"
+                  className={`team-info-subtab ${subtabEquipoMiembros === "temporales" ? "is-active" : ""}`}
+                  onClick={() => setSubtabEquipoMiembros("temporales")}
+                >
+                  Jugadores temporales
+                </button>
+                <button
+                  type="button"
+                  className={`team-info-subtab ${subtabEquipoMiembros === "expulsados" ? "is-active" : ""}`}
+                  onClick={() => setSubtabEquipoMiembros("expulsados")}
+                >
+                  Jugadores expulsados
+                </button>
+              </div>
 
-              {jugadoresTemporales.filter((t) => !t.reemplazadoPorId).length > 0 && (
-                <div className="detail-participant-list">
-                  {jugadoresTemporales
-                    .filter((t) => !t.reemplazadoPorId)
-                    .map((t) => (
-                      <div key={t.id} className="reto-item">
-                        <p className="reto-desc">
-                          {t.nickTemporal}
-                          <span className="team-temp-badge">Temporal</span>
-                        </p>
-                        {erroresReemplazoPorTemp[t.id] && (
-                          <div className="form-error">{erroresReemplazoPorTemp[t.id]}</div>
-                        )}
-                        <div className="form-group">
-                          <label className="form-label" htmlFor={`temp-reemplazo-${t.id}`}>
-                            Nick#ID de la cuenta real
-                          </label>
-                          <input
-                            id={`temp-reemplazo-${t.id}`}
-                            className="form-input"
-                            type="text"
-                            placeholder="CarpeDiem#12345"
-                            value={busquedaReemplazoPorTemp[t.id] ?? ""}
-                            onChange={(e) =>
-                              setBusquedaReemplazoPorTemp((prev) => ({ ...prev, [t.id]: e.target.value }))
-                            }
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-ghost"
-                          disabled={reemplazandoTemp === t.id}
-                          onClick={() => handleReemplazarTemporal(t.id)}
-                        >
-                          {reemplazandoTemp === t.id ? "Reemplazando..." : "Reemplazar por cuenta real"}
-                        </button>
-                      </div>
-                    ))}
-                </div>
+              {subtabEquipoMiembros === "miembros" && (
+                <>
+                  <h3 className="detail-subtitle">Miembros del equipo</h3>
+                  {errorQuitar && <div className="form-error">{errorQuitar}</div>}
+                  {errorCapitan && <div className="form-error">{errorCapitan}</div>}
+                  <div className="detail-participant-list">{miembros.map((m) => renderMiembro(m, true))}</div>
+                </>
               )}
 
+              {subtabEquipoMiembros === "temporales" && (
+                <>
+                  <h3 className="detail-subtitle">Jugadores temporales</h3>
+                  <p className="tournament-card-meta">
+                    Para el line-up cuando todavía no tienes la cuenta real del jugador. Sin Nick#ID, sin
+                    MMR y sin historial hasta que lo reemplaces por una cuenta real.
+                  </p>
+                  {errorTemporal && <div className="form-error">{errorTemporal}</div>}
+                  <form className="auth-form" onSubmit={handleCrearTemporal}>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="team-nick-temporal">
+                        Nick temporal
+                      </label>
+                      <input
+                        id="team-nick-temporal"
+                        className="form-input"
+                        type="text"
+                        pattern={NICK_REGEX.source}
+                        value={nickTemporalNuevo}
+                        onChange={(e) => setNickTemporalNuevo(e.target.value)}
+                      />
+                    </div>
+                    <button type="submit" className="btn btn-ghost btn-block" disabled={creandoTemporal}>
+                      {creandoTemporal ? "Creando..." : "Crear jugador temporal"}
+                    </button>
+                  </form>
+
+                  {jugadoresTemporales.filter((t) => !t.reemplazadoPorId).length > 0 && (
+                    <div className="detail-participant-list">
+                      {jugadoresTemporales
+                        .filter((t) => !t.reemplazadoPorId)
+                        .map((t) => (
+                          <div key={t.id} className="reto-item">
+                            <p className="reto-desc">
+                              {t.nickTemporal}
+                              <span className="team-temp-badge">Temporal</span>
+                            </p>
+                            {erroresReemplazoPorTemp[t.id] && (
+                              <div className="form-error">{erroresReemplazoPorTemp[t.id]}</div>
+                            )}
+                            <div className="form-group">
+                              <label className="form-label" htmlFor={`temp-reemplazo-${t.id}`}>
+                                Nick#ID de la cuenta real
+                              </label>
+                              <input
+                                id={`temp-reemplazo-${t.id}`}
+                                className="form-input"
+                                type="text"
+                                placeholder="TuNick#BattleTag"
+                                value={busquedaReemplazoPorTemp[t.id] ?? ""}
+                                onChange={(e) =>
+                                  setBusquedaReemplazoPorTemp((prev) => ({ ...prev, [t.id]: e.target.value }))
+                                }
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              disabled={reemplazandoTemp === t.id}
+                              onClick={() => handleReemplazarTemporal(t.id)}
+                            >
+                              {reemplazandoTemp === t.id ? "Reemplazando..." : "Reemplazar por cuenta real"}
+                            </button>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {subtabEquipoMiembros === "expulsados" && (
+              <>
               <h3 className="detail-subtitle">Jugadores expulsados</h3>
               {expulsados.length === 0 ? (
                 <p className="detail-empty">Todavía no expulsaste a nadie.</p>
@@ -4723,6 +4783,8 @@ export default function TeamDetailPage() {
                     </div>
                   ))}
                 </div>
+              )}
+              </>
               )}
               </>
               )}
@@ -4767,11 +4829,19 @@ export default function TeamDetailPage() {
 
               <h3 className="detail-subtitle">{vistaEventos === "reprogramar" ? "Reprogramar fecha" : "Clan Wars"}</h3>
 
-              {/* Sub-pestañas de Clan War (migración 158): Retos
-                  pendientes/Retos propuestos/Guerras en preparación,
-                  antes todo apilado en una sola pantalla larga. No se
+              {/* Sub-pestañas de "Retar" (migración 158, renombradas y
+                  fusionadas en la 165 a pedido del usuario): "Retos
+                  pendientes" (necesitan MI respuesta) y "Retos
+                  propuestos" (yo los propuse, esperando al rival) se
+                  fusionan en una sola "Retos por aprobar" -- las dos
+                  son, de cara al usuario, "cosas sin aprobar todavía",
+                  solo cambia quién tiene que aprobar. "Guerras en
+                  preparación" pasa a llamarse "Retos aprobados" (mismo
+                  contenido -- lineup, check-in, reportar -- el valor
+                  interno "guerras" de vistaEventos no cambia, lo
+                  comparte con "reprogramar", ver más abajo). No se
                   muestran en modo "reprogramar" -- ese es un acceso
-                  directo aparte, no una cuarta sub-pestaña. */}
+                  directo aparte, no una sub-pestaña más. */}
               {vistaEventos !== "reprogramar" && (
                 <div className="team-info-subtabs">
                   <button
@@ -4779,21 +4849,14 @@ export default function TeamDetailPage() {
                     className={`team-info-subtab ${vistaEventos === "pendientes" ? "is-active" : ""}`}
                     onClick={() => setVistaEventos("pendientes")}
                   >
-                    Retos pendientes
-                  </button>
-                  <button
-                    type="button"
-                    className={`team-info-subtab ${vistaEventos === "propuestos" ? "is-active" : ""}`}
-                    onClick={() => setVistaEventos("propuestos")}
-                  >
-                    Retos propuestos
+                    Retos por aprobar
                   </button>
                   <button
                     type="button"
                     className={`team-info-subtab ${vistaEventos === "guerras" ? "is-active" : ""}`}
                     onClick={() => setVistaEventos("guerras")}
                   >
-                    Guerras en preparación
+                    Retos aprobados
                   </button>
                   <button
                     type="button"
@@ -4886,7 +4949,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {vistaEventos === "propuestos" && (
+              {vistaEventos === "pendientes" && (
               <>
               <h4 className="detail-subtitle">Retos propuestos por mí</h4>
               {retosPropuestosPorMi.length === 0 ? (
@@ -4920,7 +4983,7 @@ export default function TeamDetailPage() {
 
               {(vistaEventos === "guerras" || vistaEventos === "reprogramar") && (
               <>
-              {vistaEventos === "guerras" && <h4 className="detail-subtitle">Guerras en preparación</h4>}
+              {vistaEventos === "guerras" && <h4 className="detail-subtitle">Retos aprobados</h4>}
 
               {vistaEventos === "reprogramar" && (
                 <div className="team-info-subtabs">
@@ -4945,7 +5008,7 @@ export default function TeamDetailPage() {
                 <p className="detail-empty">
                   {vistaEventos === "reprogramar"
                     ? "No tienes ninguna guerra para reprogramar."
-                    : "No tienes ninguna guerra en preparación."}
+                    : "No tienes ningún reto aprobado."}
                 </p>
               ) : (
                 <div className="detail-participant-list">
@@ -5759,7 +5822,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {vistaEventos === "propuestos" && (
+              {vistaEventos === "pendientes" && (
               <>
               <h4 className="detail-subtitle">Proponer un reto</h4>
               <form className="auth-form" onSubmit={handleProponerReto}>
@@ -5871,7 +5934,7 @@ export default function TeamDetailPage() {
               <>
               <h4 className="detail-subtitle">Historial de retos</h4>
               {historialRetos.length === 0 ? (
-                <p className="detail-empty">Todavía no hay retos resueltos.</p>
+                <p className="detail-empty">Todavía no hay ningún reto en el historial.</p>
               ) : (
                 <div className="detail-participant-list">
                   {historialRetos.map((r) => (
@@ -6022,7 +6085,7 @@ export default function TeamDetailPage() {
                 {errorEliminarEquipo && <div className="form-error">{errorEliminarEquipo}</div>}
                 <button
                   type="button"
-                  className="btn btn-ghost btn-block"
+                  className="btn btn-danger btn-block"
                   disabled={eliminandoEquipoDefinitivo}
                   onClick={handleEliminarEquipoDefinitivo}
                 >
@@ -6041,88 +6104,109 @@ export default function TeamDetailPage() {
                   allá. */}
               {seccionPanel === "temporada" && (
                 <>
-                  <h3 className="detail-subtitle">Mercenarios y Alianzas</h3>
+                  <div className="team-info-subtabs">
+                    <button
+                      type="button"
+                      className={`team-info-subtab ${subtabMercenariosAlianzas === "mercenarios" ? "is-active" : ""}`}
+                      onClick={() => setSubtabMercenariosAlianzas("mercenarios")}
+                    >
+                      Mercenarios
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-info-subtab ${subtabMercenariosAlianzas === "alianzas" ? "is-active" : ""}`}
+                      onClick={() => setSubtabMercenariosAlianzas("alianzas")}
+                    >
+                      Alianzas
+                    </button>
+                  </div>
 
-                  {mercenariosPropios.length > 0 ? (
-                    <>
-                      <h3 className="detail-subtitle">Mercenarios</h3>
-                      {errorQuitarMercenario && <div className="form-error">{errorQuitarMercenario}</div>}
-                      <div className="detail-participant-list">
-                        {mercenariosPropios.map((m) => (
-                          <div key={m.id} className="detail-participant-item">
-                            {m.jugadorNombre}
-                            <span className="team-temp-badge">Mercenario</span>
-                            <span className="tournament-card-meta">{m.temporadaNombre}</span>
-                            {esDueño && (
-                              <button
-                                type="button"
-                                className="btn btn-ghost"
-                                disabled={quitandoMercenarioId === m.id}
-                                onClick={() => handleQuitarMercenario(m.id)}
-                              >
-                                {quitandoMercenarioId === m.id ? "Quitando..." : "Quitar"}
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    <p className="detail-empty">Todavía no fichaste ningún mercenario.</p>
-                  )}
-
-                  {alianzasPropias.length > 0 && (
-                    <>
-                      <h3 className="detail-subtitle">Alianzas de este equipo</h3>
-                      <div className="detail-participant-list">
-                        {alianzasPropias.map((a) => {
-                          const estadoTexto =
-                            a.status === "aprobada"
-                              ? "Aprobada"
-                              : a.status === "rechazada"
-                                ? "Rechazada"
-                                : a.aprobadoPorEquipoB
-                                  ? "Confirmada -- pendiente de un administrador"
-                                  : a.propuestaPorMi
-                                    ? "Esperando confirmación del equipo aliado"
-                                    : "Pendiente de tu confirmación";
-                          return (
-                            <div key={a.id} className="detail-participant-item">
-                              {a.aliadoNombre}
-                              <span className="tournament-card-meta">{a.temporadaNombre}</span>
-                              <span className="reto-status">{estadoTexto}</span>
+                  {subtabMercenariosAlianzas === "mercenarios" && (
+                    mercenariosPropios.length > 0 ? (
+                      <>
+                        <h3 className="detail-subtitle">Mercenarios</h3>
+                        {errorQuitarMercenario && <div className="form-error">{errorQuitarMercenario}</div>}
+                        <div className="detail-participant-list">
+                          {mercenariosPropios.map((m) => (
+                            <div key={m.id} className="detail-participant-item">
+                              {m.jugadorNombre}
+                              <span className="team-temp-badge">Mercenario</span>
+                              <span className="tournament-card-meta">{m.temporadaNombre}</span>
+                              {esDueño && (
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  disabled={quitandoMercenarioId === m.id}
+                                  onClick={() => handleQuitarMercenario(m.id)}
+                                >
+                                  {quitandoMercenarioId === m.id ? "Quitando..." : "Quitar"}
+                                </button>
+                              )}
                             </div>
-                          );
-                        })}
-                      </div>
-                    </>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="detail-empty">Todavía no fichaste ningún mercenario.</p>
+                    )
                   )}
 
-                  <h3 className="detail-subtitle">Clanes amigos</h3>
-                  {errorEliminarAmistad && <div className="form-error">{errorEliminarAmistad}</div>}
-                  {amistadesPropias.filter((a) => a.status === "aceptada").length === 0 ? (
-                    <p className="detail-empty">Todavía no tienes clanes amigos.</p>
-                  ) : (
-                    <div className="detail-participant-list">
-                      {amistadesPropias
-                        .filter((a) => a.status === "aceptada")
-                        .map((a) => (
-                          <div key={a.id} className="detail-participant-item">
-                            {a.otroEquipoNombre}
-                            <span className="reto-status">Amigos</span>
-                            {esDueño && (
-                              <button
-                                type="button"
-                                className="btn btn-ghost"
-                                disabled={eliminandoAmistadId === a.id}
-                                onClick={() => handleEliminarAmistad(a.id)}
-                              >
-                                {eliminandoAmistadId === a.id ? "Eliminando..." : "Eliminar amistad"}
-                              </button>
-                            )}
+                  {subtabMercenariosAlianzas === "alianzas" && (
+                    <>
+                      {alianzasPropias.length > 0 && (
+                        <>
+                          <h3 className="detail-subtitle">Alianzas de este equipo</h3>
+                          <div className="detail-participant-list">
+                            {alianzasPropias.map((a) => {
+                              const estadoTexto =
+                                a.status === "aprobada"
+                                  ? "Aprobada"
+                                  : a.status === "rechazada"
+                                    ? "Rechazada"
+                                    : a.aprobadoPorEquipoB
+                                      ? "Confirmada -- pendiente de un administrador"
+                                      : a.propuestaPorMi
+                                        ? "Esperando confirmación del equipo aliado"
+                                        : "Pendiente de tu confirmación";
+                              return (
+                                <div key={a.id} className="detail-participant-item">
+                                  {a.aliadoNombre}
+                                  <span className="tournament-card-meta">{a.temporadaNombre}</span>
+                                  <span className="reto-status">{estadoTexto}</span>
+                                </div>
+                              );
+                            })}
                           </div>
-                        ))}
-                    </div>
+                        </>
+                      )}
+
+                      <h3 className="detail-subtitle">Clanes amigos</h3>
+                      {errorEliminarAmistad && <div className="form-error">{errorEliminarAmistad}</div>}
+                      {amistadesPropias.filter((a) => a.status === "aceptada").length === 0 ? (
+                        <p className="detail-empty">Todavía no tienes clanes amigos.</p>
+                      ) : (
+                        <div className="detail-participant-list">
+                          {amistadesPropias
+                            .filter((a) => a.status === "aceptada")
+                            .map((a) => (
+                              <div key={a.id} className="detail-participant-item">
+                                {a.otroEquipoNombre}
+                                <span className="reto-status">Amigos</span>
+                                {esDueño && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    disabled={eliminandoAmistadId === a.id}
+                                    onClick={() => handleEliminarAmistad(a.id)}
+                                  >
+                                    {eliminandoAmistadId === a.id ? "Eliminando..." : "Eliminar amistad"}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
@@ -6151,7 +6235,7 @@ export default function TeamDetailPage() {
                           id="mercenario-nick"
                           className="form-input"
                           type="text"
-                          placeholder="CarpeDiem#12345"
+                          placeholder="TuNick#BattleTag"
                           value={busquedaMercenario}
                           onChange={(e) => setBusquedaMercenario(e.target.value)}
                         />

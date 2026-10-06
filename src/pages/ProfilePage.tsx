@@ -692,7 +692,7 @@ export default function ProfilePage() {
 
     const partes = busquedaNickTitulo.trim().split("#");
     if (partes.length !== 2 || !partes[0] || !partes[1]) {
-      setErrorBusquedaTitulo("Escribe el Nick#ID completo, por ejemplo CarpeDiem#12345.");
+      setErrorBusquedaTitulo("Escribe el Nick#ID completo, por ejemplo TuNick#BattleTag.");
       return;
     }
     const [nickBuscado, uniqueIdBuscado] = partes;
@@ -2614,7 +2614,7 @@ export default function ProfilePage() {
                     id="titulo-buscar-nick"
                     className="form-input"
                     type="text"
-                    placeholder="CarpeDiem#12345"
+                    placeholder="TuNick#BattleTag"
                     value={busquedaNickTitulo}
                     onChange={(e) => setBusquedaNickTitulo(e.target.value)}
                   />

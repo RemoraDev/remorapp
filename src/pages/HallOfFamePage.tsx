@@ -233,7 +233,7 @@ export default function HallOfFamePage() {
 
     const partes = filtroNick.trim().split("#");
     if (partes.length !== 2 || !partes[0] || !partes[1]) {
-      setErrorFiltro("Escribe el Nick#ID completo, por ejemplo CarpeDiem#12345.");
+      setErrorFiltro("Escribe el Nick#ID completo, por ejemplo TuNick#BattleTag.");
       return;
     }
 

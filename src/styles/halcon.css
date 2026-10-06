@@ -405,6 +405,26 @@ main {
   color: var(--color-text);
 }
 
+/* Acción irreversible (eliminar equipo, etc.) -- a diferencia de
+   .team-panel-danger-zone .btn-ghost (un simple tinte sutil sobre un
+   botón fantasma), esta es una clase propia con fondo sólido rojo, a
+   pedido del usuario: tiene que leerse como "peligro" de un vistazo,
+   no solo con un borde apenas distinto. */
+.btn-danger {
+  background: var(--color-danger, #ef4444);
+  color: #fff;
+  padding: 0.65rem 1.5rem;
+}
+
+.btn-danger:hover {
+  background: #dc2626;
+}
+
+.btn-danger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-link {
   background: transparent;
   border: none;
@@ -2451,9 +2471,17 @@ html.es-escritorio .player-detail-panel-inline {
   cursor: wait;
 }
 
-.player-tab-col-main .detail-card,
 .player-tab-col-side {
   height: 100%;
+}
+
+/* Corrección: "Sobre mí" se estiraba a la altura de la foto de
+   presentación (9:16, ~370px) por el align-items:stretch de
+   .player-tab-grid -- con poco texto, quedaba una caja enorme casi
+   vacía. align-self:start la saca de ese estirado: ahora mide su
+   propio contenido, como las cajas de Clan/Stream al lado. */
+.player-tab-col-main {
+  align-self: start;
 }
 
 .player-tab-col-side {
@@ -6316,6 +6344,16 @@ html.es-escritorio .player-detail-panel-inline {
   display: flex;
   align-items: center;
   margin-bottom: 1rem;
+}
+
+/* Corrección: Solicitudes no tiene .team-panel-section-header (la X de
+   cerrar el panel ya alcanza, ver el comentario en TeamDetailPage.tsx)
+   -- sin ese header empujando el contenido hacia abajo, la barra de
+   pestañas quedaba como primer elemento, a la misma altura que la X
+   flotante (.modal-close, top/right: 1.1rem, 2.1rem de ancho/alto), y
+   el último botón ("Unirse al equipo") terminaba tapado por ella. */
+.team-panel-section-sin-header {
+  margin-top: 2.75rem;
 }
 
 .team-panel-back {

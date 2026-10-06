@@ -74,6 +74,22 @@ pub fn run() {
 
       Ok(())
     })
+    // Corrección: reporte de que la app seguía corriendo en segundo
+    // plano después de cerrar la ventana (el proceso y sus procesos
+    // hijos de WebView2 -- Crashpad, GPU, Network, Storage -- no
+    // terminaban solos). No había ningún código acá que lo explicara
+    // (sin tray, sin "minimizar en vez de cerrar", sin watchdog) -- el
+    // cierre ya debería terminar el proceso solo con el comportamiento
+    // por default de Tauri. Igual, por las dudas de que algo quede
+    // colgado esperando (una conexión Realtime sin cerrar, un timer),
+    // se fuerza la salida inmediata y explícita del proceso entero
+    // apenas se cierra la ventana principal, en vez de confiar en que
+    // el teardown implícito de WebView2 se complete solo.
+    .on_window_event(|window, event| {
+      if let tauri::WindowEvent::CloseRequested { .. } = event {
+        window.app_handle().exit(0);
+      }
+    })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
 }
