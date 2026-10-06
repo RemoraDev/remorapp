@@ -1047,7 +1047,7 @@ export default function PlayerDetailPage() {
                           </a>
                         ) : (
                           <span key={plataforma} className="player-tab-stream-link player-tab-stream-link-vacio">
-                            <Icono size={18} />
+                            <Icono size={18} style={{ color: COLOR_PLATAFORMA_STREAM[plataforma] }} />
                             {plataforma}
                           </span>
                         );

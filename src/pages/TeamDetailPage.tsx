@@ -627,17 +627,18 @@ export default function TeamDetailPage() {
     "apariencia" | "logo" | "banner" | "franja" | "equipo" | "eliminar"
   >("apariencia");
   // Vista dentro de "Retar"/"Reprogramar fecha" (migración 158,
-  // renombrada en la 165): "pendientes" ahora cubre tanto los retos
-  // que necesitan MI respuesta como los que yo propuse (fusionados en
-  // una sola sub-pestaña "Retos por aprobar", a pedido del usuario --
-  // "propuestos" ya no existe como valor propio). "guerras" muestra
-  // cada Clan War ya aprobada ("Retos aprobados" en la UI) completa
-  // (sin reprogramación/extensión, que se sacaron de acá);
-  // "reprogramar" reusa la misma lista pero muestra SOLO esas dos
-  // acciones por guerra -- mismo map(), sin duplicar el cálculo de
-  // cada guerra.
+  // renombrada en la 165, separada de nuevo en la 167 a pedido del
+  // usuario): "pendientes" son los retos que necesitan MI respuesta,
+  // "propuestos" son los que yo propuse y esperan al rival -- vuelven
+  // a ser sub-pestañas separadas (la 165 las había fusionado en una
+  // sola "Retos por aprobar", pero mezclaba "tengo que actuar yo" con
+  // "está esperando al otro equipo"). "guerras" muestra cada Clan War
+  // ya aprobada ("Retos aprobados" en la UI) completa (sin
+  // reprogramación/extensión, que se sacaron de acá); "reprogramar"
+  // reusa la misma lista pero muestra SOLO esas dos acciones por
+  // guerra -- mismo map(), sin duplicar el cálculo de cada guerra.
   const [vistaEventos, setVistaEventos] = useState<
-    "pendientes" | "guerras" | "historial" | "reprogramar"
+    "pendientes" | "propuestos" | "guerras" | "historial" | "reprogramar"
   >("pendientes");
   // Sub-pestañas de "Editar equipo" (migración 165): Miembros del
   // equipo/Jugadores temporales/Jugadores expulsados estaban todos
@@ -3833,7 +3834,7 @@ export default function TeamDetailPage() {
                       </a>
                     ) : (
                       <span key={plataforma} className="player-tab-stream-link player-tab-stream-link-vacio">
-                        <Icono size={18} />
+                        <Icono size={18} style={{ color: COLOR_PLATAFORMA_STREAM[plataforma] }} />
                         {plataforma}
                       </span>
                     );
@@ -4787,19 +4788,17 @@ export default function TeamDetailPage() {
 
               <h3 className="detail-subtitle">{vistaEventos === "reprogramar" ? "Reprogramar fecha" : "Clan Wars"}</h3>
 
-              {/* Sub-pestañas de "Retar" (migración 158, renombradas y
-                  fusionadas en la 165 a pedido del usuario): "Retos
-                  pendientes" (necesitan MI respuesta) y "Retos
-                  propuestos" (yo los propuse, esperando al rival) se
-                  fusionan en una sola "Retos por aprobar" -- las dos
-                  son, de cara al usuario, "cosas sin aprobar todavía",
-                  solo cambia quién tiene que aprobar. "Guerras en
-                  preparación" pasa a llamarse "Retos aprobados" (mismo
-                  contenido -- lineup, check-in, reportar -- el valor
-                  interno "guerras" de vistaEventos no cambia, lo
-                  comparte con "reprogramar", ver más abajo). No se
-                  muestran en modo "reprogramar" -- ese es un acceso
-                  directo aparte, no una sub-pestaña más. */}
+              {/* Sub-pestañas de "Retar" (migración 158, vueltas a
+                  separar en la 167 a pedido del usuario): "Retos por
+                  aprobar" (necesitan MI respuesta) y "Retos propuestos
+                  por mí" (yo los propuse, esperando al rival) son
+                  pestañas distintas -- "Guerras en preparación" pasa a
+                  llamarse "Retos aprobados" (mismo contenido --
+                  lineup, check-in, reportar -- el valor interno
+                  "guerras" de vistaEventos no cambia, lo comparte con
+                  "reprogramar", ver más abajo). No se muestran en modo
+                  "reprogramar" -- ese es un acceso directo aparte, no
+                  una sub-pestaña más. */}
               {vistaEventos !== "reprogramar" && (
                 <div className="team-info-subtabs">
                   <button
@@ -4808,6 +4807,13 @@ export default function TeamDetailPage() {
                     onClick={() => setVistaEventos("pendientes")}
                   >
                     Retos por aprobar
+                  </button>
+                  <button
+                    type="button"
+                    className={`team-info-subtab ${vistaEventos === "propuestos" ? "is-active" : ""}`}
+                    onClick={() => setVistaEventos("propuestos")}
+                  >
+                    Retos propuestos por mí
                   </button>
                   <button
                     type="button"
@@ -4907,7 +4913,7 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {vistaEventos === "pendientes" && (
+              {vistaEventos === "propuestos" && (
               <>
               <h4 className="detail-subtitle">Retos propuestos por mí</h4>
               {retosPropuestosPorMi.length === 0 ? (

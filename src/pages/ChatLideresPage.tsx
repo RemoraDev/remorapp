@@ -62,7 +62,7 @@ export default function ChatLideresPage() {
 
   if (!habilitado && !conversacionActiva) {
     return (
-      <section className="page-placeholder">
+      <section className="page-placeholder chat-lideres-page">
         <h1>Chat de líderes</h1>
         <p>Necesitas ser líder de un clan con 15 o más jugadores reales para acceder a este chat.</p>
       </section>
