@@ -20,24 +20,22 @@ import type { SkinAvatarClave } from "../types/skins";
 import type { TituloActivoTodos } from "../types/titulos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
+import { COLOR_PLATAFORMA_STREAM, extraerNombreCanal, normalizarUrlStream } from "../lib/streamLinks";
+import { getModoLabel, getFormatoLabel } from "../lib/tournamentOptions";
+import { formatFecha } from "../lib/formatters";
+import type { TournamentRow, TorneoEstado } from "../types/tournaments";
 
-// Colores de marca oficiales -- antes los 3 íconos de Stream heredaban
-// el mismo color de texto genérico (currentColor), a pedido del
-// usuario pasan a verse con su color real. Mismo mapa que
-// TeamDetailPage.tsx.
-const COLOR_PLATAFORMA_STREAM: Record<string, string> = {
-  Twitch: "#9146FF",
-  Discord: "#5865F2",
-  YouTube: "#FF0000",
+const ESTADO_EVENTO_LABEL: Record<TorneoEstado, string> = {
+  abierto: "Inscripciones abiertas",
+  en_curso: "En curso",
+  finalizado: "Finalizado",
 };
 
-// A pedido del usuario: si pega una URL completa (ej.
-// "twitch.com/grankefka"), mostrar el nombre de canal/usuario en vez
-// del nombre genérico de la plataforma.
-function extraerNombreCanal(valor: string): string {
-  const limpio = valor.trim().split("?")[0].split("#")[0].replace(/\/+$/, "");
-  const partes = limpio.split("/").filter(Boolean);
-  return partes[partes.length - 1] || valor;
+// PostgREST embebe tournaments como objeto o como array de 1 según la
+// versión, sin tipos generados -- mismo patrón que MyTournamentsPage.tsx.
+function extraerTorneo(torneos: unknown): TournamentRow | null {
+  const t = Array.isArray(torneos) ? torneos[0] : torneos;
+  return (t as TournamentRow | undefined) ?? null;
 }
 
 interface PerfilPublico {
@@ -457,6 +455,31 @@ export default function PlayerDetailPage() {
     cargarPerfilPublico();
   }, [nick, uniqueId]);
 
+  // Pestaña "Actividades" (migración 163): torneos en los que este
+  // jugador está inscrito (propia participación, tournament_participants.
+  // user_id), con estado real -- abierto/en_curso/finalizado, sin
+  // filtrar como el Historial de Mi perfil (ese sí descarta los no
+  // finalizados). Mismo patrón que MyTournamentsPage.tsx.
+  const [eventosInscritos, setEventosInscritos] = useState<TournamentRow[]>([]);
+  const [cargandoEventos, setCargandoEventos] = useState(true);
+
+  useEffect(() => {
+    if (!perfil) return;
+    setCargandoEventos(true);
+    supabase
+      .from("tournament_participants")
+      .select("tournament_id, tournaments!tournament_id(*)")
+      .eq("user_id", perfil.id)
+      .then(({ data }) => {
+        const lista = (data ?? [])
+          .map((fila) => extraerTorneo(fila.tournaments))
+          .filter((t): t is TournamentRow => t !== null)
+          .sort((a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime());
+        setEventosInscritos(lista);
+        setCargandoEventos(false);
+      });
+  }, [perfil?.id]);
+
   if (loading) {
     return <p className="tournament-card-meta">Cargando perfil...</p>;
   }
@@ -523,7 +546,7 @@ export default function PlayerDetailPage() {
           {perfil.linksTransmision.map((link, indice) => (
             <a
               key={`${link.plataforma}-${indice}`}
-              href={link.url}
+              href={normalizarUrlStream(link.plataforma, link.url)}
               target="_blank"
               rel="noreferrer noopener"
               className="badge badge-format"
@@ -845,6 +868,10 @@ export default function PlayerDetailPage() {
             </div>
 
             <div className="player-tab-col-main">
+              {/* A pedido del usuario: el título vive arriba de la caja
+                  (como en "Información del clan" de Mi Clan), no
+                  adentro. */}
+              <h3 className="detail-subtitle">Sobre mí</h3>
               <div className="detail-card player-tab-bio-card player-tab-standalone-card">
                 {/* Mismo marco "corner bracket" que la foto de
                     presentación y la tarjeta del clan -- a pedido del
@@ -854,7 +881,6 @@ export default function PlayerDetailPage() {
                 <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
                 <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
                 <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-                <h3 className="detail-subtitle">Sobre mí</h3>
 
                 {editandoBio ? (
                   <>
@@ -906,41 +932,44 @@ export default function PlayerDetailPage() {
 
             <div className="player-tab-col-side">
               {equipoActual && (
-                <Link to={`/equipos/${equipoActual.tag}`} className="player-tab-preview-card">
-                  {/* Mismo marco decorativo "corner bracket" de la foto de
-                      presentación (a pedido del usuario), acá también. */}
-                  <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
-                  <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
-                  <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
-                  <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-                  {equipoActual.logoUrl ? (
-                    <img src={equipoActual.logoUrl} alt="" className="clan-name-logo" />
-                  ) : (
-                    <span className="clan-name-logo clan-name-logo-placeholder">
-                      {equipoActual.tag.charAt(0)}
+                <>
+                  <h3 className="detail-subtitle">Clan</h3>
+                  <Link to={`/equipos/${equipoActual.tag}`} className="player-tab-preview-card">
+                    {/* Mismo marco decorativo "corner bracket" de la foto de
+                        presentación (a pedido del usuario), acá también. */}
+                    <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+                    <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+                    <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+                    <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+                    {equipoActual.logoUrl ? (
+                      <img src={equipoActual.logoUrl} alt="" className="clan-name-logo" />
+                    ) : (
+                      <span className="clan-name-logo clan-name-logo-placeholder">
+                        {equipoActual.tag.charAt(0)}
+                      </span>
+                    )}
+                    <span className="player-tab-preview-card-info">
+                      <span className="player-tab-preview-card-desc">{equipoActual.name}</span>
                     </span>
-                  )}
-                  <span className="player-tab-preview-card-info">
-                    <span className="player-tab-preview-card-header">Clan</span>
-                    <span className="player-tab-preview-card-desc">{equipoActual.name}</span>
-                  </span>
-                  <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
-                </Link>
+                    <ChevronRight size={16} className="player-tab-preview-card-chevron" aria-hidden="true" />
+                  </Link>
+                </>
               )}
 
               {/* Migración 158: tarjeta rápida de Stream, debajo de
                   "Clan" -- Twitch/Discord/YouTube con ícono propio
                   (ver IconosRedes.tsx), edición rápida con el mismo
-                  lápiz de siempre. */}
+                  lápiz de siempre. Título AFUERA de la caja (migración
+                  163), igual que "Sobre mí"/"Clan" acá al lado. */}
+              <h3 className="detail-subtitle">
+                <Radio size={16} className="icon-inline" aria-hidden="true" />
+                Stream
+              </h3>
               <div className="detail-card player-tab-stream-card">
                 <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
                 <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
                 <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
                 <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-                <h3 className="detail-subtitle">
-                  <Radio size={16} className="icon-inline" aria-hidden="true" />
-                  Stream
-                </h3>
                 {editandoLinksRapidos ? (
                   <>
                     {errorLinksRapidos && <div className="form-error">{errorLinksRapidos}</div>}
@@ -993,7 +1022,7 @@ export default function PlayerDetailPage() {
                         return link ? (
                           <a
                             key={plataforma}
-                            href={link.url}
+                            href={normalizarUrlStream(plataforma, link.url)}
                             target="_blank"
                             rel="noreferrer noopener"
                             className="player-tab-stream-link"
@@ -1028,34 +1057,69 @@ export default function PlayerDetailPage() {
         )}
 
         {tabEscritorio === "stream" && (
-          <div className="detail-card player-tab-standalone-card">
-            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
-            <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
-            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
-            <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-            {perfil.esCaster ? (
-              bloqueTransmision
-            ) : (
-              <>
-                <h3 className="detail-subtitle">
-                  <Radio size={16} className="icon-inline" aria-hidden="true" />
-                  Stream
-                </h3>
+          <>
+            {/* Migración 163: lista real de eventos -- antes "Actividades"
+                solo repetía la Transmisión de la pestaña "Perfil". Torneos
+                en los que este jugador está inscrito, con su estado real
+                (abierto/en curso/finalizado) -- clic manda al torneo. */}
+            <h3 className="detail-subtitle">Eventos inscritos</h3>
+            <div className="detail-card player-tab-standalone-card">
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+              {cargandoEventos ? (
+                <p className="tournament-card-meta">Cargando...</p>
+              ) : eventosInscritos.length === 0 ? (
+                <p className="detail-empty">Todavía no se inscribió a ningún torneo.</p>
+              ) : (
+                <div className="tournament-grid">
+                  {eventosInscritos.map((torneo) => (
+                    <Link key={torneo.id} to={`/tournaments/${torneo.id}`} className="tournament-card">
+                      <div>
+                        <div className="tournament-card-head">
+                          <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
+                          <span className="badge badge-format">{getModoLabel(torneo.modo)}</span>
+                          <span className="badge badge-format">{ESTADO_EVENTO_LABEL[torneo.estado]}</span>
+                        </div>
+                        <h3 className="tournament-card-title">{torneo.nombre}</h3>
+                        <p className="tournament-card-meta">Comienza el {formatFecha(torneo.fecha_inicio)}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {!perfil.esCaster && (
+              <h3 className="detail-subtitle">
+                <Radio size={16} className="icon-inline" aria-hidden="true" />
+                Transmisión
+              </h3>
+            )}
+            <div className="detail-card player-tab-standalone-card">
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
+              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
+              {perfil.esCaster ? (
+                bloqueTransmision
+              ) : (
                 <p className="detail-empty">Este jugador no transmite.</p>
-              </>
-            )}
-            {esMiPropioPerfil && (
-              <button
-                type="button"
-                className="player-tab-bio-edit-btn"
-                onClick={() => handleAbrirConfiguracion("transmision")}
-                aria-label="Editar links de transmisión"
-                title="Editar links de transmisión"
-              >
-                <Pencil size={14} />
-              </button>
-            )}
-          </div>
+              )}
+              {esMiPropioPerfil && (
+                <button
+                  type="button"
+                  className="player-tab-bio-edit-btn"
+                  onClick={() => handleAbrirConfiguracion("transmision")}
+                  aria-label="Editar links de transmisión"
+                  title="Editar links de transmisión"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+            </div>
+          </>
         )}
 
         {tabEscritorio === "logros" && (

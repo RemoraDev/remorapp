@@ -33,6 +33,7 @@ import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { TwitchIcon, DiscordIcon, YoutubeIcon } from "../components/IconosRedes";
+import { COLOR_PLATAFORMA_STREAM, extraerNombreCanal, normalizarUrlStream } from "../lib/streamLinks";
 import type { EquipoDelUsuario } from "../lib/teams";
 import { formatFecha } from "../lib/formatters";
 import { SC2_REGION_OPTIONS } from "../types/profile";
@@ -73,24 +74,6 @@ import LogrosClanWarList from "../components/LogrosClanWarList";
 const LOGO_MAX_BYTES = 15 * 1024 * 1024;
 const BANNER_MAX_BYTES = 15 * 1024 * 1024;
 
-// Colores de marca oficiales -- antes los 3 íconos de Stream heredaban
-// el mismo color de texto genérico (currentColor), a pedido del
-// usuario pasan a verse con su color real.
-const COLOR_PLATAFORMA_STREAM: Record<string, string> = {
-  Twitch: "#9146FF",
-  Discord: "#5865F2",
-  YouTube: "#FF0000",
-};
-
-// A pedido del usuario: si pega una URL completa (ej.
-// "twitch.com/grankefka"), mostrar el nombre de canal/usuario en vez
-// del nombre genérico de la plataforma -- toma el último segmento de
-// la ruta, sin query ni hash.
-function extraerNombreCanal(valor: string): string {
-  const limpio = valor.trim().split("?")[0].split("#")[0].replace(/\/+$/, "");
-  const partes = limpio.split("/").filter(Boolean);
-  return partes[partes.length - 1] || valor;
-}
 
 // Mismos emblemas oficiales que usa TarjetaLineupClanWar.tsx (public/razas/)
 // -- se muestra solo la raza principal, sin la secundaria, y con el logo en
@@ -291,6 +274,16 @@ interface InvitacionTorneoEquipoConNombre {
   torneoNombre: string;
   status: TorneoInvitacionEquipoStatus;
   createdAt: string;
+}
+
+// Invitación a UN JUGADOR para unirse al equipo (migración 104, estado
+// visible recién en la 163) -- con el nombre ya resuelto, mismo patrón
+// que las demás "ConNombre(s)" de acá arriba.
+interface InvitacionJugadorConNombre {
+  id: string;
+  nick: string | null;
+  uniqueId: string | null;
+  status: "pendiente" | "aceptada" | "rechazada";
 }
 
 // Lineup de Clan War (migración 037): sigue haciendo falta más allá de
@@ -643,6 +636,22 @@ export default function TeamDetailPage() {
   // para reprogramar y Extensión del plazo de lineup iban las dos
   // juntas, apiladas por cada guerra.
   const [subtabReprogramar, setSubtabReprogramar] = useState<"fecha" | "extension">("fecha");
+  // Sub-pestañas de "Alianzas" dentro de Solicitudes (migración 163):
+  // "proponer" es solo el formulario (sin preguntar la temporada, se
+  // auto-selecciona -- ver temporadaAlianzaId); "clanes-amigos" junta
+  // lo que antes era "Enviar solicitud de amistad" + su lista -- a
+  // pedido del usuario, alianza y amistad son "básicamente lo mismo"
+  // desde la UI (aunque por dentro sigan siendo dos sistemas
+  // distintos: alianza comparte roster de Clan War y la aprueba un
+  // admin; amistad es un apretón de manos instantáneo entre los dos
+  // equipos, y es lo único de lo que depende invitar a un equipo amigo
+  // a un torneo -- por eso no se puede sacar amistad del todo).
+  const [subtabAlianzas, setSubtabAlianzas] = useState<"proponer" | "clanes-amigos">("proponer");
+  // Sub-pestañas de "Unirse al equipo" dentro de Solicitudes (migración
+  // 163): "invitar" es el formulario + solicitudes recibidas de
+  // siempre; "estado" es nuevo -- antes no había forma de ver si una
+  // invitación YA mandada fue aceptada/rechazada o sigue pendiente.
+  const [subtabUnirse, setSubtabUnirse] = useState<"invitar" | "estado">("invitar");
   // Mercenarios y Alianzas (migración 159, separada en dos destinos en
   // la 160): opción de quitar un mercenario fichado o eliminar una
   // amistad ya aceptada.
@@ -738,7 +747,6 @@ export default function TeamDetailPage() {
   const [mercenariosPropios, setMercenariosPropios] = useState<MercenarioConNombres[]>([]);
   const [alianzasPropias, setAlianzasPropias] = useState<AlianzaConNombres[]>([]);
 
-  const [temporadaFichaje, setTemporadaFichaje] = useState("");
   const [busquedaMercenario, setBusquedaMercenario] = useState("");
   const [buscandoMercenario, setBuscandoMercenario] = useState(false);
   const [errorMercenario, setErrorMercenario] = useState<string | null>(null);
@@ -746,7 +754,6 @@ export default function TeamDetailPage() {
   const [fichando, setFichando] = useState(false);
   const [mercenarioFichado, setMercenarioFichado] = useState(false);
 
-  const [temporadaAlianza, setTemporadaAlianza] = useState("");
   const [tagRivalAlianza, setTagRivalAlianza] = useState("");
   const [proponiendoAlianza, setProponiendoAlianza] = useState(false);
   const [errorAlianza, setErrorAlianza] = useState<string | null>(null);
@@ -757,6 +764,11 @@ export default function TeamDetailPage() {
   // --- Amistad entre equipos + invitaciones a torneos (migración 073) ---
   const [amistadesPropias, setAmistadesPropias] = useState<AmistadEquipoConNombre[]>([]);
   const [invitacionesTorneoPropias, setInvitacionesTorneoPropias] = useState<InvitacionTorneoEquipoConNombre[]>([]);
+  // Estado de "Unirse al equipo" (migración 163): invitaciones que ESTE
+  // equipo ya mandó a jugadores, con su status -- antes solo se veía
+  // "Invitación enviada" al toque de invitar, sin ninguna forma de
+  // volver a ver si la aceptaron, la rechazaron o sigue pendiente.
+  const [invitacionesJugadorEnviadas, setInvitacionesJugadorEnviadas] = useState<InvitacionJugadorConNombre[]>([]);
   const [tagAmistad, setTagAmistad] = useState("");
   const [enviandoAmistad, setEnviandoAmistad] = useState(false);
   const [errorAmistad, setErrorAmistad] = useState<string | null>(null);
@@ -1187,6 +1199,29 @@ export default function TeamDetailPage() {
             torneoNombre: (torneo as { nombre?: string } | null)?.nombre ?? "Torneo",
             status: inv.status as TorneoInvitacionEquipoStatus,
             createdAt: inv.created_at,
+          };
+        })
+      );
+    };
+
+    const cargarInvitacionesJugador = async () => {
+      // team_invitations_select ya deja ver al dueño del equipo las
+      // invitaciones de SU equipo (no las de otros) -- misma política
+      // que ya usa "invitar_jugador"/handleInvitar, esto solo lee.
+      const { data: invitacionesData } = await supabase
+        .from("team_invitations")
+        .select("id, status, invited_user_id, profiles!invited_user_id(nick, unique_id)")
+        .eq("team_id", equipoData.id)
+        .order("created_at", { ascending: false });
+
+      setInvitacionesJugadorEnviadas(
+        (invitacionesData ?? []).map((inv) => {
+          const jugador = Array.isArray(inv.profiles) ? inv.profiles[0] : inv.profiles;
+          return {
+            id: inv.id,
+            nick: (jugador as { nick?: string } | null)?.nick ?? null,
+            uniqueId: (jugador as { unique_id?: string } | null)?.unique_id ?? null,
+            status: inv.status as InvitacionJugadorConNombre["status"],
           };
         })
       );
@@ -1884,6 +1919,7 @@ export default function TeamDetailPage() {
       cargarAlianzas(),
       cargarAmistades(),
       cargarInvitacionesTorneo(),
+      cargarInvitacionesJugador(),
       cargarMiembros(),
       cargarTemporales(),
       cargarSeccionDueno(),
@@ -3003,14 +3039,23 @@ export default function TeamDetailPage() {
   };
 
   // --- Mercenarios y alianzas (migración 047) ---
+  // Corrección: antes había que elegir la temporada a mano en un
+  // desplegable -- a pedido del usuario ("por qué preguntas la
+  // temporada?"), se auto-selecciona la única con inscripciones
+  // abiertas (mismo filtro que ya tenía ese desplegable). Si hay más
+  // de una abierta a la vez, se usa la primera -- caso borde, no hay
+  // forma de saber cuál sin preguntar, y en la práctica suele haber
+  // una sola.
+  const temporadaFichajeId = temporadas.find((t) => t.inscripciones_abiertas)?.id ?? null;
+
   const handleBuscarMercenario = async (event: FormEvent) => {
     event.preventDefault();
     setErrorMercenario(null);
     setResultadoBusquedaMercenario(null);
     setMercenarioFichado(false);
 
-    if (!temporadaFichaje) {
-      setErrorMercenario("Elige la temporada para la que quieres fichar.");
+    if (!temporadaFichajeId) {
+      setErrorMercenario("No hay ninguna temporada con inscripciones abiertas en este momento.");
       return;
     }
 
@@ -3045,7 +3090,7 @@ export default function TeamDetailPage() {
   };
 
   const handleFicharMercenario = async () => {
-    if (!resultadoBusquedaMercenario || !temporadaFichaje) return;
+    if (!resultadoBusquedaMercenario || !temporadaFichajeId) return;
 
     setFichando(true);
     setErrorMercenario(null);
@@ -3057,7 +3102,7 @@ export default function TeamDetailPage() {
     const { error } = await supabase.rpc("fichar_mercenario", {
       p_team_id: equipo.id,
       p_jugador_id: resultadoBusquedaMercenario.id,
-      p_temporada_id: temporadaFichaje,
+      p_temporada_id: temporadaFichajeId,
     });
 
     setFichando(false);
@@ -3073,13 +3118,19 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
+  // Mismo criterio que temporadaFichajeId -- a pedido del usuario, sin
+  // preguntar. Acá se usa "vigente" (dentro del rango de fechas) en vez
+  // de "inscripciones_abiertas": una alianza es para la temporada que
+  // ya está en curso, no para una que recién abre inscripciones.
+  const temporadaAlianzaId = temporadas.find((t) => esTemporadaVigente(t))?.id ?? null;
+
   const handleProponerAlianza = async (event: FormEvent) => {
     event.preventDefault();
     setErrorAlianza(null);
     setAlianzaEnviada(false);
 
-    if (!temporadaAlianza) {
-      setErrorAlianza("Elige la temporada de la alianza.");
+    if (!temporadaAlianzaId) {
+      setErrorAlianza("No hay ninguna temporada vigente en este momento.");
       return;
     }
     const tagRival = tagRivalAlianza.trim().toUpperCase();
@@ -3109,7 +3160,7 @@ export default function TeamDetailPage() {
     const { error } = await supabase.rpc("proponer_alianza", {
       p_team_id: equipo.id,
       p_team_rival_id: equipoRival.id,
-      p_temporada_id: temporadaAlianza,
+      p_temporada_id: temporadaAlianzaId,
     });
 
     setProponiendoAlianza(false);
@@ -3809,7 +3860,7 @@ export default function TeamDetailPage() {
                     return link ? (
                       <a
                         key={plataforma}
-                        href={link.url}
+                        href={normalizarUrlStream(plataforma, link.url)}
                         target="_blank"
                         rel="noreferrer noopener"
                         className="player-tab-stream-link"
@@ -4091,25 +4142,24 @@ export default function TeamDetailPage() {
                 </>
               ) : (
                 <div className="team-panel-section">
-                  <div className="team-panel-section-header">
-                    {/* Corrección: "Solicitudes" (Clan War/Mercenarios/
-                        Alianzas/Reprogramar fecha/Unirse al equipo) se
-                        entra directo, saltando el menú de Panel de
-                        control -- "Volver al panel" ahí era confuso
-                        (prometía volver a un menú por el que nunca se
-                        pasó). Para ese grupo de pestañas, Volver cierra
-                        el panel entero en vez de mandar al menú de
-                        Panel de control. */}
-                    <button
-                      type="button"
-                      className="team-panel-back"
-                      onClick={() =>
-                        esSeccionSolicitudes ? setPanelAbierto(false) : setSeccionPanel(null)
-                      }
-                    >
-                      {esSeccionSolicitudes ? "✕ Cerrar" : "← Volver al panel"}
-                    </button>
-                  </div>
+                  {/* Corrección: "Solicitudes" (Clan War/Mercenarios/
+                      Alianzas/Reprogramar fecha/Unirse al equipo) se
+                      entra directo, saltando el menú de Panel de
+                      control -- "Volver al panel" ahí era confuso
+                      (prometía volver a un menú por el que nunca se
+                      pasó), y el botón "✕ Cerrar" que se le puso en su
+                      lugar quedaba duplicado con la X de cerrar el
+                      panel entero (arriba a la derecha): dos botones
+                      distintos haciendo exactamente lo mismo. Ahora
+                      para ese grupo de pestañas no se muestra ningún
+                      botón acá -- la X de siempre ya cierra. */}
+                  {!esSeccionSolicitudes && (
+                    <div className="team-panel-section-header">
+                      <button type="button" className="team-panel-back" onClick={() => setSeccionPanel(null)}>
+                        ← Volver al panel
+                      </button>
+                    </div>
+                  )}
 
               {/* Barra de pestañas de "Solicitudes" (migración 158,
                   Mercenarios y Alianzas separadas en pestañas propias
@@ -4423,96 +4473,148 @@ export default function TeamDetailPage() {
 
               {seccionPanel === "solicitudes-unirse" && (
               <>
-              <h3 className="detail-subtitle">Invitar jugador</h3>
-              <form className="auth-form" onSubmit={handleBuscarJugador}>
-                {errorBusqueda && <div className="form-error">{errorBusqueda}</div>}
-                {invitacionEnviada && <div className="form-success">¡Invitación enviada!</div>}
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="team-invitar-nick">
-                    Nick#ID del jugador
-                  </label>
-                  <input
-                    id="team-invitar-nick"
-                    className="form-input"
-                    type="text"
-                    placeholder="CarpeDiem#12345"
-                    value={busquedaNick}
-                    onChange={(e) => setBusquedaNick(e.target.value)}
-                  />
-                </div>
-
-                <button type="submit" className="btn btn-ghost btn-block" disabled={buscando}>
-                  {buscando ? "Buscando..." : "Buscar"}
+              {/* A pedido del usuario: "invitar" (formulario + lo que te
+                  piden a vos) queda separado de "estado" (lo que VOS ya
+                  mandaste, y si lo aceptaron/rechazaron/sigue pendiente)
+                  -- antes esto último no se veía en ningún lado. */}
+              <div className="team-info-subtabs">
+                <button
+                  type="button"
+                  className={`team-info-subtab ${subtabUnirse === "invitar" ? "is-active" : ""}`}
+                  onClick={() => setSubtabUnirse("invitar")}
+                >
+                  Invitar jugador
                 </button>
-              </form>
+                <button
+                  type="button"
+                  className={`team-info-subtab ${subtabUnirse === "estado" ? "is-active" : ""}`}
+                  onClick={() => setSubtabUnirse("estado")}
+                >
+                  Estado
+                </button>
+              </div>
 
-              {resultadoBusqueda && (
-                <div className="detail-participant-item">
-                  <Avatar
-                    url={resultadoBusqueda.avatarUrl}
-                    nombre={resultadoBusqueda.nick}
-                    className="detail-participant-avatar"
-                    forma={resultadoBusqueda.avatarForma}
-                  />
-                  {resultadoBusqueda.nick}
-                  <span className="profile-nick-id">#{resultadoBusqueda.uniqueId}</span>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    disabled={invitando}
-                    onClick={handleInvitar}
-                  >
-                    {invitando ? "Invitando..." : "Invitar"}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    disabled={investigando}
-                    onClick={() => handleInvestigar(resultadoBusqueda.id)}
-                  >
-                    {investigando ? "Investigando..." : "Investigar jugador"}
-                  </button>
-                </div>
-              )}
+              {subtabUnirse === "invitar" && (
+                <>
+                  <h3 className="detail-subtitle">Invitar jugador</h3>
+                  <form className="auth-form" onSubmit={handleBuscarJugador}>
+                    {errorBusqueda && <div className="form-error">{errorBusqueda}</div>}
+                    {invitacionEnviada && <div className="form-success">¡Invitación enviada!</div>}
 
-              {errorInvestigacion && <div className="form-error">{errorInvestigacion}</div>}
-              {investigacion && <InvestigacionJugadorPanel investigacion={investigacion} />}
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="team-invitar-nick">
+                        Nick#ID del jugador
+                      </label>
+                      <input
+                        id="team-invitar-nick"
+                        className="form-input"
+                        type="text"
+                        placeholder="CarpeDiem#12345"
+                        value={busquedaNick}
+                        onChange={(e) => setBusquedaNick(e.target.value)}
+                      />
+                    </div>
 
-              {/* Solicitudes de unión (migración 104): camino inverso a
-                  "Invitar jugador" de arriba -- acá el jugador pidió
-                  sumarse solo, y el dueño o un capitán decide. */}
-              <h3 className="detail-subtitle">Solicitudes recibidas</h3>
-              {solicitudesUnionRecibidas.length === 0 ? (
-                <p className="detail-empty">Nadie pidió unirse a este equipo por ahora.</p>
-              ) : (
-                <div className="detail-participant-list">
-                  {solicitudesUnionRecibidas.map((s) => (
-                    <div key={s.id} className="detail-participant-item">
-                      {s.nick ?? "Jugador"}
-                      {s.uniqueId && <span className="profile-nick-id">#{s.uniqueId}</span>}
-                      {erroresResponderSolicitudUnion[s.id] && (
-                        <div className="form-error">{erroresResponderSolicitudUnion[s.id]}</div>
-                      )}
+                    <button type="submit" className="btn btn-ghost btn-block" disabled={buscando}>
+                      {buscando ? "Buscando..." : "Buscar"}
+                    </button>
+                  </form>
+
+                  {resultadoBusqueda && (
+                    <div className="detail-participant-item">
+                      <Avatar
+                        url={resultadoBusqueda.avatarUrl}
+                        nombre={resultadoBusqueda.nick}
+                        className="detail-participant-avatar"
+                        forma={resultadoBusqueda.avatarForma}
+                      />
+                      {resultadoBusqueda.nick}
+                      <span className="profile-nick-id">#{resultadoBusqueda.uniqueId}</span>
                       <button
                         type="button"
                         className="btn btn-primary"
-                        disabled={respondiendoSolicitudUnionId === s.id}
-                        onClick={() => handleAceptarSolicitudUnion(s.id)}
+                        disabled={invitando}
+                        onClick={handleInvitar}
                       >
-                        {respondiendoSolicitudUnionId === s.id ? "Procesando..." : "Aceptar"}
+                        {invitando ? "Invitando..." : "Invitar"}
                       </button>
                       <button
                         type="button"
                         className="btn btn-ghost"
-                        disabled={respondiendoSolicitudUnionId === s.id}
-                        onClick={() => handleRechazarSolicitudUnion(s.id)}
+                        disabled={investigando}
+                        onClick={() => handleInvestigar(resultadoBusqueda.id)}
                       >
-                        Rechazar
+                        {investigando ? "Investigando..." : "Investigar jugador"}
                       </button>
                     </div>
-                  ))}
-                </div>
+                  )}
+
+                  {errorInvestigacion && <div className="form-error">{errorInvestigacion}</div>}
+                  {investigacion && <InvestigacionJugadorPanel investigacion={investigacion} />}
+
+                  {/* Solicitudes de unión (migración 104): camino inverso a
+                      "Invitar jugador" de arriba -- acá el jugador pidió
+                      sumarse solo, y el dueño o un capitán decide. */}
+                  <h3 className="detail-subtitle">Solicitudes recibidas</h3>
+                  {solicitudesUnionRecibidas.length === 0 ? (
+                    <p className="detail-empty">Nadie pidió unirse a este equipo por ahora.</p>
+                  ) : (
+                    <div className="detail-participant-list">
+                      {solicitudesUnionRecibidas.map((s) => (
+                        <div key={s.id} className="detail-participant-item">
+                          {s.nick ?? "Jugador"}
+                          {s.uniqueId && <span className="profile-nick-id">#{s.uniqueId}</span>}
+                          {erroresResponderSolicitudUnion[s.id] && (
+                            <div className="form-error">{erroresResponderSolicitudUnion[s.id]}</div>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={respondiendoSolicitudUnionId === s.id}
+                            onClick={() => handleAceptarSolicitudUnion(s.id)}
+                          >
+                            {respondiendoSolicitudUnionId === s.id ? "Procesando..." : "Aceptar"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-ghost"
+                            disabled={respondiendoSolicitudUnionId === s.id}
+                            onClick={() => handleRechazarSolicitudUnion(s.id)}
+                          >
+                            Rechazar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {subtabUnirse === "estado" && (
+                <>
+                  <h3 className="detail-subtitle">Invitaciones enviadas</h3>
+                  {invitacionesJugadorEnviadas.length === 0 ? (
+                    <p className="detail-empty">Todavía no invitaste a ningún jugador.</p>
+                  ) : (
+                    <div className="detail-participant-list">
+                      {invitacionesJugadorEnviadas.map((inv) => {
+                        const estadoTexto =
+                          inv.status === "aceptada"
+                            ? "Aceptada"
+                            : inv.status === "rechazada"
+                              ? "Rechazada"
+                              : "Pendiente";
+                        return (
+                          <div key={inv.id} className="detail-participant-item">
+                            {inv.nick ?? "Jugador"}
+                            {inv.uniqueId && <span className="profile-nick-id">#{inv.uniqueId}</span>}
+                            <span className="reto-status">{estadoTexto}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
               </>
               )}
@@ -6016,33 +6118,12 @@ export default function TeamDetailPage() {
                     solo puede tener 1 mercenario por temporada, y un jugador solo puede ser mercenario
                     de 1 equipo por temporada.
                   </p>
-                  {temporadas.length === 0 ? (
-                    <p className="detail-empty">Todavía no hay ninguna temporada creada.</p>
+                  {!temporadaFichajeId ? (
+                    <p className="detail-empty">No hay ninguna temporada con inscripciones abiertas en este momento.</p>
                   ) : (
                     <form className="auth-form" onSubmit={handleBuscarMercenario}>
                       {errorMercenario && <div className="form-error">{errorMercenario}</div>}
                       {mercenarioFichado && <div className="form-success">¡Mercenario fichado!</div>}
-
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="mercenario-temporada">
-                          Temporada
-                        </label>
-                        <select
-                          id="mercenario-temporada"
-                          className="form-select"
-                          value={temporadaFichaje}
-                          onChange={(e) => setTemporadaFichaje(e.target.value)}
-                        >
-                          <option value="">Selecciona una temporada</option>
-                          {temporadas
-                            .filter((t) => t.inscripciones_abiertas)
-                            .map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.nombre}
-                              </option>
-                            ))}
-                        </select>
-                      </div>
 
                       <div className="form-group">
                         <label className="form-label" htmlFor="mercenario-nick">
@@ -6089,234 +6170,272 @@ export default function TeamDetailPage() {
 
               {seccionPanel === "agregar-alianzas" && (
                 <>
-                  <h3 className="detail-subtitle">Proponer una alianza</h3>
-                  {esDueño ? (
-                    temporadas.length === 0 ? (
-                      <p className="detail-empty">Todavía no hay ninguna temporada creada.</p>
-                    ) : (
-                      <form className="auth-form" onSubmit={handleProponerAlianza}>
-                        {errorAlianza && <div className="form-error">{errorAlianza}</div>}
-                        {alianzaEnviada && (
-                          <div className="form-success">
-                            Alianza propuesta -- queda pendiente de aprobación de un administrador.
-                          </div>
-                        )}
+                  {/* A pedido del usuario: "proponer alianza" y "amistad"
+                      se sienten como lo mismo -- se juntan bajo un único
+                      concepto de "Alianzas" con 2 sub-pestañas: proponer,
+                      y ver/sacar los clanes ya amigos. Por dentro siguen
+                      siendo 2 sistemas (ver comentario de subtabAlianzas
+                      más arriba), pero la UI ya no obliga a entender la
+                      diferencia. */}
+                  <div className="team-info-subtabs">
+                    <button
+                      type="button"
+                      className={`team-info-subtab ${subtabAlianzas === "proponer" ? "is-active" : ""}`}
+                      onClick={() => setSubtabAlianzas("proponer")}
+                    >
+                      Proponer alianza
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-info-subtab ${subtabAlianzas === "clanes-amigos" ? "is-active" : ""}`}
+                      onClick={() => setSubtabAlianzas("clanes-amigos")}
+                    >
+                      Clanes amigos
+                    </button>
+                  </div>
 
-                        <div className="form-group">
-                          <label className="form-label" htmlFor="alianza-temporada">
-                            Temporada
-                          </label>
-                          <select
-                            id="alianza-temporada"
-                            className="form-select"
-                            value={temporadaAlianza}
-                            onChange={(e) => setTemporadaAlianza(e.target.value)}
-                          >
-                            <option value="">Selecciona una temporada</option>
-                            {temporadas.map((t) => (
-                              <option key={t.id} value={t.id}>
-                                {t.nombre}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <div className="form-group">
-                          <label className="form-label" htmlFor="alianza-tag">
-                            Tag del equipo aliado
-                          </label>
-                          <input
-                            id="alianza-tag"
-                            className="form-input"
-                            type="text"
-                            placeholder="QSQD"
-                            value={tagRivalAlianza}
-                            onChange={(e) => setTagRivalAlianza(e.target.value.toUpperCase())}
-                          />
-                        </div>
-
-                        <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendoAlianza}>
-                          {proponiendoAlianza ? "Proponiendo..." : "Proponer alianza"}
-                        </button>
-                      </form>
-                    )
-                  ) : (
-                    <p className="detail-empty">Solo el dueño del equipo puede proponer una alianza.</p>
-                  )}
-
-                  {alianzasPropias.length > 0 && (
+                  {subtabAlianzas === "proponer" && (
                     <>
-                      <h3 className="detail-subtitle">Alianzas de este equipo</h3>
-                      <div className="detail-participant-list">
-                        {alianzasPropias.map((a) => {
-                          const estadoTexto =
-                            a.status === "aprobada"
-                              ? "Aprobada"
-                              : a.status === "rechazada"
-                                ? "Rechazada"
-                                : a.aprobadoPorEquipoB
-                                  ? "Confirmada -- pendiente de un administrador"
-                                  : a.propuestaPorMi
-                                    ? "Esperando confirmación del equipo aliado"
-                                    : "Pendiente de tu confirmación";
+                      <h3 className="detail-subtitle">Proponer una alianza</h3>
+                      {esDueño ? (
+                        !temporadaAlianzaId ? (
+                          <p className="detail-empty">No hay ninguna temporada vigente en este momento.</p>
+                        ) : (
+                          <form className="auth-form" onSubmit={handleProponerAlianza}>
+                            {errorAlianza && <div className="form-error">{errorAlianza}</div>}
+                            {alianzaEnviada && (
+                              <div className="form-success">
+                                Alianza propuesta -- queda pendiente de aprobación de un administrador.
+                              </div>
+                            )}
 
-                          // Solo el dueño del equipo B confirma -- ver el
-                          // chequeo explícito en confirmar_alianza_equipo().
-                          const puedoConfirmar =
-                            esDueño && !a.propuestaPorMi && a.status === "pendiente" && !a.aprobadoPorEquipoB;
-
-                          return (
-                            <div key={a.id} className="detail-participant-item">
-                              {a.aliadoNombre}
-                              <span className="tournament-card-meta">{a.temporadaNombre}</span>
-                              <span className="reto-status">{estadoTexto}</span>
-                              {puedoConfirmar && (
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                  disabled={confirmandoAlianza === a.id}
-                                  onClick={() => handleConfirmarAlianza(a.id)}
-                                >
-                                  {confirmandoAlianza === a.id ? "Confirmando..." : "Confirmar alianza"}
-                                </button>
-                              )}
-                              {erroresConfirmarAlianza[a.id] && (
-                                <div className="form-error">{erroresConfirmarAlianza[a.id]}</div>
-                              )}
+                            <div className="form-group">
+                              <label className="form-label" htmlFor="alianza-tag">
+                                Tag del equipo aliado
+                              </label>
+                              <input
+                                id="alianza-tag"
+                                className="form-input"
+                                type="text"
+                                placeholder="QSQD"
+                                value={tagRivalAlianza}
+                                onChange={(e) => setTagRivalAlianza(e.target.value.toUpperCase())}
+                              />
                             </div>
-                          );
-                        })}
-                      </div>
+
+                            <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendoAlianza}>
+                              {proponiendoAlianza ? "Proponiendo..." : "Proponer alianza"}
+                            </button>
+                          </form>
+                        )
+                      ) : (
+                        <p className="detail-empty">Solo el dueño del equipo puede proponer una alianza.</p>
+                      )}
+
+                      {alianzasPropias.length > 0 && (
+                        <>
+                          <h3 className="detail-subtitle">Alianzas de este equipo</h3>
+                          <div className="detail-participant-list">
+                            {alianzasPropias.map((a) => {
+                              const estadoTexto =
+                                a.status === "aprobada"
+                                  ? "Aprobada"
+                                  : a.status === "rechazada"
+                                    ? "Rechazada"
+                                    : a.aprobadoPorEquipoB
+                                      ? "Confirmada -- pendiente de un administrador"
+                                      : a.propuestaPorMi
+                                        ? "Esperando confirmación del equipo aliado"
+                                        : "Pendiente de tu confirmación";
+
+                              // Solo el dueño del equipo B confirma -- ver el
+                              // chequeo explícito en confirmar_alianza_equipo().
+                              const puedoConfirmar =
+                                esDueño && !a.propuestaPorMi && a.status === "pendiente" && !a.aprobadoPorEquipoB;
+
+                              return (
+                                <div key={a.id} className="detail-participant-item">
+                                  {a.aliadoNombre}
+                                  <span className="tournament-card-meta">{a.temporadaNombre}</span>
+                                  <span className="reto-status">{estadoTexto}</span>
+                                  {puedoConfirmar && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-primary"
+                                      disabled={confirmandoAlianza === a.id}
+                                      onClick={() => handleConfirmarAlianza(a.id)}
+                                    >
+                                      {confirmandoAlianza === a.id ? "Confirmando..." : "Confirmar alianza"}
+                                    </button>
+                                  )}
+                                  {erroresConfirmarAlianza[a.id] && (
+                                    <div className="form-error">{erroresConfirmarAlianza[a.id]}</div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
 
-                  <h3 className="detail-subtitle">Enviar solicitud de amistad</h3>
-                  {esDueño ? (
-                    <form className="auth-form" onSubmit={handleSolicitarAmistad}>
-                      {errorAmistad && <div className="form-error">{errorAmistad}</div>}
-                      {amistadEnviada && (
-                        <div className="form-success">Solicitud de amistad enviada.</div>
-                      )}
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="amistad-tag">
-                          Tag del equipo
-                        </label>
-                        <input
-                          id="amistad-tag"
-                          className="form-input"
-                          type="text"
-                          placeholder="QSQD"
-                          value={tagAmistad}
-                          onChange={(e) => setTagAmistad(e.target.value.toUpperCase())}
-                        />
-                      </div>
-                      <button type="submit" className="btn btn-ghost btn-block" disabled={enviandoAmistad}>
-                        {enviandoAmistad ? "Enviando..." : "Enviar solicitud de amistad"}
-                      </button>
-                    </form>
-                  ) : (
-                    <p className="detail-empty">Solo el dueño del equipo puede enviar solicitudes de amistad.</p>
-                  )}
-
-                  {amistadesPropias.filter((a) => a.status !== "aceptada").length > 0 && (
+                  {subtabAlianzas === "clanes-amigos" && (
                     <>
-                      <h3 className="detail-subtitle">Solicitudes de amistad</h3>
-                      <div className="detail-participant-list">
-                        {amistadesPropias
-                          .filter((a) => a.status !== "aceptada")
-                          .map((a) => {
-                            const estadoTexto =
-                              a.status === "rechazada"
-                                ? "Rechazada"
-                                : a.propuestaPorMi
-                                  ? "Esperando respuesta del otro equipo"
-                                  : "Te mandaron una solicitud";
-                            const puedeResponder = esDueño && a.status === "pendiente" && !a.propuestaPorMi;
+                      <h3 className="detail-subtitle">Agregar clan amigo</h3>
+                      {esDueño ? (
+                        <form className="auth-form" onSubmit={handleSolicitarAmistad}>
+                          {errorAmistad && <div className="form-error">{errorAmistad}</div>}
+                          {amistadEnviada && <div className="form-success">Solicitud enviada.</div>}
+                          <div className="form-group">
+                            <label className="form-label" htmlFor="amistad-tag">
+                              Tag del equipo
+                            </label>
+                            <input
+                              id="amistad-tag"
+                              className="form-input"
+                              type="text"
+                              placeholder="QSQD"
+                              value={tagAmistad}
+                              onChange={(e) => setTagAmistad(e.target.value.toUpperCase())}
+                            />
+                          </div>
+                          <button type="submit" className="btn btn-ghost btn-block" disabled={enviandoAmistad}>
+                            {enviandoAmistad ? "Enviando..." : "Agregar clan amigo"}
+                          </button>
+                        </form>
+                      ) : (
+                        <p className="detail-empty">Solo el dueño del equipo puede agregar clanes amigos.</p>
+                      )}
 
-                            return (
+                      <h3 className="detail-subtitle">Clanes amigos</h3>
+                      {errorEliminarAmistad && <div className="form-error">{errorEliminarAmistad}</div>}
+                      {amistadesPropias.filter((a) => a.status === "aceptada").length === 0 ? (
+                        <p className="detail-empty">Todavía no tienes clanes amigos.</p>
+                      ) : (
+                        <div className="detail-participant-list">
+                          {amistadesPropias
+                            .filter((a) => a.status === "aceptada")
+                            .map((a) => (
                               <div key={a.id} className="detail-participant-item">
                                 {a.otroEquipoNombre}
+                                <span className="reto-status">Amigos</span>
+                                {esDueño && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-ghost"
+                                    disabled={eliminandoAmistadId === a.id}
+                                    onClick={() => handleEliminarAmistad(a.id)}
+                                  >
+                                    {eliminandoAmistadId === a.id ? "Eliminando..." : "Eliminar"}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
+                      {amistadesPropias.filter((a) => a.status !== "aceptada").length > 0 && (
+                        <>
+                          <h3 className="detail-subtitle">Solicitudes pendientes</h3>
+                          <div className="detail-participant-list">
+                            {amistadesPropias
+                              .filter((a) => a.status !== "aceptada")
+                              .map((a) => {
+                                const estadoTexto =
+                                  a.status === "rechazada"
+                                    ? "Rechazada"
+                                    : a.propuestaPorMi
+                                      ? "Esperando respuesta del otro equipo"
+                                      : "Te mandaron una solicitud";
+                                const puedeResponder = esDueño && a.status === "pendiente" && !a.propuestaPorMi;
+
+                                return (
+                                  <div key={a.id} className="detail-participant-item">
+                                    {a.otroEquipoNombre}
+                                    <span className="reto-status">{estadoTexto}</span>
+                                    {puedeResponder && (
+                                      <div className="invitation-actions">
+                                        <button
+                                          type="button"
+                                          className="btn btn-primary"
+                                          disabled={respondiendoAmistadId === a.id}
+                                          onClick={() => handleResponderAmistad(a.id, true)}
+                                        >
+                                          Aceptar
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn btn-ghost"
+                                          disabled={respondiendoAmistadId === a.id}
+                                          onClick={() => handleResponderAmistad(a.id, false)}
+                                        >
+                                          Rechazar
+                                        </button>
+                                      </div>
+                                    )}
+                                    {erroresResponderAmistad[a.id] && (
+                                      <div className="form-error">{erroresResponderAmistad[a.id]}</div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </>
+                      )}
+
+                      <h3 className="detail-subtitle">Invitaciones a torneos</h3>
+                      <p className="detail-empty">
+                        Cuando un equipo amigo organiza un torneo por equipos, puede invitar directo a tu
+                        clan desde acá -- aceptar te inscribe al toque, sin tener que buscar el torneo vos
+                        mismo.
+                      </p>
+                      {invitacionesTorneoPropias.length === 0 ? (
+                        <p className="detail-empty">Todavía no llegó ninguna invitación a un torneo.</p>
+                      ) : (
+                        <div className="detail-participant-list">
+                          {invitacionesTorneoPropias.map((inv) => {
+                            const estadoTexto =
+                              inv.status === "aceptada"
+                                ? "Aceptada -- ya estás inscrito"
+                                : inv.status === "rechazada"
+                                  ? "Rechazada"
+                                  : "Pendiente";
+                            const puedeResponder = puedeGestionar && inv.status === "pendiente";
+
+                            return (
+                              <div key={inv.id} className="detail-participant-item">
+                                <Link to={`/tournaments/${inv.tournamentId}`}>{inv.torneoNombre}</Link>
                                 <span className="reto-status">{estadoTexto}</span>
                                 {puedeResponder && (
                                   <div className="invitation-actions">
                                     <button
                                       type="button"
                                       className="btn btn-primary"
-                                      disabled={respondiendoAmistadId === a.id}
-                                      onClick={() => handleResponderAmistad(a.id, true)}
+                                      disabled={respondiendoInvitacionId === inv.id}
+                                      onClick={() => handleResponderInvitacionTorneo(inv.id, true)}
                                     >
                                       Aceptar
                                     </button>
                                     <button
                                       type="button"
                                       className="btn btn-ghost"
-                                      disabled={respondiendoAmistadId === a.id}
-                                      onClick={() => handleResponderAmistad(a.id, false)}
+                                      disabled={respondiendoInvitacionId === inv.id}
+                                      onClick={() => handleResponderInvitacionTorneo(inv.id, false)}
                                     >
                                       Rechazar
                                     </button>
                                   </div>
                                 )}
-                                {erroresResponderAmistad[a.id] && (
-                                  <div className="form-error">{erroresResponderAmistad[a.id]}</div>
+                                {erroresResponderInvitacion[inv.id] && (
+                                  <div className="form-error">{erroresResponderInvitacion[inv.id]}</div>
                                 )}
                               </div>
                             );
                           })}
-                      </div>
+                        </div>
+                      )}
                     </>
-                  )}
-
-                  <h3 className="detail-subtitle">Invitaciones a torneos</h3>
-                  <p className="detail-empty">
-                    Cuando un equipo amigo organiza un torneo por equipos, puede invitar directo a tu
-                    clan desde acá -- aceptar te inscribe al toque, sin tener que buscar el torneo vos
-                    mismo.
-                  </p>
-                  {invitacionesTorneoPropias.length === 0 ? (
-                    <p className="detail-empty">Todavía no llegó ninguna invitación a un torneo.</p>
-                  ) : (
-                    <div className="detail-participant-list">
-                      {invitacionesTorneoPropias.map((inv) => {
-                        const estadoTexto =
-                          inv.status === "aceptada"
-                            ? "Aceptada -- ya estás inscrito"
-                            : inv.status === "rechazada"
-                              ? "Rechazada"
-                              : "Pendiente";
-                        const puedeResponder = puedeGestionar && inv.status === "pendiente";
-
-                        return (
-                          <div key={inv.id} className="detail-participant-item">
-                            <Link to={`/tournaments/${inv.tournamentId}`}>{inv.torneoNombre}</Link>
-                            <span className="reto-status">{estadoTexto}</span>
-                            {puedeResponder && (
-                              <div className="invitation-actions">
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                  disabled={respondiendoInvitacionId === inv.id}
-                                  onClick={() => handleResponderInvitacionTorneo(inv.id, true)}
-                                >
-                                  Aceptar
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-ghost"
-                                  disabled={respondiendoInvitacionId === inv.id}
-                                  onClick={() => handleResponderInvitacionTorneo(inv.id, false)}
-                                >
-                                  Rechazar
-                                </button>
-                              </div>
-                            )}
-                            {erroresResponderInvitacion[inv.id] && (
-                              <div className="form-error">{erroresResponderInvitacion[inv.id]}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
                   )}
                 </>
               )}

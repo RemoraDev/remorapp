@@ -3,6 +3,23 @@
    Sin frameworks de utilidades: clases planas, reutilizables entre páginas.
    ========================================================================== */
 
+/* Corrección: con la app de escritorio simplemente abierta (incluso sin
+   foco) el PC se ponía lento y relentizaba juegos -- hay bastantes
+   animaciones CSS "infinite" en toda la app (el anillo de marcos de
+   prestigio del avatar del Header es la peor, porque está SIEMPRE
+   montado) que nunca se apagaban solas. DesktopClaseHtml.tsx agrega
+   "es-escritorio-sin-foco" al <html> cuando la ventana pierde el foco
+   -- esto pausa TODAS las animaciones CSS de golpe en vez de tener que
+   acordarse de pausar cada una a mano. Las animaciones SMIL de SVG se
+   pausan aparte, en el propio DesktopClaseHtml.tsx (pauseAnimations()).
+   !important a propósito: tiene que ganarle a cualquier "animation"
+   puntual sin importar su especificidad. */
+html.es-escritorio-sin-foco *,
+html.es-escritorio-sin-foco *::before,
+html.es-escritorio-sin-foco *::after {
+  animation-play-state: paused !important;
+}
+
 :root {
   --color-bg: #06070a;
   /* Superficies sólidas y opacas (sin alfa): fondos de tarjetas, menús
@@ -2037,7 +2054,12 @@ main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 18rem);
   gap: 1.5rem;
-  align-items: start;
+  /* Corrección: con "start" cada columna medía solo su propio
+     contenido -- "Información del clan" y "Stream" quedaban de alturas
+     distintas. "stretch" (default) hace que ambas columnas compartan
+     el alto de la más alta, y .team-general-card ya tiene flex:1
+     esperando justo esto (mismo truco que .player-tab-grid). */
+  align-items: stretch;
 }
 
 /* .player-tab-col-main acá adentro suma el título ARRIBA de la caja
@@ -2165,6 +2187,32 @@ html.es-escritorio .player-detail-vista-escritorio {
    menú. */
 html.es-escritorio .player-detail-panel-inline {
   display: none;
+}
+
+/* Corrección: la vista moderna de "Mi perfil" (tabs Perfil/Actividades/
+   Logros, tarjetas con marco "corner bracket") solo se mostraba dentro
+   de la app de escritorio (html.es-escritorio) -- en la web, por más
+   ancha que fuera la ventana, siempre quedaba la vista plana de abajo
+   ("vista-movil", un nombre engañoso: en realidad es "no-Tauri", no
+   "pantalla angosta"). Mismas 3 reglas que arriba, pero por ancho real
+   de pantalla -- así la web también la ve en una ventana de escritorio
+   ancha, y una ventana de Tauri angosta (poco común, pero posible)
+   sigue mostrando la moderna igual gracias a las reglas de
+   html.es-escritorio de arriba, que no se tocan. */
+@media (min-width: 900px) {
+  .player-detail-vista-movil {
+    display: none;
+  }
+
+  .player-detail-vista-escritorio {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+
+  .player-detail-panel-inline {
+    display: none;
+  }
 }
 
 .player-hero-identity {
@@ -2488,7 +2536,12 @@ html.es-escritorio .player-detail-panel-inline {
   flex-direction: column;
   border-radius: 0;
   padding-bottom: 3.25rem;
-  overflow-y: auto;
+  /* Corrección: overflow-y:auto (aunque no hubiera scroll real, solo 3
+     links fijos) recortaba el marco "corner bracket" -- sus esquinas
+     se dibujan con offset NEGATIVO (fuera de la caja), y overflow
+     distinto de visible las corta. Mismo bug que .team-general-card
+     ya corregido antes. */
+  overflow: visible;
 }
 
 /* Selector compuesto -- ver el mismo comentario en
@@ -2955,6 +3008,13 @@ html.es-escritorio .player-detail-panel-inline {
 .team-leader-panel-propio {
   position: relative;
   width: min(90vw, 56rem);
+  /* Corrección: antes era solo max-height -- la caja se achicaba o
+     agrandaba según cuánto contenido tuviera la pestaña activa
+     (Solicitudes "saltaba" de tamaño al cambiar entre Clan War/
+     Mercenarios/Alianzas/etc). height fija (no solo tope) + scroll
+     interno: ancho y alto quedan iguales siempre, ninguna pestaña los
+     cambia. */
+  height: 85vh;
   max-height: 85vh;
   overflow-y: auto;
   margin-top: 0;
