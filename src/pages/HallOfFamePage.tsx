@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { calcularNivelLineal } from "../lib/ligas";
 import { construirGaleria } from "../lib/hallOfFame";
@@ -263,6 +263,9 @@ export default function HallOfFamePage() {
 
   return (
     <section className="hall-of-fame">
+      <Link to="/" className="hall-of-fame-volver">
+        ← Volver a Inicio
+      </Link>
       <div className="hall-of-fame-header">
         <h1 className="hall-of-fame-title">Sala de la Fama</h1>
         <div className="hall-of-fame-selector">
@@ -297,8 +300,6 @@ export default function HallOfFamePage() {
               <span className="hall-name">
                 {c.nombre} <span className="profile-nick-id">[{c.tag}]</span>
               </span>
-              <span className="liga-badge">{c.liga}</span>
-              <span className="hall-mmr">{c.mmr} MMR</span>
               {c.titulo && <span className="liga-badge">{c.titulo}</span>}
             </div>
           ))}
@@ -319,9 +320,6 @@ export default function HallOfFamePage() {
                 {j.nick}
                 <span className="profile-nick-id">#{j.uniqueId}</span>
               </span>
-              <span className="liga-badge">{j.liga}</span>
-              <span className="hall-mmr">Valentía {j.valentia}%</span>
-              <span className="hall-mmr">Responsabilidad {j.responsabilidad}%</span>
               {j.titulo && <span className="liga-badge">{j.titulo}</span>}
             </div>
           ))}

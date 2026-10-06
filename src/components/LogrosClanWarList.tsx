@@ -16,6 +16,11 @@ interface LogroClanWar {
 interface LogrosClanWarListProps {
   teamId: string;
   className?: string;
+  // Migración 166: la pestaña "Logros" del Historial del clan solo
+  // quiere mostrar las ganadas (victorias) -- "Actividad" sigue
+  // mostrando el historial completo (ganadas/perdidas/empatadas),
+  // mismo componente, sin duplicar la consulta.
+  soloGanadas?: boolean;
 }
 
 // Migración 091: Clan Wars finalizadas de un equipo que NO vienen de
@@ -23,7 +28,7 @@ interface LogrosClanWarListProps {
 // de siempre) -- pública, vía logros_clan_war_de() (RPC sin
 // restricción de participante). Se muestra en la pestaña "Logros" de
 // la ficha pública del equipo, junto a los Títulos Padre/Hijo.
-export default function LogrosClanWarList({ teamId, className = "" }: LogrosClanWarListProps) {
+export default function LogrosClanWarList({ teamId, className = "", soloGanadas = false }: LogrosClanWarListProps) {
   const [logros, setLogros] = useState<LogroClanWar[]>([]);
 
   useEffect(() => {
@@ -52,13 +57,19 @@ export default function LogrosClanWarList({ teamId, className = "" }: LogrosClan
     };
   }, [teamId]);
 
-  if (logros.length === 0) {
-    return <p className="detail-empty">Todavía no hay Clan Wars amistosas jugadas.</p>;
+  const logrosAMostrar = soloGanadas ? logros.filter((l) => l.gane) : logros;
+
+  if (logrosAMostrar.length === 0) {
+    return (
+      <p className="detail-empty">
+        {soloGanadas ? "Todavía no ganó ninguna Clan War Amistosa." : "Todavía no hay Clan Wars amistosas jugadas."}
+      </p>
+    );
   }
 
   return (
     <div className={className}>
-      {logros.map((l) => (
+      {logrosAMostrar.map((l) => (
         <div key={l.id} className="detail-participant-item">
           <span className={l.gane ? "result-win" : "result-loss"}>
             {l.empate ? "Empate" : l.gane ? "Victoria" : "Derrota"}

@@ -24,6 +24,7 @@ import {
   Info,
   Pencil,
   Radio,
+  HelpCircle,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -55,7 +56,6 @@ import { NICK_REGEX, validarNick } from "../lib/nickValidation";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import {
-  BO_OPTIONS,
   datetimeLocalAIso,
   dentroDeVentanaCheckIn,
   formatearHoraCet,
@@ -67,6 +67,8 @@ import Avatar from "../components/Avatar";
 import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
 import TitulosActivosList from "../components/TitulosActivosList";
 import LogrosClanWarList from "../components/LogrosClanWarList";
+import LogrosTorneosList from "../components/LogrosTorneosList";
+import MiniEventosClanList from "../components/MiniEventosClanList";
 
 // Migración 145: el límite subió de 2MB/3MB a 15MB -- comprimirImagen()
 // baja el peso antes de subir, así que acá solo hace falta cubrir una
@@ -670,7 +672,7 @@ export default function TeamDetailPage() {
   // 163): "invitar" es el formulario + solicitudes recibidas de
   // siempre; "estado" es nuevo -- antes no había forma de ver si una
   // invitación YA mandada fue aceptada/rechazada o sigue pendiente.
-  const [subtabUnirse, setSubtabUnirse] = useState<"invitar" | "estado">("invitar");
+  const [subtabUnirse, setSubtabUnirse] = useState<"invitar" | "recibidas" | "estado">("invitar");
   // Mercenarios y Alianzas (migración 159, separada en dos destinos en
   // la 160): opción de quitar un mercenario fichado o eliminar una
   // amistad ya aceptada.
@@ -693,7 +695,7 @@ export default function TeamDetailPage() {
   const [seccionPublica, setSeccionPublica] = useState<"general" | "jugadores" | "lideres" | "logros">("general");
   // Sub-pestañas de "Historial" (migración 158): Logros y Hall of Fame
   // dejan de ser ítems del Panel de control y pasan a vivir acá.
-  const [subtabHistorial, setSubtabHistorial] = useState<"actividad" | "logros" | "fama">("actividad");
+  const [subtabHistorial, setSubtabHistorial] = useState<"actividad" | "minieventos" | "logros" | "fama">("actividad");
 
   // Acceso rápido desde "Check-in" en el abanico: ?panel=eventos abre
   // el Panel de control directo en Gestor de eventos, para no tener
@@ -743,25 +745,11 @@ export default function TeamDetailPage() {
   const [retosPropuestosPorMi, setRetosPropuestosPorMi] = useState<ClanWarConNombres[]>([]);
   const [historialRetos, setHistorialRetos] = useState<ClanWarConNombres[]>([]);
 
-  const [tagRivalReto, setTagRivalReto] = useState("");
-  const [fechaHoraReto, setFechaHoraReto] = useState("");
-  // Migración 093: un solo sistema de lineup para cualquier cantidad
-  // de jugadores -- ya no se elige entre "simple" y "WTL" por
-  // separado, siempre es 'wtl' (cada titular juega su propio set 1v1
-  // contra la posición equivalente del rival).
-  const [jugadoresPorSetReto, setJugadoresPorSetReto] = useState("3");
-  const [mapasPorSetReto, setMapasPorSetReto] = useState("2");
-  // Temporada (migración 047): opcional, "" = sin temporada, mismo
-  // comportamiento de siempre.
-  const [temporadaReto, setTemporadaReto] = useState("");
-  const [proponiendoReto, setProponiendoReto] = useState(false);
-  const [errorReto, setErrorReto] = useState<string | null>(null);
-  const [retoEnviado, setRetoEnviado] = useState(false);
-
   // --- Temporadas, mercenarios y alianzas (migración 047) ---
-  // Listado público de temporadas, para elegir en "Proponer un reto",
-  // "Fichar mercenario" y "Proponer alianza" -- no hace falta volver a
-  // pedirlo en cada formulario aparte.
+  // Listado público de temporadas, para elegir en "Fichar mercenario" y
+  // "Proponer alianza" -- no hace falta volver a pedirlo en cada
+  // formulario aparte. ("Proponer un reto" ya no vive acá, migración
+  // 166 -- Clan War Amistosa se propone solo desde "Crear evento".)
   const [temporadas, setTemporadas] = useState<TemporadaRow[]>([]);
   const [mercenariosPropios, setMercenariosPropios] = useState<MercenarioConNombres[]>([]);
   const [alianzasPropias, setAlianzasPropias] = useState<AlianzaConNombres[]>([]);
@@ -2377,69 +2365,6 @@ export default function TeamDetailPage() {
     await cargar();
   };
 
-  const handleProponerReto = async (event: FormEvent) => {
-    event.preventDefault();
-    setErrorReto(null);
-    setRetoEnviado(false);
-
-    const tagRival = tagRivalReto.trim().toUpperCase();
-    if (!tagRival) {
-      setErrorReto("Escribe el tag del equipo rival.");
-      return;
-    }
-    if (!fechaHoraReto) {
-      setErrorReto("Elige la fecha y hora del reto.");
-      return;
-    }
-
-    setProponiendoReto(true);
-
-    const { data: equipoRival, error: buscarError } = await supabase
-      .from("teams")
-      .select("id")
-      .eq("tag", tagRival)
-      .maybeSingle();
-
-    if (buscarError || !equipoRival) {
-      setErrorReto("No encontré ningún equipo con ese tag.");
-      setProponiendoReto(false);
-      return;
-    }
-
-    // Toda la validación real (dueño, banca rota, equipo disuelto,
-    // que la fecha sea futura, el cooldown de 7 días) vive en
-    // proponer_clan_war() en la base -- esto de acá es solo el
-    // formulario.
-    const jugadoresPorSet = Number(jugadoresPorSetReto);
-    if (!jugadoresPorSet || jugadoresPorSet < 1) {
-      setErrorReto("La cantidad de jugadores por lado tiene que ser al menos 1.");
-      setProponiendoReto(false);
-      return;
-    }
-
-    const { error } = await supabase.rpc("proponer_clan_war", {
-      p_challenged_team_id: equipoRival.id,
-      p_fecha_hora_cet: datetimeLocalAIso(fechaHoraReto),
-      p_formato: "wtl",
-      p_temporada_id: temporadaReto || null,
-      p_jugadores_por_set: jugadoresPorSet,
-      p_mapas_por_set: Number(mapasPorSetReto) || 2,
-    });
-
-    setProponiendoReto(false);
-
-    if (error) {
-      setErrorReto(error.message);
-      return;
-    }
-
-    setRetoEnviado(true);
-    setTagRivalReto("");
-    setFechaHoraReto("");
-    setTemporadaReto("");
-    await cargar();
-  };
-
   const handleResponderReto = async (retoId: string, aceptar: boolean) => {
     setRespondiendoReto(retoId);
     setErroresResponderReto((prev) => ({ ...prev, [retoId]: "" }));
@@ -4007,6 +3932,13 @@ export default function TeamDetailPage() {
             </button>
             <button
               type="button"
+              className={`team-info-subtab ${subtabHistorial === "minieventos" ? "is-active" : ""}`}
+              onClick={() => setSubtabHistorial("minieventos")}
+            >
+              Minieventos
+            </button>
+            <button
+              type="button"
               className={`team-info-subtab ${subtabHistorial === "logros" ? "is-active" : ""}`}
               onClick={() => setSubtabHistorial("logros")}
             >
@@ -4030,13 +3962,25 @@ export default function TeamDetailPage() {
             </>
           )}
 
+          {subtabHistorial === "minieventos" && (
+            <>
+              <h4 className="detail-subtitle">Race Wars</h4>
+              <MiniEventosClanList teamId={equipo.id} className="detail-participant-list" />
+            </>
+          )}
+
           {subtabHistorial === "logros" && (
             <>
-              <h3 className="detail-subtitle">Desbloqueadas por nivel</h3>
-              <p className="detail-empty">
-                Todavía no existe un catálogo de skins por nivel -- esta vitrina va a mostrarlas acá en
-                cuanto ese catálogo esté listo.
-              </p>
+              {/* Migración 166: antes era un placeholder de un catálogo
+                  de skins por nivel que nunca se construyó -- a pedido
+                  del usuario, "Logros" pasa a ser nada más que esto:
+                  Clan Wars Amistosas GANADAS y torneos por ligas
+                  jugados, ambos ya finalizados. */}
+              <h3 className="detail-subtitle">Clan Wars Amistosas ganadas</h3>
+              <LogrosClanWarList teamId={equipo.id} className="detail-participant-list" soloGanadas />
+
+              <h3 className="detail-subtitle">Torneos por ligas</h3>
+              <LogrosTorneosList teamId={equipo.id} className="detail-participant-list" />
             </>
           )}
         </>
@@ -4175,6 +4119,23 @@ export default function TeamDetailPage() {
                       Reportar un problema
                     </span>
                     <span className="team-panel-menu-item-desc">Avisa al staff sobre algo puntual</span>
+                  </button>
+                  {/* Migración 166: "Ayuda" se saca del abanico del navbar
+                      inferior -- a pedido del usuario, pasa a vivir acá
+                      (y en el Panel de control de Mi perfil). */}
+                  <button
+                    type="button"
+                    className="team-panel-menu-item"
+                    onClick={() => {
+                      setPanelAbierto(false);
+                      navigate("/ayuda");
+                    }}
+                  >
+                    <span className="team-panel-menu-item-title">
+                      <HelpCircle className="icon-inline" />
+                      Ayuda
+                    </span>
+                    <span className="team-panel-menu-item-desc">Preguntas frecuentes y soporte</span>
                   </button>
                   </div>
                 </>
@@ -4505,10 +4466,6 @@ export default function TeamDetailPage() {
               </div>
             )}
 
-            <p className="form-hint">
-              El nombre y el tag del equipo no se pueden cambiar por ahora.
-            </p>
-
             <button type="submit" className="btn btn-primary btn-block" disabled={guardandoEquipo}>
               {guardandoEquipo ? "Guardando..." : "Guardar cambios"}
             </button>
@@ -4517,10 +4474,10 @@ export default function TeamDetailPage() {
 
               {seccionPanel === "solicitudes-unirse" && (
               <>
-              {/* A pedido del usuario: "invitar" (formulario + lo que te
-                  piden a vos) queda separado de "estado" (lo que VOS ya
-                  mandaste, y si lo aceptaron/rechazaron/sigue pendiente)
-                  -- antes esto último no se veía en ningún lado. */}
+              {/* A pedido del usuario: "invitar" (solo el formulario),
+                  "recibidas" (lo que te piden a vos) y "estado" (lo que
+                  VOS ya mandaste, y si lo aceptaron/rechazaron/sigue
+                  pendiente) van cada una en su propia sub-pestaña. */}
               <div className="team-info-subtabs">
                 <button
                   type="button"
@@ -4528,6 +4485,13 @@ export default function TeamDetailPage() {
                   onClick={() => setSubtabUnirse("invitar")}
                 >
                   Invitar jugador
+                </button>
+                <button
+                  type="button"
+                  className={`team-info-subtab ${subtabUnirse === "recibidas" ? "is-active" : ""}`}
+                  onClick={() => setSubtabUnirse("recibidas")}
+                >
+                  Solicitudes recibidas
                 </button>
                 <button
                   type="button"
@@ -4595,10 +4559,14 @@ export default function TeamDetailPage() {
 
                   {errorInvestigacion && <div className="form-error">{errorInvestigacion}</div>}
                   {investigacion && <InvestigacionJugadorPanel investigacion={investigacion} />}
+                </>
+              )}
 
+              {subtabUnirse === "recibidas" && (
+                <>
                   {/* Solicitudes de unión (migración 104): camino inverso a
-                      "Invitar jugador" de arriba -- acá el jugador pidió
-                      sumarse solo, y el dueño o un capitán decide. */}
+                      "Invitar jugador" -- acá el jugador pidió sumarse
+                      solo, y el dueño o un capitán decide. */}
                   <h3 className="detail-subtitle">Solicitudes recibidas</h3>
                   {solicitudesUnionRecibidas.length === 0 ? (
                     <p className="detail-empty">Nadie pidió unirse a este equipo por ahora.</p>
@@ -4665,6 +4633,11 @@ export default function TeamDetailPage() {
 
               {seccionPanel === "configuracion" && tabConfig === "equipo" && (
               <>
+              {/* Corrección: esta nota vivía mezclada en el formulario de
+                  Logo/Banner/Banner lateral (que no tiene nada que ver
+                  con nombre/tag) -- acá sí tiene sentido, es la pestaña
+                  de identidad del equipo. */}
+              <p className="form-hint">El nombre y el tag del equipo no se pueden cambiar por ahora.</p>
               <div className="team-info-subtabs">
                 <button
                   type="button"
@@ -5822,111 +5795,10 @@ export default function TeamDetailPage() {
               </>
               )}
 
-              {vistaEventos === "pendientes" && (
-              <>
-              <h4 className="detail-subtitle">Proponer un reto</h4>
-              <form className="auth-form" onSubmit={handleProponerReto}>
-                {errorReto && <div className="form-error">{errorReto}</div>}
-                {retoEnviado && <div className="form-success">¡Reto propuesto!</div>}
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="reto-tag">
-                    Tag del equipo rival
-                  </label>
-                  <input
-                    id="reto-tag"
-                    className="form-input"
-                    type="text"
-                    placeholder="QSQD"
-                    value={tagRivalReto}
-                    onChange={(e) => setTagRivalReto(e.target.value.toUpperCase())}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="reto-fecha-hora">
-                    Fecha y hora (tu hora local)
-                  </label>
-                  <input
-                    id="reto-fecha-hora"
-                    className="form-input"
-                    type="datetime-local"
-                    value={fechaHoraReto}
-                    onChange={(e) => setFechaHoraReto(e.target.value)}
-                  />
-                </div>
-
-                {/* Migración 093: un solo sistema de lineup para
-                    cualquier cantidad de jugadores -- ya no se elige
-                    entre "Simple" y "WTL", siempre es el mismo (cada
-                    titular juega su propio set 1v1 contra la posición
-                    equivalente del rival). */}
-                <div className="form-group">
-                  <label className="form-label" htmlFor="reto-jugadores-por-set">
-                    Cantidad de jugadores por lado
-                  </label>
-                  <input
-                    id="reto-jugadores-por-set"
-                    className="form-input"
-                    type="number"
-                    min={1}
-                    value={jugadoresPorSetReto}
-                    onChange={(e) => setJugadoresPorSetReto(e.target.value)}
-                  />
-                  <p className="form-hint">
-                    Cada titular juega su propio set 1v1 contra la posición equivalente del rival. Es
-                    editable -- se puede ajustar después, subir o bajar, desde el propio lineup.
-                  </p>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label" htmlFor="reto-mapas-por-set">
-                    "Bo" de cada set
-                  </label>
-                  <select
-                    id="reto-mapas-por-set"
-                    className="form-select"
-                    value={mapasPorSetReto}
-                    onChange={(e) => setMapasPorSetReto(e.target.value)}
-                  >
-                    {BO_OPTIONS.map((bo) => (
-                      <option key={bo.value} value={bo.value}>
-                        {bo.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Migración 047: opcional -- solo si este reto forma
-                    parte de una temporada aplican las reglas de
-                    mercenarios/alianzas/rangos de MMR. Sin elegir
-                    ninguna, el reto se comporta exactamente como
-                    siempre. */}
-                <div className="form-group">
-                  <label className="form-label" htmlFor="reto-temporada">
-                    Temporada (opcional)
-                  </label>
-                  <select
-                    id="reto-temporada"
-                    className="form-select"
-                    value={temporadaReto}
-                    onChange={(e) => setTemporadaReto(e.target.value)}
-                  >
-                    <option value="">Sin temporada</option>
-                    {temporadas.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.nombre}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <button type="submit" className="btn btn-ghost btn-block" disabled={proponiendoReto}>
-                  {proponiendoReto ? "Proponiendo..." : "Proponer reto"}
-                </button>
-              </form>
-              </>
-              )}
+              {/* Migración 166: "Proponer un reto" se saca de acá -- a
+                  pedido del usuario, Clan War Amistosa ahora se propone
+                  solo desde "Crear evento", no se duplica también en
+                  Solicitudes. */}
               </>
               )}
 

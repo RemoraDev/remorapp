@@ -759,6 +759,11 @@ export default function PlayerDetailPage() {
           )}
         </div>
 
+        {/* Corrección: las pestañas ocupaban su propia fila completa,
+            abajo del nombre -- a pedido del usuario, pasan a vivir al
+            lado del nombre (mismo renglón), para liberar alto vertical
+            y darle más lugar a las 3 cajas de "Perfil" para acomodarse. */}
+        <div className="player-hero-identity-row">
         <div className="player-hero-identity">
           <h1 className="section-title">
             {perfil.nick}
@@ -806,6 +811,7 @@ export default function PlayerDetailPage() {
             <Award size={16} className="icon-inline" aria-hidden="true" />
             Logros
           </button>
+        </div>
         </div>
 
         {tabEscritorio === "perfil" && (
@@ -867,6 +873,15 @@ export default function PlayerDetailPage() {
               {errorFotoPresentacion && <div className="form-error">{errorFotoPresentacion}</div>}
             </div>
 
+            {/* Corrección: "Sobre mí" y "Clan"/"Stream" se estiraban
+                para igualar la fila entera del grid (dictada por la
+                foto, 9:16, la más alta de las 3) -- "Sobre mí" quedaba
+                una caja enorme casi vacía. Envueltas juntas acá, se
+                miden SOLO entre sí (align-items:stretch de
+                .player-tab-contenido más abajo), sin la foto de por
+                medio -- así la foto puede seguir siendo alta sin
+                arrastrar a las otras dos. */}
+            <div className="player-tab-contenido">
             <div className="player-tab-col-main">
               {/* A pedido del usuario: el título vive arriba de la caja
                   (como en "Información del clan" de Mi Clan), no
@@ -1053,15 +1068,20 @@ export default function PlayerDetailPage() {
                 )}
               </div>
             </div>
+            </div>
           </div>
         )}
 
         {tabEscritorio === "stream" && (
           <>
             {/* Migración 163: lista real de eventos -- antes "Actividades"
-                solo repetía la Transmisión de la pestaña "Perfil". Torneos
-                en los que este jugador está inscrito, con su estado real
-                (abierto/en curso/finalizado) -- clic manda al torneo. */}
+                solo repetía la Transmisión de la pestaña "Perfil".
+                Corrección (migración 166): a pedido del usuario, se saca
+                del todo esa Transmisión duplicada de acá -- Actividades
+                es solo para ver en qué estás inscrito, Transmisión ya
+                vive en "Perfil". Torneos en los que este jugador está
+                inscrito, con su estado real (abierto/en curso/
+                finalizado) -- clic manda al torneo. */}
             <h3 className="detail-subtitle">Eventos inscritos</h3>
             <div className="detail-card player-tab-standalone-card">
               <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
@@ -1088,35 +1108,6 @@ export default function PlayerDetailPage() {
                     </Link>
                   ))}
                 </div>
-              )}
-            </div>
-
-            {!perfil.esCaster && (
-              <h3 className="detail-subtitle">
-                <Radio size={16} className="icon-inline" aria-hidden="true" />
-                Transmisión
-              </h3>
-            )}
-            <div className="detail-card player-tab-standalone-card">
-              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
-              <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-              {perfil.esCaster ? (
-                bloqueTransmision
-              ) : (
-                <p className="detail-empty">Este jugador no transmite.</p>
-              )}
-              {esMiPropioPerfil && (
-                <button
-                  type="button"
-                  className="player-tab-bio-edit-btn"
-                  onClick={() => handleAbrirConfiguracion("transmision")}
-                  aria-label="Editar links de transmisión"
-                  title="Editar links de transmisión"
-                >
-                  <Pencil size={14} />
-                </button>
               )}
             </div>
           </>

@@ -2235,8 +2235,34 @@ html.es-escritorio .player-detail-panel-inline {
   }
 }
 
-.player-hero-identity {
+/* Corrección: las pestañas Perfil/Actividades/Logros vivían en su
+   propia fila completa, abajo del nombre -- a pedido del usuario,
+   pasan al lado del nombre (mismo renglón) para liberar alto vertical
+   y darle más lugar a las cajas de abajo para acomodarse sin quedar
+   desparejas. El nombre se queda con el ancho que necesite, las
+   pestañas ocupan el resto; en angosto, cada uno pasa a su propia
+   fila (wrap) en vez de aplastarse. */
+.player-hero-identity-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
   margin-bottom: 1.5rem;
+}
+
+.player-hero-identity-row .player-hero-identity {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 14rem;
+}
+
+.player-hero-identity-row .team-info-tabs {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.player-hero-identity {
   /* Corrección: nick+#id sin espacio en el medio (es una sola
      "palabra" para el navegador) se cortaba contra el borde de la
      pantalla en anchos angostos -- que corte de línea en vez de
@@ -2257,8 +2283,15 @@ html.es-escritorio .player-detail-panel-inline {
    .guerra-razas-tab), bien marcado el que está activo con fondo sólido
    de acento en vez de apenas un trazo de color. */
 
-/* Grilla de la pestaña "Perfil": foto angosta / descripción ancha /
-   vistas previas angostas -- la del medio es la que realmente crece. */
+/* Grilla de la pestaña "Perfil": foto angosta / resto del contenido.
+   Corrección: antes eran 3 columnas (foto / Sobre mí / Clan+Stream)
+   con align-items:stretch -- las 3 compartían el alto de la fila más
+   alta, que siempre era la foto (9:16). "Sobre mí" terminaba siendo
+   una caja enorme casi vacía con poco texto. Ahora son solo 2
+   columnas -- la foto por un lado, y un contenedor propio
+   (.player-tab-contenido) por el otro que agrupa "Sobre mí" y "Clan"+
+   "Stream" -- esas dos SÍ se siguen estirando para igualarse ENTRE
+   SÍ (ver más abajo), pero ya no contra la foto. */
 .player-tab-grid {
   /* flex:1 -- se estira para ocupar el alto que sobra dentro de
      .player-detail-vista-escritorio (flex column), en vez de dejar un
@@ -2267,14 +2300,32 @@ html.es-escritorio .player-detail-panel-inline {
   display: grid;
   /* La columna de la foto de presentación pasó de 8.5rem a 13rem -- a
      pedido del usuario, se veía demasiado chica. */
-  grid-template-columns: minmax(0, 13rem) minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
   gap: 1.5rem;
-  /* Corrección: con "start" cada columna medía su propio contenido y
-     la tarjeta de "Sobre mí" quedaba mucho más baja que la foto de al
-     lado -- "stretch" hace que las tres columnas compartan el alto de
-     la fila más alta (la foto, 9:16), y .player-tab-col-main .detail-card
-     ya tenía "height: 100%" esperando justo esto. */
+  align-items: start;
+}
+
+.player-tab-contenido {
+  display: flex;
+  gap: 1.5rem;
   align-items: stretch;
+  min-width: 0;
+}
+
+.player-tab-contenido .player-tab-col-main {
+  flex: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-tab-contenido .player-tab-col-main .detail-card {
+  flex: 1;
+}
+
+.player-tab-contenido .player-tab-col-side {
+  flex: 1;
+  min-width: 0;
 }
 
 .player-tab-col-foto {
@@ -2469,19 +2520,6 @@ html.es-escritorio .player-detail-panel-inline {
 .player-detail-foto-presentacion-clan-btn:disabled {
   opacity: 0.6;
   cursor: wait;
-}
-
-.player-tab-col-side {
-  height: 100%;
-}
-
-/* Corrección: "Sobre mí" se estiraba a la altura de la foto de
-   presentación (9:16, ~370px) por el align-items:stretch de
-   .player-tab-grid -- con poco texto, quedaba una caja enorme casi
-   vacía. align-self:start la saca de ese estirado: ahora mide su
-   propio contenido, como las cajas de Clan/Stream al lado. */
-.player-tab-col-main {
-  align-self: start;
 }
 
 .player-tab-col-side {
@@ -5937,6 +5975,24 @@ html.es-escritorio .player-detail-panel-inline {
   }
 }
 
+/* Más grande y cómodo en escritorio (Tauri) -- a pedido del usuario.
+   Con "Ayuda" afuera quedan solo 3 botones, así que hay margen de
+   sobra para agrandarlos sin que el abanico se vea desproporcionado. */
+html.es-escritorio .fan-menu {
+  width: 17rem;
+  gap: 0.6rem;
+  padding: 0.75rem;
+}
+
+html.es-escritorio .fan-menu-item {
+  height: 3.5rem;
+  font-size: 1rem;
+}
+
+html.es-escritorio .fan-menu-item-label {
+  padding: 0 1.4rem;
+}
+
 /* ---------- Formularios (login / registro / modales) ---------- */
 
 .auth-page {
@@ -6827,13 +6883,9 @@ html.es-escritorio .player-detail-panel-inline {
    acento de luz a baja opacidad. Se busca que se sienta como el
    espacio más solemne de la plataforma. */
 
-.hall-of-fame {
+.hall-of-fame,
+.chat-lideres-page {
   position: relative;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 2.5rem 1.5rem 4rem;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
   background-color: #030406;
   background-image: radial-gradient(ellipse 65% 45% at 50% -5%, rgba(var(--h-accent-rgb), 0.14), transparent 70%),
     radial-gradient(ellipse 55% 35% at 100% 100%, rgba(var(--h-accent-rgb), 0.07), transparent 70%),
@@ -6841,7 +6893,16 @@ html.es-escritorio .player-detail-panel-inline {
   box-shadow: inset 0 0 0 1px rgba(var(--h-accent-rgb), 0.12);
 }
 
-.hall-of-fame::before {
+.hall-of-fame {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 4rem;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.hall-of-fame::before,
+.chat-lideres-page::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -6850,6 +6911,16 @@ html.es-escritorio .player-detail-panel-inline {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cg fill='none' stroke='%2322d3ee' stroke-opacity='0.07' stroke-width='1'%3E%3Cpath d='M0 70 L70 0 L140 70 L70 140 Z'/%3E%3Cpath d='M70 0 L70 140 M0 70 L140 70'/%3E%3Cpath d='M0 0 L35 35 M140 0 L105 35 M0 140 L35 105 M140 140 L105 105'/%3E%3C/g%3E%3C/svg%3E");
   background-size: 140px 140px;
   mask-image: radial-gradient(ellipse 80% 80% at 50% 20%, #000 40%, transparent 90%);
+}
+
+/* A pedido del usuario: mismo fondo "solemne" de Sala de la Fama,
+   reusado acá -- link al mismo botón "Volver" de siempre. */
+.hall-of-fame-volver {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  margin-bottom: 1rem;
+  color: var(--color-text-muted);
 }
 
 .hall-of-fame-header {
@@ -9311,6 +9382,18 @@ html.es-escritorio .escritorio-chat-fijo {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* El ::before del fondo (ver el bloque compartido con .hall-of-fame
+   más arriba) es absolute -- sin esto, pintaría por encima del
+   contenido normal de la página (tabs, mensajes), en vez de quedar
+   atrás como fondo. */
+.chat-lideres-page > * {
+  position: relative;
+  z-index: 1;
 }
 
 /* Rediseño (reportado como "poco moderno" en su versión anterior,

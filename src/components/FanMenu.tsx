@@ -38,11 +38,14 @@ interface FanItem {
 // cambia de lugar con "Equipos": "Mi equipo" (ahora "Mi Clan") pasa a
 // la barra inferior fija (ver BottomNav.tsx), y "Equipos" (ahora
 // "Clanes", el buscador general, no el propio) entra acá en su lugar.
+// Migración 166: "Ayuda" se saca de acá -- a pedido del usuario, pasa
+// a vivir dentro del Panel de control de Mi Clan y de Mi perfil (ver
+// AyudaPage.tsx, sigue siendo la misma página, solo cambia desde dónde
+// se llega).
 const FAN_ITEMS: FanItem[] = [
   { key: "torneos", label: "Eventos", requiresAuth: false },
   { key: "clanes", label: "Clanes", requiresAuth: false },
   { key: "checkin", label: "Check-in", requiresAuth: true },
-  { key: "ayuda", label: "Ayuda", requiresAuth: false },
 ];
 
 export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
@@ -71,12 +74,6 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
 
     if (item.key === "torneos") {
       navigate("/tournaments");
-      onClose();
-      return;
-    }
-
-    if (item.key === "ayuda") {
-      navigate("/ayuda");
       onClose();
       return;
     }

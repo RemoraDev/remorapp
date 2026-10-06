@@ -3,7 +3,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Settings, Shield, X } from "lucide-react";
+import { Settings, Shield, HelpCircle, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
@@ -1575,6 +1575,16 @@ export default function ProfilePage() {
               <span className="team-panel-menu-item-desc">Crear liga de clanes, reportes al staff y bugs</span>
             </button>
           )}
+          {/* Migración 166: "Ayuda" se saca del abanico del navbar
+              inferior -- a pedido del usuario, pasa a vivir acá (y en
+              el Panel de control de Mi Clan). */}
+          <Link to="/ayuda" className="team-panel-menu-item" onClick={cerrarOverlay}>
+            <span className="team-panel-menu-item-title">
+              <HelpCircle className="icon-inline" />
+              Ayuda
+            </span>
+            <span className="team-panel-menu-item-desc">Preguntas frecuentes y soporte</span>
+          </Link>
         </div>
       ) : (
         <button
