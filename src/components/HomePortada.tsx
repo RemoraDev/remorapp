@@ -6,8 +6,12 @@ import { supabase } from "../lib/supabaseClient";
 import { formatFecha } from "../lib/formatters";
 import { formatearCuentaRegresiva, formatoHora, LogoEquipo, useAhora, yaComenzo } from "./ProximasClanWars";
 import FondoParticulas from "./FondoParticulas";
+import { useAuth } from "../context/AuthContext";
+import { obtenerEquipoDelUsuario } from "../lib/teams";
+import type { EquipoDelUsuario } from "../lib/teams";
 import type { NoticiaPreview } from "./NewsSection";
 import type { ClanWarProxima } from "../types/clanWars";
+import type { MiniEvento } from "../types/ranking";
 
 interface Props {
   noticiasDestacadas: NoticiaPreview[];
@@ -125,8 +129,11 @@ function IconoDescargaEscritorio() {
 // usuario, "ultra gaming moderno minimalista", con un fondo de
 // partículas subiendo en zigzag (puro CSS, ver .home-particula).
 export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }: Props) {
+  const { user } = useAuth();
   const [esEscritorio, setEsEscritorio] = useState(false);
   const [clanWars, setClanWars] = useState<ClanWarProxima[] | null>(null);
+  const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
+  const [minieventos, setMinieventos] = useState<MiniEvento[]>([]);
   const ahora = useAhora(60000);
 
   useEffect(() => {
@@ -144,10 +151,29 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
     });
   }, []);
 
+  useEffect(() => {
+    if (user) obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
+  }, [user]);
+
   const proximos = useMemo(
     () => (clanWars ? elegirProximos(clanWars, ahora, EVENTOS_DESTACADOS) : []),
     [clanWars, ahora]
   );
+
+  // Migración 164: si no hay ningún Clan War próximo, la portada sigue
+  // mostrando los mini eventos (Race War/Clan War Amistosa) del propio
+  // clan de quien mira, en vez de cortar directo al mensaje de "no hay
+  // nada programado" -- a pedido del usuario.
+  useEffect(() => {
+    if (proximos.length > 0 || !miEquipo) return;
+    supabase.rpc("mis_minieventos_clan").then(({ data, error }) => {
+      if (error) {
+        console.error("Error cargando mini eventos de respaldo:", error);
+        return;
+      }
+      setMinieventos((data ?? []) as MiniEvento[]);
+    });
+  }, [proximos, miEquipo]);
 
   return (
     <div className="home-portada">
@@ -218,6 +244,19 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
             <div className="home-eventos-grid">
               {proximos.map((cw) => (
                 <EventoMini key={cw.id} cw={cw} ahora={ahora} />
+              ))}
+            </div>
+          ) : minieventos.length > 0 ? (
+            <div className="detail-participant-list">
+              {minieventos.map((ev) => (
+                <Link
+                  key={ev.id}
+                  to={ev.tipo === "race_war" ? `/guerra-razas/${ev.id}` : `/clan-war/${ev.id}`}
+                  className="detail-participant-item"
+                >
+                  {ev.titulo}
+                  <span className="tournament-card-meta">{formatFecha(ev.fecha)}</span>
+                </Link>
               ))}
             </div>
           ) : (

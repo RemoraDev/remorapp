@@ -55,3 +55,13 @@ export interface RankingMinievento {
   jugador_nombre: string;
   puntos: number;
 }
+
+// Fila devuelta por ranking_actividad_clanes() (migración 164): un
+// equipo por fila, ya ordenado por actividad desc, nombre asc.
+export interface RankingActividadClan {
+  team_id: string;
+  team_name: string;
+  team_tag: string;
+  logo_url: string | null;
+  actividades: number;
+}

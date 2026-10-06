@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { calcularNivelLineal } from "../lib/ligas";
 import { construirGaleria } from "../lib/hallOfFame";
@@ -52,6 +52,7 @@ function tituloMasRelevante(id: string, titulos: TituloActivoTodos[]): TituloRes
 }
 
 export default function HallOfFamePage() {
+  const navigate = useNavigate();
   const [juegoActivo, setJuegoActivo] = useState<string>(JUEGOS[0].id);
 
   const [campeones, setCampeones] = useState<CampeonFila[]>([]);
@@ -263,9 +264,9 @@ export default function HallOfFamePage() {
 
   return (
     <section className="hall-of-fame">
-      <Link to="/" className="hall-of-fame-volver">
-        ← Volver a Inicio
-      </Link>
+      <button type="button" onClick={() => navigate(-1)} className="hall-of-fame-volver">
+        ← Volver
+      </button>
       <div className="hall-of-fame-header">
         <h1 className="hall-of-fame-title">Sala de la Fama</h1>
         <div className="hall-of-fame-selector">

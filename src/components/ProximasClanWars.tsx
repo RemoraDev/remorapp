@@ -3,7 +3,11 @@ import { Link } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { supabase } from "../lib/supabaseClient";
 import { formatFecha } from "../lib/formatters";
+import { useAuth } from "../context/AuthContext";
+import { obtenerEquipoDelUsuario } from "../lib/teams";
+import type { EquipoDelUsuario } from "../lib/teams";
 import type { ClanWarProxima } from "../types/clanWars";
+import type { MiniEvento } from "../types/ranking";
 
 interface TorneoRespaldo {
   id: string;
@@ -111,8 +115,11 @@ function TarjetaClanWar({ cw, ahora }: { cw: ClanWarProxima; ahora: Date }) {
 // Si no hay ninguna Clan War, se muestran los próximos torneos por
 // fecha de inicio como respaldo.
 export default function ProximasClanWars() {
+  const { user } = useAuth();
   const [clanWars, setClanWars] = useState<ClanWarProxima[] | null>(null);
   const [torneosRespaldo, setTorneosRespaldo] = useState<TorneoRespaldo[]>([]);
+  const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
+  const [minieventos, setMinieventos] = useState<MiniEvento[]>([]);
 
   const cargarClanWars = () => {
     supabase.rpc("clan_wars_proximas").then(({ data, error }) => {
@@ -165,6 +172,26 @@ export default function ProximasClanWars() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sinNadaProgramado]);
+
+  useEffect(() => {
+    if (user) obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
+  }, [user]);
+
+  // Migración 164: si no hay Clan Wars NI torneos próximos, la
+  // cascada de respaldo sigue un escalón más -- los mini eventos
+  // (Race War/Clan War Amistosa) del propio clan de quien mira, en
+  // vez de cortar directo al mensaje de "no hay nada". Solo se pide
+  // cuando hace falta (los dos respaldos anteriores ya están vacíos).
+  useEffect(() => {
+    if (!sinNadaProgramado || torneosRespaldo.length > 0 || !miEquipo) return;
+    supabase.rpc("mis_minieventos_clan").then(({ data, error }) => {
+      if (error) {
+        console.error("Error cargando mini eventos de respaldo:", error);
+        return;
+      }
+      setMinieventos((data ?? []) as MiniEvento[]);
+    });
+  }, [sinNadaProgramado, torneosRespaldo, miEquipo]);
 
   if (clanWars === null) return null;
 
@@ -240,9 +267,7 @@ export default function ProximasClanWars() {
             </div>
           )}
         </>
-      ) : torneosRespaldo.length === 0 ? (
-        <p className="detail-empty">No hay Clan Wars ni torneos próximos por el momento.</p>
-      ) : (
+      ) : torneosRespaldo.length > 0 ? (
         <div className="proxima-clan-war-grupo">
           <h3 className="proxima-clan-war-grupo-titulo">Sin Clan Wars programadas -- próximos torneos</h3>
           {torneosRespaldo.map((t) => (
@@ -252,6 +277,22 @@ export default function ProximasClanWars() {
             </Link>
           ))}
         </div>
+      ) : minieventos.length > 0 ? (
+        <div className="proxima-clan-war-grupo">
+          <h3 className="proxima-clan-war-grupo-titulo">Mini eventos de {miEquipo?.teamTag}</h3>
+          {minieventos.map((ev) => (
+            <Link
+              key={ev.id}
+              to={ev.tipo === "race_war" ? `/guerra-razas/${ev.id}` : `/clan-war/${ev.id}`}
+              className="proxima-clan-war-item"
+            >
+              <span className="proxima-clan-war-hora">{formatFecha(ev.fecha)}</span>
+              <span className="proxima-clan-war-equipos">{ev.titulo}</span>
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <p className="detail-empty">No hay Clan Wars ni torneos próximos por el momento.</p>
       )}
     </div>
   );

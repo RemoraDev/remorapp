@@ -6921,6 +6921,11 @@ html.es-escritorio .fan-menu-item-label {
   display: inline-block;
   margin-bottom: 1rem;
   color: var(--color-text-muted);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
 }
 
 .hall-of-fame-header {
