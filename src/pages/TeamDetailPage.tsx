@@ -4276,14 +4276,16 @@ export default function TeamDetailPage() {
                 </>
               )}
 
-              {/* El dueño no puede simplemente "salir": si hay más
-                  miembros, primero tiene que transferir el liderazgo.
-                  Recién cuando queda como único miembro, salir del
-                  equipo disuelve el equipo en vez de dejarlo sin
-                  dueño. Exclusivo de esDueño -- un capitán que entra a
-                  "Editar equipo" no ve esto, transferir liderazgo
-                  sigue siendo solo del dueño. */}
-              {seccionPanel === "configuracion" && tabConfig === "equipo" && esDueño && (miembros.length > 1 ? (
+              {/* El dueño nunca ve "Salir del equipo" -- a pedido del
+                  usuario, le quedaba duplicado con "Eliminar equipo"
+                  (su propia pestaña, botón danger). Si hay más
+                  miembros, puede transferir el liderazgo (y una vez
+                  que deja de ser dueño, ve "Salir del equipo" como
+                  cualquier miembro); si es el único miembro, su única
+                  salida es "Eliminar equipo". Exclusivo de esDueño --
+                  un capitán que entra a "Editar equipo" no ve esto,
+                  transferir liderazgo sigue siendo solo del dueño. */}
+              {seccionPanel === "configuracion" && tabConfig === "equipo" && esDueño && miembros.length > 1 && (
                 <>
                   <h3 className="detail-subtitle">Transferir liderazgo</h3>
                   {errorTransferir && <div className="form-error">{errorTransferir}</div>}
@@ -4318,24 +4320,7 @@ export default function TeamDetailPage() {
                     </button>
                   </form>
                 </>
-              ) : (
-                <>
-                  <h3 className="detail-subtitle">Salir del equipo</h3>
-                  <p className="tournament-card-meta">
-                    Eres el único miembro. Si sales, el equipo quedará disuelto y dejará de
-                    aparecer en el buscador público.
-                  </p>
-                  {errorSalir && <div className="form-error">{errorSalir}</div>}
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-block"
-                    disabled={saliendo}
-                    onClick={handleSalirEquipo}
-                  >
-                    {saliendo ? "Saliendo..." : "Salir del equipo"}
-                  </button>
-                </>
-              ))}
+              )}
 
               {seccionPanel === "configuracion" && tabConfig === "apariencia" && (
                 <>
