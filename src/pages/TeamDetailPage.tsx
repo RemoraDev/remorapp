@@ -65,7 +65,6 @@ import {
 import type { InvestigacionJugador } from "../types/investigacion";
 import Avatar from "../components/Avatar";
 import InvestigacionJugadorPanel from "../components/InvestigacionJugadorPanel";
-import TitulosActivosList from "../components/TitulosActivosList";
 import LogrosClanWarList from "../components/LogrosClanWarList";
 import LogrosTorneosList from "../components/LogrosTorneosList";
 import MiniEventosClanList from "../components/MiniEventosClanList";
@@ -3971,9 +3970,11 @@ export default function TeamDetailPage() {
               el equipo está inscrito o que organizó, sin terminar).
               Lo finalizado se mudó a "Finalizados"; lo finalizado Y
               ganado sigue en "Logros". */}
+          {/* Migración 167, a pedido del usuario: el título Padre/
+              Hijo deja de mostrarse acá -- es privado entre los dos
+              clanes involucrados, no una vidriera pública. */}
           {subtabHistorial === "actividad" && (
             <>
-              <TitulosActivosList tipo="clan" id={equipo.id} className="detail-map-list" />
               <h4 className="detail-subtitle">En curso</h4>
               <ActividadClanList teamId={equipo.id} className="detail-participant-list" />
             </>

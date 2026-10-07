@@ -6,17 +6,11 @@ import { calcularNivelLineal } from "../lib/ligas";
 import { construirGaleria } from "../lib/hallOfFame";
 import type { EventoGaleria } from "../lib/hallOfFame";
 import { formatFecha } from "../lib/formatters";
-import type { TituloActivoTodos } from "../types/titulos";
 
 // Un solo juego real por ahora -- la estructura ya queda lista como
 // array para agregar más adelante, sin construir salas vacías todavía
 // para los que no existen.
 const JUEGOS = [{ id: "sc2", nombre: "StarCraft II" }] as const;
-
-interface TituloResuelto {
-  otroId: string;
-  soyPadre: boolean;
-}
 
 interface CampeonFila {
   id: string;
@@ -25,7 +19,6 @@ interface CampeonFila {
   liga: string;
   mmr: number;
   nivel: number;
-  titulo: string | null;
 }
 
 interface JugadorFila {
@@ -36,19 +29,6 @@ interface JugadorFila {
   nivel: number;
   valentia: number;
   responsabilidad: number;
-  titulo: string | null;
-}
-
-// El título más "importante" cuando hay varios activos a la vez: el
-// de mayor duracion_dias, tal como se pidió (criterio simple).
-function tituloMasRelevante(id: string, titulos: TituloActivoTodos[]): TituloResuelto | null {
-  const propios = titulos.filter((t) => t.retador_id === id || t.retado_id === id);
-  if (propios.length === 0) return null;
-  const elegido = [...propios].sort((a, b) => b.duracion_dias - a.duracion_dias)[0];
-  return {
-    otroId: elegido.retador_id === id ? elegido.retado_id : elegido.retador_id,
-    soyPadre: elegido.ganador_id === id,
-  };
 }
 
 export default function HallOfFamePage() {
@@ -79,91 +59,46 @@ export default function HallOfFamePage() {
     const cargarMuros = async () => {
       setCargandoMuros(true);
 
-      const [{ data: equiposData }, { data: titulosClanData }] = await Promise.all([
-        supabase
-          .from("teams")
-          .select("id, name, tag, mmr, liga")
-          .eq("disuelto", false)
-          .order("mmr", { ascending: false })
-          .limit(100),
-        supabase.rpc("titulos_activos_todos", { p_tipo: "clan" }),
-      ]);
-
-      const titulosClan = (titulosClanData ?? []) as TituloActivoTodos[];
-      const equipos = equiposData ?? [];
-
-      const otrosIdsClan = equipos
-        .map((e) => tituloMasRelevante(e.id, titulosClan))
-        .filter((t): t is TituloResuelto => t !== null)
-        .map((t) => t.otroId);
-
-      let tagPorTeamId: Record<string, string> = {};
-      if (otrosIdsClan.length > 0) {
-        const { data: otrosEquipos } = await supabase.from("teams").select("id, tag").in("id", otrosIdsClan);
-        tagPorTeamId = Object.fromEntries((otrosEquipos ?? []).map((t) => [t.id, t.tag]));
-      }
+      const { data: equiposData } = await supabase
+        .from("teams")
+        .select("id, name, tag, mmr, liga")
+        .eq("disuelto", false)
+        .order("mmr", { ascending: false })
+        .limit(100);
 
       setCampeones(
-        equipos.map((e) => {
-          const t = tituloMasRelevante(e.id, titulosClan);
-          return {
-            id: e.id,
-            tag: e.tag,
-            nombre: e.name,
-            liga: e.liga,
-            mmr: e.mmr,
-            nivel: calcularNivelLineal(e.mmr),
-            titulo: t ? `${t.soyPadre ? "Padre" : "Hijo"} de ${tagPorTeamId[t.otroId] ?? "?"}` : null,
-          };
-        })
+        (equiposData ?? []).map((e) => ({
+          id: e.id,
+          tag: e.tag,
+          nombre: e.name,
+          liga: e.liga,
+          mmr: e.mmr,
+          nivel: calcularNivelLineal(e.mmr),
+        }))
       );
 
-      const [{ data: perfilesData }, { data: titulosJugadorData }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select(
-            "id, nick, unique_id, mmr_1v1, liga_1v1, nivel_1v1, valentia_jugador, responsabilidad_cw, suspendido"
-          )
-          .order("mmr_1v1", { ascending: false })
-          .limit(100),
-        supabase.rpc("titulos_activos_todos", { p_tipo: "jugador" }),
-      ]);
+      const { data: perfilesData } = await supabase
+        .from("profiles")
+        .select(
+          "id, nick, unique_id, mmr_1v1, liga_1v1, nivel_1v1, valentia_jugador, responsabilidad_cw, suspendido"
+        )
+        .order("mmr_1v1", { ascending: false })
+        .limit(100);
 
-      const titulosJugador = (titulosJugadorData ?? []) as TituloActivoTodos[];
       // Las cuentas suspendidas no aparecen en listados públicos --
       // mismo criterio que el resto de la app.
       const perfilesVisibles = (perfilesData ?? []).filter((p) => !p.suspendido);
 
-      const otrosIdsJugador = perfilesVisibles
-        .map((p) => tituloMasRelevante(p.id, titulosJugador))
-        .filter((t): t is TituloResuelto => t !== null)
-        .map((t) => t.otroId);
-
-      let nombrePorUserId: Record<string, string> = {};
-      if (otrosIdsJugador.length > 0) {
-        const { data: otrosPerfiles } = await supabase
-          .from("profiles")
-          .select("id, nick, unique_id")
-          .in("id", otrosIdsJugador);
-        nombrePorUserId = Object.fromEntries(
-          (otrosPerfiles ?? []).map((p) => [p.id, p.nick ? `${p.nick}#${p.unique_id}` : "Jugador de RemorApp"])
-        );
-      }
-
       setJugadores(
-        perfilesVisibles.map((p) => {
-          const t = tituloMasRelevante(p.id, titulosJugador);
-          return {
-            id: p.id,
-            nick: p.nick ?? "Jugador de RemorApp",
-            uniqueId: p.unique_id,
-            liga: p.liga_1v1,
-            nivel: p.nivel_1v1,
-            valentia: p.valentia_jugador,
-            responsabilidad: p.responsabilidad_cw,
-            titulo: t ? `${t.soyPadre ? "Padre" : "Hijo"} de ${nombrePorUserId[t.otroId] ?? "?"}` : null,
-          };
-        })
+        perfilesVisibles.map((p) => ({
+          id: p.id,
+          nick: p.nick ?? "Jugador de RemorApp",
+          uniqueId: p.unique_id,
+          liga: p.liga_1v1,
+          nivel: p.nivel_1v1,
+          valentia: p.valentia_jugador,
+          responsabilidad: p.responsabilidad_cw,
+        }))
       );
 
       setCargandoMuros(false);
@@ -301,7 +236,6 @@ export default function HallOfFamePage() {
               <span className="hall-name">
                 {c.nombre} <span className="profile-nick-id">[{c.tag}]</span>
               </span>
-              {c.titulo && <span className="liga-badge">{c.titulo}</span>}
             </div>
           ))}
         </div>
@@ -321,7 +255,6 @@ export default function HallOfFamePage() {
                 {j.nick}
                 <span className="profile-nick-id">#{j.uniqueId}</span>
               </span>
-              {j.titulo && <span className="liga-badge">{j.titulo}</span>}
             </div>
           ))}
         </div>

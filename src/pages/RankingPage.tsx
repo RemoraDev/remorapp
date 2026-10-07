@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
+import MisTitulosPadreHijoList from "../components/MisTitulosPadreHijoList";
 import type {
   DivisionLiga,
   Liga,
@@ -21,8 +22,10 @@ type CategoriaLiga = Liga | null;
 
 // Migración 164: "Ranking privado" deja de ser una sección fija
 // debajo de "Race War" -- pasa a ser una tercera opción del mismo
-// grupo de pills, a pedido del usuario.
-type SubTipoMinievento = MiniEvento["tipo"] | "ranking";
+// grupo de pills, a pedido del usuario. Migración 167: se suma
+// "¿Quién es el padre?" (reto de título entre jugadores) como cuarta
+// opción -- privado, solo lo ven los dos jugadores involucrados.
+type SubTipoMinievento = MiniEvento["tipo"] | "ranking" | "padre_hijo";
 
 // Migración 164: "Ranking" pasa de dos bloques apilados (clanes y
 // jugadores) a tres sub-pestañas, sumando "Clanes más activos".
@@ -201,6 +204,16 @@ export default function RankingPage() {
               />
               Ranking {miEquipo.teamTag}
             </label>
+            <label className={`pill-radio-option ${subTipoMinievento === "padre_hijo" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="sub-tipo-minievento"
+                checked={subTipoMinievento === "padre_hijo"}
+                onChange={() => setSubTipoMinievento("padre_hijo")}
+              />
+              ¿Quién es el padre?
+            </label>
           </div>
 
           {(subTipoMinievento === "race_war" || subTipoMinievento === "clan_war_amistosa") &&
@@ -283,6 +296,13 @@ export default function RankingPage() {
                   </table>
                 </div>
               )}
+            </>
+          )}
+
+          {subTipoMinievento === "padre_hijo" && user && (
+            <>
+              <h2 className="section-title ranking-jugadores-titulo">¿Quién es el padre?</h2>
+              <MisTitulosPadreHijoList userId={user.id} className="detail-participant-list" />
             </>
           )}
         </>

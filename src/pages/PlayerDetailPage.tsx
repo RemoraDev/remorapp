@@ -640,7 +640,11 @@ export default function PlayerDetailPage() {
               {perfil.nick}
               <span className="profile-nick-id">#{perfil.uniqueId}</span>
             </h1>
-            {tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
+            {/* Migración 167, a pedido del usuario: el título Padre/
+                Hijo deja de ser un badge público -- solo lo ve el
+                propio jugador, los demás no deberían poder usarlo
+                para bullying. */}
+            {esMiPropioPerfil && tituloTexto && <span className="liga-badge">{tituloTexto}</span>}
             {perfil.razaPrincipal && (
               <span className="liga-badge">
                 Raza: {perfil.razaPrincipal}
@@ -769,7 +773,7 @@ export default function PlayerDetailPage() {
             {perfil.nick}
             <span className="profile-nick-id">#{perfil.uniqueId}</span>
           </h1>
-          {tituloTexto && (
+          {esMiPropioPerfil && tituloTexto && (
             <div className="player-hero-badges">
               <span className="liga-badge">{tituloTexto}</span>
             </div>
