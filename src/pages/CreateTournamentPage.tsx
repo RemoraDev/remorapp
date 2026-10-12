@@ -91,12 +91,14 @@ export default function CreateTournamentPage() {
 
   const [nombre, setNombre] = useState("");
   const [tipoEvento, setTipoEvento] = useState<TipoEvento>("amistosa");
-  // Migración 162: a pedido del usuario, un torneo por ligas creado
-  // desde acá siempre es 1v1 -- se saca el selector de Formato (2v2/
-  // 3v3/4v4/Clan vs Clan WTL, con todo lo que dependía de él: First
-  // Stand, lineup de Clan War del fixture). Ya no hace falta que sea
-  // editable, así que deja de ser estado.
-  const formato: TorneoFormato = "1v1";
+  // Migración 162: a pedido del usuario, se había sacado el selector
+  // de Formato completo (2v2/3v3/4v4/Clan vs Clan WTL, con First
+  // Stand y el lineup de Clan War del fixture). Migración 166: vuelve
+  // una versión mínima -- Individual (1v1) o Por equipos (2v2/3v3/
+  // 4v4, sin WTL ni First Stand, que siguen sin preguntarse acá) --
+  // porque el paso 1 no preguntaba si el torneo era para jugadores o
+  // para clanes, y no había forma de inscribir equipos.
+  const [formato, setFormato] = useState<TorneoFormato>("1v1");
   const [modo, setModo] = useState<TorneoModo>("eliminacion_simple");
 
   // Migración 091/093: Clan War Amistosa -- formulario mínimo, sin
@@ -212,13 +214,13 @@ export default function CreateTournamentPage() {
   }, [ligaId]);
 
   // Default de cupos -- solo mientras el organizador no haya tocado el
-  // campo a mano, para no pisarle un valor que ya eligió. Antes
-  // dependía del formato (2v2+ arrancaba en 8) -- ya no hace falta,
-  // todo torneo por ligas creado acá es 1v1.
+  // campo a mano, para no pisarle un valor que ya eligió. Migración
+  // 166: vuelve a depender del formato (equipos arranca en 8, menos
+  // cupos esperables que jugadores individuales).
   useEffect(() => {
     if (cuposTocados) return;
-    setCuposTotales("16");
-  }, [cuposTocados]);
+    setCuposTotales(formato === "1v1" ? "16" : "8");
+  }, [cuposTocados, formato]);
 
   // Migración 091: mi propio equipo, para saber si puedo proponer una
   // Clan War Amistosa (hace falta pertenecer a uno) y para no
@@ -582,6 +584,57 @@ export default function CreateTournamentPage() {
           ))}
         </div>
       </div>
+
+      {/* Migración 166, a pedido del usuario: "Torneo por ligas" vuelve
+          a preguntar si es para jugadores individuales o para clanes --
+          sin esto, no había forma de inscribir equipos a una liga. Si
+          es "Por equipos", un segundo grupo de pills elige el tamaño
+          (2v2/3v3/4v4) -- WTL y First Stand siguen sin preguntarse acá,
+          eso se ajusta después desde la ficha del torneo. */}
+      {esLiga && (
+        <div className="form-group">
+          <span className="form-label">¿Es para jugadores individuales o para clanes?</span>
+          <div className="pill-radio-group">
+            <label className={`pill-radio-option ${formato === "1v1" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="formato-liga-tipo"
+                checked={formato === "1v1"}
+                onChange={() => setFormato("1v1")}
+              />
+              Individual (1v1)
+            </label>
+            <label className={`pill-radio-option ${formato !== "1v1" ? "selected" : ""}`}>
+              <input
+                type="radio"
+                className="sr-only"
+                name="formato-liga-tipo"
+                checked={formato !== "1v1"}
+                onChange={() => setFormato("2v2")}
+              />
+              Por equipos
+            </label>
+          </div>
+
+          {formato !== "1v1" && (
+            <div className="pill-radio-group" style={{ marginTop: "0.5rem" }}>
+              {(["2v2", "3v3", "4v4"] as const).map((f) => (
+                <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="formato-liga-equipo"
+                    checked={formato === f}
+                    onChange={() => setFormato(f)}
+                  />
+                  {f}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {esClanWarAmistosa ? (
         <form className="create-tournament-form" onSubmit={handleProponerClanWarAmistosa}>
