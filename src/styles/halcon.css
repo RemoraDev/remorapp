@@ -10499,3 +10499,70 @@ html.es-escritorio .escritorio-chat-fijo {
   font-weight: 700;
   color: var(--color-accent);
 }
+
+/* Vista previa de llaves (migración 166): grilla moderna de cupos del
+   torneo -- se llenan con los clanes inscritos en orden, y los que
+   faltan quedan como placeholder "Vacante". No es la llave real (esa
+   recién se arma al cerrar inscripciones, con cruces al azar) -- es
+   solo un vistazo de cómo se van completando los cupos. */
+.bracket-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.75rem;
+}
+
+.bracket-preview-slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 0.75rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(var(--h-accent-rgb), 0.2);
+  background: var(--color-panel);
+  text-align: center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bracket-preview-slot.ocupado {
+  border-color: var(--color-accent);
+  box-shadow: var(--shadow-accent);
+}
+
+.bracket-preview-slot.vacante {
+  border-style: dashed;
+  opacity: 0.55;
+}
+
+.bracket-preview-slot-numero {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.6rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--color-text-faint);
+}
+
+.bracket-preview-slot-avatar {
+  width: 3rem;
+  height: 3rem;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+}
+
+.bracket-preview-slot-nombre {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.bracket-preview-slot-vacio {
+  color: var(--color-text-faint);
+  font-weight: 500;
+  font-style: italic;
+}

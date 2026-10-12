@@ -238,7 +238,9 @@ export interface TemporadaRow {
   torneo_id: string;
   nombre: string;
   fecha_inicio: string;
-  fecha_fin: string;
+  // Migración 166: ya no es obligatoria al crear la temporada -- se
+  // puede completar después desde el Panel de organizador.
+  fecha_fin: string | null;
   inscripciones_abiertas: boolean;
   // Un rango por posición del set (1/2/3, el único formato de Clan War
   // con ese concepto hoy es WTL). Null = sin restricción.

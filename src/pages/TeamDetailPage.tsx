@@ -403,11 +403,13 @@ type SeccionPanel =
 // Migración 047: una temporada es "la actual" cuando hoy cae dentro
 // de su fecha_inicio/fecha_fin -- sin esto, "de la temporada actual"
 // (punto 5 del pedido) no tendría cómo distinguirse de "de cualquier
-// temporada que haya existido alguna vez".
+// temporada que haya existido alguna vez". Migración 166: fecha_fin
+// ya puede ser null (todavía no se definió) -- mientras tanto, se
+// considera vigente sin fecha límite, no expirada.
 function esTemporadaVigente(temporada: TemporadaRow | undefined): boolean {
   if (!temporada) return false;
   const ahora = new Date().toISOString();
-  return temporada.fecha_inicio <= ahora && ahora <= temporada.fecha_fin;
+  return temporada.fecha_inicio <= ahora && (temporada.fecha_fin === null || ahora <= temporada.fecha_fin);
 }
 
 // team_kicks_log.user_id apunta a profiles.id, igual que

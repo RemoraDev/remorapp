@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
-import { Trophy, Medal, Download, FileText, Upload } from "lucide-react";
+import { Trophy, Medal, Download, FileText, Upload, Calendar } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -312,6 +312,12 @@ export default function TournamentDetailPage() {
   // -- exclusivo del organizador. tournaments_update_organizador (RLS
   // que ya existe) alcanza para un update directo, sin RPC nueva.
   const [mostrarOpcionesAvanzadas, setMostrarOpcionesAvanzadas] = useState(false);
+  // Migración 166, a pedido del usuario: vista previa de cómo se van
+  // llenando los cupos del torneo a medida que se inscriben equipos,
+  // antes de que exista una llave real (recién se genera al cerrar
+  // inscripciones). No es la llave final -- es solo un vistazo
+  // ordenado por inscripción, con los cupos vacíos como placeholder.
+  const [mostrarVistaPreviaLlaves, setMostrarVistaPreviaLlaves] = useState(false);
   const [errorOpcionesAvanzadas, setErrorOpcionesAvanzadas] = useState<string | null>(null);
   // Migración 144: reglamento en PDF -- subida (desde el Panel de
   // organizador) y visor embebido (público, con PDF.js) del archivo
@@ -325,6 +331,12 @@ export default function TournamentDetailPage() {
   const [rangosMmrForm, setRangosMmrForm] = useState<Record<string, string>>({});
   const [guardandoRangos, setGuardandoRangos] = useState<string | null>(null);
   const [errorRangos, setErrorRangos] = useState<string | null>(null);
+  // Migración 166: editar la fecha de fin de una temporada que se
+  // creó sin ella (ya no es obligatoria al crearla).
+  const [editandoFechaFinId, setEditandoFechaFinId] = useState<string | null>(null);
+  const [fechaFinEditada, setFechaFinEditada] = useState("");
+  const [guardandoFechaFin, setGuardandoFechaFin] = useState<string | null>(null);
+  const [errorFechaFin, setErrorFechaFin] = useState<string | null>(null);
 
   // Vencimiento automático de torneos sin actividad (migración 095).
   const [reactivandoTorneo, setReactivandoTorneo] = useState(false);
@@ -907,11 +919,10 @@ export default function TournamentDetailPage() {
       setErrorTemporada("Escribe un nombre para la temporada.");
       return;
     }
-    if (!fechaFinTemporada) {
-      setErrorTemporada("Elige la fecha de fin de la temporada.");
-      return;
-    }
-    if (new Date(fechaFinTemporada) <= new Date(torneo.fecha_inicio)) {
+    // Migración 166, a pedido del usuario: la fecha de fin ya no es
+    // obligatoria -- se puede completar después (ver
+    // handleGuardarFechaFinTemporada más abajo).
+    if (fechaFinTemporada && new Date(fechaFinTemporada) <= new Date(torneo.fecha_inicio)) {
       setErrorTemporada("La fecha de fin debe ser posterior a la fecha de inicio del torneo.");
       return;
     }
@@ -928,7 +939,7 @@ export default function TournamentDetailPage() {
       torneo_id: torneo.id,
       nombre: nombreTemporada.trim(),
       fecha_inicio: torneo.fecha_inicio,
-      fecha_fin: new Date(fechaFinTemporada).toISOString(),
+      fecha_fin: fechaFinTemporada ? new Date(fechaFinTemporada).toISOString() : null,
     });
 
     setCreandoTemporada(false);
@@ -1024,6 +1035,47 @@ export default function TournamentDetailPage() {
     }
 
     setTemporadaRangosAbierta(null);
+    await cargarTorneo();
+  };
+
+  const handleAbrirFechaFin = (temporada: TemporadaRow) => {
+    if (editandoFechaFinId === temporada.id) {
+      setEditandoFechaFinId(null);
+      return;
+    }
+    setEditandoFechaFinId(temporada.id);
+    setErrorFechaFin(null);
+    setFechaFinEditada("");
+  };
+
+  const handleGuardarFechaFin = async (temporadaId: string) => {
+    setErrorFechaFin(null);
+    if (!fechaFinEditada) {
+      setErrorFechaFin("Elige una fecha de fin.");
+      return;
+    }
+    if (!torneo || new Date(fechaFinEditada) <= new Date(torneo.fecha_inicio)) {
+      setErrorFechaFin("La fecha de fin debe ser posterior a la fecha de inicio del torneo.");
+      return;
+    }
+
+    setGuardandoFechaFin(temporadaId);
+
+    // temporadas_update_organizador (RLS) ya exige ser el creador del
+    // torneo o un administrador.
+    const { error } = await supabase
+      .from("temporadas")
+      .update({ fecha_fin: new Date(fechaFinEditada).toISOString() })
+      .eq("id", temporadaId);
+
+    setGuardandoFechaFin(null);
+
+    if (error) {
+      setErrorFechaFin(error.message);
+      return;
+    }
+
+    setEditandoFechaFinId(null);
     await cargarTorneo();
   };
 
@@ -1788,126 +1840,6 @@ export default function TournamentDetailPage() {
         </div>
       )}
 
-      {/* Temporadas (migración 047): solo el organizador las
-          administra -- contenedor mínimo para que "fichado para toda
-          la temporada" (mercenarios) y las alianzas entre equipos
-          tengan un límite de tiempo real. Los equipos las eligen al
-          proponer una Clan War, no acá. */}
-      {esOrganizador && (
-        <>
-          <h2 className="detail-subtitle">Temporadas</h2>
-          {temporadas.length === 0 ? (
-            <p className="detail-empty">Todavía no creaste ninguna temporada para este torneo.</p>
-          ) : (
-            <div className="detail-participant-list">
-              {temporadas.map((t) => (
-                <div key={t.id} className="reto-item">
-                  <p className="reto-desc">
-                    {t.nombre}
-                    <span className="reto-status">
-                      {t.inscripciones_abiertas ? "Inscripciones abiertas" : "Inscripciones cerradas"}
-                    </span>
-                  </p>
-                  <p className="tournament-card-meta">
-                    {formatFecha(t.fecha_inicio)} — {formatFecha(t.fecha_fin)}
-                  </p>
-                  <div className="bracket-report">
-                    <button
-                      type="button"
-                      className="btn btn-ghost"
-                      disabled={guardandoInscripciones === t.id}
-                      onClick={() => handleToggleInscripciones(t.id, !t.inscripciones_abiertas)}
-                    >
-                      {t.inscripciones_abiertas ? "Cerrar inscripciones" : "Abrir inscripciones"}
-                    </button>
-                    <button type="button" className="btn btn-ghost" onClick={() => handleAbrirRangos(t)}>
-                      {temporadaRangosAbierta === t.id ? "Cerrar rangos de MMR" : "Rangos de MMR por posición"}
-                    </button>
-                  </div>
-
-                  {temporadaRangosAbierta === t.id && (
-                    <div className="form-group">
-                      <p className="tournament-card-meta">
-                        Rango de mmr_equipos permitido para cada posición del set (formato WTL). Deja
-                        una posición vacía (mínimo y máximo) para no restringirla.
-                      </p>
-                      {errorRangos && <div className="form-error">{errorRangos}</div>}
-                      {([1, 2, 3] as const).map((posicion) => (
-                        <div key={posicion} className="form-group">
-                          <label className="form-label">Posición {posicion}</label>
-                          <input
-                            className="form-input"
-                            type="number"
-                            placeholder="MMR mínimo"
-                            value={rangosMmrForm[`${t.id}-${posicion}-min`] ?? ""}
-                            onChange={(e) =>
-                              setRangosMmrForm((prev) => ({ ...prev, [`${t.id}-${posicion}-min`]: e.target.value }))
-                            }
-                          />
-                          <input
-                            className="form-input"
-                            type="number"
-                            placeholder="MMR máximo"
-                            value={rangosMmrForm[`${t.id}-${posicion}-max`] ?? ""}
-                            onChange={(e) =>
-                              setRangosMmrForm((prev) => ({ ...prev, [`${t.id}-${posicion}-max`]: e.target.value }))
-                            }
-                          />
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        disabled={guardandoRangos === t.id}
-                        onClick={() => handleGuardarRangos(t.id)}
-                      >
-                        {guardandoRangos === t.id ? "Guardando..." : "Guardar rangos de MMR"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <form className="auth-form" onSubmit={handleCrearTemporada}>
-            {errorTemporada && <div className="form-error">{errorTemporada}</div>}
-            <div className="form-group">
-              <label className="form-label" htmlFor="temporada-nombre">
-                Nombre de la nueva temporada
-              </label>
-              <input
-                id="temporada-nombre"
-                className="form-input"
-                type="text"
-                placeholder="SLL Temporada 6"
-                value={nombreTemporada}
-                onChange={(e) => setNombreTemporada(e.target.value)}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label" htmlFor="temporada-fin">
-                Fecha de fin
-              </label>
-              <p className="form-hint">
-                Arranca el mismo día que el torneo ({formatFecha(torneo.fecha_inicio)}).
-              </p>
-              <input
-                id="temporada-fin"
-                className="form-input"
-                type="datetime-local"
-                min={fechaInicioComoInputLocal(torneo.fecha_inicio)}
-                value={fechaFinTemporada}
-                onChange={(e) => setFechaFinTemporada(e.target.value)}
-              />
-            </div>
-            <button type="submit" className="btn btn-ghost btn-block" disabled={creandoTemporada}>
-              {creandoTemporada ? "Creando..." : "Crear temporada"}
-            </button>
-          </form>
-        </>
-      )}
-
       {/* Panel de organizador (migración 079, rediseñado): ya no se
           eligen al crear el torneo -- se ajustan acá, en cualquier
           momento, exclusivo del organizador. Misma lógica de guardado
@@ -2135,16 +2067,201 @@ export default function TournamentDetailPage() {
                     <p className="form-hint">Hasta 10MB. Se muestra embebido en la página pública del torneo.</p>
                   </div>
                 </div>
+
+                {/* Temporadas (migración 047, movida acá adentro en la
+                    166 a pedido del usuario -- antes vivía siempre
+                    visible, afuera del Panel de organizador, y
+                    "hablaba de más" cada vez que se entraba a la
+                    ficha del torneo). Contenedor mínimo para que
+                    "fichado para toda la temporada" (mercenarios) y
+                    las alianzas entre equipos tengan un límite de
+                    tiempo real. Los equipos las eligen al proponer una
+                    Clan War, no acá. */}
+                <div className="organizer-panel-card">
+                  <div className="organizer-panel-card-header">
+                    <span className="organizer-panel-card-icon">
+                      <Calendar size={18} />
+                    </span>
+                    <h3 className="organizer-panel-card-title">Temporadas</h3>
+                  </div>
+                  <div className="organizer-panel-card-body">
+                    {temporadas.length === 0 ? (
+                      <p className="detail-empty">Todavía no creaste ninguna temporada para este torneo.</p>
+                    ) : (
+                      <div className="detail-participant-list">
+                        {temporadas.map((t) => (
+                          <div key={t.id} className="reto-item">
+                            <p className="reto-desc">
+                              {t.nombre}
+                              <span className="reto-status">
+                                {t.inscripciones_abiertas ? "Inscripciones abiertas" : "Inscripciones cerradas"}
+                              </span>
+                            </p>
+                            <p className="tournament-card-meta">
+                              {formatFecha(t.fecha_inicio)} —{" "}
+                              {t.fecha_fin ? formatFecha(t.fecha_fin) : "sin fecha de fin todavía"}
+                            </p>
+                            <div className="bracket-report">
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                disabled={guardandoInscripciones === t.id}
+                                onClick={() => handleToggleInscripciones(t.id, !t.inscripciones_abiertas)}
+                              >
+                                {t.inscripciones_abiertas ? "Cerrar inscripciones" : "Abrir inscripciones"}
+                              </button>
+                              <button type="button" className="btn btn-ghost" onClick={() => handleAbrirRangos(t)}>
+                                {temporadaRangosAbierta === t.id ? "Cerrar rangos de MMR" : "Rangos de MMR por posición"}
+                              </button>
+                              <button type="button" className="btn btn-ghost" onClick={() => handleAbrirFechaFin(t)}>
+                                {editandoFechaFinId === t.id
+                                  ? "Cancelar"
+                                  : t.fecha_fin
+                                    ? "Cambiar fecha de fin"
+                                    : "Agregar fecha de fin"}
+                              </button>
+                            </div>
+
+                            {editandoFechaFinId === t.id && (
+                              <div className="form-group">
+                                {errorFechaFin && <div className="form-error">{errorFechaFin}</div>}
+                                <input
+                                  className="form-input"
+                                  type="datetime-local"
+                                  min={fechaInicioComoInputLocal(torneo.fecha_inicio)}
+                                  value={fechaFinEditada}
+                                  onChange={(e) => setFechaFinEditada(e.target.value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={guardandoFechaFin === t.id}
+                                  onClick={() => handleGuardarFechaFin(t.id)}
+                                >
+                                  {guardandoFechaFin === t.id ? "Guardando..." : "Guardar fecha de fin"}
+                                </button>
+                              </div>
+                            )}
+
+                            {temporadaRangosAbierta === t.id && (
+                              <div className="form-group">
+                                <p className="tournament-card-meta">
+                                  Rango de mmr_equipos permitido para cada posición del set (formato WTL). Deja
+                                  una posición vacía (mínimo y máximo) para no restringirla.
+                                </p>
+                                {errorRangos && <div className="form-error">{errorRangos}</div>}
+                                {([1, 2, 3] as const).map((posicion) => (
+                                  <div key={posicion} className="form-group">
+                                    <label className="form-label">Posición {posicion}</label>
+                                    <input
+                                      className="form-input"
+                                      type="number"
+                                      placeholder="MMR mínimo"
+                                      value={rangosMmrForm[`${t.id}-${posicion}-min`] ?? ""}
+                                      onChange={(e) =>
+                                        setRangosMmrForm((prev) => ({ ...prev, [`${t.id}-${posicion}-min`]: e.target.value }))
+                                      }
+                                    />
+                                    <input
+                                      className="form-input"
+                                      type="number"
+                                      placeholder="MMR máximo"
+                                      value={rangosMmrForm[`${t.id}-${posicion}-max`] ?? ""}
+                                      onChange={(e) =>
+                                        setRangosMmrForm((prev) => ({ ...prev, [`${t.id}-${posicion}-max`]: e.target.value }))
+                                      }
+                                    />
+                                  </div>
+                                ))}
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  disabled={guardandoRangos === t.id}
+                                  onClick={() => handleGuardarRangos(t.id)}
+                                >
+                                  {guardandoRangos === t.id ? "Guardando..." : "Guardar rangos de MMR"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <form className="auth-form" onSubmit={handleCrearTemporada}>
+                      {errorTemporada && <div className="form-error">{errorTemporada}</div>}
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="temporada-nombre">
+                          Nombre de la nueva temporada
+                        </label>
+                        <input
+                          id="temporada-nombre"
+                          className="form-input"
+                          type="text"
+                          placeholder="Escribí el nombre de la temporada"
+                          value={nombreTemporada}
+                          onChange={(e) => setNombreTemporada(e.target.value)}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="temporada-fin">
+                          Fecha de fin (opcional, se puede agregar después)
+                        </label>
+                        <p className="form-hint">
+                          Arranca el mismo día que el torneo ({formatFecha(torneo.fecha_inicio)}).
+                        </p>
+                        <input
+                          id="temporada-fin"
+                          className="form-input"
+                          type="datetime-local"
+                          min={fechaInicioComoInputLocal(torneo.fecha_inicio)}
+                          value={fechaFinTemporada}
+                          onChange={(e) => setFechaFinTemporada(e.target.value)}
+                        />
+                      </div>
+                      <button type="submit" className="btn btn-ghost btn-block" disabled={creandoTemporada}>
+                        {creandoTemporada ? "Creando..." : "Crear temporada"}
+                      </button>
+                    </form>
+                  </div>
+                </div>
               </div>
             </div>
           )}
         </div>
       )}
 
-      <h2 className="detail-subtitle">
-        {esPorEquipos ? "Equipos inscritos" : "Participantes"} ({participantesVisibles.length})
-      </h2>
-      {participantesVisibles.length === 0 ? (
+      <div className="section-head">
+        <h2 className="detail-subtitle">
+          {esPorEquipos ? "Equipos inscritos" : "Participantes"} ({participantesVisibles.length})
+        </h2>
+        {torneo.estado === "abierto" && torneo.cupos_totales > 0 && (
+          <button type="button" className="btn btn-ghost" onClick={() => setMostrarVistaPreviaLlaves((v) => !v)}>
+            {mostrarVistaPreviaLlaves ? "Ver como lista" : "Vista previa de llaves"}
+          </button>
+        )}
+      </div>
+
+      {mostrarVistaPreviaLlaves ? (
+        <div className="bracket-preview-grid">
+          {Array.from({ length: torneo.cupos_totales }).map((_, indice) => {
+            const p = participantesVisibles[indice];
+            return (
+              <div key={p?.id ?? `vacante-${indice}`} className={`bracket-preview-slot ${p ? "ocupado" : "vacante"}`}>
+                <span className="bracket-preview-slot-numero">{indice + 1}</span>
+                {p ? (
+                  <>
+                    <Avatar url={p.avatarUrl} nombre={p.nombre} className="bracket-preview-slot-avatar" forma={p.avatarForma} />
+                    <span className="bracket-preview-slot-nombre">{p.nombre ?? "Jugador de RemorApp"}</span>
+                  </>
+                ) : (
+                  <span className="bracket-preview-slot-nombre bracket-preview-slot-vacio">Vacante</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : participantesVisibles.length === 0 ? (
         <p className="detail-empty">
           {esPorEquipos ? "Todavía no hay equipos inscritos." : "Todavía no hay nadie inscrito."}
         </p>

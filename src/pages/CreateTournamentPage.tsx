@@ -170,7 +170,6 @@ export default function CreateTournamentPage() {
   const [temporadaModo, setTemporadaModo] = useState<"numerada" | "manual">("numerada");
   const [temporadaNumero, setTemporadaNumero] = useState("1");
   const [temporadaNombreManual, setTemporadaNombreManual] = useState("");
-  const [temporadaFechaFin, setTemporadaFechaFin] = useState("");
 
   const [loading, setLoading] = useState(false);
 
@@ -443,14 +442,6 @@ export default function CreateTournamentPage() {
       toast.error("Escribe el nombre de la temporada, o cambia a numerada.");
       return;
     }
-    if (esLiga && !temporadaFechaFin) {
-      toast.error("Elige la fecha de fin de la temporada.");
-      return;
-    }
-    if (esLiga && temporadaFechaFin && new Date(temporadaFechaFin) <= new Date(fechaInicio)) {
-      toast.error("La fecha de fin de la temporada debe ser posterior a la fecha de inicio del torneo.");
-      return;
-    }
 
     setLoading(true);
 
@@ -523,11 +514,13 @@ export default function CreateTournamentPage() {
 
       if (esLiga) {
         const nombreTemporada = temporadaModo === "numerada" ? `Temporada ${temporadaNumero}` : temporadaNombreManual.trim();
+        // Migración 166: fecha_fin ya no se pide acá -- se agrega
+        // después desde la ficha del torneo (Panel de organizador →
+        // Temporadas), ahora que la columna admite null.
         const { error: temporadaError } = await supabase.from("temporadas").insert({
           torneo_id: torneo.id,
           nombre: nombreTemporada,
           fecha_inicio: new Date(fechaInicio).toISOString(),
-          fecha_fin: new Date(temporadaFechaFin).toISOString(),
         });
         // No bloquea la creación del torneo si falla la temporada --
         // el torneo ya existe, solo faltaría crearla a mano después.
@@ -1097,25 +1090,17 @@ export default function CreateTournamentPage() {
                   id="torneo-temporada-nombre"
                   className="form-input"
                   type="text"
-                  placeholder="SLL Season 7"
+                  placeholder="Escribí el nombre de la temporada"
                   value={temporadaNombreManual}
                   onChange={(e) => setTemporadaNombreManual(e.target.value)}
                 />
               </div>
             )}
 
-            <div className="form-group">
-              <label className="form-label" htmlFor="torneo-temporada-fin">
-                Fecha de fin de la temporada
-              </label>
-              <FechaHoraInput
-                id="torneo-temporada-fin"
-                required
-                min={fechaInicio || undefined}
-                value={temporadaFechaFin}
-                onChange={setTemporadaFechaFin}
-              />
-            </div>
+            {/* Migración 166, a pedido del usuario: la fecha de fin ya
+                no se pide acá -- se agrega después, desde la ficha del
+                torneo (Panel de organizador → Temporadas), cuando ya
+                se sabe. */}
           </div>
         )}
 
