@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
-import { Trophy, Medal, Download, FileText, Upload, Calendar } from "lucide-react";
+import { Trophy, Medal, Download, FileText, Upload, Calendar, Users } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -810,7 +810,8 @@ export default function TournamentDetailPage() {
       | "tiene_fase_grupos"
       | "cantidad_grupos"
       | "avanzan_por_grupo"
-      | "tiene_tercer_lugar",
+      | "tiene_tercer_lugar"
+      | "formato",
     valor: boolean | string | number | null
   ) => {
     if (!torneo) return;
@@ -1870,6 +1871,44 @@ export default function TournamentDetailPage() {
               {errorOpcionesAvanzadas && <div className="form-error">{errorOpcionesAvanzadas}</div>}
 
               <div className="organizer-panel-grid">
+                {/* Migración 167, a pedido del usuario: todo torneo por
+                    ligas arranca en 1v1 (es lo más común) -- cambiarlo
+                    a un formato de equipo es una decisión de acá, no
+                    de la creación. Solo tiene sentido mientras nadie
+                    se haya inscrito todavía (1v1 inscribe por
+                    user_id, equipo por team_id -- mezclarlos a mitad
+                    de camino dejaría inscripciones huérfanas). */}
+                {torneo.estado === "abierto" && torneo.cupos_ocupados === 0 && (
+                  <div className="organizer-panel-card">
+                    <div className="organizer-panel-card-header">
+                      <span className="organizer-panel-card-icon">
+                        <Users size={18} />
+                      </span>
+                      <h3 className="organizer-panel-card-title">¿Jugadores o clanes?</h3>
+                    </div>
+                    <div className="organizer-panel-card-body">
+                      <div className="pill-radio-group">
+                        {(["1v1", "2v2", "3v3", "4v4"] as const).map((f) => (
+                          <label key={f} className={`pill-radio-option ${torneo.formato === f ? "selected" : ""}`}>
+                            <input
+                              type="radio"
+                              className="sr-only"
+                              name="torneo-formato"
+                              checked={torneo.formato === f}
+                              onChange={() => handleActualizarOpcionAvanzada("formato", f)}
+                            />
+                            {f === "1v1" ? "Individual (1v1)" : f}
+                          </label>
+                        ))}
+                      </div>
+                      <p className="form-hint">
+                        2v2/3v3/4v4 inscribe clanes en vez de jugadores individuales. Una vez que
+                        alguien se inscriba, esto deja de poder cambiarse.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Etapa de grupos y tercer lugar: solo tienen sentido
                     ANTES de generar la llave -- una vez que el torneo
                     arrancó, cambiarlas no tendría ningún efecto real. */}
