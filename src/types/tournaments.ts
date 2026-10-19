@@ -23,32 +23,38 @@ export type TorneoEstado = "abierto" | "en_curso" | "finalizado";
 // Migración 040: layout de cajas/líneas de la llave y fondo
 // "galáctico" detrás -- independientes entre sí, se combinan.
 export type EstiloBracket = "clasico" | "esports" | "starcraft_oficial";
-// Migración 174, a pedido del usuario: suma el catálogo de fondos de
+// Migración 174, a pedido del usuario: sumó el catálogo de fondos de
 // lineup (ver FondoLineup en types/teams.ts) a los que ya tenía la
 // llave -- mismas animaciones, CSS compartido bajo data-fondo-bracket
-// (ver halcon.css, junto a cada data-fondo-lineup).
-export type FondoBracket =
-  | "ninguno"
-  | "campo_estrellas"
-  | "nebulosa"
-  | "constelacion"
-  | "vortice"
-  | "estrellas"
-  | "estrellado"
-  | "estrellado_2"
-  | "nova"
-  | "planeta"
-  | "viaje"
-  | "fuego";
+// (ver halcon.css, junto a cada data-fondo-lineup). Migración 179, a
+// pedido del usuario: se recorta a solo 3 -- el resto "se elimina de
+// RemorApp" (ver migración 179 en supabase/, sigue reseteando
+// cualquier torneo viejo con uno de los valores sacados).
+export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2";
 
 // Migración 176, a pedido del usuario: "efectos de líneas" -- antes la
 // línea de conexión entre rondas era un extra fijo de los estilos
 // "esports"/"starcraft_oficial" (o nada en "clasico"). Ahora es su
 // propio selector, independiente del estilo de caja -- se puede
 // combinar cualquier estilo de bracket con cualquier efecto de línea
-// (o "ninguno", para no mostrar líneas). "laser" es el que ya existía
-// (ver BracketView.tsx/halcon.css); los otros 5 son nuevos.
-export type EstiloLineaBracket = "ninguno" | "laser" | "pulso" | "electrico" | "arcoiris" | "dorado" | "matrix";
+// (o "ninguno", para no mostrar líneas). Migración 179, a pedido del
+// usuario: "pulso"/"eléctrico"/"arcoíris" se sacan del catálogo.
+export type EstiloLineaBracket = "ninguno" | "laser" | "dorado" | "matrix";
+
+// Migración 179, a pedido del usuario: paleta para personalizar el
+// color de la línea elegida -- null es "sin personalizar" (cada
+// efecto usa su color de siempre, ver halcon.css). Un hex de esta
+// lista pisa ese color por CSS custom property (--linea-color).
+export const PALETA_COLOR_LINEA_BRACKET: { value: string; label: string }[] = [
+  { value: "#38bdf8", label: "Celeste" },
+  { value: "#a78bfa", label: "Violeta" },
+  { value: "#f472b6", label: "Rosa" },
+  { value: "#f87171", label: "Rojo" },
+  { value: "#fb923c", label: "Naranja" },
+  { value: "#fde047", label: "Dorado" },
+  { value: "#4ade80", label: "Verde" },
+  { value: "#ffffff", label: "Blanco" },
+];
 
 // Migración 177, a pedido del usuario (mismo espíritu que "Estructura"
 // del lineup, ver EstructuraLineupPicker.tsx): cómo se arma la llave
@@ -76,26 +82,14 @@ export const ESTILO_BRACKET_OPTIONS: { value: EstiloBracket; label: string }[] =
 export const ESTILO_LINEA_BRACKET_OPTIONS: { value: EstiloLineaBracket; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
   { value: "laser", label: "Láser" },
-  { value: "pulso", label: "Pulso" },
-  { value: "electrico", label: "Eléctrico" },
-  { value: "arcoiris", label: "Arcoíris" },
   { value: "dorado", label: "Dorado" },
   { value: "matrix", label: "Matrix" },
 ];
 
 export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
-  { value: "campo_estrellas", label: "Campo de estrellas" },
-  { value: "nebulosa", label: "Nebulosa" },
-  { value: "constelacion", label: "Constelación" },
-  { value: "vortice", label: "Vórtice" },
   { value: "estrellas", label: "Estrellas" },
-  { value: "estrellado", label: "Estrellado" },
   { value: "estrellado_2", label: "Estrellado 2" },
-  { value: "nova", label: "Nova" },
-  { value: "planeta", label: "Planeta" },
-  { value: "viaje", label: "Viaje" },
-  { value: "fuego", label: "Fuego" },
 ];
 
 export interface MapRow {
@@ -139,6 +133,7 @@ export interface TournamentRow {
   fondo_bracket: FondoBracket;
   estilo_linea_bracket: EstiloLineaBracket;
   estructura_bracket: EstructuraBracket;
+  color_linea_bracket: string | null;
   // Migración 041: etapa de grupos previa a la llave eliminatoria.
   tiene_fase_grupos: boolean;
   cantidad_grupos: number | null;

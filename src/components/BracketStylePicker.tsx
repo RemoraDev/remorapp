@@ -1,9 +1,11 @@
 import { useState } from "react";
+import type { CSSProperties } from "react";
 import { supabase } from "../lib/supabaseClient";
 import {
   FONDO_BRACKET_OPTIONS,
   ESTILO_LINEA_BRACKET_OPTIONS,
   ESTRUCTURA_BRACKET_OPTIONS,
+  PALETA_COLOR_LINEA_BRACKET,
 } from "../types/tournaments";
 import type { FondoBracket, EstiloLineaBracket, EstructuraBracket } from "../types/tournaments";
 
@@ -12,6 +14,7 @@ interface BracketStylePickerProps {
   fondo: FondoBracket;
   estiloLinea: EstiloLineaBracket;
   estructura: EstructuraBracket;
+  colorLinea: string | null;
   onCambio: () => void;
 }
 
@@ -60,11 +63,18 @@ function PreviewEstructura({ variante }: { variante: EstructuraBracket }) {
 // Mini-render del efecto de línea elegido (migración 176): a
 // diferencia de la llave real, acá no hay nada que medir en el DOM --
 // un trazo en escuadra fijo alcanza para mostrar el efecto, con el
-// mismo CSS real (.bracket-conectores, ver halcon.css).
-function MiniLinea({ estiloLinea }: { estiloLinea: EstiloLineaBracket }) {
+// mismo CSS real (.bracket-conectores, ver halcon.css). Migración 179:
+// también respeta el color personalizado elegido (--linea-color), así
+// la vista previa no miente sobre cómo se va a ver.
+function MiniLinea({ estiloLinea, colorLinea }: { estiloLinea: EstiloLineaBracket; colorLinea: string | null }) {
   return (
     <div className="bracket-linea-preview">
-      <svg className="bracket-conectores" data-estilo-linea={estiloLinea} viewBox="0 0 90 60">
+      <svg
+        className="bracket-conectores"
+        data-estilo-linea={estiloLinea}
+        viewBox="0 0 90 60"
+        style={colorLinea ? ({ "--linea-color": colorLinea } as CSSProperties) : undefined}
+      >
         <path d="M 5 15 H 45 V 45 H 85" />
       </svg>
     </div>
@@ -86,6 +96,7 @@ export default function BracketStylePicker({
   fondo,
   estiloLinea,
   estructura,
+  colorLinea,
   onCambio,
 }: BracketStylePickerProps) {
   // Antes, si el update fallaba (por ejemplo porque el constraint de
@@ -126,6 +137,17 @@ export default function BracketStylePicker({
     else onCambio();
   };
 
+  const handleCambiarColor = async (nuevoColor: string | null) => {
+    if (nuevoColor === colorLinea) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ color_linea_bracket: nuevoColor })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
   return (
     <div className="bracket-picker">
       {error && <div className="form-error">{error}</div>}
@@ -158,7 +180,36 @@ export default function BracketStylePicker({
               className={`bracket-picker-option ${estiloLinea === o.value ? "selected" : ""}`}
               onClick={() => handleCambiarLinea(o.value)}
             >
-              <MiniLinea estiloLinea={o.value} />
+              <MiniLinea estiloLinea={o.value} colorLinea={colorLinea} />
+              <span className="bracket-picker-option-label">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Migración 179, a pedido del usuario: paleta para personalizar
+          el color de cualquiera de los 3 efectos de arriba -- "Por
+          defecto" vuelve al color de siempre de cada uno
+          (color_linea_bracket = null). */}
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Color de línea</h3>
+        <div className="bracket-picker-options">
+          <button
+            type="button"
+            className={`bracket-picker-option ${colorLinea === null ? "selected" : ""}`}
+            onClick={() => handleCambiarColor(null)}
+          >
+            <div className="bracket-color-linea-preview bracket-color-linea-preview-defecto" />
+            <span className="bracket-picker-option-label">Por defecto</span>
+          </button>
+          {PALETA_COLOR_LINEA_BRACKET.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`bracket-picker-option ${colorLinea === o.value ? "selected" : ""}`}
+              onClick={() => handleCambiarColor(o.value)}
+            >
+              <div className="bracket-color-linea-preview" style={{ background: o.value }} />
               <span className="bracket-picker-option-label">{o.label}</span>
             </button>
           ))}

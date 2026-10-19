@@ -3363,19 +3363,25 @@ html.es-escritorio .player-detail-panel-inline {
    propio selector (ver BracketStylePicker.tsx), independiente del
    estilo de bracket -- antes esto estaba atado a
    data-estilo-bracket="esports"/"starcraft_oficial". El atributo
-   data-estilo-linea vive en el <svg> (ver BracketView.tsx). 6 efectos:
-   el "láser" que ya existía + 5 nuevos. */
+   data-estilo-linea vive en el <svg> (ver BracketView.tsx).
+   Migración 179, a pedido del usuario: "pulso"/"eléctrico"/"arcoíris"
+   se sacan del catálogo (quedan láser/dorado/matrix); los 3 que
+   quedan usan --linea-color (custom property, ver style inline en
+   BracketView.tsx) con su color de siempre como fallback -- así el
+   nuevo selector "Color de línea" puede pisarlo sin tocar el efecto
+   en sí (guión, parpadeo, etc.). */
 
 /* 1) Láser: varios drop-shadow apilados, de radio creciente, dan el
    brillo de tubo de neón -- el guión (stroke-dasharray) + la
    animación de stroke-dashoffset hacen que esos segmentos de luz
    viajen sin parar a lo largo de la línea. */
 .bracket-conectores[data-estilo-linea="laser"] path {
-  stroke: var(--color-accent);
+  stroke: var(--linea-color, var(--color-accent));
   stroke-width: 2.5px;
   stroke-dasharray: 10 8;
-  filter: drop-shadow(0 0 2px var(--color-accent)) drop-shadow(0 0 6px var(--color-accent))
-    drop-shadow(0 0 14px rgba(var(--h-accent-rgb), 0.85));
+  filter: drop-shadow(0 0 2px var(--linea-color, var(--color-accent)))
+    drop-shadow(0 0 6px var(--linea-color, var(--color-accent)))
+    drop-shadow(0 0 14px var(--linea-color, var(--color-accent)));
   animation: bracket-conector-energia 0.6s linear infinite;
 }
 
@@ -3384,87 +3390,30 @@ html.es-escritorio .player-detail-panel-inline {
   to { stroke-dashoffset: 0; }
 }
 
-/* 2) Pulso: línea sólida (sin guiones) que respira de brillo apagado a
-   intenso, sin moverse -- contraste con el láser, que sí viaja. */
-.bracket-conectores[data-estilo-linea="pulso"] path {
-  stroke: var(--color-accent);
-  stroke-width: 2.5px;
-  animation: bracket-conector-pulso 1.8s ease-in-out infinite;
-}
-
-@keyframes bracket-conector-pulso {
-  0%, 100% {
-    opacity: 0.7;
-    filter: drop-shadow(0 0 2px var(--color-accent)) drop-shadow(0 0 4px var(--color-accent));
-  }
-  50% {
-    opacity: 1;
-    filter: drop-shadow(0 0 6px var(--color-accent)) drop-shadow(0 0 18px rgba(var(--h-accent-rgb), 0.9));
-  }
-}
-
-/* 3) Eléctrico: guiones cortos corriendo rápido + parpadeo ocasional,
-   como una chispa que no se termina de estabilizar. */
-.bracket-conectores[data-estilo-linea="electrico"] path {
-  stroke: #fef08a;
-  stroke-width: 2px;
-  stroke-dasharray: 3 2;
-  filter: drop-shadow(0 0 2px #fde047) drop-shadow(0 0 8px #facc15);
-  animation:
-    bracket-conector-electrico-flujo 0.15s steps(2) infinite,
-    bracket-conector-electrico-chispa 1.4s steps(1) infinite;
-}
-
-@keyframes bracket-conector-electrico-flujo {
-  from { stroke-dashoffset: 5; }
-  to { stroke-dashoffset: 0; }
-}
-
-@keyframes bracket-conector-electrico-chispa {
-  0%, 92%, 100% { opacity: 1; }
-  94% { opacity: 0.35; }
-  96% { opacity: 1; }
-  98% { opacity: 0.5; }
-}
-
-/* 4) Arcoíris: línea blanca de base, todo el ciclo de color sale de
-   animar hue-rotate sobre el filtro (afecta el color ya renderizado,
-   incluido el drop-shadow del mismo filtro). */
-.bracket-conectores[data-estilo-linea="arcoiris"] path {
-  stroke: #fff;
-  stroke-width: 2.5px;
-  animation: bracket-conector-arcoiris 3s linear infinite;
-}
-
-@keyframes bracket-conector-arcoiris {
-  from { filter: hue-rotate(0deg) saturate(4) brightness(1.3) drop-shadow(0 0 6px #fff); }
-  to { filter: hue-rotate(360deg) saturate(4) brightness(1.3) drop-shadow(0 0 6px #fff); }
-}
-
-/* 5) Dorado (premium): brillo cálido ámbar/dorado que respira, sin
-   guiones -- pensado para una final o un torneo "de gala". */
+/* 2) Dorado (premium): brillo cálido que respira, sin guiones --
+   pensado para una final o un torneo "de gala". */
 .bracket-conectores[data-estilo-linea="dorado"] path {
-  stroke: #fde047;
+  stroke: var(--linea-color, #fde047);
   stroke-width: 2.5px;
   animation: bracket-conector-dorado 2.2s ease-in-out infinite;
 }
 
 @keyframes bracket-conector-dorado {
   0%, 100% {
-    filter: drop-shadow(0 0 2px #fde047) drop-shadow(0 0 6px #fbbf24);
+    filter: drop-shadow(0 0 2px var(--linea-color, #fde047)) drop-shadow(0 0 6px var(--linea-color, #fbbf24));
   }
   50% {
-    filter: drop-shadow(0 0 8px #fde047) drop-shadow(0 0 20px #f59e0b)
-      drop-shadow(0 0 32px rgba(253, 224, 71, 0.6));
+    filter: drop-shadow(0 0 8px var(--linea-color, #fde047)) drop-shadow(0 0 20px var(--linea-color, #f59e0b))
+      drop-shadow(0 0 32px var(--linea-color, #fde047));
   }
 }
 
-/* 6) Matrix: guiones verdes corriendo, como un flujo de datos. */
+/* 3) Matrix: guiones corriendo, como un flujo de datos. */
 .bracket-conectores[data-estilo-linea="matrix"] path {
-  stroke: #4ade80;
+  stroke: var(--linea-color, #4ade80);
   stroke-width: 2px;
   stroke-dasharray: 4 6;
-  filter: drop-shadow(0 0 3px #22c55e) drop-shadow(0 0 8px #16a34a);
+  filter: drop-shadow(0 0 3px var(--linea-color, #22c55e)) drop-shadow(0 0 8px var(--linea-color, #16a34a));
   animation: bracket-conector-matrix 0.5s linear infinite;
 }
 
@@ -3918,108 +3867,19 @@ html.es-escritorio .player-detail-panel-inline {
   margin-top: 1rem;
 }
 
-/* Los 4 fondos que no son "ninguno" comparten el mismo contenedor
+/* Los fondos que no son "ninguno" comparten el mismo contenedor
    (color de base + padding + borde) -- lo único que cambia entre
-   ellos es el background-image. */
+   ellos es el background-image. Migración 179: solo quedan
+   "estrellas"/"estrellado_2" (tomados del catálogo de lineup, ver más
+   abajo); el resto se sacó del catálogo. */
 .tournament-bracket-wrap[data-fondo-bracket]:not([data-fondo-bracket="ninguno"]) {
   padding: 1.5rem 1rem 1rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background-color: #06070a;
-  /* Los fondos tomados del catálogo de lineup (estrellas/estrellado/
-     nova/planeta/viaje/fuego/etc., ver más abajo) pintan su patrón en
-     un ::before/::after con inset: -20% -- sin esto se saldría del
-     recuadro. */
+  /* Pintan su patrón en un ::before/::after con inset: -20% -- sin
+     esto se saldría del recuadro. */
   overflow: hidden;
-}
-
-/* Campo de estrellas: un único elemto, varias capas de radial-gradient
-   de 1-1.5px tileadas -- la técnica liviana estándar de "starfield",
-   sin imágenes ni múltiples nodos DOM. Estático: no hay animación. */
-.tournament-bracket-wrap[data-fondo-bracket="campo_estrellas"] {
-  background-image:
-    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
-    radial-gradient(1px 1px at 40% 72%, rgba(255, 255, 255, 0.65), transparent 60%),
-    radial-gradient(1.5px 1.5px at 70% 32%, rgba(255, 255, 255, 0.8), transparent 60%),
-    radial-gradient(1px 1px at 85% 88%, rgba(255, 255, 255, 0.55), transparent 60%),
-    radial-gradient(1.5px 1.5px at 25% 92%, rgba(255, 255, 255, 0.7), transparent 60%),
-    radial-gradient(1px 1px at 55% 12%, rgba(255, 255, 255, 0.5), transparent 60%),
-    radial-gradient(1px 1px at 95% 45%, rgba(255, 255, 255, 0.6), transparent 60%);
-  background-size: 180px 180px;
-}
-
-/* Nebulosa: 3 manchas grandes de gradiente radial, opacidad baja,
-   estáticas -- ningún movimiento. */
-.tournament-bracket-wrap[data-fondo-bracket="nebulosa"] {
-  background-image:
-    radial-gradient(45% 35% at 20% 25%, rgba(34, 211, 238, 0.16), transparent 70%),
-    radial-gradient(40% 30% at 82% 68%, rgba(168, 85, 247, 0.14), transparent 70%),
-    radial-gradient(35% 30% at 50% 95%, rgba(236, 72, 153, 0.1), transparent 70%);
-}
-
-/* Constelación: mismo criterio que el patrón de rombos de la Sala de
-   la Fama (data URI, SVG puro, sin librerías) -- acá puntos finos
-   conectados por líneas, a muy baja opacidad. */
-.tournament-bracket-wrap[data-fondo-bracket="constelacion"] {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='%2322d3ee' fill-opacity='0.45' stroke='%2322d3ee' stroke-opacity='0.16' stroke-width='1'%3E%3Ccircle cx='20' cy='30' r='1.6'/%3E%3Ccircle cx='90' cy='15' r='1.6'/%3E%3Ccircle cx='150' cy='60' r='1.6'/%3E%3Ccircle cx='60' cy='100' r='1.6'/%3E%3Ccircle cx='170' cy='150' r='1.6'/%3E%3Ccircle cx='30' cy='170' r='1.6'/%3E%3Cpath d='M20 30 L90 15 M90 15 L150 60 M60 100 L20 30 M60 100 L150 60 M60 100 L170 150 M170 150 L30 170'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 200px 200px;
-}
-
-/* Vórtice: un solo conic-gradient -- el remolino sale de la FORMA del
-   gradiente (franjas que giran alrededor de un centro), no de
-   animarlo. Sin rotación, sin @keyframes. */
-.tournament-bracket-wrap[data-fondo-bracket="vortice"] {
-  background-image: conic-gradient(
-    from 0deg at 50% 50%,
-    rgba(34, 211, 238, 0.18),
-    rgba(6, 7, 10, 0) 25%,
-    rgba(168, 85, 247, 0.16) 50%,
-    rgba(6, 7, 10, 0) 75%,
-    rgba(34, 211, 238, 0.18)
-  );
-}
-
-/* Miniaturas del selector de fondo (ver .bracket-fondo-preview más
-   abajo): NO comparten regla con el fondo real de arriba a propósito.
-   El fondo real está calibrado para verse sutil detrás de una llave
-   entera (no puede competir con el contenido); a ese mismo tamaño de
-   patrón, en una caja de unos 90px, casi no entra ni un tile completo
-   -- por eso antes se veían como cuadrados negros. Acá el patrón se
-   comprime y se sube la opacidad para que cada miniatura se lea de
-   un vistazo, sin tocar en nada el fondo real de la llave. */
-.bracket-fondo-preview[data-fondo-bracket="campo_estrellas"] {
-  background-image:
-    radial-gradient(1.2px 1.2px at 15% 25%, rgba(255, 255, 255, 0.95), transparent 60%),
-    radial-gradient(1.2px 1.2px at 42% 70%, rgba(255, 255, 255, 0.8), transparent 60%),
-    radial-gradient(1.6px 1.6px at 68% 20%, rgba(255, 255, 255, 0.9), transparent 60%),
-    radial-gradient(1.2px 1.2px at 82% 78%, rgba(255, 255, 255, 0.7), transparent 60%),
-    radial-gradient(1.6px 1.6px at 28% 85%, rgba(255, 255, 255, 0.85), transparent 60%),
-    radial-gradient(1.2px 1.2px at 58% 45%, rgba(255, 255, 255, 0.65), transparent 60%),
-    radial-gradient(1.2px 1.2px at 92% 50%, rgba(255, 255, 255, 0.75), transparent 60%);
-  background-size: 46px 46px;
-}
-
-.bracket-fondo-preview[data-fondo-bracket="nebulosa"] {
-  background-image:
-    radial-gradient(55% 45% at 22% 28%, rgba(34, 211, 238, 0.4), transparent 70%),
-    radial-gradient(50% 40% at 80% 65%, rgba(168, 85, 247, 0.35), transparent 70%),
-    radial-gradient(45% 40% at 50% 100%, rgba(236, 72, 153, 0.28), transparent 70%);
-}
-
-.bracket-fondo-preview[data-fondo-bracket="constelacion"] {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200' viewBox='0 0 200 200'%3E%3Cg fill='%2322d3ee' fill-opacity='0.9' stroke='%2322d3ee' stroke-opacity='0.45' stroke-width='1.5'%3E%3Ccircle cx='20' cy='30' r='2.2'/%3E%3Ccircle cx='90' cy='15' r='2.2'/%3E%3Ccircle cx='150' cy='60' r='2.2'/%3E%3Ccircle cx='60' cy='100' r='2.2'/%3E%3Ccircle cx='170' cy='150' r='2.2'/%3E%3Ccircle cx='30' cy='170' r='2.2'/%3E%3Cpath d='M20 30 L90 15 M90 15 L150 60 M60 100 L20 30 M60 100 L150 60 M60 100 L170 150 M170 150 L30 170'/%3E%3C/g%3E%3C/svg%3E");
-  background-size: 90px 90px;
-}
-
-.bracket-fondo-preview[data-fondo-bracket="vortice"] {
-  background-image: conic-gradient(
-    from 0deg at 50% 50%,
-    rgba(34, 211, 238, 0.4),
-    rgba(6, 7, 10, 0) 25%,
-    rgba(168, 85, 247, 0.36) 50%,
-    rgba(6, 7, 10, 0) 75%,
-    rgba(34, 211, 238, 0.4)
-  );
 }
 
 /* ----- Estilo "esports": logo/avatar más grande, franja con el
@@ -4229,6 +4089,29 @@ html.es-escritorio .player-detail-panel-inline {
   width: 80%;
   height: 70%;
   overflow: visible;
+}
+
+/* Paleta de "Color de línea" (migración 179) -- mismo tamaño que las
+   demás miniaturas del picker, pero una simple muestra de color
+   sólido en vez de un render real (no tiene efecto propio, es un
+   color que pisa el de cualquiera de los 3 efectos de arriba). */
+.bracket-color-linea-preview {
+  width: 5.5rem;
+  height: 3.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  transition: border-color 0.15s ease;
+}
+
+.bracket-color-linea-preview-defecto {
+  background:
+    linear-gradient(135deg, transparent 48%, var(--color-border) 49%, var(--color-border) 51%, transparent 52%),
+    var(--color-bg);
+}
+
+.bracket-picker-option:hover .bracket-color-linea-preview,
+.bracket-picker-option.selected .bracket-color-linea-preview {
+  border-color: var(--color-accent-soft);
 }
 
 .bracket-picker-option:hover .bracket-fondo-preview,
@@ -4571,9 +4454,7 @@ html.es-escritorio .player-detail-panel-inline {
    ::after), cada una con su propio giro. */
 .lineup-card[data-fondo-lineup="estrellado"]::before,
 .guerra-razas-page[data-fondo-lineup="estrellado"]::before,
-.lineup-fondo-preview[data-fondo-lineup="estrellado"]::before,
-.tournament-bracket-wrap[data-fondo-bracket="estrellado"]::before,
-.bracket-fondo-preview[data-fondo-bracket="estrellado"]::before {
+.lineup-fondo-preview[data-fondo-lineup="estrellado"]::before {
   background-image:
     radial-gradient(1.5px 1.5px at 60% 8%, rgba(255, 255, 255, 0.62), transparent 60%),
     radial-gradient(1.2px 1.2px at 72% 16%, rgba(255, 255, 255, 0.82), transparent 60%),
@@ -4623,9 +4504,7 @@ html.es-escritorio .player-detail-panel-inline {
 
 .lineup-card[data-fondo-lineup="estrellado"]::after,
 .guerra-razas-page[data-fondo-lineup="estrellado"]::after,
-.lineup-fondo-preview[data-fondo-lineup="estrellado"]::after,
-.tournament-bracket-wrap[data-fondo-bracket="estrellado"]::after,
-.bracket-fondo-preview[data-fondo-bracket="estrellado"]::after {
+.lineup-fondo-preview[data-fondo-lineup="estrellado"]::after {
   content: "";
   position: absolute;
   inset: -20%;
@@ -4740,9 +4619,7 @@ html.es-escritorio .player-detail-panel-inline {
    arrancan chicas y juntas, terminan grandes y separadas, en loop. */
 .lineup-card[data-fondo-lineup="viaje"]::before,
 .guerra-razas-page[data-fondo-lineup="viaje"]::before,
-.lineup-fondo-preview[data-fondo-lineup="viaje"]::before,
-.tournament-bracket-wrap[data-fondo-bracket="viaje"]::before,
-.bracket-fondo-preview[data-fondo-bracket="viaje"]::before {
+.lineup-fondo-preview[data-fondo-lineup="viaje"]::before {
   background-image:
     radial-gradient(1.5px 1.5px at 10% 20%, rgba(255, 255, 255, 0.95), transparent 60%),
     radial-gradient(1.5px 1.5px at 40% 72%, rgba(255, 255, 255, 0.85), transparent 60%),
@@ -4774,9 +4651,7 @@ html.es-escritorio .player-detail-panel-inline {
    no en alternate parejo).*/
 .lineup-card[data-fondo-lineup="fuego"]::before,
 .guerra-razas-page[data-fondo-lineup="fuego"]::before,
-.lineup-fondo-preview[data-fondo-lineup="fuego"]::before,
-.tournament-bracket-wrap[data-fondo-bracket="fuego"]::before,
-.bracket-fondo-preview[data-fondo-bracket="fuego"]::before {
+.lineup-fondo-preview[data-fondo-lineup="fuego"]::before {
   background-image:
     radial-gradient(50% 65% at 18% 105%, rgba(251, 146, 60, 0.6), transparent 70%),
     radial-gradient(45% 60% at 50% 110%, rgba(239, 68, 68, 0.55), transparent 70%),
@@ -4803,9 +4678,7 @@ html.es-escritorio .player-detail-panel-inline {
    subir. */
 .lineup-card[data-fondo-lineup="fuego"]::after,
 .guerra-razas-page[data-fondo-lineup="fuego"]::after,
-.lineup-fondo-preview[data-fondo-lineup="fuego"]::after,
-.tournament-bracket-wrap[data-fondo-bracket="fuego"]::after,
-.bracket-fondo-preview[data-fondo-bracket="fuego"]::after {
+.lineup-fondo-preview[data-fondo-lineup="fuego"]::after {
   content: "";
   position: absolute;
   inset: -20%;
@@ -4833,9 +4706,7 @@ html.es-escritorio .player-detail-panel-inline {
 
 .lineup-card[data-fondo-lineup="nova"]::before,
 .guerra-razas-page[data-fondo-lineup="nova"]::before,
-.lineup-fondo-preview[data-fondo-lineup="nova"]::before,
-.tournament-bracket-wrap[data-fondo-bracket="nova"]::before,
-.bracket-fondo-preview[data-fondo-bracket="nova"]::before {
+.lineup-fondo-preview[data-fondo-lineup="nova"]::before {
   background-image: radial-gradient(
     circle at 50% 45%,
     rgba(253, 224, 71, 0.4),
@@ -4852,9 +4723,7 @@ html.es-escritorio .player-detail-panel-inline {
 
 .lineup-card[data-fondo-lineup="planeta"]::before,
 .guerra-razas-page[data-fondo-lineup="planeta"]::before,
-.lineup-fondo-preview[data-fondo-lineup="planeta"]::before,
-.tournament-bracket-wrap[data-fondo-bracket="planeta"]::before,
-.bracket-fondo-preview[data-fondo-bracket="planeta"]::before {
+.lineup-fondo-preview[data-fondo-lineup="planeta"]::before {
   background-image:
     radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.3), transparent 40%),
     radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.35), rgba(15, 23, 42, 0.05) 60%, transparent 75%);
@@ -8889,9 +8758,9 @@ body.overlay-obs {
 /* ------------------------------------------------------------
    Race War (antes "Guerra de Razas", migración 102, independizado en
    la 106): marcador en vivo con temática StarCraft II. Fondo espacial
-   (mismo campo de estrellas de
-   .tournament-bracket-wrap[data-fondo-bracket="campo_estrellas"]),
-   título metálico, podio de 3 razas siempre lado a lado (el orden
+   (mismo campo de estrellas que usaba el fondo "Campo de estrellas"
+   de la llave, sacado del catálogo en la migración 179), título
+   metálico, podio de 3 razas siempre lado a lado (el orden
    visual lo decide React vía "order", no un reordenamiento del DOM,
    para no perder estado/transiciones al cambiar el puntaje) y un
    efecto de energía en la raza puntera que reutiliza la técnica de

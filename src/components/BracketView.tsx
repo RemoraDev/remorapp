@@ -30,6 +30,10 @@ interface BracketViewProps {
   // "esports"/"starcraft_oficial"; ver halcon.css, selectores
   // [data-estilo-linea="..."]).
   estiloLinea: EstiloLineaBracket;
+  // Migración 179, a pedido del usuario: color personalizado para
+  // cualquiera de los 3 efectos de línea -- null usa el color de
+  // siempre de cada uno (ver --linea-color en halcon.css).
+  colorLinea: string | null;
   // Migración 177, a pedido del usuario: cómo se arma la llave en sí
   // (no solo su piel) -- "clasico" es el de siempre.
   estructura: EstructuraBracket;
@@ -85,6 +89,7 @@ export default function BracketView({
   avatarsPorParticipante,
   estilo,
   estiloLinea,
+  colorLinea,
   estructura,
   nombreTorneo,
   nombresRondaPersonalizados,
@@ -304,6 +309,7 @@ export default function BracketView({
             data-estilo-linea={estiloLinea}
             width={tamano.ancho}
             height={tamano.alto}
+            style={colorLinea ? ({ "--linea-color": colorLinea } as CSSProperties) : undefined}
           >
             {lineas.map((linea) => (
               <path key={linea.key} d={linea.d} />
