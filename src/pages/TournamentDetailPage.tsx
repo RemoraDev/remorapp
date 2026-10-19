@@ -4,7 +4,19 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
-import { Trophy, Medal, Download, FileText, Upload, Calendar, Users, X, ArrowLeft } from "lucide-react";
+import {
+  Trophy,
+  Medal,
+  Download,
+  FileText,
+  Upload,
+  Calendar,
+  Users,
+  X,
+  ArrowLeft,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { esFormatoPorEquipo, getFormatoLabel, getMinimoMiembrosEquipo } from "../lib/tournamentOptions";
@@ -224,6 +236,21 @@ export default function TournamentDetailPage() {
   // así que la imagen sale exactamente como se ve en la página.
   const bracketRef = useRef<HTMLDivElement>(null);
   const [descargandoBracket, setDescargandoBracket] = useState(false);
+  // A pedido del usuario: ver la llave en pantalla completa -- mismo
+  // contenedor de siempre (bracketRef, con su estilo/fondo), solo le
+  // suma una clase que lo saca del flujo normal (position: fixed,
+  // cubre toda la ventana) en vez de desmontar/remontar BracketView.
+  const [bracketPantallaCompleta, setBracketPantallaCompleta] = useState(false);
+
+  // Esc cierra la pantalla completa de la llave.
+  useEffect(() => {
+    if (!bracketPantallaCompleta) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setBracketPantallaCompleta(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [bracketPantallaCompleta]);
 
   // Suizo (migración 069).
   const [iniciandoSuizo, setIniciandoSuizo] = useState(false);
@@ -2859,10 +2886,22 @@ export default function TournamentDetailPage() {
                         </button>
                       </div>
                       <div
-                        className="tournament-bracket-wrap"
+                        className={`tournament-bracket-wrap ${
+                          bracketPantallaCompleta ? "tournament-bracket-wrap-completa" : ""
+                        }`}
                         data-fondo-bracket={torneo.fondo_bracket}
                         ref={bracketRef}
                       >
+                        {/* A pedido del usuario: botón de pantalla
+                            completa, esquina inferior izquierda. */}
+                        <button
+                          type="button"
+                          className="bracket-pantalla-completa-btn"
+                          onClick={() => setBracketPantallaCompleta((v) => !v)}
+                          aria-label={bracketPantallaCompleta ? "Salir de pantalla completa" : "Ver en pantalla completa"}
+                        >
+                          {bracketPantallaCompleta ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                        </button>
                         <BracketView
                           matches={partidas}
                           nombresPorParticipante={Object.fromEntries(
