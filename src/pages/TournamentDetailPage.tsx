@@ -116,6 +116,11 @@ interface ParticipanteConNombre {
   // Migración 182, a pedido del usuario: insignia "banner_clan"
   // (torneo por equipo, teams.banner_url) -- siempre null en 1v1.
   bannerUrl: string | null;
+  // Migración 186, a pedido del usuario: imagen propia del clan para
+  // la tarjeta de celebración (teams.imagen_celebracion_url) -- siempre
+  // null en 1v1, tiene prioridad sobre tournaments.imagen_celebracion_url
+  // cuando este participante es el campeón (ver TournamentDetailPage.tsx).
+  imagenCelebracionUrl: string | null;
 }
 
 // Convierte una fecha ISO (como llega de la base) al formato que
@@ -405,6 +410,10 @@ export default function TournamentDetailPage() {
   const reglamentoInputRef = useRef<HTMLInputElement | null>(null);
   const [subiendoReglamento, setSubiendoReglamento] = useState(false);
   const [errorReglamento, setErrorReglamento] = useState<string | null>(null);
+  // Migración 186, a pedido del usuario: imagen propia (webp) del
+  // creador del torneo para la tarjeta de celebración.
+  const [subiendoImagenCelebracion, setSubiendoImagenCelebracion] = useState(false);
+  const [errorImagenCelebracion, setErrorImagenCelebracion] = useState<string | null>(null);
   const [mostrandoVisorReglamento, setMostrandoVisorReglamento] = useState(false);
   // A pedido del usuario: "Reglamento" en la barra de pestañas queda
   // visible aunque no haya uno subido todavía -- esto solo avisa.
@@ -487,11 +496,12 @@ export default function TournamentDetailPage() {
       let ligaPorTeamId: Record<string, string> = {};
       let bancaRotaPorTeamId: Record<string, boolean> = {};
       let bannerPorTeamId: Record<string, string | null> = {};
+      let imagenCelebracionPorTeamId: Record<string, string | null> = {};
 
       if (teamIds.length > 0) {
         const { data: equiposData } = await supabase
           .from("teams")
-          .select("id, name, logo_url, mmr, liga, banca_rota, banner_url")
+          .select("id, name, logo_url, mmr, liga, banca_rota, banner_url, imagen_celebracion_url")
           .in("id", teamIds);
 
         nombrePorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.name]));
@@ -500,6 +510,9 @@ export default function TournamentDetailPage() {
         ligaPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.liga]));
         bancaRotaPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.banca_rota]));
         bannerPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.banner_url]));
+        imagenCelebracionPorTeamId = Object.fromEntries(
+          (equiposData ?? []).map((t) => [t.id, t.imagen_celebracion_url])
+        );
       }
 
       listaParticipantes = (participantesData ?? []).map((p) => ({
@@ -518,6 +531,7 @@ export default function TournamentDetailPage() {
         puntosLeaderboard: p.puntos_leaderboard,
         pais: null,
         bannerUrl: p.team_id ? bannerPorTeamId[p.team_id] ?? null : null,
+        imagenCelebracionUrl: p.team_id ? imagenCelebracionPorTeamId[p.team_id] ?? null : null,
       }));
     } else {
       const userIds = (participantesData ?? []).map((p) => p.user_id).filter((u): u is string => u !== null);
@@ -577,6 +591,7 @@ export default function TournamentDetailPage() {
         puntosLeaderboard: p.puntos_leaderboard,
         pais: p.user_id ? paisPorId[p.user_id] ?? null : null,
         bannerUrl: null,
+        imagenCelebracionUrl: null,
       }));
     }
 
@@ -974,6 +989,72 @@ export default function TournamentDetailPage() {
       return;
     }
 
+    await cargarTorneo();
+  };
+
+  // Migración 186, a pedido del usuario: imagen propia (webp) del
+  // creador del torneo para la tarjeta de celebración -- mismo patrón
+  // que handleSubirReglamento de arriba, pero contra el bucket
+  // "celebraciones" y validando que sea webp en vez de PDF. En un
+  // torneo por equipo, si el clan campeón tiene su propia imagen
+  // (teams.imagen_celebracion_url, ver TeamDetailPage.tsx), esa manda
+  // sobre esta (ver el cálculo de imagenCelebracionEfectiva más abajo).
+  const handleSubirImagenCelebracion = async (file: File) => {
+    if (!torneo || !user) return;
+    setErrorImagenCelebracion(null);
+
+    if (file.type !== "image/webp") {
+      setErrorImagenCelebracion("La imagen debe ser un archivo WebP (.webp).");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setErrorImagenCelebracion("La imagen no puede pesar más de 3MB.");
+      return;
+    }
+
+    setSubiendoImagenCelebracion(true);
+    const ruta = `${user.id}/${torneo.id}-${Date.now()}.webp`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("celebraciones")
+      .upload(ruta, file, { contentType: "image/webp" });
+
+    if (uploadError) {
+      setErrorImagenCelebracion("No se pudo subir la imagen: " + uploadError.message);
+      setSubiendoImagenCelebracion(false);
+      return;
+    }
+
+    const url = supabase.storage.from("celebraciones").getPublicUrl(ruta).data.publicUrl;
+
+    const { error: updateError } = await supabase
+      .from("tournaments")
+      .update({ imagen_celebracion_url: url })
+      .eq("id", torneo.id);
+
+    setSubiendoImagenCelebracion(false);
+
+    if (updateError) {
+      setErrorImagenCelebracion(updateError.message);
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  const handleQuitarImagenCelebracion = async () => {
+    if (!torneo) return;
+    setErrorImagenCelebracion(null);
+    setSubiendoImagenCelebracion(true);
+    const { error } = await supabase
+      .from("tournaments")
+      .update({ imagen_celebracion_url: null })
+      .eq("id", torneo.id);
+    setSubiendoImagenCelebracion(false);
+    if (error) {
+      setErrorImagenCelebracion(error.message);
+      return;
+    }
     await cargarTorneo();
   };
 
@@ -2318,6 +2399,50 @@ export default function TournamentDetailPage() {
                         ))}
                       </div>
                     </div>
+
+                    {/* Migración 186, a pedido del usuario: imagen
+                        propia para la tarjeta de celebración, en vez
+                        de la copa de siempre -- solo WebP. En un
+                        torneo por equipo, cada clan puede tener la
+                        suya (líder del clan, en el Panel de control de
+                        su equipo), que tiene prioridad sobre esta. */}
+                    <div className="bracket-picker-group">
+                      <h3 className="detail-subtitle">Imagen de celebración (opcional)</h3>
+                      <p className="form-hint">
+                        Reemplaza la copa de siempre, solo WebP, máx. 3MB.
+                        {esPorEquipos &&
+                          " En este torneo por equipos, si el clan campeón ya tiene su propia imagen (desde el Panel de control de su clan), esa tiene prioridad sobre la de acá."}
+                      </p>
+                      <input
+                        type="file"
+                        className="form-input"
+                        accept="image/webp"
+                        disabled={subiendoImagenCelebracion}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleSubirImagenCelebracion(file);
+                          e.target.value = "";
+                        }}
+                      />
+                      {errorImagenCelebracion && <div className="form-error">{errorImagenCelebracion}</div>}
+                      {torneo.imagen_celebracion_url && (
+                        <>
+                          <img
+                            src={torneo.imagen_celebracion_url}
+                            alt="Vista previa de la imagen de celebración"
+                            className="team-celebracion-preview"
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={subiendoImagenCelebracion}
+                            onClick={handleQuitarImagenCelebracion}
+                          >
+                            Quitar imagen
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
                 )}
@@ -3639,7 +3764,20 @@ export default function TournamentDetailPage() {
             >
               <X size={18} />
             </button>
-            <Trophy className="celebracion-campeon-copa" />
+            {/* Migración 186, a pedido del usuario: imagen propia en vez
+                de la copa de siempre -- la del clan campeón (si el
+                torneo es por equipos y ese clan subió la suya) manda
+                sobre la del torneo. */}
+            {(() => {
+              const imagenCelebracion =
+                participantes.find((p) => p.id === torneo.campeon_participant_id)?.imagenCelebracionUrl ??
+                torneo.imagen_celebracion_url;
+              return imagenCelebracion ? (
+                <img src={imagenCelebracion} alt="" className="celebracion-campeon-imagen" />
+              ) : (
+                <Trophy className="celebracion-campeon-copa" />
+              );
+            })()}
             <Avatar
               url={participantes.find((p) => p.id === torneo.campeon_participant_id)?.avatarUrl ?? null}
               nombre={participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ?? null}

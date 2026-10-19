@@ -23779,3 +23779,31 @@ alter table public.tournaments add column fuente_texto text;
 alter table public.tournaments add column tamano_fuente_titulo integer;
 alter table public.tournaments add constraint tournaments_tamano_fuente_titulo_check
   check (tamano_fuente_titulo is null or tamano_fuente_titulo between 10 and 60);
+
+alter table public.tournaments add column imagen_celebracion_url text;
+
+alter table public.teams add column imagen_celebracion_url text;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'celebraciones',
+  'celebraciones',
+  true,
+  3145728,
+  array['image/webp']
+)
+on conflict (id) do nothing;
+
+create policy "celebraciones_lectura_publica"
+  on storage.objects for select
+  using (bucket_id = 'celebraciones');
+
+create policy "celebraciones_subida_propia"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'celebraciones'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+grant update (imagen_celebracion_url) on public.teams to authenticated;

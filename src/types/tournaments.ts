@@ -248,6 +248,12 @@ export interface TournamentRow {
   // Migración 185, a pedido del usuario: tamaño en px del texto de la
   // franja del título -- null usa el tamaño de siempre (1.05rem).
   tamano_fuente_titulo: number | null;
+  // Migración 186, a pedido del usuario: imagen propia (webp) para la
+  // tarjeta de celebración -- la sube el creador del torneo, pisa el
+  // ícono de copa de siempre. En un torneo por equipo, si el clan
+  // campeón tiene SU PROPIA imagen (teams.imagen_celebracion_url), esa
+  // tiene prioridad sobre esta (ver TournamentDetailPage.tsx).
+  imagen_celebracion_url: string | null;
   // Migración 041: etapa de grupos previa a la llave eliminatoria.
   tiene_fase_grupos: boolean;
   cantidad_grupos: number | null;

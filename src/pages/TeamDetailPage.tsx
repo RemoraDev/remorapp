@@ -626,8 +626,14 @@ export default function TeamDetailPage() {
   // iban todas apiladas (o, en el caso de "Editar equipo", colgando de
   // un botón suelto en el medio) en una sola pantalla larga.
   const [tabConfig, setTabConfig] = useState<
-    "apariencia" | "logo" | "banner" | "franja" | "equipo" | "eliminar"
+    "apariencia" | "logo" | "banner" | "franja" | "celebracion" | "equipo" | "eliminar"
   >("apariencia");
+  // Migración 186, a pedido del usuario: imagen propia (webp) para la
+  // tarjeta de celebración de este clan -- subida directa, sin pasar
+  // por el formulario grande de "Guardar cambios" de arriba (mismo
+  // patrón que el reglamento en PDF de un torneo).
+  const [subiendoImagenCelebracion, setSubiendoImagenCelebracion] = useState(false);
+  const [errorImagenCelebracion, setErrorImagenCelebracion] = useState<string | null>(null);
   // Vista dentro de "Retar"/"Reprogramar fecha" (migración 158,
   // renombrada en la 165, separada de nuevo en la 167 a pedido del
   // usuario): "pendientes" son los retos que necesitan MI respuesta,
@@ -2248,6 +2254,69 @@ export default function TeamDetailPage() {
     setFranjaLateralFile(null);
     setFranjaLateralPreview(null);
     setEquipoGuardado(true);
+    await cargar();
+  };
+
+  // Migración 186, a pedido del usuario: imagen propia del clan para
+  // la tarjeta de celebración de un torneo -- exclusivamente webp (así
+  // lo pidió, y de paso evita el paso de recorte/compresión que usan
+  // logo/banner/franja, pensado para jpg/png). Mismo patrón que
+  // handleSubirReglamento en TournamentDetailPage.tsx: sube, arma la
+  // URL pública, actualiza la fila -- sin pasar por el formulario
+  // grande de "Guardar cambios".
+  const handleSubirImagenCelebracion = async (file: File) => {
+    if (!equipo || !user) return;
+    setErrorImagenCelebracion(null);
+
+    if (file.type !== "image/webp") {
+      setErrorImagenCelebracion("La imagen debe ser un archivo WebP (.webp).");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      setErrorImagenCelebracion("La imagen no puede pesar más de 3MB.");
+      return;
+    }
+
+    setSubiendoImagenCelebracion(true);
+    const ruta = `${user.id}/${equipo.id}-${Date.now()}.webp`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("celebraciones")
+      .upload(ruta, file, { contentType: "image/webp" });
+
+    if (uploadError) {
+      setErrorImagenCelebracion("No se pudo subir la imagen: " + uploadError.message);
+      setSubiendoImagenCelebracion(false);
+      return;
+    }
+
+    const url = supabase.storage.from("celebraciones").getPublicUrl(ruta).data.publicUrl;
+
+    const { error: updateError } = await supabase
+      .from("teams")
+      .update({ imagen_celebracion_url: url })
+      .eq("id", equipo.id);
+
+    setSubiendoImagenCelebracion(false);
+
+    if (updateError) {
+      setErrorImagenCelebracion(updateError.message);
+      return;
+    }
+
+    await cargar();
+  };
+
+  const handleQuitarImagenCelebracion = async () => {
+    if (!equipo) return;
+    setErrorImagenCelebracion(null);
+    setSubiendoImagenCelebracion(true);
+    const { error } = await supabase.from("teams").update({ imagen_celebracion_url: null }).eq("id", equipo.id);
+    setSubiendoImagenCelebracion(false);
+    if (error) {
+      setErrorImagenCelebracion(error.message);
+      return;
+    }
     await cargar();
   };
 
@@ -4297,6 +4366,13 @@ export default function TeamDetailPage() {
                     </button>
                     <button
                       type="button"
+                      className={`team-config-media-tab ${tabConfig === "celebracion" ? "is-active" : ""}`}
+                      onClick={() => setTabConfig("celebracion")}
+                    >
+                      Celebración
+                    </button>
+                    <button
+                      type="button"
                       className={`team-config-media-tab ${tabConfig === "equipo" ? "is-active" : ""}`}
                       onClick={() => setTabConfig("equipo")}
                     >
@@ -4492,6 +4568,49 @@ export default function TeamDetailPage() {
               {guardandoEquipo ? "Guardando..." : "Guardar cambios"}
             </button>
           </form>
+              )}
+
+              {seccionPanel === "configuracion" && tabConfig === "celebracion" && (
+                <div className="form-group">
+                  <label className="form-label" htmlFor="team-edit-celebracion">
+                    Imagen de celebración (opcional, solo WebP, máx. 3MB)
+                  </label>
+                  <p className="form-hint">
+                    Reemplaza la copa de siempre en la tarjeta de celebración cuando este clan gana un torneo
+                    por equipos. Solo el líder del clan puede subirla; el creador del torneo también puede
+                    poner una propia desde el Panel de control del torneo, pero la de acá tiene prioridad.
+                  </p>
+                  <input
+                    id="team-edit-celebracion"
+                    className="form-input"
+                    type="file"
+                    accept="image/webp"
+                    disabled={subiendoImagenCelebracion}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleSubirImagenCelebracion(file);
+                      e.target.value = "";
+                    }}
+                  />
+                  {errorImagenCelebracion && <div className="form-error">{errorImagenCelebracion}</div>}
+                  {equipo.imagen_celebracion_url && (
+                    <>
+                      <img
+                        src={equipo.imagen_celebracion_url}
+                        alt="Vista previa de la imagen de celebración"
+                        className="team-celebracion-preview"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={subiendoImagenCelebracion}
+                        onClick={handleQuitarImagenCelebracion}
+                      >
+                        Quitar imagen
+                      </button>
+                    </>
+                  )}
+                </div>
               )}
 
               {seccionPanel === "solicitudes-unirse" && (

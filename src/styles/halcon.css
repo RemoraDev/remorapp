@@ -1816,6 +1816,20 @@ html.es-escritorio .section {
   border: 1px solid var(--color-border);
 }
 
+/* Migración 186: imagen de celebración del clan -- sin recorte fijo
+   (reemplaza la copa de la tarjeta de celebración, que es cuadrada
+   pero no exige ninguna proporción puntual), se muestra tal cual con
+   un límite de alto para que no domine el formulario. */
+.team-celebracion-preview {
+  display: block;
+  margin: 0.6rem 0;
+  max-width: 8rem;
+  max-height: 8rem;
+  border-radius: 0.6rem;
+  object-fit: contain;
+  border: 1px solid var(--color-border);
+}
+
 /* Migración 147: un solo buscador compacto reemplaza la caja de
    código de invitación + la barra de búsqueda que vivían separadas
    (la primera ocupaba espacio fijo aunque nadie la usara). Una sola
@@ -3202,6 +3216,17 @@ html.es-escritorio .player-detail-panel-inline {
 @keyframes celebracion-copa-pulso {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.12); }
+}
+
+/* Migración 186: imagen propia (torneo o clan campeón) en vez de la
+   copa de siempre -- sin recorte fijo, el mismo respiro de
+   celebracion-copa-pulso para que no se sienta como un elemento
+   distinto del resto de la tarjeta. */
+.celebracion-campeon-imagen {
+  max-width: 5rem;
+  max-height: 4rem;
+  object-fit: contain;
+  animation: celebracion-copa-pulso 1.8s ease-in-out infinite;
 }
 
 .celebracion-campeon-avatar {

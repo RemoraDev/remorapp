@@ -39,6 +39,12 @@ export interface TeamRow {
   // Apariencia del equipo (migración 033): una de las 7 paletas fijas
   // de TEMAS_EQUIPO, aplicada solo a la página pública de este equipo.
   tema_equipo: TemaEquipo;
+  // Migración 186, a pedido del usuario: imagen propia (webp) para la
+  // tarjeta de celebración de este clan -- la sube su líder, desde su
+  // propio Panel de control (no depende de ningún torneo puntual).
+  // Cuando este equipo gana un torneo por equipos, tiene prioridad
+  // sobre tournaments.imagen_celebracion_url (ver TournamentDetailPage.tsx).
+  imagen_celebracion_url: string | null;
 }
 
 // Apariencia del equipo (migración 033, recortada en la 160): 5
