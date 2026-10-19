@@ -3298,6 +3298,13 @@ html.es-escritorio .player-detail-panel-inline {
 
 .bracket {
   position: relative;
+  /* El patrón animado de un fondo (Campo de estrellas, Nova, etc.) vive
+     en un ::before/::after de .tournament-bracket-wrap con z-index: 0
+     -- sin esto, a veces terminaba pintándose por encima de las
+     tarjetas (orden de apilado ambiguo entre position: relative sin
+     z-index propio y un hermano con z-index explícito) y tapaba los
+     nombres. */
+  z-index: 1;
   display: flex;
   gap: 2.5rem;
   margin-top: 1rem;
@@ -3659,6 +3666,8 @@ html.es-escritorio .player-detail-panel-inline {
    pensada para torneos con muchos participantes o pantallas chicas. */
 
 .bracket-compacta {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
@@ -3721,11 +3730,12 @@ html.es-escritorio .player-detail-panel-inline {
 /* ---------- Estructura "embudo al centro" (migración 177) ---------- */
 /* Las dos mitades del cuadro convergen hacia el medio, con la final
    centrada -- el look de transmisiones grandes. La mitad derecha es
-   el MISMO .bracket de siempre, solo espejado con scaleX(-1) (así se
-   invierte de una el orden de las rondas y la dirección de las
-   líneas); .bracket-match/.bracket-round-title lo contra-espejan para
-   que el texto/logos se lean normales. */
+   el MISMO .bracket de siempre, con sus rondas en orden visual
+   inverso (ver renderGrilla en BracketView.tsx) -- sin ningún
+   transform de por medio. */
 .bracket-embudo-wrap {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 1.5rem;

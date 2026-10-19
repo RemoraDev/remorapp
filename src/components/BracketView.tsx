@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
+import Avatar from "./Avatar";
 import type { BracketMatchRow } from "../types/bracket";
 import type { EstiloBracket, EstiloLineaBracket, EstructuraBracket } from "../types/tournaments";
 
@@ -410,9 +411,11 @@ export default function BracketView({
             final de los playoffs de First Stand). */}
         {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
         <div className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""}`}>
-          {logoDe(match.participant1_id) && (
-            <img src={logoDe(match.participant1_id) ?? ""} alt="" className="bracket-slot-logo" />
-          )}
+          <Avatar
+            url={logoDe(match.participant1_id)}
+            nombre={nombreDe(match.participant1_id)}
+            className="bracket-slot-logo"
+          />
           {nombreDe(match.participant1_id)}
         </div>
         <div
@@ -420,9 +423,11 @@ export default function BracketView({
             p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""
           }`}
         >
-          {logoDe(match.participant2_id) && (
-            <img src={logoDe(match.participant2_id) ?? ""} alt="" className="bracket-slot-logo" />
-          )}
+          <Avatar
+            url={logoDe(match.participant2_id)}
+            nombre={nombreDe(match.participant2_id)}
+            className="bracket-slot-logo"
+          />
           {nombreDe(match.participant2_id)}
         </div>
 
@@ -505,16 +510,20 @@ export default function BracketView({
         {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
         <div className="bracket-compacta-nombres">
           <span className={p1Gana ? "winner" : match.winner_id ? "loser" : ""}>
-            {logoDe(match.participant1_id) && (
-              <img src={logoDe(match.participant1_id) ?? ""} alt="" className="bracket-slot-logo" />
-            )}
+            <Avatar
+              url={logoDe(match.participant1_id)}
+              nombre={nombreDe(match.participant1_id)}
+              className="bracket-slot-logo"
+            />
             {nombreDe(match.participant1_id)}
           </span>
           <span className="bracket-compacta-vs">vs</span>
           <span className={p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""}>
-            {logoDe(match.participant2_id) && (
-              <img src={logoDe(match.participant2_id) ?? ""} alt="" className="bracket-slot-logo" />
-            )}
+            <Avatar
+              url={logoDe(match.participant2_id)}
+              nombre={nombreDe(match.participant2_id)}
+              className="bracket-slot-logo"
+            />
             {nombreDe(match.participant2_id)}
           </span>
         </div>
