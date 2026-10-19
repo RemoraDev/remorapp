@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
@@ -52,6 +52,11 @@ interface BracketViewProps {
 
 const ALTURA_PARTIDO_PX = 96;
 
+interface ConectorLinea {
+  key: string;
+  d: string;
+}
+
 export default function BracketView({
   matches,
   nombresPorParticipante,
@@ -70,6 +75,80 @@ export default function BracketView({
 }: BracketViewProps) {
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
+
+  // Líneas de conexión entre rondas (solo estilos "esports"/"starcraft
+  // oficial") -- antes era un acento de CSS de ancho fijo, sin relación
+  // real con dónde caía cada partido (se notaba mal apenas una ronda
+  // tenía partidos de alturas distintas, por ejemplo uno con los
+  // botones de "Ganó X/Y" visibles y otro ya resuelto sin ellos). Ahora
+  // se miden las posiciones reales en el DOM y se dibuja un trazo SVG
+  // que conecta el borde derecho de cada partido con el borde
+  // izquierdo del partido de la ronda siguiente que le corresponde.
+  const matchElRefs = useRef(new Map<string, HTMLDivElement>());
+  const grillaElRefs = useRef(new Map<string, HTMLDivElement>());
+  const [conectoresPorGrilla, setConectoresPorGrilla] = useState<Record<string, ConectorLinea[]>>({});
+  const [tamanoPorGrilla, setTamanoPorGrilla] = useState<Record<string, { ancho: number; alto: number }>>({});
+
+  const muestraConectores = estilo === "esports" || estilo === "starcraft_oficial";
+
+  useLayoutEffect(() => {
+    if (!muestraConectores) return;
+
+    const medir = () => {
+      const nuevosConectores: Record<string, ConectorLinea[]> = {};
+      const nuevosTamanos: Record<string, { ancho: number; alto: number }> = {};
+
+      grillaElRefs.current.forEach((contenedor, keyPrefix) => {
+        const rectContenedor = contenedor.getBoundingClientRect();
+        nuevosTamanos[keyPrefix] = { ancho: contenedor.scrollWidth, alto: contenedor.scrollHeight };
+
+        const porRonda = new Map<number, { el: HTMLDivElement; matchNumber: number }[]>();
+        matchElRefs.current.forEach((el, matchKey) => {
+          const [prefijo, rondaStr, matchNumberStr] = matchKey.split("::");
+          if (prefijo !== keyPrefix) return;
+          const ronda = Number(rondaStr);
+          const lista = porRonda.get(ronda) ?? [];
+          lista.push({ el, matchNumber: Number(matchNumberStr) });
+          porRonda.set(ronda, lista);
+        });
+
+        const rondas = [...porRonda.keys()].sort((a, b) => a - b);
+        const lineas: ConectorLinea[] = [];
+
+        for (let i = 0; i < rondas.length - 1; i++) {
+          const actual = (porRonda.get(rondas[i]) ?? []).sort((a, b) => a.matchNumber - b.matchNumber);
+          const siguiente = (porRonda.get(rondas[i + 1]) ?? []).sort((a, b) => a.matchNumber - b.matchNumber);
+
+          actual.forEach(({ el, matchNumber }) => {
+            const destino = siguiente.find((s) => s.matchNumber === Math.ceil(matchNumber / 2));
+            if (!destino) return;
+
+            const r1 = el.getBoundingClientRect();
+            const r2 = destino.el.getBoundingClientRect();
+            const x1 = r1.right - rectContenedor.left;
+            const y1 = r1.top + r1.height / 2 - rectContenedor.top;
+            const x2 = r2.left - rectContenedor.left;
+            const y2 = r2.top + r2.height / 2 - rectContenedor.top;
+            const xMedio = x1 + (x2 - x1) / 2;
+
+            lineas.push({
+              key: `${keyPrefix}-${rondas[i]}-${matchNumber}`,
+              d: `M ${x1} ${y1} H ${xMedio} V ${y2} H ${x2}`,
+            });
+          });
+        }
+
+        nuevosConectores[keyPrefix] = lineas;
+      });
+
+      setConectoresPorGrilla(nuevosConectores);
+      setTamanoPorGrilla(nuevosTamanos);
+    };
+
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, [matches, estilo, muestraConectores]);
 
   // El partido por el tercer lugar (migración 046) comparte la ronda
   // de la final pero se muestra aparte, en su propia cajita -- se
@@ -141,25 +220,44 @@ export default function BracketView({
     return { rondas, partidosPorRonda, alturaBracket, totalRondasReal, nombresTradicionales };
   };
 
-  const renderGrilla = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => (
-    <div
-      className="bracket"
-      data-estilo-bracket={estilo}
-      style={{ height: `${grilla.alturaBracket}px` } as CSSProperties}
-    >
-      {grilla.partidosPorRonda.map((partidos, indiceRonda) => (
-        <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
-          <div className="bracket-round-title">
-            {grilla.nombresTradicionales
-              ? nombreDeRondaTradicional(grilla.rondas, indiceRonda, grilla.totalRondasReal, partidos.length)
-              : `Ronda ${grilla.rondas[indiceRonda]}`}
-          </div>
+  const renderGrilla = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => {
+    const lineas = conectoresPorGrilla[keyPrefix] ?? [];
+    const tamano = tamanoPorGrilla[keyPrefix];
 
-          {partidos.map(renderPartido)}
-        </div>
-      ))}
-    </div>
-  );
+    return (
+      <div
+        className="bracket"
+        data-estilo-bracket={estilo}
+        style={{ height: `${grilla.alturaBracket}px` } as CSSProperties}
+        ref={(el) => {
+          if (el) grillaElRefs.current.set(keyPrefix, el);
+          else grillaElRefs.current.delete(keyPrefix);
+        }}
+      >
+        {muestraConectores && lineas.length > 0 && tamano && (
+          <svg className="bracket-conectores" width={tamano.ancho} height={tamano.alto}>
+            {lineas.map((linea) => (
+              <path key={linea.key} d={linea.d} />
+            ))}
+          </svg>
+        )}
+
+        {grilla.partidosPorRonda.map((partidos, indiceRonda) => (
+          <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
+            <div className="bracket-round-title">
+              {grilla.nombresTradicionales
+                ? nombreDeRondaTradicional(grilla.rondas, indiceRonda, grilla.totalRondasReal, partidos.length)
+                : `Ronda ${grilla.rondas[indiceRonda]}`}
+            </div>
+
+            {partidos.map((match) =>
+              renderPartido(match, { keyPrefix, round: grilla.rondas[indiceRonda], matchNumber: match.match_number })
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   // En eliminación doble nunca hay un bye real (generar_llave_doble
   // exige potencia de 2 exacta) -- un participantId null ahí siempre
@@ -208,12 +306,24 @@ export default function BracketView({
     onCambio();
   };
 
-  const renderPartido = (match: BracketMatchRow) => {
+  const renderPartido = (
+    match: BracketMatchRow,
+    refInfo?: { keyPrefix: string; round: number; matchNumber: number }
+  ) => {
     const p1Gana = !!match.winner_id && match.winner_id === match.participant1_id;
     const p2Gana = !!match.winner_id && match.winner_id === match.participant2_id;
+    const refKey = refInfo ? `${refInfo.keyPrefix}::${refInfo.round}::${refInfo.matchNumber}` : null;
 
     return (
-      <div key={match.id} className="bracket-match">
+      <div
+        key={match.id}
+        className="bracket-match"
+        ref={(el) => {
+          if (!refKey) return;
+          if (el) matchElRefs.current.set(refKey, el);
+          else matchElRefs.current.delete(refKey);
+        }}
+      >
         {/* Migración 057: etiqueta informativa -- no hay puntaje por
             mapa dentro de la llave, solo le indica a los jugadores
             cómo tienen que jugar esta partida puntual (usada por la

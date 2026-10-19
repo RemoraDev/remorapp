@@ -3213,11 +3213,46 @@ html.es-escritorio .player-detail-panel-inline {
 /* ---------- Llave de eliminación simple ---------- */
 
 .bracket {
+  position: relative;
   display: flex;
   gap: 2.5rem;
   margin-top: 1rem;
   padding-bottom: 1rem;
   overflow-x: auto;
+}
+
+/* Líneas de conexión reales entre rondas (BracketView.tsx mide la
+   posición de cada partido en el DOM y arma estos trazos) -- a
+   diferencia del acento con ::after de más abajo (que es un ancho fijo
+   sin relación con dónde cae cada partido), esto sí traza exacto de un
+   partido al que le sigue, incluso si las alturas de cada partido no
+   son todas iguales (por ejemplo uno con los botones de "Ganó X/Y"
+   visibles y otro ya resuelto sin ellos). */
+.bracket-conectores {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.bracket-conectores path {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2px;
+}
+
+[data-estilo-bracket="starcraft_oficial"] .bracket-conectores path {
+  stroke-width: 2px;
+  filter: drop-shadow(0 0 3px var(--color-accent));
+}
+
+/* El acento con ::after (más abajo) queda solo para la miniatura del
+   selector de estilo, que no mide nada en el DOM -- en la llave real
+   lo reemplazan los .bracket-conectores de arriba. */
+.bracket[data-estilo-bracket="esports"] .bracket-round:not(:last-child) .bracket-match::after,
+.bracket[data-estilo-bracket="starcraft_oficial"] .bracket-round:not(:last-child) .bracket-match::after {
+  display: none;
 }
 
 .bracket-round {
