@@ -23,7 +23,23 @@ export type TorneoEstado = "abierto" | "en_curso" | "finalizado";
 // Migración 040: layout de cajas/líneas de la llave y fondo
 // "galáctico" detrás -- independientes entre sí, se combinan.
 export type EstiloBracket = "clasico" | "esports" | "starcraft_oficial";
-export type FondoBracket = "ninguno" | "campo_estrellas" | "nebulosa" | "constelacion" | "vortice";
+// Migración 174, a pedido del usuario: suma el catálogo de fondos de
+// lineup (ver FondoLineup en types/teams.ts) a los que ya tenía la
+// llave -- mismas animaciones, CSS compartido bajo data-fondo-bracket
+// (ver halcon.css, junto a cada data-fondo-lineup).
+export type FondoBracket =
+  | "ninguno"
+  | "campo_estrellas"
+  | "nebulosa"
+  | "constelacion"
+  | "vortice"
+  | "estrellas"
+  | "estrellado"
+  | "estrellado_2"
+  | "nova"
+  | "planeta"
+  | "viaje"
+  | "fuego";
 
 export const ESTILO_BRACKET_OPTIONS: { value: EstiloBracket; label: string }[] = [
   { value: "clasico", label: "Clásico" },
@@ -37,6 +53,13 @@ export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "nebulosa", label: "Nebulosa" },
   { value: "constelacion", label: "Constelación" },
   { value: "vortice", label: "Vórtice" },
+  { value: "estrellas", label: "Estrellas" },
+  { value: "estrellado", label: "Estrellado" },
+  { value: "estrellado_2", label: "Estrellado 2" },
+  { value: "nova", label: "Nova" },
+  { value: "planeta", label: "Planeta" },
+  { value: "viaje", label: "Viaje" },
+  { value: "fuego", label: "Fuego" },
 ];
 
 export interface MapRow {

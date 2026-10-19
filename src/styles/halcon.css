@@ -3218,7 +3218,10 @@ html.es-escritorio .player-detail-panel-inline {
   gap: 2.5rem;
   margin-top: 1rem;
   padding-bottom: 1rem;
-  overflow-x: auto;
+  /* A pedido del usuario: nunca scroll lateral -- las columnas se
+     achican para entrar (ver flex en .bracket-round más abajo) en vez
+     de desbordar el contenedor. */
+  overflow-x: hidden;
 }
 
 /* Líneas de conexión reales entre rondas (BracketView.tsx mide la
@@ -3242,9 +3245,14 @@ html.es-escritorio .player-detail-panel-inline {
   stroke-width: 2px;
 }
 
+/* Efecto "láser" (a pedido del usuario): varios drop-shadow apilados,
+   de radio creciente, dan el típico brillo de tubo de neón en vez de
+   una línea plana. */
+[data-estilo-bracket="esports"] .bracket-conectores path,
 [data-estilo-bracket="starcraft_oficial"] .bracket-conectores path {
-  stroke-width: 2px;
-  filter: drop-shadow(0 0 3px var(--color-accent));
+  stroke-width: 2.5px;
+  filter: drop-shadow(0 0 2px var(--color-accent)) drop-shadow(0 0 6px var(--color-accent))
+    drop-shadow(0 0 14px rgba(var(--h-accent-rgb), 0.85));
 }
 
 /* El acento con ::after (más abajo) queda solo para la miniatura del
@@ -3258,18 +3266,22 @@ html.es-escritorio .player-detail-panel-inline {
 .bracket-round {
   display: flex;
   flex-direction: column;
-  /* Reparte las partidas de esta ronda a lo largo del mismo alto que
-     la ronda 1 (fijado en JS, ver BracketView.tsx): con menos
-     partidas, space-around las centra solas -- así se ve el
-     achicamiento típico de una llave sin calcular la posición exacta
-     de cada una a mano. */
-  justify-content: space-around;
-  gap: 0.75rem;
-  min-width: 16rem;
-  flex-shrink: 0;
+  /* Antes tenía min-width fijo + flex-shrink: 0 -- cada ronda exigía su
+     ancho completo sin importar cuánto espacio hubiera, por eso
+     aparecía scroll lateral. Ahora se reparte el ancho disponible entre
+     las rondas y se achican si hace falta (el nick ya se recorta con
+     "..." si no entra, ver .bracket-slot). */
+  flex: 1 1 0;
+  min-width: 8rem;
 }
 
 .bracket-round-title {
+  /* Separado del área que centra los partidos (.bracket-round-matches)
+     -- antes compartía el mismo justify-content: space-around, así que
+     "Ronda 2"/"Ronda 3" quedaban más abajo que "Ronda 1" apenas tenían
+     menos partidos. Ahora los títulos de todas las rondas quedan
+     siempre a la misma altura. */
+  flex-shrink: 0;
   text-align: center;
   font-family: var(--font-display);
   font-weight: 700;
@@ -3278,6 +3290,19 @@ html.es-escritorio .player-detail-panel-inline {
   letter-spacing: 0.05em;
   color: var(--color-text-faint);
   margin-bottom: 0.5rem;
+}
+
+.bracket-round-matches {
+  display: flex;
+  flex-direction: column;
+  /* Reparte las partidas de esta ronda a lo largo del alto disponible
+     (fijado en JS, ver BracketView.tsx): con menos partidas,
+     space-around las centra solas -- así se ve el achicamiento típico
+     de una llave sin calcular la posición exacta de cada una a mano. */
+  justify-content: space-around;
+  gap: 0.75rem;
+  flex: 1;
+  min-height: 0;
 }
 
 /* Título de sección de "Eliminación doble" (migración 084): Llave de
@@ -3559,6 +3584,11 @@ html.es-escritorio .player-detail-panel-inline {
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background-color: #06070a;
+  /* Los fondos tomados del catálogo de lineup (estrellas/estrellado/
+     nova/planeta/viaje/fuego/etc., ver más abajo) pintan su patrón en
+     un ::before/::after con inset: -20% -- sin esto se saldría del
+     recuadro. */
+  overflow: hidden;
 }
 
 /* Campo de estrellas: un único elemto, varias capas de radial-gradient
@@ -3815,6 +3845,8 @@ html.es-escritorio .player-detail-panel-inline {
 /* Mini-render real del fondo: mismo fondo que .tournament-bracket-wrap,
    en una caja chica. */
 .bracket-fondo-preview {
+  position: relative;
+  overflow: hidden;
   width: 5.5rem;
   height: 3.75rem;
   border-radius: 0.5rem;
@@ -4007,7 +4039,9 @@ html.es-escritorio .player-detail-panel-inline {
    solo el patrón detrás. */
 .lineup-card[data-fondo-lineup]:not([data-fondo-lineup="ninguno"])::before,
 .lineup-fondo-preview[data-fondo-lineup]:not([data-fondo-lineup="ninguno"])::before,
-.guerra-razas-page[data-fondo-lineup]:not([data-fondo-lineup="ninguno"])::before {
+.guerra-razas-page[data-fondo-lineup]:not([data-fondo-lineup="ninguno"])::before,
+.tournament-bracket-wrap[data-fondo-bracket]:not([data-fondo-bracket="ninguno"])::before,
+.bracket-fondo-preview[data-fondo-bracket]:not([data-fondo-bracket="ninguno"])::before {
   content: "";
   position: absolute;
   inset: -20%;
@@ -4017,7 +4051,9 @@ html.es-escritorio .player-detail-panel-inline {
 
 .lineup-card[data-fondo-lineup="estrellas"]::before,
 .guerra-razas-page[data-fondo-lineup="estrellas"]::before,
-.lineup-fondo-preview[data-fondo-lineup="estrellas"]::before {
+.lineup-fondo-preview[data-fondo-lineup="estrellas"]::before,
+.tournament-bracket-wrap[data-fondo-bracket="estrellas"]::before,
+.bracket-fondo-preview[data-fondo-bracket="estrellas"]::before {
   background-image:
     radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
     radial-gradient(1px 1px at 40% 72%, rgba(255, 255, 255, 0.65), transparent 60%),
@@ -4055,7 +4091,9 @@ html.es-escritorio .player-detail-panel-inline {
    ::after), cada una con su propio giro. */
 .lineup-card[data-fondo-lineup="estrellado"]::before,
 .guerra-razas-page[data-fondo-lineup="estrellado"]::before,
-.lineup-fondo-preview[data-fondo-lineup="estrellado"]::before {
+.lineup-fondo-preview[data-fondo-lineup="estrellado"]::before,
+.tournament-bracket-wrap[data-fondo-bracket="estrellado"]::before,
+.bracket-fondo-preview[data-fondo-bracket="estrellado"]::before {
   background-image:
     radial-gradient(1.5px 1.5px at 60% 8%, rgba(255, 255, 255, 0.62), transparent 60%),
     radial-gradient(1.2px 1.2px at 72% 16%, rgba(255, 255, 255, 0.82), transparent 60%),
@@ -4105,7 +4143,9 @@ html.es-escritorio .player-detail-panel-inline {
 
 .lineup-card[data-fondo-lineup="estrellado"]::after,
 .guerra-razas-page[data-fondo-lineup="estrellado"]::after,
-.lineup-fondo-preview[data-fondo-lineup="estrellado"]::after {
+.lineup-fondo-preview[data-fondo-lineup="estrellado"]::after,
+.tournament-bracket-wrap[data-fondo-bracket="estrellado"]::after,
+.bracket-fondo-preview[data-fondo-bracket="estrellado"]::after {
   content: "";
   position: absolute;
   inset: -20%;
@@ -4161,7 +4201,9 @@ html.es-escritorio .player-detail-panel-inline {
    (background-size), no un valor cualquiera. */
 .lineup-card[data-fondo-lineup="estrellado_2"]::before,
 .guerra-razas-page[data-fondo-lineup="estrellado_2"]::before,
-.lineup-fondo-preview[data-fondo-lineup="estrellado_2"]::before {
+.lineup-fondo-preview[data-fondo-lineup="estrellado_2"]::before,
+.tournament-bracket-wrap[data-fondo-bracket="estrellado_2"]::before,
+.bracket-fondo-preview[data-fondo-bracket="estrellado_2"]::before {
   background-image:
     radial-gradient(1px 1px at 5% 10%, #fff, transparent 60%),
     radial-gradient(1px 1px at 15% 45%, #fff, transparent 60%),
@@ -4181,7 +4223,9 @@ html.es-escritorio .player-detail-panel-inline {
 
 .lineup-card[data-fondo-lineup="estrellado_2"]::after,
 .guerra-razas-page[data-fondo-lineup="estrellado_2"]::after,
-.lineup-fondo-preview[data-fondo-lineup="estrellado_2"]::after {
+.lineup-fondo-preview[data-fondo-lineup="estrellado_2"]::after,
+.tournament-bracket-wrap[data-fondo-bracket="estrellado_2"]::after,
+.bracket-fondo-preview[data-fondo-bracket="estrellado_2"]::after {
   content: "";
   position: absolute;
   inset: -20%;
@@ -4216,7 +4260,9 @@ html.es-escritorio .player-detail-panel-inline {
    arrancan chicas y juntas, terminan grandes y separadas, en loop. */
 .lineup-card[data-fondo-lineup="viaje"]::before,
 .guerra-razas-page[data-fondo-lineup="viaje"]::before,
-.lineup-fondo-preview[data-fondo-lineup="viaje"]::before {
+.lineup-fondo-preview[data-fondo-lineup="viaje"]::before,
+.tournament-bracket-wrap[data-fondo-bracket="viaje"]::before,
+.bracket-fondo-preview[data-fondo-bracket="viaje"]::before {
   background-image:
     radial-gradient(1.5px 1.5px at 10% 20%, rgba(255, 255, 255, 0.95), transparent 60%),
     radial-gradient(1.5px 1.5px at 40% 72%, rgba(255, 255, 255, 0.85), transparent 60%),
@@ -4248,7 +4294,9 @@ html.es-escritorio .player-detail-panel-inline {
    no en alternate parejo).*/
 .lineup-card[data-fondo-lineup="fuego"]::before,
 .guerra-razas-page[data-fondo-lineup="fuego"]::before,
-.lineup-fondo-preview[data-fondo-lineup="fuego"]::before {
+.lineup-fondo-preview[data-fondo-lineup="fuego"]::before,
+.tournament-bracket-wrap[data-fondo-bracket="fuego"]::before,
+.bracket-fondo-preview[data-fondo-bracket="fuego"]::before {
   background-image:
     radial-gradient(50% 65% at 18% 105%, rgba(251, 146, 60, 0.6), transparent 70%),
     radial-gradient(45% 60% at 50% 110%, rgba(239, 68, 68, 0.55), transparent 70%),
@@ -4275,7 +4323,9 @@ html.es-escritorio .player-detail-panel-inline {
    subir. */
 .lineup-card[data-fondo-lineup="fuego"]::after,
 .guerra-razas-page[data-fondo-lineup="fuego"]::after,
-.lineup-fondo-preview[data-fondo-lineup="fuego"]::after {
+.lineup-fondo-preview[data-fondo-lineup="fuego"]::after,
+.tournament-bracket-wrap[data-fondo-bracket="fuego"]::after,
+.bracket-fondo-preview[data-fondo-bracket="fuego"]::after {
   content: "";
   position: absolute;
   inset: -20%;
@@ -4303,7 +4353,9 @@ html.es-escritorio .player-detail-panel-inline {
 
 .lineup-card[data-fondo-lineup="nova"]::before,
 .guerra-razas-page[data-fondo-lineup="nova"]::before,
-.lineup-fondo-preview[data-fondo-lineup="nova"]::before {
+.lineup-fondo-preview[data-fondo-lineup="nova"]::before,
+.tournament-bracket-wrap[data-fondo-bracket="nova"]::before,
+.bracket-fondo-preview[data-fondo-bracket="nova"]::before {
   background-image: radial-gradient(
     circle at 50% 45%,
     rgba(253, 224, 71, 0.4),
@@ -4320,7 +4372,9 @@ html.es-escritorio .player-detail-panel-inline {
 
 .lineup-card[data-fondo-lineup="planeta"]::before,
 .guerra-razas-page[data-fondo-lineup="planeta"]::before,
-.lineup-fondo-preview[data-fondo-lineup="planeta"]::before {
+.lineup-fondo-preview[data-fondo-lineup="planeta"]::before,
+.tournament-bracket-wrap[data-fondo-bracket="planeta"]::before,
+.bracket-fondo-preview[data-fondo-bracket="planeta"]::before {
   background-image:
     radial-gradient(circle at 35% 35%, rgba(255, 255, 255, 0.3), transparent 40%),
     radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.35), rgba(15, 23, 42, 0.05) 60%, transparent 75%);

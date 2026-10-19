@@ -250,9 +250,11 @@ export default function BracketView({
                 : `Ronda ${grilla.rondas[indiceRonda]}`}
             </div>
 
-            {partidos.map((match) =>
-              renderPartido(match, { keyPrefix, round: grilla.rondas[indiceRonda], matchNumber: match.match_number })
-            )}
+            <div className="bracket-round-matches">
+              {partidos.map((match) =>
+                renderPartido(match, { keyPrefix, round: grilla.rondas[indiceRonda], matchNumber: match.match_number })
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -356,16 +358,27 @@ export default function BracketView({
             (torneo formato "wtl") no se reporta con el click de
             siempre -- el resultado sale de cerrar_clan_war() cuando
             los dos capitanes cierran la guerra. Mismo criterio que
-            GroupStage.tsx para los partidos de liga. */}
-        {match.status === "pendiente" && match.participant1_id && match.participant2_id && match.clan_war_id && (
+            GroupStage.tsx para los partidos de liga.
+            Migración 174, a pedido del usuario: antes esto solo se
+            mostraba mientras el partido seguía "pendiente", y solo con
+            un link propio para quien jugaba -- una vez jugado, no
+            había forma de ver qué jugadores eligió cada clan ni quién
+            ganó/perdió cada partida individual. Ahora el link a
+            /clan-war/:id (vista pública del lineup, ya existía para
+            otros usos) queda disponible para cualquiera, en cualquier
+            estado del partido. */}
+        {match.participant1_id && match.participant2_id && match.clan_war_id && (
           <div className="bracket-report">
-            {miEquipoTag &&
+            {match.status === "pendiente" &&
+            miEquipoTag &&
             (match.participant1_id === miParticipantId || match.participant2_id === miParticipantId) ? (
               <Link className="btn btn-ghost" to={`/equipos/${miEquipoTag}?panel=eventos`}>
                 Ir a la Clan War
               </Link>
             ) : (
-              <p className="tournament-card-meta">Se juega como Clan War entre los dos clanes.</p>
+              <Link className="btn btn-ghost" to={`/clan-war/${match.clan_war_id}`}>
+                {match.status === "pendiente" ? "Ver lineup" : "Ver lineup y resultado"}
+              </Link>
             )}
           </div>
         )}
