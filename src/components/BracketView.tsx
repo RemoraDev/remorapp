@@ -289,9 +289,14 @@ export default function BracketView({
     // Migración 177: "vertical" fija el ANCHO total (las rondas se
     // apilan de arriba hacia abajo) en vez del alto -- mismo cálculo,
     // ver armarGrilla más arriba.
-    const estiloTamano = esVertical
-      ? ({ width: `${grilla.alturaBracket}px` } as CSSProperties)
-      : ({ height: `${grilla.alturaBracket}px` } as CSSProperties);
+    // El color personalizado se setea acá, en .bracket (el ancestro
+    // común de las líneas Y de los partidos) -- --linea-color hereda
+    // por CSS hacia abajo, así el filete celeste de cada tarjeta
+    // (estilo "esports") también lo toma, no solo el trazo del <svg>.
+    const estiloTamano = {
+      ...(esVertical ? { width: `${grilla.alturaBracket}px` } : { height: `${grilla.alturaBracket}px` }),
+      ...(colorLinea ? { "--linea-color": colorLinea } : {}),
+    } as CSSProperties;
 
     return (
       <div
@@ -309,7 +314,6 @@ export default function BracketView({
             data-estilo-linea={estiloLinea}
             width={tamano.ancho}
             height={tamano.alto}
-            style={colorLinea ? ({ "--linea-color": colorLinea } as CSSProperties) : undefined}
           >
             {lineas.map((linea) => (
               <path key={linea.key} d={linea.d} />

@@ -3941,7 +3941,11 @@ html.es-escritorio .player-detail-panel-inline {
 
 [data-estilo-bracket="esports"] .bracket-match {
   position: relative;
-  border-left: 3px solid var(--color-accent);
+  /* A pedido del usuario: si hay un color de línea personalizado
+     (--linea-color, heredado desde .bracket -- ver renderGrilla en
+     BracketView.tsx), el filete toma ESE color en vez de quedarse fijo
+     en el acento de la marca. */
+  border-left: 3px solid var(--linea-color, var(--color-accent));
 }
 
 [data-estilo-bracket="esports"] .bracket-slot-logo {
