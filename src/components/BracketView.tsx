@@ -12,13 +12,19 @@ import type {
   InsigniaBracket,
 } from "../types/tournaments";
 
-const BANDERA_EMOJI: Record<string, string> = {
-  chile: "🇨🇱",
-  guatemala: "🇬🇹",
-  puerto_rico: "🇵🇷",
-  argentina: "🇦🇷",
-  peru: "🇵🇪",
-  bolivia: "🇧🇴",
+// Migración 182: el emoji de bandera (🇨🇱, etc.) depende de que el
+// sistema operativo tenga una fuente con glifos de emoji de bandera --
+// Windows no la tiene por default y cae a mostrar el código de país en
+// texto plano ("CL"). Se reemplaza por flag-icons (SVG reales,
+// paquete instalado, sin depender de ningún CDN externo) -- cada país
+// de profiles.country mapea a su código ISO 3166-1 alpha-2.
+const BANDERA_ISO: Record<string, string> = {
+  chile: "cl",
+  guatemala: "gt",
+  puerto_rico: "pr",
+  argentina: "ar",
+  peru: "pe",
+  bolivia: "bo",
 };
 
 interface BracketViewProps {
@@ -63,6 +69,15 @@ interface BracketViewProps {
   // título -- null usa el color de siempre de cada uno.
   colorTexto: string | null;
   colorTextoTitulo: string | null;
+  // Migración 184, a pedido del usuario: apaga la animación de brillo
+  // de la franja del título (cualquiera de los 11 modelos) sin
+  // cambiar de modelo.
+  tituloAnimado: boolean;
+  // Migración 185, a pedido del usuario: fuente de texto libre (los
+  // nombres dentro de la llave Y el título) y tamaño de letra del
+  // título -- null en cualquiera de los dos usa el de siempre.
+  fuenteTexto: string | null;
+  tamanoFuenteTitulo: number | null;
   // Migración 182, a pedido del usuario: qué se muestra junto al
   // nombre de cada participante -- "logo_personal" (default) reproduce
   // el comportamiento de siempre (logosPorParticipante/avatarsPorParticipante,
@@ -131,6 +146,9 @@ export default function BracketView({
   estiloTitulo,
   colorTexto,
   colorTextoTitulo,
+  tituloAnimado,
+  fuenteTexto,
+  tamanoFuenteTitulo,
   insignia,
   paisesPorParticipante,
   bannersPorParticipante,
@@ -409,6 +427,7 @@ export default function BracketView({
       ...(esVertical ? { width: `${grilla.alturaBracket}px` } : { height: `${grilla.alturaBracket}px` }),
       ...(colorLinea ? { "--linea-color": colorLinea } : {}),
       ...(colorTexto ? { "--texto-bracket-color": colorTexto } : {}),
+      ...(fuenteTexto ? { "--fuente-texto-personalizada": fuenteTexto } : {}),
     } as CSSProperties;
 
     return (
@@ -497,12 +516,9 @@ export default function BracketView({
 
     if (insignia === "bandera") {
       const pais = participantId ? paisesPorParticipante?.[participantId] ?? null : null;
-      if (!pais) return null;
-      return (
-        <span className="bracket-slot-bandera" title={pais}>
-          {BANDERA_EMOJI[pais] ?? "🏳️"}
-        </span>
-      );
+      const iso = pais ? BANDERA_ISO[pais] : null;
+      if (!iso) return null;
+      return <span className={`bracket-slot-bandera fi fi-${iso}`} title={pais ?? undefined} />;
     }
 
     if (insignia === "banner_clan") {
@@ -720,7 +736,12 @@ export default function BracketView({
   const renderGrillaCompacta = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => (
     <div
       className="bracket-compacta"
-      style={colorTexto ? ({ "--texto-bracket-color": colorTexto } as CSSProperties) : undefined}
+      style={
+        {
+          ...(colorTexto ? { "--texto-bracket-color": colorTexto } : {}),
+          ...(fuenteTexto ? { "--fuente-texto-personalizada": fuenteTexto } : {}),
+        } as CSSProperties
+      }
     >
       {grilla.partidosPorRonda.map((partidos, indiceRonda) => (
         <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-compacta-ronda">
@@ -790,7 +811,14 @@ export default function BracketView({
       <div
         className="bracket-esports-banner"
         data-estilo-titulo={estiloTitulo}
-        style={colorTextoTitulo ? ({ "--titulo-texto-color": colorTextoTitulo } as CSSProperties) : undefined}
+        data-titulo-animado={tituloAnimado}
+        style={
+          {
+            ...(colorTextoTitulo ? { "--titulo-texto-color": colorTextoTitulo } : {}),
+            ...(fuenteTexto ? { "--fuente-texto-personalizada": fuenteTexto } : {}),
+            ...(tamanoFuenteTitulo ? { "--titulo-tamano-fuente": `${tamanoFuenteTitulo}px` } : {}),
+          } as CSSProperties
+        }
       >
         {nombreTorneo}
       </div>
@@ -820,6 +848,7 @@ export default function BracketView({
           {
             ...(colorLinea ? { "--linea-color": colorLinea } : {}),
             ...(colorTexto ? { "--texto-bracket-color": colorTexto } : {}),
+            ...(fuenteTexto ? { "--fuente-texto-personalizada": fuenteTexto } : {}),
           } as CSSProperties
         }
         ref={(el) => {

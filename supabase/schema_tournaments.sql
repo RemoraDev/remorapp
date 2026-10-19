@@ -23764,3 +23764,18 @@ alter table public.tournaments add constraint tournaments_color_texto_titulo_bra
 alter table public.tournaments
   add column insignia_bracket text not null default 'logo_personal'
   check (insignia_bracket in ('ninguno', 'bandera', 'banner_clan', 'logo_personal'));
+
+alter table public.tournaments
+  add column estilo_celebracion text not null default 'dorado'
+  check (estilo_celebracion in (
+    'dorado', 'victory_royale', 'pentakill', 'ace', 'rank_up',
+    'aegis', 'gg_wp', 'neon_arcade', 'holografico', 'minimalista'
+  ));
+
+alter table public.tournaments add column titulo_animado boolean not null default true;
+
+alter table public.tournaments add column fuente_texto text;
+
+alter table public.tournaments add column tamano_fuente_titulo integer;
+alter table public.tournaments add constraint tournaments_tamano_fuente_titulo_check
+  check (tamano_fuente_titulo is null or tamano_fuente_titulo between 10 and 60);

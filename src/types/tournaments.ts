@@ -149,6 +149,38 @@ export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "estrellado_2", label: "Estrellado 2" },
 ];
 
+// Migración 183, a pedido del usuario: "modelos" de la tarjeta de
+// celebración del campeón ("Ver celebración", ver TournamentDetailPage.tsx)
+// -- 10 variantes inspiradas en momentos reales de victoria de juegos
+// de esports/battle royale conocidos (Victory Royale de Fortnite,
+// Pentakill/ACE de League of Legends y Valorant, el Aegis de Dota 2,
+// un ranked-up tipo Valorant, un marcador GG WP minimalista, etc.).
+// "dorado" es la tarjeta de siempre (copa dorada con glow).
+export type EstiloCelebracion =
+  | "dorado"
+  | "victory_royale"
+  | "pentakill"
+  | "ace"
+  | "rank_up"
+  | "aegis"
+  | "gg_wp"
+  | "neon_arcade"
+  | "holografico"
+  | "minimalista";
+
+export const ESTILO_CELEBRACION_OPTIONS: { value: EstiloCelebracion; label: string }[] = [
+  { value: "dorado", label: "Dorado clásico" },
+  { value: "victory_royale", label: "Victory Royale" },
+  { value: "pentakill", label: "Pentakill" },
+  { value: "ace", label: "Ace" },
+  { value: "rank_up", label: "Rango ascendido" },
+  { value: "aegis", label: "Aegis" },
+  { value: "gg_wp", label: "GG WP" },
+  { value: "neon_arcade", label: "Neón arcade" },
+  { value: "holografico", label: "Holográfico" },
+  { value: "minimalista", label: "Minimalista" },
+];
+
 export interface MapRow {
   id: string;
   nombre: string;
@@ -201,6 +233,21 @@ export interface TournamentRow {
   color_texto_bracket: string | null;
   color_texto_titulo_bracket: string | null;
   insignia_bracket: InsigniaBracket;
+  estilo_celebracion: EstiloCelebracion;
+  // Migración 184, a pedido del usuario: apaga la animación de
+  // cualquiera de los 11 modelos de "Estilo de título" -- sigue
+  // usando el mismo modelo elegido, solo deja de moverse.
+  titulo_animado: boolean;
+  // Migración 185, a pedido del usuario: fuente de texto libre (el
+  // nombre tal cual lo reconoce CSS/font-family) -- null usa la
+  // tipografía de siempre. No se "sube" ningún archivo de fuente: si
+  // quien mira el torneo no tiene esa fuente instalada, el navegador
+  // cae en la de siempre, mismo comportamiento de cualquier
+  // font-family de CSS.
+  fuente_texto: string | null;
+  // Migración 185, a pedido del usuario: tamaño en px del texto de la
+  // franja del título -- null usa el tamaño de siempre (1.05rem).
+  tamano_fuente_titulo: number | null;
   // Migración 041: etapa de grupos previa a la llave eliminatoria.
   tiene_fase_grupos: boolean;
   cantidad_grupos: number | null;

@@ -35,13 +35,45 @@ import type { ParticipanteParaLlave } from "../components/ArmarLlaveManual";
 // propio archivo, que Vite no incluye en la carga normal de esta
 // página.
 const VisorPdf = lazy(() => import("../components/VisorPdf"));
+import { ESTILO_CELEBRACION_OPTIONS } from "../types/tournaments";
 import type {
   PosicionGrupo,
   TournamentGroupMatchRow,
   TournamentGroupRow,
   TournamentRow,
   TorneoEstado,
+  EstiloCelebracion,
 } from "../types/tournaments";
+
+// Migración 183, a pedido del usuario: cada "modelo" de celebración
+// cambia el título que se muestra en la tarjeta y los colores del
+// confeti ("Ver celebración") -- buscados e inspirados en momentos de
+// victoria reales de juegos conocidos. undefined en CONFETTI_COLORES
+// deja los colores default de canvas-confetti (multicolor); "minimalista"
+// directamente no tira confeti, para quedar realmente discreto.
+const TITULO_CELEBRACION: Record<EstiloCelebracion, string> = {
+  dorado: "¡Campeón!",
+  victory_royale: "Victory Royale",
+  pentakill: "Pentakill",
+  ace: "Ace",
+  rank_up: "Rango S",
+  aegis: "Aegis conseguido",
+  gg_wp: "GG WP",
+  neon_arcade: "¡Campeón!",
+  holografico: "¡Campeón!",
+  minimalista: "Campeón",
+};
+
+const CONFETTI_COLORES_CELEBRACION: Partial<Record<EstiloCelebracion, string[]>> = {
+  dorado: ["#fde047", "#fbbf24", "#f59e0b"],
+  victory_royale: ["#fde047", "#1d4ed8", "#e2e8f0"],
+  pentakill: ["#ef4444", "#f97316", "#7f1d1d"],
+  ace: ["#f97316", "#111827", "#f8fafc"],
+  rank_up: ["#a78bfa", "#22d3ee", "#f8fafc"],
+  aegis: ["#a78bfa", "#2dd4bf", "#fde047"],
+  gg_wp: ["#4ade80", "#f8fafc"],
+  neon_arcade: ["#f472b6", "#22d3ee"],
+};
 import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
 import type { TemporadaRow, TorneoSolicitudEquipoRow } from "../types/teams";
@@ -874,7 +906,8 @@ export default function TournamentDetailPage() {
       | "cantidad_grupos"
       | "avanzan_por_grupo"
       | "tiene_tercer_lugar"
-      | "formato",
+      | "formato"
+      | "estilo_celebracion",
     valor: boolean | string | number | null
   ) => {
     if (!torneo) return;
@@ -946,8 +979,17 @@ export default function TournamentDetailPage() {
   // vea el resultado final (no solo el ganador), solo se dispara al
   // presionar el botón, nunca sola al cargar la página. Migración 175:
   // además abre la tarjeta centrada del campeón (ver mostrandoCelebracion).
+  // Migración 183: el color del confeti sigue el "modelo" de
+  // celebración elegido -- "minimalista" no tira confeti, a propósito.
   const handleVerCelebracion = () => {
-    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    if (torneo?.estilo_celebracion !== "minimalista") {
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: torneo ? CONFETTI_COLORES_CELEBRACION[torneo.estilo_celebracion] : undefined,
+      });
+    }
     setMostrandoCelebracion(true);
   };
 
@@ -2225,9 +2267,40 @@ export default function TournamentDetailPage() {
                       estiloTitulo={torneo.estilo_titulo_bracket}
                       colorTexto={torneo.color_texto_bracket}
                       colorTextoTitulo={torneo.color_texto_titulo_bracket}
+                      tituloAnimado={torneo.titulo_animado}
+                      fuenteTexto={torneo.fuente_texto}
+                      tamanoFuenteTitulo={torneo.tamano_fuente_titulo}
                       insignia={torneo.insignia_bracket}
                       onCambio={cargarTorneo}
                     />
+
+                    {/* Migración 183, a pedido del usuario: "modelos" de
+                        la tarjeta de celebración del campeón ("Ver
+                        celebración") -- inspirados en momentos de
+                        victoria reales de juegos conocidos. */}
+                    <div className="bracket-picker-group">
+                      <h3 className="detail-subtitle">Estilo de celebración</h3>
+                      <div className="bracket-picker-options">
+                        {ESTILO_CELEBRACION_OPTIONS.map((o) => (
+                          <button
+                            key={o.value}
+                            type="button"
+                            className={`bracket-picker-option ${
+                              torneo.estilo_celebracion === o.value ? "selected" : ""
+                            }`}
+                            onClick={() => handleActualizarOpcionAvanzada("estilo_celebracion", o.value)}
+                          >
+                            <div className="celebracion-campeon-preview">
+                              <div className="celebracion-campeon" data-estilo-celebracion={o.value}>
+                                <Trophy className="celebracion-campeon-copa" />
+                                <p className="celebracion-campeon-titulo">{TITULO_CELEBRACION[o.value]}</p>
+                              </div>
+                            </div>
+                            <span className="bracket-picker-option-label">{o.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
                 )}
@@ -2940,6 +3013,9 @@ export default function TournamentDetailPage() {
                           estiloTitulo={torneo.estilo_titulo_bracket}
                           colorTexto={torneo.color_texto_bracket}
                           colorTextoTitulo={torneo.color_texto_titulo_bracket}
+                          tituloAnimado={torneo.titulo_animado}
+                          fuenteTexto={torneo.fuente_texto}
+                          tamanoFuenteTitulo={torneo.tamano_fuente_titulo}
                           insignia={torneo.insignia_bracket}
                           paisesPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.pais]))}
                           bannersPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.bannerUrl]))}
@@ -3518,7 +3594,11 @@ export default function TournamentDetailPage() {
 
       {mostrandoCelebracion && torneo.campeon_participant_id && (
         <div className="modal-backdrop" onClick={() => setMostrandoCelebracion(false)}>
-          <div className="celebracion-campeon" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="celebracion-campeon"
+            data-estilo-celebracion={torneo.estilo_celebracion}
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
               className="modal-close"
@@ -3534,7 +3614,7 @@ export default function TournamentDetailPage() {
               className="celebracion-campeon-avatar"
               forma={participantes.find((p) => p.id === torneo.campeon_participant_id)?.avatarForma}
             />
-            <p className="celebracion-campeon-titulo">¡Campeón!</p>
+            <p className="celebracion-campeon-titulo">{TITULO_CELEBRACION[torneo.estilo_celebracion]}</p>
             <p className="celebracion-campeon-nombre">
               {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ?? "Jugador de RemorApp"}
             </p>

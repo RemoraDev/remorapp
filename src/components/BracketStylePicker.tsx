@@ -27,8 +27,24 @@ interface BracketStylePickerProps {
   estiloTitulo: EstiloTituloBracket;
   colorTexto: string | null;
   colorTextoTitulo: string | null;
+  tituloAnimado: boolean;
+  fuenteTexto: string | null;
+  tamanoFuenteTitulo: number | null;
   insignia: InsigniaBracket;
   onCambio: () => void;
+}
+
+// Local Font Access API (migración 185, a pedido del usuario): deja
+// elegir de una lista real de fuentes instaladas en la PC de quien
+// organiza, en vez de escribir el nombre a ciegas -- solo Chrome/Edge
+// de escritorio la soportan (y piden permiso la primera vez), así que
+// se feature-detecta y el campo de texto libre sigue siendo la forma
+// de siempre si el navegador no la tiene.
+type FuenteLocal = { family: string };
+declare global {
+  interface Window {
+    queryLocalFonts?: () => Promise<FuenteLocal[]>;
+  }
 }
 
 // Mini-diagrama abstracto de cada estructura (migración 177) -- mismo
@@ -98,10 +114,16 @@ function MiniLinea({ estiloLinea, colorLinea }: { estiloLinea: EstiloLineaBracke
 // -- mismo patrón que .bracket-style-preview: el CSS real
 // (.bracket-esports-banner[data-estilo-titulo]) aplicado a una caja
 // chica, no una captura.
-function PreviewTitulo({ estiloTitulo }: { estiloTitulo: EstiloTituloBracket }) {
+function PreviewTitulo({
+  estiloTitulo,
+  tituloAnimado,
+}: {
+  estiloTitulo: EstiloTituloBracket;
+  tituloAnimado: boolean;
+}) {
   return (
     <div className="bracket-titulo-preview">
-      <div className="bracket-esports-banner" data-estilo-titulo={estiloTitulo}>
+      <div className="bracket-esports-banner" data-estilo-titulo={estiloTitulo} data-titulo-animado={tituloAnimado}>
         Título
       </div>
     </div>
@@ -127,6 +149,9 @@ export default function BracketStylePicker({
   estiloTitulo,
   colorTexto,
   colorTextoTitulo,
+  tituloAnimado,
+  fuenteTexto,
+  tamanoFuenteTitulo,
   insignia,
   onCambio,
 }: BracketStylePickerProps) {
@@ -134,6 +159,9 @@ export default function BracketStylePicker({
   // la base todavía no tenía los valores nuevos), no pasaba nada
   // visible -- parecía que el botón "no hacía nada". Ahora se avisa.
   const [error, setError] = useState<string | null>(null);
+  const [fuenteTextoDraft, setFuenteTextoDraft] = useState(fuenteTexto ?? "");
+  const [fuentesLocales, setFuentesLocales] = useState<string[] | null>(null);
+  const [buscandoFuentes, setBuscandoFuentes] = useState(false);
 
   const handleCambiarFondo = async (nuevoFondo: FondoBracket) => {
     if (nuevoFondo === fondo) return;
@@ -188,6 +216,55 @@ export default function BracketStylePicker({
       .eq("id", tournamentId);
     if (err) setError(err.message);
     else onCambio();
+  };
+
+  const handleCambiarTituloAnimado = async (nuevo: boolean) => {
+    if (nuevo === tituloAnimado) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ titulo_animado: nuevo })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
+  const handleCambiarFuenteTexto = async (nueva: string | null) => {
+    if (nueva === fuenteTexto) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ fuente_texto: nueva })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
+  const handleCambiarTamanoFuenteTitulo = async (nuevo: number | null) => {
+    if (nuevo === tamanoFuenteTitulo) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ tamano_fuente_titulo: nuevo })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
+  const handleDetectarFuentesLocales = async () => {
+    if (!window.queryLocalFonts) return;
+    setBuscandoFuentes(true);
+    setError(null);
+    try {
+      const fuentes = await window.queryLocalFonts();
+      const nombres = [...new Set(fuentes.map((f) => f.family))].sort((a, b) => a.localeCompare(b));
+      setFuentesLocales(nombres);
+    } catch {
+      // El usuario cerró el permiso del navegador o lo rechazó -- no
+      // es un error de la app, el campo de texto libre sigue andando.
+      setError("No se pudo acceder a las fuentes de tu PC (¿rechazaste el permiso del navegador?).");
+    }
+    setBuscandoFuentes(false);
   };
 
   const handleCambiarColorTexto = async (nuevoColor: string | null) => {
@@ -296,7 +373,18 @@ export default function BracketStylePicker({
           "esports" (el único que muestra esta franja), pero se deja
           elegible siempre para que quede listo al cambiar de estilo. */}
       <div className="bracket-picker-group">
-        <h3 className="detail-subtitle">Estilo de título</h3>
+        <div className="bracket-picker-group-header">
+          <h3 className="detail-subtitle">Estilo de título</h3>
+          {/* A pedido del usuario: el brillo de los 11 modelos se puede
+              apagar sin cambiar de modelo. */}
+          <button
+            type="button"
+            className={`btn btn-ghost btn-sm ${tituloAnimado ? "" : "selected"}`}
+            onClick={() => handleCambiarTituloAnimado(!tituloAnimado)}
+          >
+            {tituloAnimado ? "Desactivar animación" : "Activar animación"}
+          </button>
+        </div>
         <div className="bracket-picker-options">
           {ESTILO_TITULO_BRACKET_OPTIONS.map((o) => (
             <button
@@ -305,10 +393,92 @@ export default function BracketStylePicker({
               className={`bracket-picker-option ${estiloTitulo === o.value ? "selected" : ""}`}
               onClick={() => handleCambiarEstiloTitulo(o.value)}
             >
-              <PreviewTitulo estiloTitulo={o.value} />
+              <PreviewTitulo estiloTitulo={o.value} tituloAnimado={tituloAnimado} />
               <span className="bracket-picker-option-label">{o.label}</span>
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Migración 185, a pedido del usuario: fuente de texto libre
+          para los nombres de la llave Y el título -- no sube ningún
+          archivo de fuente, es un font-family de CSS común y
+          corriente: si quien mira el torneo no tiene esa fuente
+          instalada, el navegador cae en la de siempre. "Detectar
+          fuentes de tu PC" (Local Font Access API) es un atajo para no
+          tener que escribir el nombre a mano, solo funciona en
+          Chrome/Edge de escritorio. */}
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Fuente del texto</h3>
+        <form
+          className="bracket-fuente-texto-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleCambiarFuenteTexto(fuenteTextoDraft.trim() || null);
+          }}
+        >
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Nombre de la fuente (ej. Arial Black, Impact...)"
+            value={fuenteTextoDraft}
+            onChange={(e) => setFuenteTextoDraft(e.target.value)}
+            style={fuenteTextoDraft ? { fontFamily: fuenteTextoDraft } : undefined}
+            list="bracket-fuentes-locales"
+          />
+          {fuentesLocales && (
+            <datalist id="bracket-fuentes-locales">
+              {fuentesLocales.map((f) => (
+                <option key={f} value={f} />
+              ))}
+            </datalist>
+          )}
+          <button type="submit" className="btn btn-ghost btn-sm">
+            Aplicar
+          </button>
+          {!!window.queryLocalFonts && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={buscandoFuentes}
+              onClick={handleDetectarFuentesLocales}
+            >
+              {buscandoFuentes ? "Buscando..." : "Detectar fuentes de tu PC"}
+            </button>
+          )}
+          {fuenteTexto && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setFuenteTextoDraft("");
+                handleCambiarFuenteTexto(null);
+              }}
+            >
+              Por defecto
+            </button>
+          )}
+        </form>
+      </div>
+
+      {/* Migración 185, a pedido del usuario: tamaño de letra del
+          título, independiente del modelo elegido arriba. */}
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Tamaño del título</h3>
+        <div className="bracket-tamano-titulo-form">
+          <input
+            type="range"
+            min={10}
+            max={60}
+            value={tamanoFuenteTitulo ?? 17}
+            onChange={(e) => handleCambiarTamanoFuenteTitulo(Number(e.target.value))}
+          />
+          <span className="bracket-tamano-titulo-valor">{tamanoFuenteTitulo ?? 17}px</span>
+          {tamanoFuenteTitulo !== null && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleCambiarTamanoFuenteTitulo(null)}>
+              Por defecto
+            </button>
+          )}
         </div>
       </div>
 
