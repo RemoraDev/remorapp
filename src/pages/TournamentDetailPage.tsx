@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
-import { Trophy, Medal, Download, FileText, Upload, Calendar, Users } from "lucide-react";
+import { Trophy, Medal, Download, FileText, Upload, Calendar, Users, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -136,14 +136,6 @@ function IconoVisualizacion() {
     <svg {...iconoComun}>
       <path d="M2.5 12s3.5-6.5 9.5-6.5S21.5 12 21.5 12s-3.5 6.5-9.5 6.5S2.5 12 2.5 12z" />
       <circle cx="12" cy="12" r="2.6" />
-    </svg>
-  );
-}
-
-function IconoChevron() {
-  return (
-    <svg {...iconoComun} width={16} height={16}>
-      <path d="M6 9l6 6 6-6" />
     </svg>
   );
 }
@@ -323,6 +315,10 @@ export default function TournamentDetailPage() {
   // Pestaña activa del Panel de organizador -- antes era una grilla con
   // todas las tarjetas abiertas a la vez, armaba un cuadro enorme.
   const [organizerPanelTab, setOrganizerPanelTab] = useState("cuadro");
+  // Pestañas de la ficha del torneo (migración 173, a pedido del
+  // usuario): antes "Participantes" y "Llave"/"Grupos"/"Suizo"/"Todos
+  // contra todos" iban todas apiladas, una debajo de la otra.
+  const [pestanaTorneo, setPestanaTorneo] = useState<"participantes" | "competencia">("participantes");
   // Migración 169: "Rellenar con equipos y jugadores" (staff/admin).
   const [rellenandoPrueba, setRellenandoPrueba] = useState(false);
   const [errorRellenarPrueba, setErrorRellenarPrueba] = useState<string | null>(null);
@@ -1879,33 +1875,38 @@ export default function TournamentDetailPage() {
         </div>
       )}
 
-      {/* Panel de organizador (migración 079, rediseñado): ya no se
-          eligen al crear el torneo -- se ajustan acá, en cualquier
-          momento, exclusivo del organizador. Misma lógica de guardado
-          de siempre (handleActualizarOpcionAvanzada), solo cambia la
-          presentación: tarjetas por tema en vez de una lista plana de
-          checkboxes. */}
+      {/* Panel de organizador (migración 079, rediseñado -- y en la
+          173 pasa a ser una ventana superpuesta, misma mecánica que
+          el Panel de control de un clan y de Mi perfil: .modal-backdrop
+          + .team-leader-panel-propio, un solo tamaño fijo para los
+          tres en vez de empujar el resto de la página hacia abajo). */}
       {esOrganizador && (
-        <div className="organizer-panel">
-          <button
-            type="button"
-            className={`organizer-panel-toggle ${mostrarOpcionesAvanzadas ? "is-open" : ""}`}
-            onClick={() => setMostrarOpcionesAvanzadas((v) => !v)}
-          >
-            <span className="organizer-panel-toggle-icon">
-              <IconoEngranaje />
-            </span>
-            <span className="organizer-panel-toggle-text">
-              <span className="organizer-panel-toggle-title">Panel de organizador</span>
-              <span className="organizer-panel-toggle-sub">Formato, cuadro, permisos y visualización</span>
-            </span>
-            <span className="organizer-panel-chevron">
-              <IconoChevron />
-            </span>
-          </button>
+        <>
+          <div className="section-head">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => setMostrarOpcionesAvanzadas(true)}
+            >
+              <span className="organizer-panel-toggle-icon">
+                <IconoEngranaje />
+              </span>
+              Panel de control
+            </button>
+          </div>
 
           {mostrarOpcionesAvanzadas && (
-            <div className="organizer-panel-body">
+            <div className="modal-backdrop" onClick={() => setMostrarOpcionesAvanzadas(false)}>
+              <div className="team-leader-panel team-leader-panel-propio" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  className="modal-close"
+                  onClick={() => setMostrarOpcionesAvanzadas(false)}
+                  aria-label="Cerrar panel de control"
+                >
+                  <X size={18} />
+                </button>
+                <h2 className="detail-subtitle">Panel de control</h2>
               {errorOpcionesAvanzadas && <div className="form-error">{errorOpcionesAvanzadas}</div>}
 
               {(() => {
@@ -2412,11 +2413,39 @@ export default function TournamentDetailPage() {
                   </>
                 );
               })()}
+              </div>
             </div>
           )}
-        </div>
+        </>
       )}
 
+      <div className="organizer-panel-tabs">
+        <button
+          type="button"
+          className={`organizer-panel-tab ${pestanaTorneo === "participantes" ? "selected" : ""}`}
+          onClick={() => setPestanaTorneo("participantes")}
+        >
+          {esPorEquipos ? "Equipos inscritos" : "Participantes"}
+        </button>
+        <button
+          type="button"
+          className={`organizer-panel-tab ${pestanaTorneo === "competencia" ? "selected" : ""}`}
+          onClick={() => setPestanaTorneo("competencia")}
+        >
+          {torneo.fase_actual === "grupos"
+            ? "Grupos"
+            : torneo.modo === "suizo"
+              ? "Suizo"
+              : torneo.modo === "todos_contra_todos"
+                ? "Todos contra todos"
+                : torneo.modo === "tabla_posiciones"
+                  ? "Tabla de posiciones"
+                  : "Llave"}
+        </button>
+      </div>
+
+      {pestanaTorneo === "participantes" && (
+        <>
       <div className="section-head">
         <h2 className="detail-subtitle">
           {esPorEquipos ? "Equipos inscritos" : "Participantes"} ({participantesVisibles.length})
@@ -2660,7 +2689,15 @@ export default function TournamentDetailPage() {
                 renderControlGenerarLlave("Cerrar check-in y generar llave")}
             </div>
           )}
+        </>
+      )}
+        </>
+      )}
 
+      {pestanaTorneo === "competencia" && (
+        <>
+      {(torneo.modo === "eliminacion_simple" || torneo.modo === "eliminacion_doble") && (
+        <>
           {torneo.fase_actual === "grupos" && (
             <>
               <h2 className="detail-subtitle">Grupos</h2>
@@ -3098,7 +3135,11 @@ export default function TournamentDetailPage() {
           )}
         </>
       )}
+        </>
+      )}
 
+      {pestanaTorneo === "participantes" && (
+        <>
       {/* El organizador ya tiene su propio panel de control más abajo
           (check-in, generar llave, etc.) -- mostrarle además la caja de
           autoinscripción confundía: parecía que la app no lo reconocía
@@ -3313,6 +3354,8 @@ export default function TournamentDetailPage() {
             {abandonando ? "Abandonando..." : "Abandonar torneo"}
           </button>
         </div>
+      )}
+        </>
       )}
 
       {esOrganizador && (
