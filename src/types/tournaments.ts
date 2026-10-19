@@ -41,10 +41,29 @@ export type FondoBracket =
   | "viaje"
   | "fuego";
 
+// Migración 176, a pedido del usuario: "efectos de líneas" -- antes la
+// línea de conexión entre rondas era un extra fijo de los estilos
+// "esports"/"starcraft_oficial" (o nada en "clasico"). Ahora es su
+// propio selector, independiente del estilo de caja -- se puede
+// combinar cualquier estilo de bracket con cualquier efecto de línea
+// (o "ninguno", para no mostrar líneas). "laser" es el que ya existía
+// (ver BracketView.tsx/halcon.css); los otros 5 son nuevos.
+export type EstiloLineaBracket = "ninguno" | "laser" | "pulso" | "electrico" | "arcoiris" | "dorado" | "matrix";
+
 export const ESTILO_BRACKET_OPTIONS: { value: EstiloBracket; label: string }[] = [
   { value: "clasico", label: "Clásico" },
   { value: "esports", label: "Esports" },
   { value: "starcraft_oficial", label: "StarCraft Oficial" },
+];
+
+export const ESTILO_LINEA_BRACKET_OPTIONS: { value: EstiloLineaBracket; label: string }[] = [
+  { value: "ninguno", label: "Ninguno" },
+  { value: "laser", label: "Láser" },
+  { value: "pulso", label: "Pulso" },
+  { value: "electrico", label: "Eléctrico" },
+  { value: "arcoiris", label: "Arcoíris" },
+  { value: "dorado", label: "Dorado" },
+  { value: "matrix", label: "Matrix" },
 ];
 
 export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
@@ -101,6 +120,7 @@ export interface TournamentRow {
   check_in_abierto: boolean;
   estilo_bracket: EstiloBracket;
   fondo_bracket: FondoBracket;
+  estilo_linea_bracket: EstiloLineaBracket;
   // Migración 041: etapa de grupos previa a la llave eliminatoria.
   tiene_fase_grupos: boolean;
   cantidad_grupos: number | null;

@@ -2,13 +2,15 @@ import { supabase } from "../lib/supabaseClient";
 import {
   ESTILO_BRACKET_OPTIONS,
   FONDO_BRACKET_OPTIONS,
+  ESTILO_LINEA_BRACKET_OPTIONS,
 } from "../types/tournaments";
-import type { EstiloBracket, FondoBracket } from "../types/tournaments";
+import type { EstiloBracket, FondoBracket, EstiloLineaBracket } from "../types/tournaments";
 
 interface BracketStylePickerProps {
   tournamentId: string;
   estilo: EstiloBracket;
   fondo: FondoBracket;
+  estiloLinea: EstiloLineaBracket;
   onCambio: () => void;
 }
 
@@ -38,12 +40,32 @@ function MiniBracket({ estilo }: { estilo: EstiloBracket }) {
   );
 }
 
-// Selector de estilo de bracket + fondo, solo para el organizador.
-// Cada opción se aplica al instante al elegirla (mismo patrón que la
-// selección de tema de equipo en TeamDetailPage.tsx) -- el mini-render
-// de cada tarjeta ES la vista previa, no hace falta un paso de
-// "confirmar" aparte.
-export default function BracketStylePicker({ tournamentId, estilo, fondo, onCambio }: BracketStylePickerProps) {
+// Mini-render del efecto de línea elegido (migración 176): a
+// diferencia de la llave real, acá no hay nada que medir en el DOM --
+// un trazo en escuadra fijo alcanza para mostrar el efecto, con el
+// mismo CSS real (.bracket-conectores, ver halcon.css).
+function MiniLinea({ estiloLinea }: { estiloLinea: EstiloLineaBracket }) {
+  return (
+    <div className="bracket-linea-preview">
+      <svg className="bracket-conectores" data-estilo-linea={estiloLinea} viewBox="0 0 90 60">
+        <path d="M 5 15 H 45 V 45 H 85" />
+      </svg>
+    </div>
+  );
+}
+
+// Selector de estilo de bracket + fondo + efecto de línea, solo para
+// el organizador. Cada opción se aplica al instante al elegirla (mismo
+// patrón que la selección de tema de equipo en TeamDetailPage.tsx) --
+// el mini-render de cada tarjeta ES la vista previa, no hace falta un
+// paso de "confirmar" aparte.
+export default function BracketStylePicker({
+  tournamentId,
+  estilo,
+  fondo,
+  estiloLinea,
+  onCambio,
+}: BracketStylePickerProps) {
   const handleCambiarEstilo = async (nuevoEstilo: EstiloBracket) => {
     if (nuevoEstilo === estilo) return;
     const { error } = await supabase
@@ -62,6 +84,15 @@ export default function BracketStylePicker({ tournamentId, estilo, fondo, onCamb
     if (!error) onCambio();
   };
 
+  const handleCambiarLinea = async (nuevaLinea: EstiloLineaBracket) => {
+    if (nuevaLinea === estiloLinea) return;
+    const { error } = await supabase
+      .from("tournaments")
+      .update({ estilo_linea_bracket: nuevaLinea })
+      .eq("id", tournamentId);
+    if (!error) onCambio();
+  };
+
   return (
     <div className="bracket-picker">
       <div className="bracket-picker-group">
@@ -75,6 +106,23 @@ export default function BracketStylePicker({ tournamentId, estilo, fondo, onCamb
               onClick={() => handleCambiarEstilo(o.value)}
             >
               <MiniBracket estilo={o.value} />
+              <span className="bracket-picker-option-label">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Efectos de líneas</h3>
+        <div className="bracket-picker-options">
+          {ESTILO_LINEA_BRACKET_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`bracket-picker-option ${estiloLinea === o.value ? "selected" : ""}`}
+              onClick={() => handleCambiarLinea(o.value)}
+            >
+              <MiniLinea estiloLinea={o.value} />
               <span className="bracket-picker-option-label">{o.label}</span>
             </button>
           ))}

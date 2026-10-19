@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import type { BracketMatchRow } from "../types/bracket";
-import type { EstiloBracket } from "../types/tournaments";
+import type { EstiloBracket, EstiloLineaBracket } from "../types/tournaments";
 
 interface BracketViewProps {
   matches: BracketMatchRow[];
@@ -20,9 +20,15 @@ interface BracketViewProps {
   // no llegó logosPorParticipante (1v1) -- "clasico"/"starcraft_oficial"
   // en 1v1 siguen sin mostrar foto, igual que siempre.
   avatarsPorParticipante?: Record<string, string | null>;
-  // Migración 040: layout de cajas/líneas -- puramente visual, ver
-  // halcon.css (selectores [data-estilo-bracket="..."]).
+  // Migración 040: layout de cajas -- puramente visual, ver halcon.css
+  // (selectores [data-estilo-bracket="..."]).
   estilo: EstiloBracket;
+  // Migración 176, a pedido del usuario: efecto de la línea de
+  // conexión entre rondas, independiente del estilo de caja de arriba
+  // -- "ninguno" no dibuja líneas (antes dependía de estilo ===
+  // "esports"/"starcraft_oficial"; ver halcon.css, selectores
+  // [data-estilo-linea="..."]).
+  estiloLinea: EstiloLineaBracket;
   // Nombre del torneo, para la franja superior del estilo "esports".
   nombreTorneo: string;
   // Migración 069: en vez de "Ronda 1/2/3", muestra el nombre
@@ -69,6 +75,7 @@ export default function BracketView({
   logosPorParticipante,
   avatarsPorParticipante,
   estilo,
+  estiloLinea,
   nombreTorneo,
   nombresRondaPersonalizados,
   permiteAutoreporte = true,
@@ -95,7 +102,7 @@ export default function BracketView({
   const [conectoresPorGrilla, setConectoresPorGrilla] = useState<Record<string, ConectorLinea[]>>({});
   const [tamanoPorGrilla, setTamanoPorGrilla] = useState<Record<string, { ancho: number; alto: number }>>({});
 
-  const muestraConectores = estilo === "esports" || estilo === "starcraft_oficial";
+  const muestraConectores = estiloLinea !== "ninguno";
 
   useLayoutEffect(() => {
     if (!muestraConectores) return;
@@ -154,7 +161,7 @@ export default function BracketView({
     medir();
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
-  }, [matches, estilo, muestraConectores]);
+  }, [matches, estiloLinea, muestraConectores]);
 
   // El partido por el tercer lugar (migración 046) comparte la ronda
   // de la final pero se muestra aparte, en su propia cajita -- se
@@ -241,7 +248,12 @@ export default function BracketView({
         }}
       >
         {muestraConectores && lineas.length > 0 && tamano && (
-          <svg className="bracket-conectores" width={tamano.ancho} height={tamano.alto}>
+          <svg
+            className="bracket-conectores"
+            data-estilo-linea={estiloLinea}
+            width={tamano.ancho}
+            height={tamano.alto}
+          >
             {lineas.map((linea) => (
               <path key={linea.key} d={linea.d} />
             ))}
