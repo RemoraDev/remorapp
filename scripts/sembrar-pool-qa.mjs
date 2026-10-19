@@ -81,7 +81,7 @@ async function crearCuentaPool(nick, email) {
 
   const { error: errorProfile } = await admin
     .from("profiles")
-    .update({ nick, cuenta_validada: true, country: "chile", sc2_region: "america" })
+    .update({ nick, cuenta_validada: true, country: "chile", sc2_region: "america", es_cuenta_prueba: true })
     .eq("id", creado.user.id);
   if (errorProfile) {
     throw new Error(`No pude completar el profile de ${nick}: ${errorProfile.message}`);
@@ -129,6 +129,7 @@ for (let equipo = 1; equipo <= 8; equipo++) {
       sc2_regions: ["america"],
       owner_id: idsMiembros[0],
       is_public: true,
+      es_cuenta_prueba: true,
     })
     .select("id")
     .single();

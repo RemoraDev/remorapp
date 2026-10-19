@@ -88,6 +88,7 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
           .select("id, name, tag, logo_url")
           .eq("is_public", true)
           .eq("disuelto", false)
+          .eq("es_cuenta_prueba", false)
           .or(`name.ilike.%${termino}%,tag.ilike.%${termino}%`)
           .order("name")
           .limit(5),
@@ -97,11 +98,13 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
               .select("id, nick, unique_id, avatar_url")
               .eq("nick", partesNick[0].trim())
               .eq("unique_id", partesNick[1].trim())
+              .eq("es_cuenta_prueba", false)
               .limit(1)
           : supabase
               .from("profiles")
               .select("id, nick, unique_id, avatar_url")
               .eq("suspendido", false)
+              .eq("es_cuenta_prueba", false)
               .not("nick", "is", null)
               .ilike("nick", `%${termino}%`)
               .order("nick")

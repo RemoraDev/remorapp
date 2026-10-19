@@ -63,6 +63,7 @@ export default function HallOfFamePage() {
         .from("teams")
         .select("id, name, tag, mmr, liga")
         .eq("disuelto", false)
+        .eq("es_cuenta_prueba", false)
         .order("mmr", { ascending: false })
         .limit(100);
 
@@ -82,6 +83,7 @@ export default function HallOfFamePage() {
         .select(
           "id, nick, unique_id, mmr_1v1, liga_1v1, nivel_1v1, valentia_jugador, responsabilidad_cw, suspendido"
         )
+        .eq("es_cuenta_prueba", false)
         .order("mmr_1v1", { ascending: false })
         .limit(100);
 

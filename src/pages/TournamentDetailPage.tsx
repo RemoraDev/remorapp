@@ -1502,6 +1502,7 @@ export default function TournamentDetailPage() {
       .select("id, name, tag")
       .eq("is_public", true)
       .eq("disuelto", false)
+      .eq("es_cuenta_prueba", false)
       .order("name");
 
     const idsYaInscritos = new Set(participantes.map((p) => p.teamId).filter((t): t is string => t !== null));

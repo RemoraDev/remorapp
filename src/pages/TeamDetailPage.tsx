@@ -2910,6 +2910,7 @@ export default function TeamDetailPage() {
       .select("id, nick, unique_id, avatar_url, avatar_forma")
       .eq("nick", nickBuscado)
       .eq("unique_id", uniqueIdBuscado)
+      .eq("es_cuenta_prueba", false)
       .maybeSingle();
     setBuscando(false);
 
@@ -3042,6 +3043,7 @@ export default function TeamDetailPage() {
       .select("id, nick, unique_id, avatar_url, avatar_forma")
       .eq("nick", nickBuscado)
       .eq("unique_id", uniqueIdBuscado)
+      .eq("es_cuenta_prueba", false)
       .maybeSingle();
     setBuscandoMercenario(false);
 

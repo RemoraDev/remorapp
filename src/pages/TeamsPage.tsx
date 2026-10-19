@@ -44,7 +44,10 @@ export default function TeamsPage() {
         .eq("is_public", true)
         // Migración 019: un equipo disuelto (el dueño era el único
         // miembro y salió) no debe seguir apareciendo en el buscador.
-        .eq("disuelto", false);
+        .eq("disuelto", false)
+        // Migración 170: clanes del pool de pruebas (staff/admin) no
+        // aparecen en el buscador público.
+        .eq("es_cuenta_prueba", false);
       if (regionFiltro) query = query.overlaps("sc2_regions", [regionFiltro]);
 
       const { data: equiposData, error } = await query.order("created_at", { ascending: false });
