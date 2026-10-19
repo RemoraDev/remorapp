@@ -1092,28 +1092,48 @@ main {
   margin-bottom: 1rem;
 }
 
-/* A pedido del usuario: título + Cupos/Inicio/Pozo lado a lado en vez
-   de uno arriba del otro, para no gastar tanto alto de página. Si no
-   entran los dos (pantalla angosta), se van a la línea de abajo. */
-.detail-header-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
 .detail-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
-  margin: 0;
+  margin: 0.75rem 0 1rem;
   padding: 1.25rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background: var(--color-panel);
   flex-shrink: 0;
+}
+
+/* Más chica y pegada a la izquierda (a pedido del usuario) -- ya no
+   comparte fila con el título, así que no necesita tanto padding ni
+   compartir ancho con nada más. */
+.detail-stats-chica {
+  display: inline-flex;
+  width: fit-content;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+}
+
+.detail-stats-chica .featured-stat-label {
+  font-size: 0.65rem;
+}
+
+.detail-stats-chica .featured-stat-value {
+  font-size: 1rem;
+}
+
+/* Color de "Cupos" según cuánto falta llenarse -- de un vistazo se
+   sabe si conviene avisar que falta gente (a pedido del usuario). */
+.detail-cupos-vacio {
+  color: #f87171;
+}
+
+.detail-cupos-parcial {
+  color: #facc15;
+}
+
+.detail-cupos-lleno {
+  color: #4ade80;
 }
 
 .detail-empty {
@@ -8280,38 +8300,45 @@ body.overlay-obs {
    las tarjetas (Cuadro, Permisos, Visualización, Reglamento,
    Temporadas, ...) abiertas a la vez, armaba un cuadro enorme. Ahora
    solo se ve una a la vez, elegida acá. */
+/* "Modernizado" a pedido del usuario: antes cada pestaña era su
+   propia píldora con borde -- ahora todas viven adentro de un único
+   "riel" (segmented control, mismo espíritu que el selector de
+   pestañas de iOS), la activa se resalta sólida en vez de con un
+   simple borde más claro. */
 .organizer-panel-tabs {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin-bottom: 0.9rem;
-  padding-bottom: 0.9rem;
-  border-bottom: 1px solid var(--color-border);
+  gap: 0.2rem;
+  padding: 0.3rem;
+  margin-bottom: 1.25rem;
+  border-radius: 999px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
 }
 
 .organizer-panel-tab {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  padding: 0.45rem 0.8rem;
-  border: 1px solid var(--color-border);
+  padding: 0.5rem 1rem;
+  border: none;
   border-radius: 999px;
-  background: var(--color-card);
+  background: transparent;
   color: var(--color-text-muted);
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   font-weight: 600;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .organizer-panel-tab:hover {
-  border-color: var(--color-accent);
   color: var(--color-text);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .organizer-panel-tab.selected {
-  border-color: var(--color-accent);
-  background: rgba(var(--h-accent-rgb), 0.12);
-  color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-bg);
+  box-shadow: 0 2px 10px rgba(var(--h-accent-rgb), 0.4);
 }
 
 .organizer-panel-tab-icon {

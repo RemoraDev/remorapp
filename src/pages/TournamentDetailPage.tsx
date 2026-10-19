@@ -7,13 +7,7 @@ import { toast } from "sonner";
 import { Trophy, Medal, Download, FileText, Upload, Calendar, Users, X, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
-import {
-  esFormatoPorEquipo,
-  getFormatoLabel,
-  getMinimoMiembrosEquipo,
-  getModoDescripcion,
-  getModoLabel,
-} from "../lib/tournamentOptions";
+import { esFormatoPorEquipo, getFormatoLabel, getMinimoMiembrosEquipo } from "../lib/tournamentOptions";
 import { formatFecha, formatPozo } from "../lib/formatters";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
@@ -1800,40 +1794,47 @@ export default function TournamentDetailPage() {
         </span>
       </div>
 
-      {/* A pedido del usuario: Cupos/Inicio/Pozo al lado del título en
-          vez de ocupar su propia fila ancha debajo -- ahorra espacio. */}
-      <div className="detail-header-row">
-        <div>
-          <h1 className="section-title">{torneo.nombre}</h1>
-          <p className="tournament-card-meta">
-            {getModoLabel(torneo.modo)} — {getModoDescripcion(torneo.modo)}
-          </p>
-        </div>
+      {/* A pedido del usuario: Cupos/Inicio/Pozo quedan chicos y pegados
+          a la izquierda, debajo del título -- antes era una caja más
+          grande al lado. El texto largo de descripción del modo
+          (Eliminación simple -- "Quien pierde..." etc.) se saca del
+          todo, ya se explica en el Panel de control si hace falta. */}
+      <h1 className="section-title">{torneo.nombre}</h1>
 
-        <div className="detail-stats">
-          {/* Migración 168, a pedido del usuario: si no se cargó pozo de
-              premios, ni se menciona el tema -- antes mostraba "Pozo:
-              Sin premio en efectivo" igual, dando a entender que el
-              dinero era parte de la conversación aunque nadie lo haya
-              tocado. */}
-          {torneo.pozo_premio !== null && (
-            <div>
-              <p className="featured-stat-label">Pozo</p>
-              <p className="featured-stat-value featured-stat-value-accent">
-                {formatPozo(torneo.pozo_premio)}
-              </p>
-            </div>
-          )}
+      <div className="detail-stats detail-stats-chica">
+        {/* Migración 168, a pedido del usuario: si no se cargó pozo de
+            premios, ni se menciona el tema -- antes mostraba "Pozo:
+            Sin premio en efectivo" igual, dando a entender que el
+            dinero era parte de la conversación aunque nadie lo haya
+            tocado. */}
+        {torneo.pozo_premio !== null && (
           <div>
-            <p className="featured-stat-label">Cupos</p>
-            <p className="featured-stat-value">
-              {torneo.cupos_ocupados}/{torneo.cupos_totales}
+            <p className="featured-stat-label">Pozo</p>
+            <p className="featured-stat-value featured-stat-value-accent">
+              {formatPozo(torneo.pozo_premio)}
             </p>
           </div>
-          <div>
-            <p className="featured-stat-label">Inicio</p>
-            <p className="featured-stat-value">{formatFecha(torneo.fecha_inicio)}</p>
-          </div>
+        )}
+        <div>
+          <p className="featured-stat-label">Cupos</p>
+          {/* A pedido del usuario: rojo con 0 o 1 inscritos, amarillo
+              mientras falten cupos, verde cuando está lleno -- de un
+              vistazo se sabe si conviene avisar que falta gente. */}
+          <p
+            className={`featured-stat-value ${
+              torneo.cupos_ocupados >= torneo.cupos_totales && torneo.cupos_totales > 0
+                ? "detail-cupos-lleno"
+                : torneo.cupos_ocupados <= 1
+                  ? "detail-cupos-vacio"
+                  : "detail-cupos-parcial"
+            }`}
+          >
+            {torneo.cupos_ocupados}/{torneo.cupos_totales}
+          </p>
+        </div>
+        <div>
+          <p className="featured-stat-label">Inicio</p>
+          <p className="featured-stat-value">{formatFecha(torneo.fecha_inicio)}</p>
         </div>
       </div>
 
@@ -2423,6 +2424,22 @@ export default function TournamentDetailPage() {
       )}
 
       <div className="organizer-panel-tabs">
+        {/* "Panel de control" vivía en su propia fila, arriba de esta
+            -- a pedido del usuario, ahora es un botón más de la misma
+            fila que Participantes/Llave/Reglamento, primero de
+            izquierda a derecha. Sigue abriendo la ventana superpuesta
+            de siempre (ver más arriba). */}
+        {esOrganizador && (
+          <button
+            type="button"
+            className="organizer-panel-tab"
+            onClick={() => setMostrarOpcionesAvanzadas(true)}
+          >
+            <IconoEngranaje />
+            Panel de control
+          </button>
+        )}
+
         <button
           type="button"
           className={`organizer-panel-tab ${pestanaTorneo === "participantes" ? "selected" : ""}`}
@@ -2457,21 +2474,6 @@ export default function TournamentDetailPage() {
           >
             <FileText size={14} className="icon-inline" aria-hidden="true" />
             Reglamento
-          </button>
-        )}
-
-        {/* "Panel de control" vivía en su propia fila, arriba de esta
-            -- a pedido del usuario, ahora es un botón más de la misma
-            fila que Participantes/Llave/Reglamento. Sigue abriendo la
-            ventana superpuesta de siempre (ver más arriba). */}
-        {esOrganizador && (
-          <button
-            type="button"
-            className="organizer-panel-tab"
-            onClick={() => setMostrarOpcionesAvanzadas(true)}
-          >
-            <IconoEngranaje />
-            Panel de control
           </button>
         )}
       </div>
