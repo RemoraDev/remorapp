@@ -2151,6 +2151,7 @@ export default function TournamentDetailPage() {
                       estilo={torneo.estilo_bracket}
                       fondo={torneo.fondo_bracket}
                       estiloLinea={torneo.estilo_linea_bracket}
+                      estructura={torneo.estructura_bracket}
                       onCambio={cargarTorneo}
                     />
                   </div>
@@ -2829,6 +2830,7 @@ export default function TournamentDetailPage() {
                           avatarsPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.avatarUrl]))}
                           estilo={torneo.estilo_bracket}
                           estiloLinea={torneo.estilo_linea_bracket}
+                          estructura={torneo.estructura_bracket}
                           nombreTorneo={torneo.nombre}
                           nombresRondaPersonalizados={torneo.mostrar_nombres_ronda_personalizados}
                           permiteAutoreporte={torneo.permite_autoreporte}

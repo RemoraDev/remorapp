@@ -3500,6 +3500,33 @@ html.es-escritorio .player-detail-panel-inline {
   min-height: 0;
 }
 
+/* Estructura "vertical" (migración 177): mismo árbol de siempre,
+   rotado -- .bracket pasa de fila a columna (las rondas se apilan de
+   arriba hacia abajo en vez de en columnas lado a lado) y
+   .bracket-round-matches pasa de columna a fila (los partidos de una
+   misma ronda quedan lado a lado). El ancho total lo fija
+   BracketView.tsx (ver estiloTamano en renderGrilla), igual que el
+   alto en la estructura clásica. */
+.bracket.bracket-vertical {
+  flex-direction: column;
+}
+
+.bracket-vertical .bracket-round {
+  flex: none;
+  min-width: 0;
+  width: 100%;
+}
+
+.bracket-vertical .bracket-round-matches {
+  flex-direction: row;
+  flex-wrap: nowrap;
+}
+
+.bracket-vertical .bracket-match {
+  width: 12rem;
+  flex-shrink: 0;
+}
+
 /* Título de sección de "Eliminación doble" (migración 084): Llave de
    ganadores/perdedores -- un escalón más grande que el título de cada
    columna de ronda, con el acento de la marca y su propio margen para
@@ -3625,6 +3652,107 @@ html.es-escritorio .player-detail-panel-inline {
   margin-top: 1.5rem;
   padding-top: 1.25rem;
   border-top: 1px dashed var(--color-border);
+}
+
+/* ---------- Estructura "compacta" (migración 177) ---------- */
+/* Lista densa por ronda, sin cajas grandes ni líneas de conexión --
+   pensada para torneos con muchos participantes o pantallas chicas. */
+
+.bracket-compacta {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.bracket-compacta-ronda {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bracket-compacta-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+}
+
+.bracket-compacta-nombres {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.bracket-compacta-nombres span {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-text-muted);
+}
+
+.bracket-compacta-nombres span.winner {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.bracket-compacta-nombres span.loser {
+  color: var(--color-text-faint);
+  text-decoration: line-through;
+}
+
+.bracket-compacta-vs {
+  color: var(--color-text-faint);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.bracket-compacta-fila .bracket-report {
+  margin: 0;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
+
+/* ---------- Estructura "embudo al centro" (migración 177) ---------- */
+/* Las dos mitades del cuadro convergen hacia el medio, con la final
+   centrada -- el look de transmisiones grandes. La mitad derecha es
+   el MISMO .bracket de siempre, solo espejado con scaleX(-1) (así se
+   invierte de una el orden de las rondas y la dirección de las
+   líneas); .bracket-match/.bracket-round-title lo contra-espejan para
+   que el texto/logos se lean normales. */
+.bracket-embudo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  overflow: hidden;
+}
+
+.bracket-embudo-wrap .bracket {
+  flex: 1 1 0;
+}
+
+.bracket-embudo-final {
+  flex-shrink: 0;
+  max-width: 14rem;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.bracket-embudo-flip {
+  flex: 1 1 0;
+  min-width: 0;
+  transform: scaleX(-1);
+}
+
+.bracket-embudo-flip .bracket-match,
+.bracket-embudo-flip .bracket-round-title {
+  transform: scaleX(-1);
 }
 
 /* ---------- Armar llave manualmente, arrastrar y soltar (migración 097) ---------- */
@@ -4212,6 +4340,114 @@ html.es-escritorio .player-detail-panel-inline {
   height: 0.85rem;
   border-radius: 50%;
   background: var(--color-text-faint);
+}
+
+/* Mini-diagramas de "Estructura" de la LLAVE (migración 177) -- mismo
+   recuadro que .estructura-picker-preview de arriba (que es del
+   lineup), nombre propio porque las 4 variantes son conceptualmente
+   distintas (clásico/vertical/embudo/compacta), no una quinta opción
+   del mismo selector. */
+.estructura-bracket-preview {
+  width: 5.5rem;
+  height: 3.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-bg);
+  padding: 0.3rem;
+  display: flex;
+  gap: 0.2rem;
+  transition: border-color 0.15s ease;
+}
+
+.bracket-picker-option:hover .estructura-bracket-preview,
+.bracket-picker-option.selected .estructura-bracket-preview {
+  border-color: var(--color-accent-soft);
+}
+
+/* "Clásico": 3 columnas angostas, cada una más baja que la anterior --
+   el achicamiento típico de una llave de izquierda a derecha. */
+.estructura-bracket-preview-clasico {
+  flex-direction: row;
+  align-items: center;
+}
+
+.estructura-bracket-preview-clasico span {
+  flex: 1;
+  border-radius: 0.2rem;
+  background: rgba(var(--h-accent-rgb), 0.28);
+}
+
+.estructura-bracket-preview-clasico span:nth-child(1) {
+  height: 90%;
+}
+
+.estructura-bracket-preview-clasico span:nth-child(2) {
+  height: 55%;
+}
+
+.estructura-bracket-preview-clasico span:nth-child(3) {
+  height: 25%;
+}
+
+/* "Vertical": el mismo achicamiento, rotado -- 3 filas angostas, cada
+   una más angosta que la anterior. */
+.estructura-bracket-preview-vertical {
+  flex-direction: column;
+}
+
+.estructura-bracket-preview-vertical span {
+  border-radius: 0.2rem;
+  background: rgba(var(--h-accent-rgb), 0.28);
+}
+
+.estructura-bracket-preview-vertical span:nth-child(1) {
+  flex: 1;
+  width: 90%;
+}
+
+.estructura-bracket-preview-vertical span:nth-child(2) {
+  flex: 1;
+  width: 55%;
+}
+
+.estructura-bracket-preview-vertical span:nth-child(3) {
+  flex: 1;
+  width: 25%;
+}
+
+/* "Embudo al centro": dos bloques angostos en los extremos, un punto
+   marcado al medio (la final). */
+.estructura-bracket-preview-embudo {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.estructura-bracket-preview-embudo span:not(.estructura-bracket-preview-centro) {
+  flex: 1;
+  height: 90%;
+  border-radius: 0.2rem;
+  background: rgba(var(--h-accent-rgb), 0.28);
+}
+
+.estructura-bracket-preview-centro {
+  flex: 0 0 0.85rem;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 50%;
+  background: var(--color-accent);
+}
+
+/* "Compacta": 4 líneas finas apiladas, como filas de una lista. */
+.estructura-bracket-preview-compacta {
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.estructura-bracket-preview-compacta span {
+  flex: 0 0 15%;
+  border-radius: 0.15rem;
+  background: rgba(var(--h-accent-rgb), 0.28);
 }
 
 /* Selector de dimensión de la tarjeta (migración 129) -- a diferencia

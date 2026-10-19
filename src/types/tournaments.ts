@@ -50,6 +50,23 @@ export type FondoBracket =
 // (ver BracketView.tsx/halcon.css); los otros 5 son nuevos.
 export type EstiloLineaBracket = "ninguno" | "laser" | "pulso" | "electrico" | "arcoiris" | "dorado" | "matrix";
 
+// Migración 177, a pedido del usuario (mismo espíritu que "Estructura"
+// del lineup, ver EstructuraLineupPicker.tsx): cómo se arma la llave
+// en sí, no solo su piel -- independiente de estilo/fondo/línea.
+// "clasico" es el de siempre (columnas de izquierda a derecha).
+export type EstructuraBracket = "clasico" | "vertical" | "embudo" | "compacta";
+
+export const ESTRUCTURA_BRACKET_OPTIONS: { value: EstructuraBracket; label: string; desc: string }[] = [
+  { value: "clasico", label: "Clásico", desc: "Columnas de izquierda a derecha, una por ronda." },
+  { value: "vertical", label: "Vertical", desc: "El mismo árbol, rotado: de arriba hacia abajo." },
+  {
+    value: "embudo",
+    label: "Embudo al centro",
+    desc: "Las dos mitades del cuadro convergen hacia el medio, la final queda centrada.",
+  },
+  { value: "compacta", label: "Compacta", desc: "Lista densa por ronda, sin cajas grandes ni líneas." },
+];
+
 export const ESTILO_BRACKET_OPTIONS: { value: EstiloBracket; label: string }[] = [
   { value: "clasico", label: "Clásico" },
   { value: "esports", label: "Esports" },
@@ -121,6 +138,7 @@ export interface TournamentRow {
   estilo_bracket: EstiloBracket;
   fondo_bracket: FondoBracket;
   estilo_linea_bracket: EstiloLineaBracket;
+  estructura_bracket: EstructuraBracket;
   // Migración 041: etapa de grupos previa a la llave eliminatoria.
   tiene_fase_grupos: boolean;
   cantidad_grupos: number | null;

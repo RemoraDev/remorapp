@@ -4,15 +4,59 @@ import {
   ESTILO_BRACKET_OPTIONS,
   FONDO_BRACKET_OPTIONS,
   ESTILO_LINEA_BRACKET_OPTIONS,
+  ESTRUCTURA_BRACKET_OPTIONS,
 } from "../types/tournaments";
-import type { EstiloBracket, FondoBracket, EstiloLineaBracket } from "../types/tournaments";
+import type { EstiloBracket, FondoBracket, EstiloLineaBracket, EstructuraBracket } from "../types/tournaments";
 
 interface BracketStylePickerProps {
   tournamentId: string;
   estilo: EstiloBracket;
   fondo: FondoBracket;
   estiloLinea: EstiloLineaBracket;
+  estructura: EstructuraBracket;
   onCambio: () => void;
+}
+
+// Mini-diagrama abstracto de cada estructura (migración 177) -- mismo
+// espíritu que PreviewDiagrama de EstructuraLineupPicker.tsx, 4
+// variantes bien distintas entre sí para que se entienda de un
+// vistazo sin tener que leer la descripción.
+function PreviewEstructura({ variante }: { variante: EstructuraBracket }) {
+  if (variante === "vertical") {
+    return (
+      <div className="estructura-bracket-preview estructura-bracket-preview-vertical">
+        <span />
+        <span />
+        <span />
+      </div>
+    );
+  }
+  if (variante === "embudo") {
+    return (
+      <div className="estructura-bracket-preview estructura-bracket-preview-embudo">
+        <span />
+        <span className="estructura-bracket-preview-centro" />
+        <span />
+      </div>
+    );
+  }
+  if (variante === "compacta") {
+    return (
+      <div className="estructura-bracket-preview estructura-bracket-preview-compacta">
+        <span />
+        <span />
+        <span />
+        <span />
+      </div>
+    );
+  }
+  return (
+    <div className="estructura-bracket-preview estructura-bracket-preview-clasico">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
 }
 
 // Mini-render real del estilo: mismas clases .bracket-match/.bracket-slot
@@ -65,6 +109,7 @@ export default function BracketStylePicker({
   estilo,
   fondo,
   estiloLinea,
+  estructura,
   onCambio,
 }: BracketStylePickerProps) {
   // Antes, si el update fallaba (por ejemplo porque el constraint de
@@ -105,9 +150,38 @@ export default function BracketStylePicker({
     else onCambio();
   };
 
+  const handleCambiarEstructura = async (nueva: EstructuraBracket) => {
+    if (nueva === estructura) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ estructura_bracket: nueva })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
   return (
     <div className="bracket-picker">
       {error && <div className="form-error">{error}</div>}
+
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Estructura</h3>
+        <div className="bracket-picker-options estructura-picker-options">
+          {ESTRUCTURA_BRACKET_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`bracket-picker-option estructura-picker-option ${estructura === o.value ? "selected" : ""}`}
+              onClick={() => handleCambiarEstructura(o.value)}
+            >
+              <PreviewEstructura variante={o.value} />
+              <span className="bracket-picker-option-label">{o.label}</span>
+              <span className="estructura-picker-desc">{o.desc}</span>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="bracket-picker-group">
         <h3 className="detail-subtitle">Estilo de bracket</h3>
