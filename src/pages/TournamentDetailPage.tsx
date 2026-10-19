@@ -2095,6 +2095,18 @@ export default function TournamentDetailPage() {
                       </select>
                       <p className="form-hint">Solo tiene efecto la próxima vez que generes la llave.</p>
                     </div>
+
+                    {/* Estilo y fondo visual de la llave -- movido acá
+                        adentro (antes vivía siempre visible, arriba de
+                        la llave, ocupando demasiado lugar antes de
+                        llegar a lo importante). El mini-render de cada
+                        tarjeta ya es la vista previa. */}
+                    <BracketStylePicker
+                      tournamentId={torneo.id}
+                      estilo={torneo.estilo_bracket}
+                      fondo={torneo.fondo_bracket}
+                      onCambio={cargarTorneo}
+                    />
                   </div>
                 </div>
 
@@ -2647,18 +2659,6 @@ export default function TournamentDetailPage() {
                       {participantes.find((p) => p.id === torneo.tercer_lugar_participant_id)?.nombre ??
                         "Jugador de RemorApp"}
                     </p>
-                  )}
-
-                  {/* Estilo y fondo: visibles y editables solo para el
-                      organizador, en cualquier momento, incluso con el
-                      torneo en curso -- migración 040. */}
-                  {esOrganizador && (
-                    <BracketStylePicker
-                      tournamentId={torneo.id}
-                      estilo={torneo.estilo_bracket}
-                      fondo={torneo.fondo_bracket}
-                      onCambio={cargarTorneo}
-                    />
                   )}
 
                   {partidas.length === 0 ? (
