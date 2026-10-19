@@ -60,33 +60,39 @@ function passwordAlAzar() {
   return "QaPool-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 }
 
-// Crea la cuenta y actualiza su profile -- el trigger
-// handle_new_user() ya le arma la fila en profiles sola al crear el
-// auth.user (con email, pero nick todavía en null), acá se completa.
-// Busca primero por EMAIL, no por nick -- un intento anterior puede
-// haber creado el auth.user y fallado antes de llegar a ponerle el
-// nick (ej. permisos insuficientes en ese momento), dejando un
-// profile "a medio camino" que buscar por nick nunca iba a encontrar,
-// y el reintento chocaba con "ya existe un user con ese email".
-async function crearCuentaPool(nick, email) {
-  const { data: existente } = await admin.from("profiles").select("id, nick").eq("email", email).maybeSingle();
+// Mapa email -> user id, construido UNA vez desde auth.admin (la
+// fuente de verdad real) -- no desde la tabla profiles. Un intento
+// anterior puede haber creado el auth.user y fallado antes de
+// llegar a completar su profile (permisos insuficientes en ese
+// momento), y por alguna razón buscar ese profile por email tampoco
+// lo encontraba -- listUsers() no depende de nada de eso.
+async function mapaUsuariosExistentes() {
+  const mapa = new Map();
+  let page = 1;
+  for (;;) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
+    if (error) throw new Error(`No pude listar usuarios existentes: ${error.message}`);
+    for (const u of data.users) mapa.set(u.email, u.id);
+    if (data.users.length < 200) break;
+    page++;
+  }
+  return mapa;
+}
 
-  if (existente) {
-    if (existente.nick === nick) {
-      console.log(`  ${nick} ya existe (${existente.id}), salteando.`);
-      return existente.id;
-    }
-    // Existe el auth.user (por email) pero el profile quedó
-    // incompleto de un intento anterior -- se completa ahora.
-    const { error: errorProfile } = await admin
-      .from("profiles")
-      .update({ nick, cuenta_validada: true, country: "chile", sc2_region: "america", es_cuenta_prueba: true })
-      .eq("id", existente.id);
-    if (errorProfile) {
-      throw new Error(`No pude completar el profile pendiente de ${nick}: ${errorProfile.message}`);
-    }
-    console.log(`  ${nick} completado (${existente.id}, venía a medio crear).`);
-    return existente.id;
+async function completarProfile(id, nick) {
+  const { error } = await admin
+    .from("profiles")
+    .update({ nick, cuenta_validada: true, country: "chile", sc2_region: "america", es_cuenta_prueba: true })
+    .eq("id", id);
+  if (error) throw new Error(`No pude completar el profile de ${nick} (${id}): ${error.message}`);
+}
+
+async function crearCuentaPool(nick, email, usuariosExistentes) {
+  const idExistente = usuariosExistentes.get(email);
+  if (idExistente) {
+    await completarProfile(idExistente, nick);
+    console.log(`  ${nick} ya existía en auth (${idExistente}), profile completado/confirmado.`);
+    return idExistente;
   }
 
   const { data: creado, error: errorAuth } = await admin.auth.admin.createUser({
@@ -98,23 +104,26 @@ async function crearCuentaPool(nick, email) {
     throw new Error(`No pude crear ${email}: ${errorAuth?.message ?? "sin usuario devuelto"}`);
   }
 
-  const { error: errorProfile } = await admin
-    .from("profiles")
-    .update({ nick, cuenta_validada: true, country: "chile", sc2_region: "america", es_cuenta_prueba: true })
-    .eq("id", creado.user.id);
-  if (errorProfile) {
-    throw new Error(`No pude completar el profile de ${nick}: ${errorProfile.message}`);
-  }
+  await completarProfile(creado.user.id, nick);
+  usuariosExistentes.set(email, creado.user.id);
 
   console.log(`  ${nick} creado (${creado.user.id}).`);
   return creado.user.id;
 }
 
+console.log("0) Revisando cuentas que ya existen en auth...");
+const usuariosExistentes = await mapaUsuariosExistentes();
+console.log(`  ${usuariosExistentes.size} cuenta(s) encontrada(s) en total (de cualquier tipo).`);
+
 console.log("1) Cuentas individuales sueltas (1v1)...");
 const idsJugadores = [];
 for (let i = 1; i <= 20; i++) {
   const n = String(i).padStart(2, "0");
-  const id = await crearCuentaPool(`QAPoolJugador${n}`, `qa.pool.jugador.${n}@remorapp-qa-pool.invalid`);
+  const id = await crearCuentaPool(
+    `QAPoolJugador${n}`,
+    `qa.pool.jugador.${n}@remorapp-qa-pool.invalid`,
+    usuariosExistentes
+  );
   idsJugadores.push(id);
 }
 
@@ -126,7 +135,8 @@ for (let equipo = 1; equipo <= 8; equipo++) {
   for (let miembro = 1; miembro <= 4; miembro++) {
     const id = await crearCuentaPool(
       `QAPoolEquipo${nEquipo}_${miembro}`,
-      `qa.pool.equipo.${nEquipo}.${miembro}@remorapp-qa-pool.invalid`
+      `qa.pool.equipo.${nEquipo}.${miembro}@remorapp-qa-pool.invalid`,
+      usuariosExistentes
     );
     idsMiembros.push(id);
   }
