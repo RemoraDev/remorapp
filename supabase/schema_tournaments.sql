@@ -23656,13 +23656,6 @@ where checked_in = false
     user_id in (select id from public.profiles where nick like 'QAJug%')
     or team_id in (select id from public.teams where name like 'QA Pool Equipo%')
   );
--- Migración 174, a pedido del usuario: suma el catálogo de fondos de
--- lineup (estrellas/estrellado/estrellado_2/nova/planeta/viaje/fuego,
--- ver FONDO_LINEUP_OPTIONS en types/teams.ts) a los que ya tenía la
--- llave de torneo (tournaments.fondo_bracket). El CSS ya comparte las
--- mismas animaciones bajo data-fondo-bracket (ver halcon.css, junto a
--- cada data-fondo-lineup) -- esto solo relaja el constraint para que
--- la base acepte los valores nuevos.
 do $$
 declare
   r record;
