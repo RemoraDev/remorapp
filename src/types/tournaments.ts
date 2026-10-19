@@ -116,6 +116,12 @@ export interface TournamentRow {
   // Se llena sola cuando se juega la final de la llave (ver
   // avanzar_ganador() en supabase/migration_006_bracket.sql).
   campeon_participant_id: string | null;
+  // Migración 180, a pedido del usuario: cuándo pasó a "finalizado" --
+  // un trigger lo completa solo (ver set_finalizado_en_torneo() en la
+  // base), sin tocar las varias funciones que ya ponían estado =
+  // 'finalizado' por su cuenta (avanzar_ganador, finalizar_leaderboard,
+  // etc.).
+  finalizado_en: string | null;
   // Migración 046: partido por el tercer lugar entre los perdedores
   // de semifinal, en paralelo a la final. Mismo patrón de llenado que
   // campeon_participant_id, se completa solo cuando se juega.

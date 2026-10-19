@@ -23,7 +23,13 @@ import type { ParticipanteParaLlave } from "../components/ArmarLlaveManual";
 // propio archivo, que Vite no incluye en la carga normal de esta
 // página.
 const VisorPdf = lazy(() => import("../components/VisorPdf"));
-import type { PosicionGrupo, TournamentGroupMatchRow, TournamentGroupRow, TournamentRow } from "../types/tournaments";
+import type {
+  PosicionGrupo,
+  TournamentGroupMatchRow,
+  TournamentGroupRow,
+  TournamentRow,
+  TorneoEstado,
+} from "../types/tournaments";
 import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
 import type { TemporadaRow, TorneoSolicitudEquipoRow } from "../types/teams";
@@ -84,6 +90,15 @@ const iconoComun = {
   strokeLinecap: "round" as const,
   strokeLinejoin: "round" as const,
   "aria-hidden": true as const,
+};
+
+// A pedido del usuario: el badge "1v1/Público" no decía nada sobre si
+// el torneo ya arrancó o terminó -- mismo texto que ya usaba
+// MyTournamentsPage.tsx para esto.
+const ESTADO_LABEL: Record<TorneoEstado, string> = {
+  abierto: "Abierto",
+  en_curso: "En curso",
+  finalizado: "Finalizado",
 };
 
 function IconoEngranaje() {
@@ -324,6 +339,9 @@ export default function TournamentDetailPage() {
   const [subiendoReglamento, setSubiendoReglamento] = useState(false);
   const [errorReglamento, setErrorReglamento] = useState<string | null>(null);
   const [mostrandoVisorReglamento, setMostrandoVisorReglamento] = useState(false);
+  // A pedido del usuario: "Reglamento" en la barra de pestañas queda
+  // visible aunque no haya uno subido todavía -- esto solo avisa.
+  const [avisoSinReglamento, setAvisoSinReglamento] = useState(false);
   // Migración 175, a pedido del usuario: "Ver celebración" solo tiraba
   // confeti -- ahora además abre una tarjeta centrada con el
   // avatar/logo del campeón y una copa, más "gamer".
@@ -1792,6 +1810,7 @@ export default function TournamentDetailPage() {
         <span className={`badge ${torneo.publico ? "badge-public" : "badge-private"}`}>
           {torneo.publico ? "Público" : "Privado"}
         </span>
+        <span className={`badge badge-estado-${torneo.estado}`}>{ESTADO_LABEL[torneo.estado]}</span>
       </div>
 
       {/* A pedido del usuario: Cupos/Inicio/Pozo quedan chicos y pegados
@@ -1836,6 +1855,13 @@ export default function TournamentDetailPage() {
           <p className="featured-stat-label">Inicio</p>
           <p className="featured-stat-value">{formatFecha(torneo.fecha_inicio)}</p>
         </div>
+        {/* A pedido del usuario: si ya terminó, mostrar cuándo. */}
+        {torneo.estado === "finalizado" && torneo.finalizado_en && (
+          <div>
+            <p className="featured-stat-label">Fin</p>
+            <p className="featured-stat-value">{formatFecha(torneo.finalizado_en)}</p>
+          </div>
+        )}
       </div>
 
       <div className="overlay-obs-copy">
@@ -2424,60 +2450,78 @@ export default function TournamentDetailPage() {
         </>
       )}
 
-      <div className="organizer-panel-tabs">
-        {/* "Panel de control" vivía en su propia fila, arriba de esta
-            -- a pedido del usuario, ahora es un botón más de la misma
-            fila que Participantes/Llave/Reglamento, primero de
-            izquierda a derecha. Sigue abriendo la ventana superpuesta
-            de siempre (ver más arriba). */}
-        {esOrganizador && (
+      {/* Fila externa con las pestañas Llave/Participantes/Reglamento
+          agrupadas en su propia píldora a la izquierda, y Panel de
+          control solo, en su propia píldora, pegado al borde derecho
+          -- a pedido del usuario. */}
+      <div className="detail-tabs-row">
+        <div className="organizer-panel-tabs">
           <button
             type="button"
-            className="organizer-panel-tab"
-            onClick={() => setMostrarOpcionesAvanzadas(true)}
+            className={`organizer-panel-tab ${pestanaTorneo === "competencia" ? "selected" : ""}`}
+            onClick={() => setPestanaTorneo("competencia")}
           >
-            <IconoEngranaje />
-            Panel de control
+            {torneo.fase_actual === "grupos"
+              ? "Grupos"
+              : torneo.modo === "suizo"
+                ? "Suizo"
+                : torneo.modo === "todos_contra_todos"
+                  ? "Todos contra todos"
+                  : torneo.modo === "tabla_posiciones"
+                    ? "Tabla de posiciones"
+                    : "Llave"}
           </button>
-        )}
 
-        <button
-          type="button"
-          className={`organizer-panel-tab ${pestanaTorneo === "participantes" ? "selected" : ""}`}
-          onClick={() => setPestanaTorneo("participantes")}
-        >
-          {esPorEquipos ? "Equipos inscritos" : "Participantes"}
-        </button>
-        <button
-          type="button"
-          className={`organizer-panel-tab ${pestanaTorneo === "competencia" ? "selected" : ""}`}
-          onClick={() => setPestanaTorneo("competencia")}
-        >
-          {torneo.fase_actual === "grupos"
-            ? "Grupos"
-            : torneo.modo === "suizo"
-              ? "Suizo"
-              : torneo.modo === "todos_contra_todos"
-                ? "Todos contra todos"
-                : torneo.modo === "tabla_posiciones"
-                  ? "Tabla de posiciones"
-                  : "Llave"}
-        </button>
+          <button
+            type="button"
+            className={`organizer-panel-tab ${pestanaTorneo === "participantes" ? "selected" : ""}`}
+            onClick={() => setPestanaTorneo("participantes")}
+          >
+            {esPorEquipos ? "Equipos inscritos" : "Participantes"}
+          </button>
 
-        {/* Migración 175, a pedido del usuario: visible para cualquiera
-            (no solo el organizador) si ya hay un reglamento subido --
-            antes vivía como botón suelto arriba del todo. */}
-        {torneo.pdf_reglamento_url && (
+          {/* Migración 175, a pedido del usuario: visible siempre (tenga
+              o no reglamento subido), no solo cuando ya hay uno. Si el
+              organizador la aprieta sin reglamento, la abre directo en
+              el Panel de control para subirla ahí mismo; si es
+              cualquier otra persona, solo avisa que todavía no hay. */}
           <button
             type="button"
             className="organizer-panel-tab"
-            onClick={() => setMostrandoVisorReglamento(true)}
+            onClick={() => {
+              if (torneo.pdf_reglamento_url) {
+                setMostrandoVisorReglamento(true);
+                return;
+              }
+              setAvisoSinReglamento(true);
+              if (esOrganizador) {
+                setOrganizerPanelTab("reglamento");
+                setMostrarOpcionesAvanzadas(true);
+              }
+            }}
           >
             <FileText size={14} className="icon-inline" aria-hidden="true" />
             Reglamento
           </button>
+        </div>
+
+        {esOrganizador && (
+          <div className="organizer-panel-tabs">
+            <button
+              type="button"
+              className="organizer-panel-tab"
+              onClick={() => setMostrarOpcionesAvanzadas(true)}
+            >
+              <IconoEngranaje />
+              Panel de control
+            </button>
+          </div>
         )}
       </div>
+
+      {avisoSinReglamento && !torneo.pdf_reglamento_url && !esOrganizador && (
+        <p className="tournament-card-meta">El organizador todavía no subió un reglamento.</p>
+      )}
 
       {pestanaTorneo === "participantes" && (
         <>

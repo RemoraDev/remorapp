@@ -1016,6 +1016,26 @@ main {
   font-weight: 600;
 }
 
+/* Estado del torneo (migración 180, a pedido del usuario): el badge de
+   1v1/Público no decía si ya arrancó o terminó. */
+.badge-estado-abierto {
+  background: rgba(var(--h-accent-rgb), 0.1);
+  color: var(--color-accent-soft);
+  font-weight: 600;
+}
+
+.badge-estado-en_curso {
+  background: rgba(250, 204, 21, 0.12);
+  color: #facc15;
+  font-weight: 600;
+}
+
+.badge-estado-finalizado {
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--color-text-muted);
+  font-weight: 600;
+}
+
 .tournament-card-title {
   font-family: var(--font-display);
   font-weight: 700;
@@ -8213,6 +8233,20 @@ body.overlay-obs {
 .organizer-panel-tab-icon {
   display: flex;
   align-items: center;
+}
+
+/* Fila externa de TournamentDetailPage.tsx: la píldora de pestañas
+   (Llave/Participantes/Reglamento) a la izquierda, la píldora de Panel
+   de control sola a la derecha -- a pedido del usuario. Cada una
+   sigue siendo un .organizer-panel-tabs normal (inline-flex, se achica
+   a su contenido); esta fila de afuera es la que las separa a los
+   dos extremos. */
+.detail-tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .organizer-panel-tab-panel .organizer-panel-card {
