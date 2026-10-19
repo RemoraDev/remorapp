@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import {
   ESTILO_BRACKET_OPTIONS,
@@ -66,35 +67,48 @@ export default function BracketStylePicker({
   estiloLinea,
   onCambio,
 }: BracketStylePickerProps) {
+  // Antes, si el update fallaba (por ejemplo porque el constraint de
+  // la base todavía no tenía los valores nuevos), no pasaba nada
+  // visible -- parecía que el botón "no hacía nada". Ahora se avisa.
+  const [error, setError] = useState<string | null>(null);
+
   const handleCambiarEstilo = async (nuevoEstilo: EstiloBracket) => {
     if (nuevoEstilo === estilo) return;
-    const { error } = await supabase
+    setError(null);
+    const { error: err } = await supabase
       .from("tournaments")
       .update({ estilo_bracket: nuevoEstilo })
       .eq("id", tournamentId);
-    if (!error) onCambio();
+    if (err) setError(err.message);
+    else onCambio();
   };
 
   const handleCambiarFondo = async (nuevoFondo: FondoBracket) => {
     if (nuevoFondo === fondo) return;
-    const { error } = await supabase
+    setError(null);
+    const { error: err } = await supabase
       .from("tournaments")
       .update({ fondo_bracket: nuevoFondo })
       .eq("id", tournamentId);
-    if (!error) onCambio();
+    if (err) setError(err.message);
+    else onCambio();
   };
 
   const handleCambiarLinea = async (nuevaLinea: EstiloLineaBracket) => {
     if (nuevaLinea === estiloLinea) return;
-    const { error } = await supabase
+    setError(null);
+    const { error: err } = await supabase
       .from("tournaments")
       .update({ estilo_linea_bracket: nuevaLinea })
       .eq("id", tournamentId);
-    if (!error) onCambio();
+    if (err) setError(err.message);
+    else onCambio();
   };
 
   return (
     <div className="bracket-picker">
+      {error && <div className="form-error">{error}</div>}
+
       <div className="bracket-picker-group">
         <h3 className="detail-subtitle">Estilo de bracket</h3>
         <div className="bracket-picker-options">
