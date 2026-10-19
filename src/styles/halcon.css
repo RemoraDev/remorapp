@@ -3723,6 +3723,11 @@ html.es-escritorio .player-detail-panel-inline {
   background: var(--color-panel);
   cursor: pointer;
   transition: border-color 0.15s ease;
+  /* La línea de conexión de los estilos "Esports"/"StarCraft Oficial"
+     (ver más abajo, .bracket-round::after) está pensada para la llave
+     real, no para esta miniatura -- sin recortar, se escapaba del
+     recuadro hacia la derecha. */
+  overflow: hidden;
 }
 
 .bracket-picker-option:hover {
@@ -3746,6 +3751,14 @@ html.es-escritorio .player-detail-panel-inline {
   transform: scale(0.9);
   transform-origin: top center;
   pointer-events: none;
+  overflow: hidden;
+}
+
+/* .bracket-round hereda min-width: 16rem de la llave real (columnas
+   anchas) -- acá adentro desbordaba la miniatura de 6.5rem. */
+.bracket-style-preview .bracket-round {
+  min-width: 0;
+  gap: 0.2rem;
 }
 
 .bracket-style-preview .bracket-match {
