@@ -4,7 +4,22 @@ import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import Avatar from "./Avatar";
 import type { BracketMatchRow } from "../types/bracket";
-import type { EstiloBracket, EstiloLineaBracket, EstructuraBracket } from "../types/tournaments";
+import type {
+  EstiloBracket,
+  EstiloLineaBracket,
+  EstructuraBracket,
+  EstiloTituloBracket,
+  InsigniaBracket,
+} from "../types/tournaments";
+
+const BANDERA_EMOJI: Record<string, string> = {
+  chile: "🇨🇱",
+  guatemala: "🇬🇹",
+  puerto_rico: "🇵🇷",
+  argentina: "🇦🇷",
+  peru: "🇵🇪",
+  bolivia: "🇧🇴",
+};
 
 interface BracketViewProps {
   matches: BracketMatchRow[];
@@ -39,6 +54,27 @@ interface BracketViewProps {
   estructura: EstructuraBracket;
   // Nombre del torneo, para la franja superior del estilo "esports".
   nombreTorneo: string;
+  // Migración 181, a pedido del usuario: "modelo" de esa franja (solo
+  // aplica con estilo "esports") -- ver selectores [data-estilo-titulo]
+  // en halcon.css.
+  estiloTitulo: EstiloTituloBracket;
+  // Migración 181, a pedido del usuario: color personalizado del texto
+  // de los nombres dentro de la llave, y del texto de la franja del
+  // título -- null usa el color de siempre de cada uno.
+  colorTexto: string | null;
+  colorTextoTitulo: string | null;
+  // Migración 182, a pedido del usuario: qué se muestra junto al
+  // nombre de cada participante -- "logo_personal" (default) reproduce
+  // el comportamiento de siempre (logosPorParticipante/avatarsPorParticipante,
+  // ver logoDe más abajo); "bandera"/"banner_clan"/"ninguno" lo
+  // reemplazan por completo.
+  insignia: InsigniaBracket;
+  // tournament_participants.id -> profiles.country (solo torneos 1v1),
+  // usado cuando insignia === "bandera".
+  paisesPorParticipante?: Record<string, string | null>;
+  // tournament_participants.id -> teams.banner_url (solo torneos por
+  // equipo), usado cuando insignia === "banner_clan".
+  bannersPorParticipante?: Record<string, string | null>;
   // Migración 069: en vez de "Ronda 1/2/3", muestra el nombre
   // tradicional (Octavos/Cuartos/Semifinal/Final) según qué tan cerca
   // esté esa ronda de la final.
@@ -92,6 +128,12 @@ export default function BracketView({
   colorLinea,
   estructura,
   nombreTorneo,
+  estiloTitulo,
+  colorTexto,
+  colorTextoTitulo,
+  insignia,
+  paisesPorParticipante,
+  bannersPorParticipante,
   nombresRondaPersonalizados,
   permiteAutoreporte = true,
   puedeReportarPorParticipante,
@@ -366,6 +408,7 @@ export default function BracketView({
     const estiloTamano = {
       ...(esVertical ? { width: `${grilla.alturaBracket}px` } : { height: `${grilla.alturaBracket}px` }),
       ...(colorLinea ? { "--linea-color": colorLinea } : {}),
+      ...(colorTexto ? { "--texto-bracket-color": colorTexto } : {}),
     } as CSSProperties;
 
     return (
@@ -443,6 +486,34 @@ export default function BracketView({
     return null;
   };
 
+  // Migración 182, a pedido del usuario: reemplaza el <Avatar> fijo de
+  // cada slot por una de 4 opciones elegidas en Panel de control. Si la
+  // opción elegida no tiene dato para este participante en particular
+  // (sin país cargado, equipo sin banner) no se muestra nada en vez de
+  // caer de vuelta al logo -- el organizador eligió explícitamente esa
+  // insignia, no un reemplazo silencioso.
+  const renderInsignia = (participantId: string | null) => {
+    if (insignia === "ninguno") return null;
+
+    if (insignia === "bandera") {
+      const pais = participantId ? paisesPorParticipante?.[participantId] ?? null : null;
+      if (!pais) return null;
+      return (
+        <span className="bracket-slot-bandera" title={pais}>
+          {BANDERA_EMOJI[pais] ?? "🏳️"}
+        </span>
+      );
+    }
+
+    if (insignia === "banner_clan") {
+      const banner = participantId ? bannersPorParticipante?.[participantId] ?? null : null;
+      if (!banner) return null;
+      return <img src={banner} alt="" className="bracket-slot-banner" />;
+    }
+
+    return <Avatar url={logoDe(participantId)} nombre={nombreDe(participantId)} className="bracket-slot-logo" />;
+  };
+
   const puedeReportar = (match: BracketMatchRow) => {
     if (!userId) return false;
     if (userId === organizadorId) return true;
@@ -495,11 +566,7 @@ export default function BracketView({
             final de los playoffs de First Stand). */}
         {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
         <div className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""}`}>
-          <Avatar
-            url={logoDe(match.participant1_id)}
-            nombre={nombreDe(match.participant1_id)}
-            className="bracket-slot-logo"
-          />
+          {renderInsignia(match.participant1_id)}
           {nombreDe(match.participant1_id)}
         </div>
         <div
@@ -507,11 +574,7 @@ export default function BracketView({
             p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""
           }`}
         >
-          <Avatar
-            url={logoDe(match.participant2_id)}
-            nombre={nombreDe(match.participant2_id)}
-            className="bracket-slot-logo"
-          />
+          {renderInsignia(match.participant2_id)}
           {nombreDe(match.participant2_id)}
         </div>
 
@@ -594,20 +657,12 @@ export default function BracketView({
         {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
         <div className="bracket-compacta-nombres">
           <span className={p1Gana ? "winner" : match.winner_id ? "loser" : ""}>
-            <Avatar
-              url={logoDe(match.participant1_id)}
-              nombre={nombreDe(match.participant1_id)}
-              className="bracket-slot-logo"
-            />
+            {renderInsignia(match.participant1_id)}
             {nombreDe(match.participant1_id)}
           </span>
           <span className="bracket-compacta-vs">vs</span>
           <span className={p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""}>
-            <Avatar
-              url={logoDe(match.participant2_id)}
-              nombre={nombreDe(match.participant2_id)}
-              className="bracket-slot-logo"
-            />
+            {renderInsignia(match.participant2_id)}
             {nombreDe(match.participant2_id)}
           </span>
         </div>
@@ -663,7 +718,10 @@ export default function BracketView({
   };
 
   const renderGrillaCompacta = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => (
-    <div className="bracket-compacta">
+    <div
+      className="bracket-compacta"
+      style={colorTexto ? ({ "--texto-bracket-color": colorTexto } as CSSProperties) : undefined}
+    >
       {grilla.partidosPorRonda.map((partidos, indiceRonda) => (
         <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-compacta-ronda">
           <h4 className="bracket-round-title">
@@ -724,6 +782,20 @@ export default function BracketView({
     return { izquierda, derecha, final };
   };
 
+  // Franja superior con el nombre del torneo (solo estilo "esports") --
+  // migración 181, a pedido del usuario: "modelo" elegible
+  // (data-estilo-titulo) + color de texto personalizado.
+  const renderBanner = () =>
+    estilo === "esports" && (
+      <div
+        className="bracket-esports-banner"
+        data-estilo-titulo={estiloTitulo}
+        style={colorTextoTitulo ? ({ "--titulo-texto-color": colorTextoTitulo } as CSSProperties) : undefined}
+      >
+        {nombreTorneo}
+      </div>
+    );
+
   const renderEmbudo = () => {
     const partidosSinTercerLugar = matches.filter((m) => !m.es_tercer_lugar);
     const { izquierda, derecha, final } = partidosParaEmbudo(partidosSinTercerLugar);
@@ -744,6 +816,12 @@ export default function BracketView({
     return (
       <div
         className="bracket-embudo-wrap"
+        style={
+          {
+            ...(colorLinea ? { "--linea-color": colorLinea } : {}),
+            ...(colorTexto ? { "--texto-bracket-color": colorTexto } : {}),
+          } as CSSProperties
+        }
         ref={(el) => {
           if (el) grillaElRefs.current.set("embudo-wrap", el);
           else grillaElRefs.current.delete("embudo-wrap");
@@ -836,7 +914,7 @@ export default function BracketView({
   if (esEmbudo && !esEliminacionDoble) {
     return (
       <>
-        {estilo === "esports" && <div className="bracket-esports-banner">{nombreTorneo}</div>}
+        {renderBanner()}
         {renderEmbudo()}
         {partidoTercerLugar && (
           <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
@@ -856,7 +934,7 @@ export default function BracketView({
 
     return (
       <>
-        {estilo === "esports" && <div className="bracket-esports-banner">{nombreTorneo}</div>}
+        {renderBanner()}
 
         <div className="bracket-round-title bracket-seccion-titulo">Llave de ganadores</div>
         {renderGrilla(armarGrilla(partidosGanadores, !!nombresRondaPersonalizados, false), "ganadores")}
@@ -887,7 +965,7 @@ export default function BracketView({
 
   return (
     <>
-      {estilo === "esports" && <div className="bracket-esports-banner">{nombreTorneo}</div>}
+      {renderBanner()}
       {renderGrilla(
         armarGrilla(
           matches.filter((m) => !m.es_tercer_lugar),

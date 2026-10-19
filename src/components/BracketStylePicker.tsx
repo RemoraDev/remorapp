@@ -6,8 +6,17 @@ import {
   ESTILO_LINEA_BRACKET_OPTIONS,
   ESTRUCTURA_BRACKET_OPTIONS,
   PALETA_COLOR_LINEA_BRACKET,
+  PALETA_COLOR_TEXTO_BRACKET,
+  ESTILO_TITULO_BRACKET_OPTIONS,
+  INSIGNIA_BRACKET_OPTIONS,
 } from "../types/tournaments";
-import type { FondoBracket, EstiloLineaBracket, EstructuraBracket } from "../types/tournaments";
+import type {
+  FondoBracket,
+  EstiloLineaBracket,
+  EstructuraBracket,
+  EstiloTituloBracket,
+  InsigniaBracket,
+} from "../types/tournaments";
 
 interface BracketStylePickerProps {
   tournamentId: string;
@@ -15,6 +24,10 @@ interface BracketStylePickerProps {
   estiloLinea: EstiloLineaBracket;
   estructura: EstructuraBracket;
   colorLinea: string | null;
+  estiloTitulo: EstiloTituloBracket;
+  colorTexto: string | null;
+  colorTextoTitulo: string | null;
+  insignia: InsigniaBracket;
   onCambio: () => void;
 }
 
@@ -81,6 +94,20 @@ function MiniLinea({ estiloLinea, colorLinea }: { estiloLinea: EstiloLineaBracke
   );
 }
 
+// Mini-render real de un "modelo" de franja de título (migración 181)
+// -- mismo patrón que .bracket-style-preview: el CSS real
+// (.bracket-esports-banner[data-estilo-titulo]) aplicado a una caja
+// chica, no una captura.
+function PreviewTitulo({ estiloTitulo }: { estiloTitulo: EstiloTituloBracket }) {
+  return (
+    <div className="bracket-titulo-preview">
+      <div className="bracket-esports-banner" data-estilo-titulo={estiloTitulo}>
+        Título
+      </div>
+    </div>
+  );
+}
+
 // Selector de estructura + fondo + efecto de línea, solo para el
 // organizador. Cada opción se aplica al instante al elegirla (mismo
 // patrón que la selección de tema de equipo en TeamDetailPage.tsx) --
@@ -97,6 +124,10 @@ export default function BracketStylePicker({
   estiloLinea,
   estructura,
   colorLinea,
+  estiloTitulo,
+  colorTexto,
+  colorTextoTitulo,
+  insignia,
   onCambio,
 }: BracketStylePickerProps) {
   // Antes, si el update fallaba (por ejemplo porque el constraint de
@@ -143,6 +174,50 @@ export default function BracketStylePicker({
     const { error: err } = await supabase
       .from("tournaments")
       .update({ color_linea_bracket: nuevoColor })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
+  const handleCambiarEstiloTitulo = async (nuevo: EstiloTituloBracket) => {
+    if (nuevo === estiloTitulo) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ estilo_titulo_bracket: nuevo })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
+  const handleCambiarColorTexto = async (nuevoColor: string | null) => {
+    if (nuevoColor === colorTexto) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ color_texto_bracket: nuevoColor })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
+  const handleCambiarColorTextoTitulo = async (nuevoColor: string | null) => {
+    if (nuevoColor === colorTextoTitulo) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ color_texto_titulo_bracket: nuevoColor })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
+
+  const handleCambiarInsignia = async (nueva: InsigniaBracket) => {
+    if (nueva === insignia) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ insignia_bracket: nueva })
       .eq("id", tournamentId);
     if (err) setError(err.message);
     else onCambio();
@@ -210,6 +285,100 @@ export default function BracketStylePicker({
               onClick={() => handleCambiarColor(o.value)}
             >
               <div className="bracket-color-linea-preview" style={{ background: o.value }} />
+              <span className="bracket-picker-option-label">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Migración 181, a pedido del usuario: "modelos" de la franja con
+          el nombre del torneo -- solo cambia algo visible con estilo
+          "esports" (el único que muestra esta franja), pero se deja
+          elegible siempre para que quede listo al cambiar de estilo. */}
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Estilo de título</h3>
+        <div className="bracket-picker-options">
+          {ESTILO_TITULO_BRACKET_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`bracket-picker-option ${estiloTitulo === o.value ? "selected" : ""}`}
+              onClick={() => handleCambiarEstiloTitulo(o.value)}
+            >
+              <PreviewTitulo estiloTitulo={o.value} />
+              <span className="bracket-picker-option-label">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Migración 181, a pedido del usuario: color del texto de los
+          nombres DENTRO de la llave -- misma paleta y mismo patrón que
+          "Color de línea" de arriba ("Por defecto" = sin personalizar). */}
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Color de texto (llave)</h3>
+        <div className="bracket-picker-options">
+          <button
+            type="button"
+            className={`bracket-picker-option ${colorTexto === null ? "selected" : ""}`}
+            onClick={() => handleCambiarColorTexto(null)}
+          >
+            <div className="bracket-color-linea-preview bracket-color-linea-preview-defecto" />
+            <span className="bracket-picker-option-label">Por defecto</span>
+          </button>
+          {PALETA_COLOR_TEXTO_BRACKET.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`bracket-picker-option ${colorTexto === o.value ? "selected" : ""}`}
+              onClick={() => handleCambiarColorTexto(o.value)}
+            >
+              <div className="bracket-color-linea-preview" style={{ background: o.value }} />
+              <span className="bracket-picker-option-label">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Migración 181, a pedido del usuario: color del texto de la
+          franja del título -- independiente del de arriba, misma paleta. */}
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Color de texto (título)</h3>
+        <div className="bracket-picker-options">
+          <button
+            type="button"
+            className={`bracket-picker-option ${colorTextoTitulo === null ? "selected" : ""}`}
+            onClick={() => handleCambiarColorTextoTitulo(null)}
+          >
+            <div className="bracket-color-linea-preview bracket-color-linea-preview-defecto" />
+            <span className="bracket-picker-option-label">Por defecto</span>
+          </button>
+          {PALETA_COLOR_TEXTO_BRACKET.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`bracket-picker-option ${colorTextoTitulo === o.value ? "selected" : ""}`}
+              onClick={() => handleCambiarColorTextoTitulo(o.value)}
+            >
+              <div className="bracket-color-linea-preview" style={{ background: o.value }} />
+              <span className="bracket-picker-option-label">{o.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Migración 182, a pedido del usuario: qué se muestra junto al
+          nombre de cada participante dentro de la llave. */}
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Insignia del participante</h3>
+        <div className="bracket-picker-options">
+          {INSIGNIA_BRACKET_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`bracket-picker-option ${insignia === o.value ? "selected" : ""}`}
+              onClick={() => handleCambiarInsignia(o.value)}
+            >
               <span className="bracket-picker-option-label">{o.label}</span>
             </button>
           ))}

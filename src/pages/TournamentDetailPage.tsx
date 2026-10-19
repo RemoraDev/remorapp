@@ -77,6 +77,12 @@ interface ParticipanteConNombre {
   checkedIn: boolean;
   // Migración 069: solo tiene sentido en un torneo modo "tabla_posiciones".
   puntosLeaderboard: number;
+  // Migración 182, a pedido del usuario: insignia "bandera" (torneo
+  // 1v1, profiles.country) -- siempre null en un torneo por equipo.
+  pais: string | null;
+  // Migración 182, a pedido del usuario: insignia "banner_clan"
+  // (torneo por equipo, teams.banner_url) -- siempre null en 1v1.
+  bannerUrl: string | null;
 }
 
 // Convierte una fecha ISO (como llega de la base) al formato que
@@ -446,11 +452,12 @@ export default function TournamentDetailPage() {
       let mmrPorTeamId: Record<string, number> = {};
       let ligaPorTeamId: Record<string, string> = {};
       let bancaRotaPorTeamId: Record<string, boolean> = {};
+      let bannerPorTeamId: Record<string, string | null> = {};
 
       if (teamIds.length > 0) {
         const { data: equiposData } = await supabase
           .from("teams")
-          .select("id, name, logo_url, mmr, liga, banca_rota")
+          .select("id, name, logo_url, mmr, liga, banca_rota, banner_url")
           .in("id", teamIds);
 
         nombrePorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.name]));
@@ -458,6 +465,7 @@ export default function TournamentDetailPage() {
         mmrPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.mmr]));
         ligaPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.liga]));
         bancaRotaPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.banca_rota]));
+        bannerPorTeamId = Object.fromEntries((equiposData ?? []).map((t) => [t.id, t.banner_url]));
       }
 
       listaParticipantes = (participantesData ?? []).map((p) => ({
@@ -474,6 +482,8 @@ export default function TournamentDetailPage() {
         suspendido: false,
         checkedIn: p.checked_in,
         puntosLeaderboard: p.puntos_leaderboard,
+        pais: null,
+        bannerUrl: p.team_id ? bannerPorTeamId[p.team_id] ?? null : null,
       }));
     } else {
       const userIds = (participantesData ?? []).map((p) => p.user_id).filter((u): u is string => u !== null);
@@ -485,6 +495,7 @@ export default function TournamentDetailPage() {
       let ligaPorId: Record<string, string> = {};
       let nivelPorId: Record<string, number> = {};
       let bancaRotaPorId: Record<string, boolean> = {};
+      let paisPorId: Record<string, string | null> = {};
 
       // tournament_participants.user_id apunta a auth.users, no a
       // profiles, así que no hay join automático: se resuelven los
@@ -498,7 +509,9 @@ export default function TournamentDetailPage() {
       if (userIds.length > 0) {
         const { data: perfilesData } = await supabase
           .from("profiles")
-          .select("id, nick, unique_id, suspendido, avatar_url, avatar_forma, mmr_1v1, liga_1v1, nivel_1v1, banca_rota")
+          .select(
+            "id, nick, unique_id, suspendido, avatar_url, avatar_forma, mmr_1v1, liga_1v1, nivel_1v1, banca_rota, country"
+          )
           .in("id", userIds);
 
         nombresPorId = Object.fromEntries(
@@ -511,6 +524,7 @@ export default function TournamentDetailPage() {
         ligaPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.liga_1v1]));
         nivelPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.nivel_1v1]));
         bancaRotaPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.banca_rota]));
+        paisPorId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p.country]));
       }
 
       listaParticipantes = (participantesData ?? []).map((p) => ({
@@ -527,6 +541,8 @@ export default function TournamentDetailPage() {
         suspendido: p.user_id ? suspendidoPorId[p.user_id] ?? false : false,
         checkedIn: p.checked_in,
         puntosLeaderboard: p.puntos_leaderboard,
+        pais: p.user_id ? paisPorId[p.user_id] ?? null : null,
+        bannerUrl: null,
       }));
     }
 
@@ -2206,6 +2222,10 @@ export default function TournamentDetailPage() {
                       estiloLinea={torneo.estilo_linea_bracket}
                       estructura={torneo.estructura_bracket}
                       colorLinea={torneo.color_linea_bracket}
+                      estiloTitulo={torneo.estilo_titulo_bracket}
+                      colorTexto={torneo.color_texto_bracket}
+                      colorTextoTitulo={torneo.color_texto_titulo_bracket}
+                      insignia={torneo.insignia_bracket}
                       onCambio={cargarTorneo}
                     />
                   </div>
@@ -2917,6 +2937,12 @@ export default function TournamentDetailPage() {
                           estiloLinea={torneo.estilo_linea_bracket}
                           colorLinea={torneo.color_linea_bracket}
                           estructura={torneo.estructura_bracket}
+                          estiloTitulo={torneo.estilo_titulo_bracket}
+                          colorTexto={torneo.color_texto_bracket}
+                          colorTextoTitulo={torneo.color_texto_titulo_bracket}
+                          insignia={torneo.insignia_bracket}
+                          paisesPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.pais]))}
+                          bannersPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.bannerUrl]))}
                           nombreTorneo={torneo.nombre}
                           nombresRondaPersonalizados={torneo.mostrar_nombres_ronda_personalizados}
                           permiteAutoreporte={torneo.permite_autoreporte}

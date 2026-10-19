@@ -3407,12 +3407,14 @@ html.es-escritorio .player-detail-panel-inline {
    viajen sin parar a lo largo de la línea. */
 .bracket-conectores[data-estilo-linea="laser"] path {
   stroke: var(--linea-color, var(--color-accent));
-  stroke-width: 2.5px;
+  stroke-width: 2px;
   stroke-dasharray: 10 8;
-  filter: drop-shadow(0 0 2px var(--linea-color, var(--color-accent)))
-    drop-shadow(0 0 6px var(--linea-color, var(--color-accent)))
-    drop-shadow(0 0 14px var(--linea-color, var(--color-accent)));
-  animation: bracket-conector-energia 0.6s linear infinite;
+  /* A pedido del usuario: el brillo original (3 drop-shadow hasta
+     14px) quedaba "demasiado exagerado" -- un solo resplandor chico
+     alcanza para leerse como láser sin encandilar. */
+  filter: drop-shadow(0 0 3px var(--linea-color, var(--color-accent)));
+  /* Idem con la velocidad: de 0.6s (muy rápido) a 2.4s. */
+  animation: bracket-conector-energia 2.4s linear infinite;
 }
 
 @keyframes bracket-conector-energia {
@@ -3563,7 +3565,9 @@ html.es-escritorio .player-detail-panel-inline {
   padding: 0.45rem 0.5rem;
   border-radius: 0.3rem;
   font-size: 0.85rem;
-  color: var(--color-text-muted);
+  /* Migración 181, a pedido del usuario: color de texto personalizable
+     (Panel de control) -- var sin valor pisa el color de siempre. */
+  color: var(--texto-bracket-color, var(--color-text-muted));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3584,6 +3588,23 @@ html.es-escritorio .player-detail-panel-inline {
   width: 1.25rem;
   height: 1.25rem;
   border-radius: 0.3rem;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+/* Migración 182, a pedido del usuario: alternativas al logo de
+   siempre -- bandera del país (profiles.country, solo 1v1) o banner
+   del clan (teams.banner_url, recorte 4:1, solo torneos por equipo). */
+.bracket-slot-bandera {
+  font-size: 1.1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.bracket-slot-banner {
+  width: 2.25rem;
+  height: 1.25rem;
+  border-radius: 0.25rem;
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -3959,14 +3980,14 @@ html.es-escritorio .player-detail-panel-inline {
 /* ----- Estilo "esports": logo/avatar más grande, franja con el
    nombre del torneo, líneas de conexión gruesas color de acento. ----- */
 
-/* Franja del nombre del torneo: cortada en diagonal en las dos puntas
-   (clip-path, look de gráfica de transmisión/scoreboard) en vez de una
-   píldora lisa, con degradé + brillo de la marca y un filo inferior
-   más oscuro que le da grosor/profundidad en vez de quedar plana. */
+/* Franja del nombre del torneo -- layout compartido por los 11
+   "modelos" (migración 181, a pedido del usuario: buscados e
+   inspirados en gráficas reales de transmisiones de esports). Cada
+   data-estilo-titulo de abajo pone su propio fondo/recorte/color;
+   --titulo-texto-color (Panel de control) pisa el color de texto de
+   cualquiera de los 11 por igual. */
 .bracket-esports-banner {
   position: relative;
-  background: linear-gradient(100deg, var(--h-accent-hover) 0%, var(--h-accent) 55%, var(--color-accent-soft) 100%);
-  color: #04141a;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 1.05rem;
@@ -3975,13 +3996,22 @@ html.es-escritorio .player-detail-panel-inline {
   text-align: center;
   padding: 0.7rem 2rem;
   margin-bottom: 1rem;
+}
+
+/* 1) Diagonal (el de siempre): cortada en diagonal en las dos puntas
+   (clip-path, look de gráfica de transmisión/scoreboard), con degradé
+   + brillo de la marca y un filo inferior más oscuro que le da
+   grosor/profundidad en vez de quedar plana. */
+.bracket-esports-banner[data-estilo-titulo="diagonal"] {
+  background: linear-gradient(100deg, var(--h-accent-hover) 0%, var(--h-accent) 55%, var(--color-accent-soft) 100%);
+  color: var(--titulo-texto-color, #04141a);
   clip-path: polygon(1.1rem 0, 100% 0, calc(100% - 1.1rem) 100%, 0 100%);
   box-shadow: var(--shadow-accent-lg), 0 6px 0 rgba(4, 20, 26, 0.35);
 }
 
 /* Filete fino debajo del borde recortado, mismo ángulo que el
    clip-path -- refuerzo de "placa metálica" sin agregar otro nodo. */
-.bracket-esports-banner::after {
+.bracket-esports-banner[data-estilo-titulo="diagonal"]::after {
   content: "";
   position: absolute;
   left: 0;
@@ -3993,6 +4023,113 @@ html.es-escritorio .player-detail-panel-inline {
   opacity: 0.55;
 }
 
+/* 2) Hexagonal: cresta con los dos lados cortados en punta, como el
+   escudo de un equipo de esports. */
+.bracket-esports-banner[data-estilo-titulo="hexagonal"] {
+  background: linear-gradient(90deg, var(--h-accent) 0%, var(--h-accent-hover) 100%);
+  color: var(--titulo-texto-color, #04141a);
+  clip-path: polygon(1.4rem 0, calc(100% - 1.4rem) 0, 100% 50%, calc(100% - 1.4rem) 100%, 1.4rem 100%, 0 50%);
+  box-shadow: var(--shadow-accent-lg);
+}
+
+/* 3) Flecha: apunta hacia la derecha, como un indicador de "siguiente
+   ronda" en un scoreboard. */
+.bracket-esports-banner[data-estilo-titulo="chevron"] {
+  background: linear-gradient(90deg, var(--h-accent-hover) 0%, var(--h-accent) 100%);
+  color: var(--titulo-texto-color, #04141a);
+  clip-path: polygon(0 0, calc(100% - 1.6rem) 0, 100% 50%, calc(100% - 1.6rem) 100%, 0 100%);
+}
+
+/* 4) Subrayado: sin caja, solo el nombre con un trazo grueso de acento
+   debajo -- el modelo más discreto del lote. */
+.bracket-esports-banner[data-estilo-titulo="subrayado"] {
+  background: none;
+  color: var(--titulo-texto-color, var(--color-text));
+  padding: 0.4rem 1rem 0.7rem;
+  border-bottom: 3px solid var(--h-accent);
+}
+
+/* 5) Marco HUD: panel con borde fino y las 4 esquinas cortadas, como
+   un visor de interfaz de juego. */
+.bracket-esports-banner[data-estilo-titulo="marco"] {
+  background: rgba(var(--h-accent-rgb), 0.08);
+  color: var(--titulo-texto-color, var(--color-text));
+  border: 1px solid rgba(var(--h-accent-rgb), 0.6);
+  clip-path: polygon(
+    0.8rem 0, calc(100% - 0.8rem) 0, 100% 0.8rem, 100% 100%,
+    calc(100% - 0.8rem) 100%, 0.8rem 100%, 0 100%, 0 0.8rem
+  );
+}
+
+/* 6) Cinta: banda con una pequeña muesca triangular cortada en el
+   medio de cada punta, como una etiqueta/ribbon. */
+.bracket-esports-banner[data-estilo-titulo="cinta"] {
+  background: linear-gradient(90deg, var(--h-accent) 0%, var(--h-accent-hover) 100%);
+  color: var(--titulo-texto-color, #04141a);
+  clip-path: polygon(
+    0 0, 100% 0, 100% 35%, calc(100% - 0.7rem) 50%, 100% 65%, 100% 100%,
+    0 100%, 0 65%, 0.7rem 50%, 0 35%
+  );
+}
+
+/* 7) Glitch: panel oscuro con el texto duplicado en rojo/cian
+   desplazado, efecto estático (sin animación -- ya hubo feedback de
+   que un efecto parpadeante se sentía demasiado exagerado). */
+.bracket-esports-banner[data-estilo-titulo="glitch"] {
+  background: rgba(8, 10, 16, 0.85);
+  color: var(--titulo-texto-color, #f8fafc);
+  border-left: 3px solid var(--h-accent);
+  text-shadow:
+    2px 0 rgba(239, 68, 68, 0.75),
+    -2px 0 rgba(34, 211, 238, 0.75);
+}
+
+/* 8) Placa: metálica, con 4 remaches en las esquinas (radial-gradient
+   apilados sobre el fondo, sin pseudo-elementos extra). */
+.bracket-esports-banner[data-estilo-titulo="placa"] {
+  background:
+    radial-gradient(circle 3px at 0.7rem 0.6rem, rgba(255, 255, 255, 0.5), transparent 4px),
+    radial-gradient(circle 3px at calc(100% - 0.7rem) 0.6rem, rgba(255, 255, 255, 0.5), transparent 4px),
+    radial-gradient(circle 3px at 0.7rem calc(100% - 0.6rem), rgba(255, 255, 255, 0.5), transparent 4px),
+    radial-gradient(circle 3px at calc(100% - 0.7rem) calc(100% - 0.6rem), rgba(255, 255, 255, 0.5), transparent 4px),
+    linear-gradient(180deg, var(--color-card) 0%, rgba(0, 0, 0, 0.25) 100%);
+  color: var(--titulo-texto-color, var(--color-text));
+  border: 1px solid var(--color-border);
+  border-radius: 0.3rem;
+}
+
+/* 9) Gradiente: degradé suave de punta a punta, sin recortes -- el
+   modelo más "limpio" de caja lisa. */
+.bracket-esports-banner[data-estilo-titulo="gradiente"] {
+  background: linear-gradient(90deg, var(--h-accent) 0%, var(--color-accent-soft) 50%, var(--h-accent-hover) 100%);
+  color: var(--titulo-texto-color, #04141a);
+  border-radius: 0.6rem;
+}
+
+/* 10) Minimal: sin caja ni borde, solo el nombre bien espaciado. */
+.bracket-esports-banner[data-estilo-titulo="minimal"] {
+  background: none;
+  color: var(--titulo-texto-color, var(--color-text));
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  padding: 0.4rem 1rem;
+}
+
+/* 11) Neón doble: panel oscuro, texto con resplandor de dos capas
+   (acento + blanco) y un borde con el mismo glow -- el modelo más
+   "vitrina de arcade" del lote. */
+.bracket-esports-banner[data-estilo-titulo="neon_doble"] {
+  background: rgba(8, 10, 16, 0.85);
+  color: var(--titulo-texto-color, #f8fafc);
+  border: 1px solid var(--h-accent);
+  border-radius: 0.4rem;
+  text-shadow:
+    0 0 4px #fff,
+    0 0 10px var(--h-accent),
+    0 0 18px var(--h-accent);
+  box-shadow: 0 0 12px rgba(var(--h-accent-rgb), 0.5), inset 0 0 12px rgba(var(--h-accent-rgb), 0.2);
+}
+
 [data-estilo-bracket="esports"] .bracket-match {
   position: relative;
   /* A pedido del usuario: si hay un color de línea personalizado
@@ -4002,8 +4139,24 @@ html.es-escritorio .player-detail-panel-inline {
   border-left: 3px solid var(--linea-color, var(--color-accent));
 }
 
+/* La Final centrada de "embudo al centro" recibe líneas de AMBAS
+   mitades convergiendo, así que el filete de color va en los dos
+   lados, no solo a la izquierda como el resto de las tarjetas. */
+.bracket-embudo-final[data-estilo-bracket="esports"] .bracket-match {
+  border-right: 3px solid var(--linea-color, var(--color-accent));
+}
+
 [data-estilo-bracket="esports"] .bracket-slot-logo {
   width: 1.75rem;
+  height: 1.75rem;
+}
+
+[data-estilo-bracket="esports"] .bracket-slot-bandera {
+  font-size: 1.4rem;
+}
+
+[data-estilo-bracket="esports"] .bracket-slot-banner {
+  width: 3rem;
   height: 1.75rem;
 }
 
@@ -4120,6 +4273,23 @@ html.es-escritorio .player-detail-panel-inline {
 .bracket-style-preview .bracket-slot-logo {
   width: 0.7rem;
   height: 0.7rem;
+}
+
+/* Mini-render real de cada "modelo" de franja de título (migración
+   181): mismo .bracket-esports-banner de la llave de verdad, a escala
+   reducida -- fuerza un ancho fijo con nowrap para que los 11 modelos
+   se vean del mismo tamaño en el selector, sin depender del nombre
+   real (que puede ser largo) del torneo. */
+.bracket-titulo-preview {
+  width: 7rem;
+  transform: scale(0.55);
+  transform-origin: top center;
+  pointer-events: none;
+}
+
+.bracket-titulo-preview .bracket-esports-banner {
+  margin-bottom: 0;
+  white-space: nowrap;
 }
 
 /* Mini-render real del fondo: mismo fondo que .tournament-bracket-wrap,

@@ -56,6 +56,63 @@ export const PALETA_COLOR_LINEA_BRACKET: { value: string; label: string }[] = [
   { value: "#ffffff", label: "Blanco" },
 ];
 
+// Migración 181, a pedido del usuario: misma paleta de arriba, para
+// personalizar el color del TEXTO (de los nombres dentro de la llave,
+// o del título) en vez del color de la línea -- comparten la lista
+// porque son los mismos 8 colores de siempre, con otro nombre para que
+// se lea claro en cada selector.
+export const PALETA_COLOR_TEXTO_BRACKET = PALETA_COLOR_LINEA_BRACKET;
+
+// Migración 181, a pedido del usuario: "modelos" de la franja con el
+// nombre del torneo (solo aplica con estilo "esports", la única que
+// muestra esta franja) -- 11 variantes, buscadas e inspiradas en
+// gráficas reales de transmisiones de esports (diagonal tipo scoreboard,
+// cresta hexagonal, cinta con muescas, marco tipo HUD, glitch, placa
+// con remaches, etc.). "diagonal" es la de siempre.
+export type EstiloTituloBracket =
+  | "diagonal"
+  | "hexagonal"
+  | "chevron"
+  | "subrayado"
+  | "marco"
+  | "cinta"
+  | "glitch"
+  | "placa"
+  | "gradiente"
+  | "minimal"
+  | "neon_doble";
+
+export const ESTILO_TITULO_BRACKET_OPTIONS: { value: EstiloTituloBracket; label: string }[] = [
+  { value: "diagonal", label: "Diagonal" },
+  { value: "hexagonal", label: "Hexagonal" },
+  { value: "chevron", label: "Flecha" },
+  { value: "subrayado", label: "Subrayado" },
+  { value: "marco", label: "Marco HUD" },
+  { value: "cinta", label: "Cinta" },
+  { value: "glitch", label: "Glitch" },
+  { value: "placa", label: "Placa" },
+  { value: "gradiente", label: "Gradiente" },
+  { value: "minimal", label: "Minimal" },
+  { value: "neon_doble", label: "Neón doble" },
+];
+
+// Migración 182, a pedido del usuario: qué insignia se muestra junto
+// al nombre de cada participante dentro de la llave -- antes era fijo
+// (el logo del equipo en torneos por equipo, el avatar en 1v1 estilo
+// "esports"). "logo_personal" reproduce ese comportamiento de siempre
+// (default, no rompe torneos ya creados); "bandera" usa el país del
+// perfil (profiles.country) en torneos 1v1, "banner_clan" usa
+// teams.banner_url (el banner 4:1 del equipo) en torneos por equipo, y
+// "ninguno" no muestra nada junto al nombre.
+export type InsigniaBracket = "ninguno" | "bandera" | "banner_clan" | "logo_personal";
+
+export const INSIGNIA_BRACKET_OPTIONS: { value: InsigniaBracket; label: string }[] = [
+  { value: "logo_personal", label: "Logo / avatar" },
+  { value: "bandera", label: "Bandera del país" },
+  { value: "banner_clan", label: "Banner del clan" },
+  { value: "ninguno", label: "Ninguno" },
+];
+
 // Migración 177, a pedido del usuario (mismo espíritu que "Estructura"
 // del lineup, ver EstructuraLineupPicker.tsx): cómo se arma la llave
 // en sí, no solo su piel -- independiente de estilo/fondo/línea.
@@ -140,6 +197,10 @@ export interface TournamentRow {
   estilo_linea_bracket: EstiloLineaBracket;
   estructura_bracket: EstructuraBracket;
   color_linea_bracket: string | null;
+  estilo_titulo_bracket: EstiloTituloBracket;
+  color_texto_bracket: string | null;
+  color_texto_titulo_bracket: string | null;
+  insignia_bracket: InsigniaBracket;
   // Migración 041: etapa de grupos previa a la llave eliminatoria.
   tiene_fase_grupos: boolean;
   cantidad_grupos: number | null;
