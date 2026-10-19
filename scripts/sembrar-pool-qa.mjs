@@ -99,7 +99,7 @@ console.log("1) Cuentas individuales sueltas (1v1)...");
 const jugadores = [];
 for (let i = 1; i <= 20; i++) {
   const n = String(i).padStart(2, "0");
-  const nick = `QAPoolJugador${n}`;
+  const nick = `QAJug${n}`;
   const id = await crearCuentaAuth(`qa.pool.jugador.${n}.${SUFIJO}@remorapp-qa-pool.invalid`);
   jugadores.push({ nick, id });
   console.log(`  ${nick} creado (${id}).`);
@@ -112,7 +112,7 @@ for (let equipo = 1; equipo <= 8; equipo++) {
   const nEquipo = String(equipo).padStart(2, "0");
   const miembros = [];
   for (let miembro = 1; miembro <= 4; miembro++) {
-    const nick = `QAPoolEquipo${nEquipo}_${miembro}`;
+    const nick = `QAEq${nEquipo}_${miembro}`;
     const id = await crearCuentaAuth(`qa.pool.equipo.${nEquipo}.${miembro}.${SUFIJO}@remorapp-qa-pool.invalid`);
     miembros.push({ nick, id });
     console.log(`  ${nick} creado (${id}).`);
