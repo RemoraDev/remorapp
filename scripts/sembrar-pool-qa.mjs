@@ -3,24 +3,27 @@
 // visible solo para staff/admin) -- RemorApp exige que todo
 // tournament_participants sea un user_id o team_id real (FK a
 // auth.users), no hay forma de inventar participantes fantasma sin
-// cuentas de verdad. Este script usa la Admin API de Supabase
-// (auth.admin.createUser) para crear:
-//   - 20 cuentas individuales sueltas, nick "QAPoolJugadorNN" -- para
-//     rellenar torneos 1v1.
-//   - 8 clanes, cada uno con 4 miembros reales (32 cuentas más), nick
-//     "QAPoolEquipoNN_M" -- con roster al tope (4) califican para
-//     cualquier formato de equipo (2v2/3v3/4v4) sin importar cuál
-//     elija el organizador.
-// Es idempotente: si ya existe una cuenta con ese nick, la saltea en
-// vez de duplicarla -- correrlo de nuevo no rompe nada.
+// cuentas de verdad.
+//
+// Este proyecto en particular rechaza "permission denied for table
+// profiles/teams/..." al hacer operaciones normales de tabla con la
+// Service Role Key (algo específico de este proyecto, no de este
+// script -- la Admin API de Auth sí funciona bien con la misma key).
+// Por eso el script SOLO usa auth.admin.createUser() -- lo único que
+// confirmamos que funciona -- para crear las 52 cuentas en
+// auth.users, y al final IMPRIME un bloque de SQL con los IDs reales
+// para que lo corras vos en el SQL Editor (que al ser superusuario no
+// tiene este problema) y complete profiles/teams/team_members.
 //
 // Uso:
 //   1. Sacá tu Service Role Key de supabase.com/dashboard -> tu
 //      proyecto -> Project Settings -> API -- NUNCA se la pases a
 //      Claude ni la subas a git, solo vos la tenés.
 //   2. SUPABASE_SERVICE_ROLE_KEY=tu-key node scripts/sembrar-pool-qa.mjs
+//   3. Copiá el bloque SQL que imprime al final y corrélo en el SQL
+//      Editor de Supabase.
 import { createClient } from "@supabase/supabase-js";
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -60,95 +63,102 @@ function passwordAlAzar() {
   return "QaPool-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 }
 
-async function completarProfile(id, nick) {
-  const { error } = await admin
-    .from("profiles")
-    .update({ nick, cuenta_validada: true, country: "chile", sc2_region: "america", es_cuenta_prueba: true })
-    .eq("id", id);
-  if (error) throw new Error(`No pude completar el profile de ${nick} (${id}): ${error.message}`);
+function sqlString(valor) {
+  return "'" + valor.replace(/'/g, "''") + "'";
 }
 
-// Nota: NO usa auth.admin.listUsers() para chequear duplicados --
-// ese proyecto tiene cuentas viejas con datos incompletos que hacen
-// fallar esa llamada con "Database error finding users" (no tiene
-// nada que ver con este script). En cambio, intenta crear
-// directamente; si el email ya existe, avisa con el mensaje de
-// Supabase y corta ahí -- hay que borrar esa cuenta puntual desde el
-// Dashboard (Authentication > Users > buscar el email > Delete user)
-// y volver a correr el script, no intenta adivinar su id.
-async function crearCuentaPool(nick, email) {
-  const { data: creado, error: errorAuth } = await admin.auth.admin.createUser({
+// Crea la cuenta en auth.users -- si el email ya existe (de un
+// intento anterior), lo informa y corta: borrala desde el Dashboard
+// (Authentication > Users > buscar el email > Delete user) y volvé a
+// correr el script.
+async function crearCuentaAuth(email) {
+  const { data: creado, error } = await admin.auth.admin.createUser({
     email,
     password: passwordAlAzar(),
     email_confirm: true,
   });
-  if (errorAuth || !creado?.user) {
+  if (error || !creado?.user) {
     throw new Error(
-      `No pude crear ${email}: ${errorAuth?.message ?? "sin usuario devuelto"} -- si ya existe, ` +
+      `No pude crear ${email}: ${error?.message ?? "sin usuario devuelto"} -- si ya existe, ` +
         `borrala desde el Dashboard (Authentication > Users) y volvé a correr el script.`
     );
   }
-
-  await completarProfile(creado.user.id, nick);
-
-  console.log(`  ${nick} creado (${creado.user.id}).`);
   return creado.user.id;
 }
 
 console.log("1) Cuentas individuales sueltas (1v1)...");
-const idsJugadores = [];
+const jugadores = [];
 for (let i = 1; i <= 20; i++) {
   const n = String(i).padStart(2, "0");
-  const id = await crearCuentaPool(`QAPoolJugador${n}`, `qa.pool.jugador.${n}@remorapp-qa-pool.invalid`);
-  idsJugadores.push(id);
+  const nick = `QAPoolJugador${n}`;
+  const id = await crearCuentaAuth(`qa.pool.jugador.${n}@remorapp-qa-pool.invalid`);
+  jugadores.push({ nick, id });
+  console.log(`  ${nick} creado (${id}).`);
 }
 
-console.log("2) Clanes de prueba (2v2/3v3/4v4), 4 miembros cada uno...");
+console.log("2) Cuentas para clanes de prueba (2v2/3v3/4v4), 4 por clan...");
 const TAGS = ["QABA", "QABB", "QABC", "QABD", "QABE", "QABF", "QABG", "QABH"];
+const equipos = [];
 for (let equipo = 1; equipo <= 8; equipo++) {
   const nEquipo = String(equipo).padStart(2, "0");
-  const idsMiembros = [];
+  const miembros = [];
   for (let miembro = 1; miembro <= 4; miembro++) {
-    const id = await crearCuentaPool(
-      `QAPoolEquipo${nEquipo}_${miembro}`,
-      `qa.pool.equipo.${nEquipo}.${miembro}@remorapp-qa-pool.invalid`
-    );
-    idsMiembros.push(id);
+    const nick = `QAPoolEquipo${nEquipo}_${miembro}`;
+    const id = await crearCuentaAuth(`qa.pool.equipo.${nEquipo}.${miembro}@remorapp-qa-pool.invalid`);
+    miembros.push({ nick, id });
+    console.log(`  ${nick} creado (${id}).`);
   }
-
-  const nombreEquipo = `QA Pool Equipo ${equipo}`;
-  const { data: equipoExistente } = await admin.from("teams").select("id").eq("name", nombreEquipo).maybeSingle();
-  if (equipoExistente) {
-    console.log(`  ${nombreEquipo} ya existe, salteando.`);
-    continue;
-  }
-
-  // El primer miembro queda como owner -- el trigger
-  // after_insert_teams_owner le crea su fila en team_members solo.
-  const { data: nuevoEquipo, error: errorEquipo } = await admin
-    .from("teams")
-    .insert({
-      name: nombreEquipo,
-      tag: TAGS[equipo - 1],
-      sc2_regions: ["america"],
-      owner_id: idsMiembros[0],
-      is_public: true,
-      es_cuenta_prueba: true,
-    })
-    .select("id")
-    .single();
-  if (errorEquipo || !nuevoEquipo) {
-    throw new Error(`No pude crear ${nombreEquipo}: ${errorEquipo?.message}`);
-  }
-
-  const { error: errorMiembros } = await admin.from("team_members").insert(
-    idsMiembros.slice(1).map((user_id) => ({ team_id: nuevoEquipo.id, user_id }))
-  );
-  if (errorMiembros) {
-    throw new Error(`No pude agregar miembros a ${nombreEquipo}: ${errorMiembros.message}`);
-  }
-
-  console.log(`  ${nombreEquipo} (${TAGS[equipo - 1]}) creado con 4 miembros.`);
+  equipos.push({ nombre: `QA Pool Equipo ${equipo}`, tag: TAGS[equipo - 1], miembros });
 }
 
-console.log("Listo. El botón \"Rellenar con equipos y jugadores\" ya tiene de dónde sacar participantes.");
+// ---- Arma el bloque SQL con los IDs reales ----
+const lineasProfiles = [];
+for (const j of jugadores) {
+  lineasProfiles.push(
+    `update public.profiles set nick = ${sqlString(j.nick)}, cuenta_validada = true, country = 'chile', sc2_region = 'america', es_cuenta_prueba = true where id = '${j.id}';`
+  );
+}
+for (const eq of equipos) {
+  for (const m of eq.miembros) {
+    lineasProfiles.push(
+      `update public.profiles set nick = ${sqlString(m.nick)}, cuenta_validada = true, country = 'chile', sc2_region = 'america', es_cuenta_prueba = true where id = '${m.id}';`
+    );
+  }
+}
+
+const lineasEquipos = [];
+for (const eq of equipos) {
+  const owner = eq.miembros[0];
+  const resto = eq.miembros.slice(1);
+  lineasEquipos.push(
+    `insert into public.teams (name, tag, sc2_regions, owner_id, is_public, es_cuenta_prueba) values (${sqlString(
+      eq.nombre
+    )}, ${sqlString(eq.tag)}, array['america'], '${owner.id}', true, true);`
+  );
+  for (const m of resto) {
+    lineasEquipos.push(
+      `insert into public.team_members (team_id, user_id) select id, '${m.id}' from public.teams where name = ${sqlString(
+        eq.nombre
+      )};`
+    );
+  }
+}
+
+const sqlFinal = [
+  "-- Corré esto en el SQL Editor de Supabase para terminar de armar el pool --",
+  "-- generado por scripts/sembrar-pool-qa.mjs, con los IDs reales ya creados.",
+  "",
+  "-- 1) Completa nick/validación de las 52 cuentas:",
+  ...lineasProfiles,
+  "",
+  "-- 2) Crea los 8 clanes y agrega a sus otros 3 miembros cada uno",
+  "--    (el dueño ya queda de owner_id, el trigger lo agrega solo a team_members):",
+  ...lineasEquipos,
+  "",
+].join("\n");
+
+const rutaSalida = join(RAIZ, "pool-qa-completar.sql");
+writeFileSync(rutaSalida, sqlFinal, "utf8");
+
+console.log("\nListo. Las 52 cuentas ya existen en auth.users.");
+console.log(`Ahora corré el SQL que quedó en ${rutaSalida} en el SQL Editor de Supabase para terminar.`);
