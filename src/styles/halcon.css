@@ -8784,6 +8784,36 @@ body.overlay-obs {
   align-items: center;
 }
 
+/* Migración 186, a pedido del usuario: "Eliminar torneo" como su
+   propia pestaña roja, al final de todas -- se lee como peligrosa
+   incluso sin abrirla, no solo cuando ya está seleccionada. */
+.organizer-panel-tab-peligro {
+  color: #f87171;
+}
+
+.organizer-panel-tab-peligro:hover {
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.organizer-panel-tab-peligro.selected {
+  background: var(--color-danger, #ef4444);
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(239, 68, 68, 0.4);
+}
+
+.organizer-panel-card-peligro {
+  border: 1px solid rgba(239, 68, 68, 0.4) !important;
+}
+
+.organizer-panel-card-peligro .organizer-panel-card-header {
+  border-bottom-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.organizer-panel-card-peligro .organizer-panel-card-icon {
+  color: #f87171;
+}
+
 /* Fila externa de TournamentDetailPage.tsx: la píldora de pestañas
    (Llave/Participantes/Reglamento) a la izquierda, la píldora de Panel
    de control sola a la derecha -- a pedido del usuario. Cada una
@@ -10895,11 +10925,12 @@ html.es-escritorio .escritorio-chat-fijo {
   font-weight: 700;
 }
 
-/* Migración 108: botones de eliminar, exclusivos del organizador --
-   solo necesitan despegarse del contenido de arriba, mismo estilo
-   btn-ghost que "Abandonar torneo" en TournamentDetailPage. */
-.guerra-razas-eliminar-btn,
-.eliminar-torneo-btn {
+/* Migración 108: botón de eliminar de Guerra de Razas, exclusivo del
+   organizador -- solo necesita despegarse del contenido de arriba,
+   mismo estilo btn-ghost que "Abandonar torneo" en TournamentDetailPage.
+   "Eliminar torneo" en sí se movió a su propia pestaña (migración 186,
+   ver .organizer-panel-tab-peligro más abajo). */
+.guerra-razas-eliminar-btn {
   margin-top: 2rem;
 }
 

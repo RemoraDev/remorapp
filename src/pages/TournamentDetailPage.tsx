@@ -16,6 +16,7 @@ import {
   ArrowLeft,
   Maximize2,
   Minimize2,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -347,6 +348,7 @@ export default function TournamentDetailPage() {
   const [errorAbandonar, setErrorAbandonar] = useState<string | null>(null);
 
   const [eliminandoTorneo, setEliminandoTorneo] = useState(false);
+  const [errorEliminarTorneo, setErrorEliminarTorneo] = useState<string | null>(null);
 
   // --- Mi equipo (solo relevante en torneos 2v2/3v3/4v4) ---
   const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
@@ -1865,16 +1867,26 @@ export default function TournamentDetailPage() {
   // organizador puede eliminar el torneo en cualquier momento, sin
   // importar cuántos inscritos tenga. admin_eliminar_torneo() (en la
   // base) ya validaba esto para is_admin(), se amplió para que el
-  // propio creador_id también pueda usarla.
+  // propio creador_id también pueda usarla (y el dueño de la
+  // plataforma). Migración 186, a pedido del usuario: la advertencia
+  // deja explícito que no se puede restaurar.
   const handleEliminarTorneo = async () => {
     if (!torneo) return;
-    if (!window.confirm("¿Seguro? Esta acción es irreversible y afecta a todos los inscritos.")) return;
+    setErrorEliminarTorneo(null);
+    if (
+      !window.confirm(
+        `Vas a eliminar "${torneo.nombre}" por completo: la llave, los partidos y las inscripciones. No se puede restaurar después. ¿Eliminar de todas formas?`
+      )
+    ) {
+      return;
+    }
 
     setEliminandoTorneo(true);
     const { error } = await supabase.rpc("admin_eliminar_torneo", { p_tournament_id: torneo.id });
     setEliminandoTorneo(false);
 
     if (error) {
+      setErrorEliminarTorneo(error.message);
       toast.error(error.message);
       return;
     }
@@ -2036,6 +2048,9 @@ export default function TournamentDetailPage() {
                   { key: "visualizacion", label: "Visualización", icon: <IconoVisualizacion />, visible: true },
                   { key: "reglamento", label: "Reglamento", icon: <FileText size={16} />, visible: true },
                   { key: "temporadas", label: "Temporadas", icon: <Calendar size={16} />, visible: true },
+                  // A pedido del usuario: acción peligrosa, su propia
+                  // pestaña en rojo, al final de todas las demás.
+                  { key: "eliminar", label: "Eliminar torneo", icon: <Trash2 size={16} />, visible: true, peligro: true },
                 ];
                 const tabsVisibles = tabsOrganizador.filter((t) => t.visible);
                 const tabActivo = tabsVisibles.some((t) => t.key === organizerPanelTab)
@@ -2049,7 +2064,9 @@ export default function TournamentDetailPage() {
                         <button
                           key={t.key}
                           type="button"
-                          className={`organizer-panel-tab ${tabActivo === t.key ? "selected" : ""}`}
+                          className={`organizer-panel-tab ${tabActivo === t.key ? "selected" : ""} ${
+                            "peligro" in t && t.peligro ? "organizer-panel-tab-peligro" : ""
+                          }`}
                           onClick={() => setOrganizerPanelTab(t.key)}
                         >
                           <span className="organizer-panel-tab-icon">{t.icon}</span>
@@ -2548,22 +2565,37 @@ export default function TournamentDetailPage() {
                   </div>
                 </div>
                 )}
+
+                {tabActivo === "eliminar" && (
+                <div className="organizer-panel-card organizer-panel-card-peligro">
+                  <div className="organizer-panel-card-header">
+                    <span className="organizer-panel-card-icon">
+                      <Trash2 size={18} />
+                    </span>
+                    <h3 className="organizer-panel-card-title">Eliminar torneo</h3>
+                  </div>
+                  <div className="organizer-panel-card-body">
+                    <p className="form-hint">
+                      Esta acción borra el torneo por completo: la llave, los partidos, las inscripciones y
+                      cualquier resultado cargado. No queda ningún registro para restaurarlo después. Solo
+                      quien creó el torneo (o el dueño de la plataforma) puede hacerlo.
+                    </p>
+                    {errorEliminarTorneo && <div className="form-error">{errorEliminarTorneo}</div>}
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-block"
+                      disabled={eliminandoTorneo}
+                      onClick={handleEliminarTorneo}
+                    >
+                      {eliminandoTorneo ? "Eliminando..." : "Eliminar torneo definitivamente"}
+                    </button>
+                  </div>
+                </div>
+                )}
                     </div>
                   </>
                 );
               })()}
-
-              {/* A pedido del usuario: vivía suelto en el lobby del
-                  torneo -- una acción tan destructiva pertenece acá
-                  adentro, junto al resto de la gestión. */}
-              <button
-                type="button"
-                className="btn btn-ghost btn-block eliminar-torneo-btn"
-                disabled={eliminandoTorneo}
-                onClick={handleEliminarTorneo}
-              >
-                {eliminandoTorneo ? "Eliminando..." : "Eliminar torneo"}
-              </button>
               </div>
             </div>
           )}
