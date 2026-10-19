@@ -86,12 +86,21 @@ async function crearCuentaAuth(email) {
   return creado.user.id;
 }
 
+// Sufijo único por corrida -- así el email nunca choca con nada de
+// un intento anterior (este proyecto en particular dejó cuentas en
+// estados raros varias veces seguidas con el mismo email fijo, sin
+// una causa clara ni forma confiable de limpiarlas desde acá). El
+// nick (lo único que usa RemorApp para reconocer al pool) sigue
+// siendo el de siempre, sin el sufijo.
+const SUFIJO = Date.now().toString(36);
+console.log(`Sufijo de esta corrida: ${SUFIJO} (evita chocar con intentos anteriores).\n`);
+
 console.log("1) Cuentas individuales sueltas (1v1)...");
 const jugadores = [];
 for (let i = 1; i <= 20; i++) {
   const n = String(i).padStart(2, "0");
   const nick = `QAPoolJugador${n}`;
-  const id = await crearCuentaAuth(`qa.pool.jugador.${n}@remorapp-qa-pool.invalid`);
+  const id = await crearCuentaAuth(`qa.pool.jugador.${n}.${SUFIJO}@remorapp-qa-pool.invalid`);
   jugadores.push({ nick, id });
   console.log(`  ${nick} creado (${id}).`);
 }
@@ -104,7 +113,7 @@ for (let equipo = 1; equipo <= 8; equipo++) {
   const miembros = [];
   for (let miembro = 1; miembro <= 4; miembro++) {
     const nick = `QAPoolEquipo${nEquipo}_${miembro}`;
-    const id = await crearCuentaAuth(`qa.pool.equipo.${nEquipo}.${miembro}@remorapp-qa-pool.invalid`);
+    const id = await crearCuentaAuth(`qa.pool.equipo.${nEquipo}.${miembro}.${SUFIJO}@remorapp-qa-pool.invalid`);
     miembros.push({ nick, id });
     console.log(`  ${nick} creado (${id}).`);
   }
