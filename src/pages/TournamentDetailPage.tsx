@@ -316,7 +316,13 @@ export default function TournamentDetailPage() {
   // antes de que exista una llave real (recién se genera al cerrar
   // inscripciones). No es la llave final -- es solo un vistazo
   // ordenado por inscripción, con los cupos vacíos como placeholder.
-  const [mostrarVistaPreviaLlaves, setMostrarVistaPreviaLlaves] = useState(false);
+  // A pedido del usuario: la vista en tarjetas (logo + nombre completo,
+  // sin liga/MMR) es la que se ve por defecto -- la lista plana queda
+  // como alternativa detrás del botón "Ver como lista".
+  const [mostrarVistaPreviaLlaves, setMostrarVistaPreviaLlaves] = useState(true);
+  // Pestaña activa del Panel de organizador -- antes era una grilla con
+  // todas las tarjetas abiertas a la vez, armaba un cuadro enorme.
+  const [organizerPanelTab, setOrganizerPanelTab] = useState("cuadro");
   // Migración 169: "Rellenar con equipos y jugadores" (staff/admin).
   const [rellenandoPrueba, setRellenandoPrueba] = useState(false);
   const [errorRellenarPrueba, setErrorRellenarPrueba] = useState<string | null>(null);
@@ -1902,7 +1908,54 @@ export default function TournamentDetailPage() {
             <div className="organizer-panel-body">
               {errorOpcionesAvanzadas && <div className="form-error">{errorOpcionesAvanzadas}</div>}
 
-              <div className="organizer-panel-grid">
+              {(() => {
+                const tabsOrganizador = [
+                  {
+                    key: "jugadores_clanes",
+                    label: "Jugadores/Clanes",
+                    icon: <Users size={16} />,
+                    visible: torneo.estado === "abierto" && torneo.cupos_ocupados === 0,
+                  },
+                  {
+                    key: "rellenar",
+                    label: "Rellenar (QA)",
+                    icon: <Users size={16} />,
+                    visible: !!(profile?.es_admin || profile?.es_staff) && torneo.estado === "abierto",
+                  },
+                  {
+                    key: "formato",
+                    label: "Formato",
+                    icon: <IconoFormato />,
+                    visible: torneo.modo === "eliminacion_simple" && !torneo.formato_liga && torneo.estado === "abierto",
+                  },
+                  { key: "cuadro", label: "Cuadro", icon: <IconoCuadro />, visible: true },
+                  { key: "permisos", label: "Permisos", icon: <IconoPermisos />, visible: true },
+                  { key: "visualizacion", label: "Visualización", icon: <IconoVisualizacion />, visible: true },
+                  { key: "reglamento", label: "Reglamento", icon: <FileText size={16} />, visible: true },
+                  { key: "temporadas", label: "Temporadas", icon: <Calendar size={16} />, visible: true },
+                ];
+                const tabsVisibles = tabsOrganizador.filter((t) => t.visible);
+                const tabActivo = tabsVisibles.some((t) => t.key === organizerPanelTab)
+                  ? organizerPanelTab
+                  : (tabsVisibles[0]?.key ?? "cuadro");
+
+                return (
+                  <>
+                    <div className="organizer-panel-tabs">
+                      {tabsVisibles.map((t) => (
+                        <button
+                          key={t.key}
+                          type="button"
+                          className={`organizer-panel-tab ${tabActivo === t.key ? "selected" : ""}`}
+                          onClick={() => setOrganizerPanelTab(t.key)}
+                        >
+                          <span className="organizer-panel-tab-icon">{t.icon}</span>
+                          {t.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="organizer-panel-tab-panel">
                 {/* Migración 167, a pedido del usuario: todo torneo por
                     ligas arranca en 1v1 (es lo más común) -- cambiarlo
                     a un formato de equipo es una decisión de acá, no
@@ -1910,7 +1963,7 @@ export default function TournamentDetailPage() {
                     se haya inscrito todavía (1v1 inscribe por
                     user_id, equipo por team_id -- mezclarlos a mitad
                     de camino dejaría inscripciones huérfanas). */}
-                {torneo.estado === "abierto" && torneo.cupos_ocupados === 0 && (
+                {tabActivo === "jugadores_clanes" && (
                   <div className="organizer-panel-card">
                     <div className="organizer-panel-card-header">
                       <span className="organizer-panel-card-icon">
@@ -1948,7 +2001,7 @@ export default function TournamentDetailPage() {
                     inflar un torneo público de verdad). Completa los
                     cupos que falten con el pool de cuentas reales de
                     scripts/sembrar-pool-qa.mjs. */}
-                {(profile?.es_admin || profile?.es_staff) && torneo.estado === "abierto" && (
+                {tabActivo === "rellenar" && (
                   <div className="organizer-panel-card">
                     <div className="organizer-panel-card-header">
                       <span className="organizer-panel-card-icon">
@@ -1981,7 +2034,7 @@ export default function TournamentDetailPage() {
                 {/* Etapa de grupos y tercer lugar: solo tienen sentido
                     ANTES de generar la llave -- una vez que el torneo
                     arrancó, cambiarlas no tendría ningún efecto real. */}
-                {torneo.modo === "eliminacion_simple" && !torneo.formato_liga && torneo.estado === "abierto" && (
+                {tabActivo === "formato" && (
                   <div className="organizer-panel-card">
                     <div className="organizer-panel-card-header">
                       <span className="organizer-panel-card-icon">
@@ -2053,6 +2106,7 @@ export default function TournamentDetailPage() {
                   </div>
                 )}
 
+                {tabActivo === "cuadro" && (
                 <div className="organizer-panel-card">
                   <div className="organizer-panel-card-header">
                     <span className="organizer-panel-card-icon">
@@ -2109,7 +2163,9 @@ export default function TournamentDetailPage() {
                     />
                   </div>
                 </div>
+                )}
 
+                {tabActivo === "permisos" && (
                 <div className="organizer-panel-card">
                   <div className="organizer-panel-card-header">
                     <span className="organizer-panel-card-icon">
@@ -2131,7 +2187,9 @@ export default function TournamentDetailPage() {
                     />
                   </div>
                 </div>
+                )}
 
+                {tabActivo === "visualizacion" && (
                 <div className="organizer-panel-card">
                   <div className="organizer-panel-card-header">
                     <span className="organizer-panel-card-icon">
@@ -2147,10 +2205,12 @@ export default function TournamentDetailPage() {
                     />
                   </div>
                 </div>
+                )}
 
                 {/* Migración 144: no es obligatorio al crear el torneo --
                     se puede subir (o reemplazar) en cualquier momento
                     desde acá. */}
+                {tabActivo === "reglamento" && (
                 <div className="organizer-panel-card">
                   <div className="organizer-panel-card-header">
                     <span className="organizer-panel-card-icon">
@@ -2187,6 +2247,7 @@ export default function TournamentDetailPage() {
                     <p className="form-hint">Hasta 10MB. Se muestra embebido en la página pública del torneo.</p>
                   </div>
                 </div>
+                )}
 
                 {/* Temporadas (migración 047, movida acá adentro en la
                     166 a pedido del usuario -- antes vivía siempre
@@ -2197,6 +2258,7 @@ export default function TournamentDetailPage() {
                     las alianzas entre equipos tengan un límite de
                     tiempo real. Los equipos las eligen al proponer una
                     Clan War, no acá. */}
+                {tabActivo === "temporadas" && (
                 <div className="organizer-panel-card">
                   <div className="organizer-panel-card-header">
                     <span className="organizer-panel-card-icon">
@@ -2345,7 +2407,11 @@ export default function TournamentDetailPage() {
                     </form>
                   </div>
                 </div>
-              </div>
+                )}
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           )}
         </div>
@@ -2355,9 +2421,9 @@ export default function TournamentDetailPage() {
         <h2 className="detail-subtitle">
           {esPorEquipos ? "Equipos inscritos" : "Participantes"} ({participantesVisibles.length})
         </h2>
-        {torneo.estado === "abierto" && torneo.cupos_totales > 0 && (
+        {torneo.cupos_totales > 0 && (
           <button type="button" className="btn btn-ghost" onClick={() => setMostrarVistaPreviaLlaves((v) => !v)}>
-            {mostrarVistaPreviaLlaves ? "Ver como lista" : "Vista previa de llaves"}
+            {mostrarVistaPreviaLlaves ? "Ver como lista" : "Vista de tarjetas"}
           </button>
         )}
       </div>

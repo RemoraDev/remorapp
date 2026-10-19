@@ -7714,6 +7714,58 @@ body.overlay-obs {
   gap: 0.9rem;
 }
 
+/* Pestañas del Panel de organizador -- antes era una grilla con todas
+   las tarjetas (Cuadro, Permisos, Visualización, Reglamento,
+   Temporadas, ...) abiertas a la vez, armaba un cuadro enorme. Ahora
+   solo se ve una a la vez, elegida acá. */
+.organizer-panel-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.organizer-panel-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.organizer-panel-tab:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.organizer-panel-tab.selected {
+  border-color: var(--color-accent);
+  background: rgba(var(--h-accent-rgb), 0.12);
+  color: var(--color-accent);
+}
+
+.organizer-panel-tab-icon {
+  display: flex;
+  align-items: center;
+}
+
+.organizer-panel-tab-panel .organizer-panel-card {
+  border: none;
+  background: transparent;
+}
+
+.organizer-panel-tab-panel .organizer-panel-card-header {
+  padding: 0 0 0.75rem;
+}
+
 .organizer-panel-card {
   display: flex;
   flex-direction: column;
