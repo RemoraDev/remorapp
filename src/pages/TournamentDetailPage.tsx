@@ -21,7 +21,6 @@ import BracketView from "../components/BracketView";
 import BracketStylePicker from "../components/BracketStylePicker";
 import GroupStage from "../components/GroupStage";
 import Avatar from "../components/Avatar";
-import LigaBadge from "../components/LigaBadge";
 import ArmarLlaveManual from "../components/ArmarLlaveManual";
 import type { ParticipanteParaLlave } from "../components/ArmarLlaveManual";
 // Migración 144: PDF.js (y el visor que lo usa) solo se descargan
@@ -2380,15 +2379,6 @@ export default function TournamentDetailPage() {
             <div key={p.id} className="detail-participant-item">
               <Avatar url={p.avatarUrl} nombre={p.nombre} className="detail-participant-avatar" forma={p.avatarForma} />
               {p.nombre ?? "Jugador de RemorApp"}
-              {/* Migración 167: liga/MMR de un CLAN se sacan de acá --
-                  mismo criterio que el Muro de Campeones de Hall of
-                  Fame y la lista de miembros del equipo, nunca se
-                  tocó este lugar hasta ahora. Para un jugador
-                  individual (1v1) se mantiene -- ahí sí sigue
-                  relevante, igual que en Ranking de jugadores. */}
-              {!esPorEquipos && p.liga !== null && p.mmr !== null && (
-                <LigaBadge liga={p.liga} mmr={p.mmr} bancaRota={p.bancaRota} />
-              )}
             </div>
           ))}
         </div>
