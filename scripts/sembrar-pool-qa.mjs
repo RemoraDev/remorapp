@@ -60,13 +60,32 @@ function passwordAlAzar() {
   return "QaPool-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 }
 
-// Crea la cuenta (si no existe un profile con ese nick todavía) y
-// actualiza su profile -- el trigger handle_new_user() ya le arma la
-// fila en profiles sola al crear el auth.user, acá solo se completa.
+// Crea la cuenta y actualiza su profile -- el trigger
+// handle_new_user() ya le arma la fila en profiles sola al crear el
+// auth.user (con email, pero nick todavía en null), acá se completa.
+// Busca primero por EMAIL, no por nick -- un intento anterior puede
+// haber creado el auth.user y fallado antes de llegar a ponerle el
+// nick (ej. permisos insuficientes en ese momento), dejando un
+// profile "a medio camino" que buscar por nick nunca iba a encontrar,
+// y el reintento chocaba con "ya existe un user con ese email".
 async function crearCuentaPool(nick, email) {
-  const { data: existente } = await admin.from("profiles").select("id").eq("nick", nick).maybeSingle();
+  const { data: existente } = await admin.from("profiles").select("id, nick").eq("email", email).maybeSingle();
+
   if (existente) {
-    console.log(`  ${nick} ya existe (${existente.id}), salteando.`);
+    if (existente.nick === nick) {
+      console.log(`  ${nick} ya existe (${existente.id}), salteando.`);
+      return existente.id;
+    }
+    // Existe el auth.user (por email) pero el profile quedó
+    // incompleto de un intento anterior -- se completa ahora.
+    const { error: errorProfile } = await admin
+      .from("profiles")
+      .update({ nick, cuenta_validada: true, country: "chile", sc2_region: "america", es_cuenta_prueba: true })
+      .eq("id", existente.id);
+    if (errorProfile) {
+      throw new Error(`No pude completar el profile pendiente de ${nick}: ${errorProfile.message}`);
+    }
+    console.log(`  ${nick} completado (${existente.id}, venía a medio crear).`);
     return existente.id;
   }
 
