@@ -50,7 +50,13 @@ interface BracketViewProps {
   miParticipantId?: string | null;
 }
 
-const ALTURA_PARTIDO_PX = 96;
+// Estimación del alto de UN partido -- fija la altura total del
+// bracket (ver armarGrilla más abajo). Subido de 96 a 150: con
+// overflow: hidden en .bracket (ver halcon.css, necesario para que
+// nunca aparezca scroll), un partido más alto que su "cupo" quedaba
+// recortado -- el caso más alto es uno sin resultado con los dos
+// botones de "Ganó X/Y" visibles.
+const ALTURA_PARTIDO_PX = 150;
 
 interface ConectorLinea {
   key: string;

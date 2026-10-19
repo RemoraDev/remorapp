@@ -1086,15 +1086,34 @@ main {
   margin: 2rem 0 0.75rem;
 }
 
+.detail-volver-eventos {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+/* A pedido del usuario: título + Cupos/Inicio/Pozo lado a lado en vez
+   de uno arriba del otro, para no gastar tanto alto de página. Si no
+   entran los dos (pantalla angosta), se van a la línea de abajo. */
+.detail-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
 .detail-stats {
   display: flex;
   flex-wrap: wrap;
   gap: 1.5rem;
-  margin: 1.5rem 0;
+  margin: 0;
   padding: 1.25rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background: var(--color-panel);
+  flex-shrink: 0;
 }
 
 .detail-empty {
@@ -3096,6 +3115,71 @@ html.es-escritorio .player-detail-panel-inline {
   width: min(95vw, 75rem);
 }
 
+/* "Ver celebración" (migración 175, a pedido del usuario): antes solo
+   tiraba confeti -- ahora además abre esta tarjeta centrada con el
+   avatar/logo del campeón y una copa, más "gamer". Mismo
+   .modal-backdrop de siempre, tarjeta propia (no .team-leader-panel,
+   esto no tiene pestañas ni gestión, es solo una celebración). */
+.celebracion-campeon {
+  position: relative;
+  width: min(90vw, 26rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2.5rem 2rem 2rem;
+  text-align: center;
+  border-radius: var(--radius-xl);
+  border: 1px solid rgba(253, 224, 71, 0.5);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(253, 224, 71, 0.18), transparent 60%),
+    var(--color-panel);
+  box-shadow: 0 0 60px rgba(253, 224, 71, 0.25), 0 24px 60px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+}
+
+.celebracion-campeon-copa {
+  width: 3rem;
+  height: 3rem;
+  color: #fde047;
+  filter: drop-shadow(0 0 10px rgba(253, 224, 71, 0.8));
+  animation: celebracion-copa-pulso 1.8s ease-in-out infinite;
+}
+
+@keyframes celebracion-copa-pulso {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
+.celebracion-campeon-avatar {
+  width: 6rem;
+  height: 6rem;
+  object-fit: cover;
+  border: 3px solid #fde047;
+  box-shadow: 0 0 24px rgba(253, 224, 71, 0.6);
+}
+
+.celebracion-campeon-titulo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #fde047;
+}
+
+.celebracion-campeon-nombre {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.6rem;
+  color: var(--color-text);
+}
+
+.celebracion-campeon-torneo {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
 /* Migración 149: "Configuración" del Header abre Mi perfil como
    ventana superpuesta (modal-backdrop + esta clase) sobre la página en
    la que ya estaba el usuario, en vez de navegar de lleno a /perfil --
@@ -3218,10 +3302,14 @@ html.es-escritorio .player-detail-panel-inline {
   gap: 2.5rem;
   margin-top: 1rem;
   padding-bottom: 1rem;
-  /* A pedido del usuario: nunca scroll lateral -- las columnas se
-     achican para entrar (ver flex en .bracket-round más abajo) en vez
-     de desbordar el contenedor. */
-  overflow-x: hidden;
+  /* A pedido del usuario: nunca scroll -- las columnas se achican para
+     entrar (ver flex en .bracket-round más abajo) en vez de desbordar
+     el contenedor. Ojo: overflow-x solo (sin overflow-y explícito) hace
+     que el navegador fuerce overflow-y: auto solo -- por eso quedaba
+     un scroll vertical aunque nunca se pidió uno. Los dos ejes en
+     "hidden" evitan cualquier scroll, a costa de recortar algo que no
+     entrara en el alto fijo (ver alturaBracket en BracketView.tsx). */
+  overflow: hidden;
 }
 
 /* Líneas de conexión reales entre rondas (BracketView.tsx mide la
@@ -3245,14 +3333,24 @@ html.es-escritorio .player-detail-panel-inline {
   stroke-width: 2px;
 }
 
-/* Efecto "láser" (a pedido del usuario): varios drop-shadow apilados,
-   de radio creciente, dan el típico brillo de tubo de neón en vez de
-   una línea plana. */
+/* Efecto "láser" con energía animada (a pedido del usuario): varios
+   drop-shadow apilados, de radio creciente, dan el brillo de tubo de
+   neón -- el guión (stroke-dasharray) + la animación de
+   stroke-dashoffset hacen que esos segmentos de luz viajen sin parar
+   a lo largo de la línea, como un flujo de energía en vez de un trazo
+   estático. */
 [data-estilo-bracket="esports"] .bracket-conectores path,
 [data-estilo-bracket="starcraft_oficial"] .bracket-conectores path {
   stroke-width: 2.5px;
+  stroke-dasharray: 10 8;
   filter: drop-shadow(0 0 2px var(--color-accent)) drop-shadow(0 0 6px var(--color-accent))
     drop-shadow(0 0 14px rgba(var(--h-accent-rgb), 0.85));
+  animation: bracket-conector-energia 0.6s linear infinite;
+}
+
+@keyframes bracket-conector-energia {
+  from { stroke-dashoffset: 18; }
+  to { stroke-dashoffset: 0; }
 }
 
 /* El acento con ::after (más abajo) queda solo para la miniatura del

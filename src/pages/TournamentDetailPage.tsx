@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import confetti from "canvas-confetti";
 import { toast } from "sonner";
-import { Trophy, Medal, Download, FileText, Upload, Calendar, Users, X } from "lucide-react";
+import { Trophy, Medal, Download, FileText, Upload, Calendar, Users, X, ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import {
@@ -330,6 +330,10 @@ export default function TournamentDetailPage() {
   const [subiendoReglamento, setSubiendoReglamento] = useState(false);
   const [errorReglamento, setErrorReglamento] = useState<string | null>(null);
   const [mostrandoVisorReglamento, setMostrandoVisorReglamento] = useState(false);
+  // Migración 175, a pedido del usuario: "Ver celebración" solo tiraba
+  // confeti -- ahora además abre una tarjeta centrada con el
+  // avatar/logo del campeón y una copa, más "gamer".
+  const [mostrandoCelebracion, setMostrandoCelebracion] = useState(false);
   const [guardandoInscripciones, setGuardandoInscripciones] = useState<string | null>(null);
   const [temporadaRangosAbierta, setTemporadaRangosAbierta] = useState<string | null>(null);
   const [rangosMmrForm, setRangosMmrForm] = useState<Record<string, string>>({});
@@ -885,9 +889,11 @@ export default function TournamentDetailPage() {
 
   // Migración 145: confeti al ganar -- disponible para cualquiera que
   // vea el resultado final (no solo el ganador), solo se dispara al
-  // presionar el botón, nunca sola al cargar la página.
+  // presionar el botón, nunca sola al cargar la página. Migración 175:
+  // además abre la tarjeta centrada del campeón (ver mostrandoCelebracion).
   const handleVerCelebracion = () => {
     confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    setMostrandoCelebracion(true);
   };
 
   const handleAbrirCheckIn = async () => {
@@ -1782,6 +1788,11 @@ export default function TournamentDetailPage() {
 
   return (
     <section className="section section-page">
+      <Link to="/tournaments" className="btn-link detail-volver-eventos">
+        <ArrowLeft size={16} className="icon-inline" aria-hidden="true" />
+        Volver a eventos
+      </Link>
+
       <div className="detail-badges">
         <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
         <span className={`badge ${torneo.publico ? "badge-public" : "badge-private"}`}>
@@ -1789,24 +1800,42 @@ export default function TournamentDetailPage() {
         </span>
       </div>
 
-      <h1 className="section-title">{torneo.nombre}</h1>
-      <p className="tournament-card-meta">
-        {getModoLabel(torneo.modo)} — {getModoDescripcion(torneo.modo)}
-      </p>
+      {/* A pedido del usuario: Cupos/Inicio/Pozo al lado del título en
+          vez de ocupar su propia fila ancha debajo -- ahorra espacio. */}
+      <div className="detail-header-row">
+        <div>
+          <h1 className="section-title">{torneo.nombre}</h1>
+          <p className="tournament-card-meta">
+            {getModoLabel(torneo.modo)} — {getModoDescripcion(torneo.modo)}
+          </p>
+        </div>
 
-      {/* Migración 144: visible para cualquiera (no solo el organizador)
-          si ya hay un reglamento subido. El PDF y pdfjs-dist recién se
-          descargan al abrir este visor (ver VisorPdf.tsx). */}
-      {torneo.pdf_reglamento_url && (
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={() => setMostrandoVisorReglamento(true)}
-        >
-          <FileText size={16} className="icon-inline" aria-hidden="true" />
-          Ver reglamento
-        </button>
-      )}
+        <div className="detail-stats">
+          {/* Migración 168, a pedido del usuario: si no se cargó pozo de
+              premios, ni se menciona el tema -- antes mostraba "Pozo:
+              Sin premio en efectivo" igual, dando a entender que el
+              dinero era parte de la conversación aunque nadie lo haya
+              tocado. */}
+          {torneo.pozo_premio !== null && (
+            <div>
+              <p className="featured-stat-label">Pozo</p>
+              <p className="featured-stat-value featured-stat-value-accent">
+                {formatPozo(torneo.pozo_premio)}
+              </p>
+            </div>
+          )}
+          <div>
+            <p className="featured-stat-label">Cupos</p>
+            <p className="featured-stat-value">
+              {torneo.cupos_ocupados}/{torneo.cupos_totales}
+            </p>
+          </div>
+          <div>
+            <p className="featured-stat-label">Inicio</p>
+            <p className="featured-stat-value">{formatFecha(torneo.fecha_inicio)}</p>
+          </div>
+        </div>
+      </div>
 
       <div className="overlay-obs-copy">
         <button type="button" className="btn btn-ghost" onClick={handleCopiarUrlObs}>
@@ -1815,32 +1844,6 @@ export default function TournamentDetailPage() {
         <p className="form-hint">
           Pégala en OBS como "Fuente de navegador" para mostrar el marcador en tu transmisión.
         </p>
-      </div>
-
-      <div className="detail-stats">
-        {/* Migración 168, a pedido del usuario: si no se cargó pozo de
-            premios, ni se menciona el tema -- antes mostraba "Pozo:
-            Sin premio en efectivo" igual, dando a entender que el
-            dinero era parte de la conversación aunque nadie lo haya
-            tocado. */}
-        {torneo.pozo_premio !== null && (
-          <div>
-            <p className="featured-stat-label">Pozo</p>
-            <p className="featured-stat-value featured-stat-value-accent">
-              {formatPozo(torneo.pozo_premio)}
-            </p>
-          </div>
-        )}
-        <div>
-          <p className="featured-stat-label">Cupos</p>
-          <p className="featured-stat-value">
-            {torneo.cupos_ocupados}/{torneo.cupos_totales}
-          </p>
-        </div>
-        <div>
-          <p className="featured-stat-label">Inicio</p>
-          <p className="featured-stat-value">{formatFecha(torneo.fecha_inicio)}</p>
-        </div>
       </div>
 
       {/* Vencimiento automático de torneos sin actividad (migración
@@ -1882,19 +1885,6 @@ export default function TournamentDetailPage() {
           tres en vez de empujar el resto de la página hacia abajo). */}
       {esOrganizador && (
         <>
-          <div className="section-head">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => setMostrarOpcionesAvanzadas(true)}
-            >
-              <span className="organizer-panel-toggle-icon">
-                <IconoEngranaje />
-              </span>
-              Panel de control
-            </button>
-          </div>
-
           {mostrarOpcionesAvanzadas && (
             <div className="modal-backdrop" onClick={() => setMostrarOpcionesAvanzadas(false)}>
               <div className="team-leader-panel team-leader-panel-propio" onClick={(e) => e.stopPropagation()}>
@@ -2413,6 +2403,18 @@ export default function TournamentDetailPage() {
                   </>
                 );
               })()}
+
+              {/* A pedido del usuario: vivía suelto en el lobby del
+                  torneo -- una acción tan destructiva pertenece acá
+                  adentro, junto al resto de la gestión. */}
+              <button
+                type="button"
+                className="btn btn-ghost btn-block eliminar-torneo-btn"
+                disabled={eliminandoTorneo}
+                onClick={handleEliminarTorneo}
+              >
+                {eliminandoTorneo ? "Eliminando..." : "Eliminar torneo"}
+              </button>
               </div>
             </div>
           )}
@@ -2442,6 +2444,35 @@ export default function TournamentDetailPage() {
                   ? "Tabla de posiciones"
                   : "Llave"}
         </button>
+
+        {/* Migración 175, a pedido del usuario: visible para cualquiera
+            (no solo el organizador) si ya hay un reglamento subido --
+            antes vivía como botón suelto arriba del todo. */}
+        {torneo.pdf_reglamento_url && (
+          <button
+            type="button"
+            className="organizer-panel-tab"
+            onClick={() => setMostrandoVisorReglamento(true)}
+          >
+            <FileText size={14} className="icon-inline" aria-hidden="true" />
+            Reglamento
+          </button>
+        )}
+
+        {/* "Panel de control" vivía en su propia fila, arriba de esta
+            -- a pedido del usuario, ahora es un botón más de la misma
+            fila que Participantes/Llave/Reglamento. Sigue abriendo la
+            ventana superpuesta de siempre (ver más arriba). */}
+        {esOrganizador && (
+          <button
+            type="button"
+            className="organizer-panel-tab"
+            onClick={() => setMostrarOpcionesAvanzadas(true)}
+          >
+            <IconoEngranaje />
+            Panel de control
+          </button>
+        )}
       </div>
 
       {pestanaTorneo === "participantes" && (
@@ -3358,16 +3389,6 @@ export default function TournamentDetailPage() {
         </>
       )}
 
-      {esOrganizador && (
-        <button
-          type="button"
-          className="btn btn-ghost btn-block eliminar-torneo-btn"
-          disabled={eliminandoTorneo}
-          onClick={handleEliminarTorneo}
-        >
-          {eliminandoTorneo ? "Eliminando..." : "Eliminar torneo"}
-        </button>
-      )}
 
       {mostrandoVisorReglamento && torneo.pdf_reglamento_url && (
         <Suspense fallback={<div className="modal-backdrop" />}>
@@ -3377,6 +3398,33 @@ export default function TournamentDetailPage() {
             onCerrar={() => setMostrandoVisorReglamento(false)}
           />
         </Suspense>
+      )}
+
+      {mostrandoCelebracion && torneo.campeon_participant_id && (
+        <div className="modal-backdrop" onClick={() => setMostrandoCelebracion(false)}>
+          <div className="celebracion-campeon" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setMostrandoCelebracion(false)}
+              aria-label="Cerrar"
+            >
+              <X size={18} />
+            </button>
+            <Trophy className="celebracion-campeon-copa" />
+            <Avatar
+              url={participantes.find((p) => p.id === torneo.campeon_participant_id)?.avatarUrl ?? null}
+              nombre={participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ?? null}
+              className="celebracion-campeon-avatar"
+              forma={participantes.find((p) => p.id === torneo.campeon_participant_id)?.avatarForma}
+            />
+            <p className="celebracion-campeon-titulo">¡Campeón!</p>
+            <p className="celebracion-campeon-nombre">
+              {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ?? "Jugador de RemorApp"}
+            </p>
+            <p className="celebracion-campeon-torneo">{torneo.nombre}</p>
+          </div>
+        </div>
       )}
     </section>
   );
