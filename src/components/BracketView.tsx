@@ -204,6 +204,60 @@ export default function BracketView({
         nuevosConectores[keyPrefix] = lineas;
       });
 
+      // "Embudo al centro": las líneas de arriba conectan rondas
+      // DENTRO de cada mitad, pero ninguna llegaba a la Final (una
+      // cajita aparte, fuera de ambas grillas) -- acá se agregan las 2
+      // que faltan, izquierda->Final y derecha->Final, usando
+      // .bracket-embudo-wrap como referencia en vez de cada .bracket
+      // por separado.
+      const wrapEmbudo = grillaElRefs.current.get("embudo-wrap");
+      const elFinal = matchElRefs.current.get("embudo-final::0::1");
+      if (wrapEmbudo && elFinal) {
+        const rectWrap = wrapEmbudo.getBoundingClientRect();
+        const rFinal = elFinal.getBoundingClientRect();
+        const lineasEmbudo: ConectorLinea[] = [];
+
+        let maxRondaIzq = -1;
+        let elIzq: HTMLDivElement | null = null;
+        let maxRondaDer = -1;
+        let elDer: HTMLDivElement | null = null;
+        matchElRefs.current.forEach((el, matchKey) => {
+          const [prefijo, rondaStr] = matchKey.split("::");
+          const ronda = Number(rondaStr);
+          if (prefijo === "embudo-izq" && ronda > maxRondaIzq) {
+            maxRondaIzq = ronda;
+            elIzq = el;
+          }
+          if (prefijo === "embudo-der" && ronda > maxRondaDer) {
+            maxRondaDer = ronda;
+            elDer = el;
+          }
+        });
+
+        if (elIzq) {
+          const r1 = (elIzq as HTMLDivElement).getBoundingClientRect();
+          const x1 = r1.right - rectWrap.left;
+          const y1 = r1.top + r1.height / 2 - rectWrap.top;
+          const x2 = rFinal.left - rectWrap.left;
+          const y2 = rFinal.top + rFinal.height / 2 - rectWrap.top;
+          const xMedio = x1 + (x2 - x1) / 2;
+          lineasEmbudo.push({ key: "embudo-izq-final", d: `M ${x1} ${y1} H ${xMedio} V ${y2} H ${x2}` });
+        }
+
+        if (elDer) {
+          const r1 = (elDer as HTMLDivElement).getBoundingClientRect();
+          const x1 = r1.left - rectWrap.left;
+          const y1 = r1.top + r1.height / 2 - rectWrap.top;
+          const x2 = rFinal.right - rectWrap.left;
+          const y2 = rFinal.top + rFinal.height / 2 - rectWrap.top;
+          const xMedio = x1 + (x2 - x1) / 2;
+          lineasEmbudo.push({ key: "embudo-der-final", d: `M ${x1} ${y1} H ${xMedio} V ${y2} H ${x2}` });
+        }
+
+        nuevosConectores["embudo-wrap"] = lineasEmbudo;
+        nuevosTamanos["embudo-wrap"] = { ancho: wrapEmbudo.scrollWidth, alto: wrapEmbudo.scrollHeight };
+      }
+
       setConectoresPorGrilla(nuevosConectores);
       setTamanoPorGrilla(nuevosTamanos);
     };
@@ -211,7 +265,7 @@ export default function BracketView({
     medir();
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
-  }, [matches, estiloLinea, muestraConectores, esVertical]);
+  }, [matches, estiloLinea, muestraConectores, esVertical, estructura]);
 
   // El partido por el tercer lugar (migración 046) comparte la ronda
   // de la final pero se muestra aparte, en su propia cajita -- se
@@ -230,13 +284,25 @@ export default function BracketView({
   // "distancia 0" es la final, 1 semifinal, 2 cuartos, 3 octavos; más
   // lejos que eso, se queda en "Ronda N" (no hay nombre tradicional
   // para dieciseisavos en adelante que valga la pena mostrar).
+  //
+  // Corrección: "Final" para la última ronda (1 solo partido) tiene
+  // que verse SIEMPRE, no solo cuando el organizador activa "Nombres
+  // de ronda personalizados" -- antes esa bandera gateaba si esta
+  // función se llamaba siquiera, así que con la bandera apagada la
+  // última ronda de un torneo normal decía "Ronda 3" en vez de
+  // "Final". permitirFinal es lo único que sigue dependiendo del
+  // contexto: en "Llave de ganadores/perdedores" (eliminación doble) y
+  // en cada mitad de "Embudo al centro", la última ronda NO es la
+  // final real (esa se muestra aparte, en su propia cajita), así que
+  // ahí se pasa false.
   const nombreDeRondaTradicional = (
     rondas: number[],
     indiceRonda: number,
     totalRondas: number,
-    cantidadPartidos: number
+    cantidadPartidos: number,
+    permitirFinal: boolean
   ) => {
-    if (cantidadPartidos === 1) return "Final";
+    if (permitirFinal && cantidadPartidos === 1) return "Final";
     if (!nombresRondaPersonalizados) return `Ronda ${rondas[indiceRonda]}`;
     const distanciaDeLaFinal = totalRondas - 1 - indiceRonda;
     switch (distanciaDeLaFinal) {
@@ -256,7 +322,11 @@ export default function BracketView({
   // en eliminación simple/First Stand (el caso de siempre, una sola
   // llave) y, en eliminación doble, una vez para "ganadores" y otra
   // para "perdedores".
-  const armarGrilla = (partidosDeEstaLlave: BracketMatchRow[], nombresTradicionales: boolean) => {
+  const armarGrilla = (
+    partidosDeEstaLlave: BracketMatchRow[],
+    nombresTradicionales: boolean,
+    permiteFinal = true
+  ) => {
     const rondas = [...new Set(partidosDeEstaLlave.map((m) => m.round))].sort((a, b) => a - b);
     const partidosPorRonda = rondas.map((r) =>
       partidosDeEstaLlave.filter((m) => m.round === r).sort((a, b) => a.match_number - b.match_number)
@@ -280,7 +350,7 @@ export default function BracketView({
       ? Math.round(Math.log2(partidosPorRonda[0].length)) + 1
       : rondas.length;
 
-    return { rondas, partidosPorRonda, alturaBracket, totalRondasReal, nombresTradicionales };
+    return { rondas, partidosPorRonda, alturaBracket, totalRondasReal, nombresTradicionales, permiteFinal };
   };
 
   const renderGrilla = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => {
@@ -329,9 +399,13 @@ export default function BracketView({
           return (
             <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
               <div className="bracket-round-title">
-                {grilla.nombresTradicionales
-                  ? nombreDeRondaTradicional(grilla.rondas, indiceRonda, grilla.totalRondasReal, partidos.length)
-                  : `Ronda ${grilla.rondas[indiceRonda]}`}
+                {nombreDeRondaTradicional(
+                  grilla.rondas,
+                  indiceRonda,
+                  grilla.totalRondasReal,
+                  partidos.length,
+                  grilla.permiteFinal
+                )}
               </div>
 
               <div className="bracket-round-matches">
@@ -593,9 +667,13 @@ export default function BracketView({
       {grilla.partidosPorRonda.map((partidos, indiceRonda) => (
         <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-compacta-ronda">
           <h4 className="bracket-round-title">
-            {grilla.nombresTradicionales
-              ? nombreDeRondaTradicional(grilla.rondas, indiceRonda, grilla.totalRondasReal, partidos.length)
-              : `Ronda ${grilla.rondas[indiceRonda]}`}
+            {nombreDeRondaTradicional(
+              grilla.rondas,
+              indiceRonda,
+              grilla.totalRondasReal,
+              partidos.length,
+              grilla.permiteFinal
+            )}
           </h4>
           {partidos.map(renderPartidoCompacto)}
         </div>
@@ -657,24 +735,48 @@ export default function BracketView({
     }
 
     // Dentro de cada mitad, la última ronda (1 solo partido) es en
-    // realidad una semifinal del torneo completo, no "la Final" --
-    // la Final real es el partido centrado de acá abajo. nombreDeRonda
-    // Tradicional() no sabe distinguir ese caso (siempre dice "Final"
-    // cuando quedó 1 solo partido), así que las mitades se quedan con
-    // "Ronda N" en vez de los nombres tradicionales para no mostrar
-    // dos "Final" a la vez.
+    // realidad una semifinal del torneo completo, no "la Final" -- la
+    // Final real es el partido centrado acá abajo (permiteFinal=false
+    // en armarGrilla de cada mitad evita el "Final" automático ahí).
+    const lineasEmbudo = conectoresPorGrilla["embudo-wrap"] ?? [];
+    const tamanoEmbudo = tamanoPorGrilla["embudo-wrap"];
+
     return (
-      <div className="bracket-embudo-wrap">
-        {renderGrilla(armarGrilla(izquierda, false), "embudo-izq")}
+      <div
+        className="bracket-embudo-wrap"
+        ref={(el) => {
+          if (el) grillaElRefs.current.set("embudo-wrap", el);
+          else grillaElRefs.current.delete("embudo-wrap");
+        }}
+      >
+        {/* Las líneas que conectan cada mitad con la Final (no las de
+            DENTRO de cada mitad, esas ya las dibuja cada .bracket por
+            su cuenta) -- medidas con .bracket-embudo-wrap como
+            referencia, ver el useLayoutEffect más arriba. */}
+        {muestraConectores && lineasEmbudo.length > 0 && tamanoEmbudo && (
+          <svg
+            className="bracket-conectores bracket-conectores-embudo"
+            data-estilo-linea={estiloLinea}
+            width={tamanoEmbudo.ancho}
+            height={tamanoEmbudo.alto}
+            style={colorLinea ? ({ "--linea-color": colorLinea } as CSSProperties) : undefined}
+          >
+            {lineasEmbudo.map((linea) => (
+              <path key={linea.key} d={linea.d} />
+            ))}
+          </svg>
+        )}
+
+        {renderGrilla(armarGrilla(izquierda, false, false), "embudo-izq")}
 
         {final && (
           <div className="bracket-tercer-lugar bracket-embudo-final" data-estilo-bracket={estilo}>
             <div className="bracket-round-title">Final</div>
-            {renderPartido(final)}
+            {renderPartido(final, { keyPrefix: "embudo-final", round: 0, matchNumber: 1 })}
           </div>
         )}
 
-        {renderGrilla(armarGrilla(derecha, false), "embudo-der")}
+        {renderGrilla(armarGrilla(derecha, false, false), "embudo-der")}
       </div>
     );
   };
@@ -689,12 +791,12 @@ export default function BracketView({
       return (
         <>
           <div className="bracket-round-title bracket-seccion-titulo">Llave de ganadores</div>
-          {renderGrillaCompacta(armarGrilla(partidosGanadores, !!nombresRondaPersonalizados), "ganadores")}
+          {renderGrillaCompacta(armarGrilla(partidosGanadores, !!nombresRondaPersonalizados, false), "ganadores")}
 
           {partidosPerdedores.length > 0 && (
             <>
               <div className="bracket-round-title bracket-seccion-titulo">Llave de perdedores</div>
-              {renderGrillaCompacta(armarGrilla(partidosPerdedores, false), "perdedores")}
+              {renderGrillaCompacta(armarGrilla(partidosPerdedores, false, false), "perdedores")}
             </>
           )}
 
@@ -757,12 +859,12 @@ export default function BracketView({
         {estilo === "esports" && <div className="bracket-esports-banner">{nombreTorneo}</div>}
 
         <div className="bracket-round-title bracket-seccion-titulo">Llave de ganadores</div>
-        {renderGrilla(armarGrilla(partidosGanadores, !!nombresRondaPersonalizados), "ganadores")}
+        {renderGrilla(armarGrilla(partidosGanadores, !!nombresRondaPersonalizados, false), "ganadores")}
 
         {partidosPerdedores.length > 0 && (
           <>
             <div className="bracket-round-title bracket-seccion-titulo">Llave de perdedores</div>
-            {renderGrilla(armarGrilla(partidosPerdedores, false), "perdedores")}
+            {renderGrilla(armarGrilla(partidosPerdedores, false, false), "perdedores")}
           </>
         )}
 
