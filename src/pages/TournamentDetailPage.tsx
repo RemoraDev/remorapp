@@ -17,6 +17,7 @@ import {
   Maximize2,
   Minimize2,
   Trash2,
+  Palette,
 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -1996,7 +1997,15 @@ export default function TournamentDetailPage() {
           grande al lado. El texto largo de descripción del modo
           (Eliminación simple -- "Quien pierde..." etc.) se saca del
           todo, ya se explica en el Panel de control si hace falta. */}
-      <h1 className="section-title">{torneo.nombre}</h1>
+      <div className="detail-title-row">
+        <h1 className="section-title">{torneo.nombre}</h1>
+        {/* A pedido del usuario: "Copiar URL para OBS" pasa de su
+            propio bloque (con el texto explicando qué hacer con la URL
+            en OBS) a vivir pegado al título, a la izquierda. */}
+        <button type="button" className="btn btn-ghost detail-obs-copy-btn" onClick={handleCopiarUrlObs}>
+          {urlObsCopiada ? "¡Copiado!" : "Copiar URL para OBS"}
+        </button>
+      </div>
 
       <div className="detail-stats detail-stats-chica">
         {/* Migración 168, a pedido del usuario: si no se cargó pozo de
@@ -2040,15 +2049,6 @@ export default function TournamentDetailPage() {
             <p className="featured-stat-value">{formatFecha(torneo.finalizado_en)}</p>
           </div>
         )}
-      </div>
-
-      <div className="overlay-obs-copy">
-        <button type="button" className="btn btn-ghost" onClick={handleCopiarUrlObs}>
-          {urlObsCopiada ? "¡Copiado!" : "Copiar URL para OBS"}
-        </button>
-        <p className="form-hint">
-          Pégala en OBS como "Fuente de navegador" para mostrar el marcador en tu transmisión.
-        </p>
       </div>
 
       {/* Vencimiento automático de torneos sin actividad (migración
@@ -2125,6 +2125,12 @@ export default function TournamentDetailPage() {
                     visible: torneo.modo === "eliminacion_simple" && !torneo.formato_liga && torneo.estado === "abierto",
                   },
                   { key: "cuadro", label: "Cuadro", icon: <IconoCuadro />, visible: true },
+                  // A pedido del usuario: todo el picker de
+                  // estructura/fondo/línea/título/insignia (antes
+                  // mezclado dentro de "Cuadro") pasa a su propia
+                  // pestaña, organizado en sub-pestañas (ver
+                  // BracketStylePicker.tsx).
+                  { key: "apariencia", label: "Apariencia", icon: <Palette size={16} />, visible: true },
                   { key: "permisos", label: "Permisos", icon: <IconoPermisos />, visible: true },
                   { key: "visualizacion", label: "Visualización", icon: <IconoVisualizacion />, visible: true },
                   { key: "reglamento", label: "Reglamento", icon: <FileText size={16} />, visible: true },
@@ -2351,27 +2357,6 @@ export default function TournamentDetailPage() {
                       <p className="form-hint">Solo tiene efecto la próxima vez que generes la llave.</p>
                     </div>
 
-                    {/* Estilo y fondo visual de la llave -- movido acá
-                        adentro (antes vivía siempre visible, arriba de
-                        la llave, ocupando demasiado lugar antes de
-                        llegar a lo importante). El mini-render de cada
-                        tarjeta ya es la vista previa. */}
-                    <BracketStylePicker
-                      tournamentId={torneo.id}
-                      fondo={torneo.fondo_bracket}
-                      estiloLinea={torneo.estilo_linea_bracket}
-                      estructura={torneo.estructura_bracket}
-                      colorLinea={torneo.color_linea_bracket}
-                      estiloTitulo={torneo.estilo_titulo_bracket}
-                      colorTexto={torneo.color_texto_bracket}
-                      colorTextoTitulo={torneo.color_texto_titulo_bracket}
-                      tituloAnimado={torneo.titulo_animado}
-                      fuenteTexto={torneo.fuente_texto}
-                      tamanoFuenteTitulo={torneo.tamano_fuente_titulo}
-                      insignia={torneo.insignia_bracket}
-                      onCambio={cargarTorneo}
-                    />
-
                     {/* Migración 183, a pedido del usuario: "modelos" de
                         la tarjeta de celebración del campeón ("Ver
                         celebración") -- inspirados en momentos de
@@ -2443,6 +2428,34 @@ export default function TournamentDetailPage() {
                         </>
                       )}
                     </div>
+                  </div>
+                </div>
+                )}
+
+                {tabActivo === "apariencia" && (
+                <div className="organizer-panel-card">
+                  <div className="organizer-panel-card-header">
+                    <span className="organizer-panel-card-icon">
+                      <Palette size={18} />
+                    </span>
+                    <h3 className="organizer-panel-card-title">Apariencia</h3>
+                  </div>
+                  <div className="organizer-panel-card-body">
+                    <BracketStylePicker
+                      tournamentId={torneo.id}
+                      fondo={torneo.fondo_bracket}
+                      estiloLinea={torneo.estilo_linea_bracket}
+                      estructura={torneo.estructura_bracket}
+                      colorLinea={torneo.color_linea_bracket}
+                      estiloTitulo={torneo.estilo_titulo_bracket}
+                      colorTexto={torneo.color_texto_bracket}
+                      colorTextoTitulo={torneo.color_texto_titulo_bracket}
+                      tituloAnimado={torneo.titulo_animado}
+                      fuenteTexto={torneo.fuente_texto}
+                      tamanoFuenteTitulo={torneo.tamano_fuente_titulo}
+                      insignia={torneo.insignia_bracket}
+                      onCambio={cargarTorneo}
+                    />
                   </div>
                 </div>
                 )}
@@ -2786,7 +2799,7 @@ export default function TournamentDetailPage() {
           <div className="organizer-panel-tabs">
             <button
               type="button"
-              className="organizer-panel-tab"
+              className="organizer-panel-tab organizer-panel-tab-cta"
               onClick={() => setMostrarOpcionesAvanzadas(true)}
             >
               <IconoEngranaje />

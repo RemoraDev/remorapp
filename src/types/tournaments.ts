@@ -117,7 +117,11 @@ export const INSIGNIA_BRACKET_OPTIONS: { value: InsigniaBracket; label: string }
 // del lineup, ver EstructuraLineupPicker.tsx): cómo se arma la llave
 // en sí, no solo su piel -- independiente de estilo/fondo/línea.
 // "clasico" es el de siempre (columnas de izquierda a derecha).
-export type EstructuraBracket = "clasico" | "vertical" | "embudo" | "compacta";
+// Migración 187, a pedido del usuario: "compacta" se reemplaza por
+// "escalera" -- cada partido de una ronda se escalona en zigzag (igual
+// columnas que "clasico", pero con un look más dinámico tipo
+// transmisión moderna), en vez de la lista densa de "compacta".
+export type EstructuraBracket = "clasico" | "vertical" | "embudo" | "escalera";
 
 export const ESTRUCTURA_BRACKET_OPTIONS: { value: EstructuraBracket; label: string; desc: string }[] = [
   { value: "clasico", label: "Clásico", desc: "Columnas de izquierda a derecha, una por ronda." },
@@ -127,7 +131,11 @@ export const ESTRUCTURA_BRACKET_OPTIONS: { value: EstructuraBracket; label: stri
     label: "Embudo al centro",
     desc: "Las dos mitades del cuadro convergen hacia el medio, la final queda centrada.",
   },
-  { value: "compacta", label: "Compacta", desc: "Lista densa por ronda, sin cajas grandes ni líneas." },
+  {
+    value: "escalera",
+    label: "Escalera",
+    desc: "Los partidos de cada ronda se escalonan en zigzag, un look más dinámico que las columnas rectas.",
+  },
 ];
 
 export const ESTILO_BRACKET_OPTIONS: { value: EstiloBracket; label: string }[] = [

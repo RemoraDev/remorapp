@@ -183,7 +183,11 @@ export default function BracketView({
   // trazo de conexión también tiene que salir del borde de ABAJO de
   // cada partido (no del derecho) y entrar por ARRIBA del siguiente.
   const esVertical = estructura === "vertical";
-  const esCompacta = estructura === "compacta";
+  // Migración 187, a pedido del usuario: "escalera" reemplaza a
+  // "compacta" -- reutiliza el mismo armado por columnas de "clasico"
+  // (renderGrilla/renderPartido tal cual, ver más abajo), solo
+  // escalona cada partido en zigzag vía CSS ([data-estructura="escalera"],
+  // ver halcon.css) -- no hace falta ninguna función de render propia.
   const esEmbudo = estructura === "embudo";
 
   useLayoutEffect(() => {
@@ -434,6 +438,7 @@ export default function BracketView({
       <div
         className={`bracket ${esVertical ? "bracket-vertical" : ""}`}
         data-estilo-bracket={estilo}
+        data-estructura={estructura}
         style={estiloTamano}
         ref={(el) => {
           if (el) grillaElRefs.current.set(keyPrefix, el);
@@ -471,11 +476,12 @@ export default function BracketView({
               </div>
 
               <div className="bracket-round-matches">
-                {partidos.map((match) =>
+                {partidos.map((match, indiceEnRonda) =>
                   renderPartido(match, {
                     keyPrefix,
                     round: grilla.rondas[indiceRonda],
                     matchNumber: match.match_number,
+                    indiceEnRonda,
                   })
                 )}
               </div>
@@ -560,7 +566,7 @@ export default function BracketView({
 
   const renderPartido = (
     match: BracketMatchRow,
-    refInfo?: { keyPrefix: string; round: number; matchNumber: number }
+    refInfo?: { keyPrefix: string; round: number; matchNumber: number; indiceEnRonda?: number }
   ) => {
     const p1Gana = !!match.winner_id && match.winner_id === match.participant1_id;
     const p2Gana = !!match.winner_id && match.winner_id === match.participant2_id;
@@ -570,6 +576,17 @@ export default function BracketView({
       <div
         key={match.id}
         className="bracket-match"
+        // Migración 187, a pedido del usuario: estructura "escalera" --
+        // zigzag parejo/impar en vez de alinear todos los partidos de
+        // la ronda en la misma fila (ver [data-estructura="escalera"]
+        // en halcon.css). Acotado a 0/1 a propósito: un offset que
+        // creciera sin techo con el índice se podía salir del alto fijo
+        // de .bracket (overflow: hidden), este queda siempre chico.
+        style={
+          refInfo?.indiceEnRonda !== undefined
+            ? ({ "--escalon-index": refInfo.indiceEnRonda % 2 } as CSSProperties)
+            : undefined
+        }
         ref={(el) => {
           if (!refKey) return;
           if (el) matchElRefs.current.set(refKey, el);
@@ -658,107 +675,6 @@ export default function BracketView({
       </div>
     );
   };
-
-  // ---------- Estructura "compacta" (migración 177) ----------
-  // Lista densa por ronda, sin cajas grandes ni líneas de conexión --
-  // pensada para torneos con muchos participantes o pantallas chicas.
-  // Reutiliza nombreDe/logoDe/puedeReportar/handleReportar tal cual,
-  // solo cambia cómo se pinta cada partido.
-  const renderPartidoCompacto = (match: BracketMatchRow) => {
-    const p1Gana = !!match.winner_id && match.winner_id === match.participant1_id;
-    const p2Gana = !!match.winner_id && match.winner_id === match.participant2_id;
-
-    return (
-      <div key={match.id} className="bracket-compacta-fila">
-        {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
-        <div className="bracket-compacta-nombres">
-          <span className={p1Gana ? "winner" : match.winner_id ? "loser" : ""}>
-            {renderInsignia(match.participant1_id)}
-            {nombreDe(match.participant1_id)}
-          </span>
-          <span className="bracket-compacta-vs">vs</span>
-          <span className={p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""}>
-            {renderInsignia(match.participant2_id)}
-            {nombreDe(match.participant2_id)}
-          </span>
-        </div>
-
-        {match.status === "en_disputa" && (
-          <p className="bracket-disputa">Resultado en disputa, un administrador debe resolverlo.</p>
-        )}
-
-        {match.participant1_id && match.participant2_id && match.clan_war_id && (
-          <div className="bracket-report">
-            {match.status === "pendiente" &&
-            miEquipoTag &&
-            (match.participant1_id === miParticipantId || match.participant2_id === miParticipantId) ? (
-              <Link className="btn btn-ghost" to={`/equipos/${miEquipoTag}?panel=eventos`}>
-                Ir a la Clan War
-              </Link>
-            ) : (
-              <Link className="btn btn-ghost" to={`/clan-war/${match.clan_war_id}`}>
-                {match.status === "pendiente" ? "Ver lineup" : "Ver lineup y resultado"}
-              </Link>
-            )}
-          </div>
-        )}
-
-        {match.status === "pendiente" &&
-          match.participant1_id &&
-          match.participant2_id &&
-          !match.clan_war_id &&
-          puedeReportar(match) && (
-            <div className="bracket-report">
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={reportando === match.id}
-                onClick={() => handleReportar(match.id, match.participant1_id as string)}
-              >
-                Ganó {nombreDe(match.participant1_id)}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={reportando === match.id}
-                onClick={() => handleReportar(match.id, match.participant2_id as string)}
-              >
-                Ganó {nombreDe(match.participant2_id)}
-              </button>
-            </div>
-          )}
-
-        {errores[match.id] && <div className="form-error">{errores[match.id]}</div>}
-      </div>
-    );
-  };
-
-  const renderGrillaCompacta = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => (
-    <div
-      className="bracket-compacta"
-      style={
-        {
-          ...(colorTexto ? { "--texto-bracket-color": colorTexto } : {}),
-          ...(fuenteTexto ? { "--fuente-texto-personalizada": fuenteTexto } : {}),
-        } as CSSProperties
-      }
-    >
-      {grilla.partidosPorRonda.map((partidos, indiceRonda) => (
-        <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-compacta-ronda">
-          <h4 className="bracket-round-title">
-            {nombreDeRondaTradicional(
-              grilla.rondas,
-              indiceRonda,
-              grilla.totalRondasReal,
-              partidos.length,
-              grilla.permiteFinal
-            )}
-          </h4>
-          {partidos.map(renderPartidoCompacto)}
-        </div>
-      ))}
-    </div>
-  );
 
   // ---------- Estructura "embudo al centro" (migración 177) ----------
   // Parte el cuadro en dos mitades que convergen hacia el medio, con
@@ -887,58 +803,6 @@ export default function BracketView({
       </div>
     );
   };
-
-  if (esCompacta) {
-    if (esEliminacionDoble) {
-      const partidosGanadores = matches.filter((m) => m.bracket_tipo === "ganadores");
-      const partidosPerdedores = matches.filter((m) => m.bracket_tipo === "perdedores");
-      const partidoFinal = matches.find((m) => m.bracket_tipo === "final") ?? null;
-      const partidoReset = matches.find((m) => m.bracket_tipo === "reset") ?? null;
-
-      return (
-        <>
-          <div className="bracket-round-title bracket-seccion-titulo">Llave de ganadores</div>
-          {renderGrillaCompacta(armarGrilla(partidosGanadores, !!nombresRondaPersonalizados, false), "ganadores")}
-
-          {partidosPerdedores.length > 0 && (
-            <>
-              <div className="bracket-round-title bracket-seccion-titulo">Llave de perdedores</div>
-              {renderGrillaCompacta(armarGrilla(partidosPerdedores, false, false), "perdedores")}
-            </>
-          )}
-
-          {partidoFinal && (
-            <div className="bracket-compacta-ronda">
-              <h4 className="bracket-round-title">Gran final</h4>
-              {renderPartidoCompacto(partidoFinal)}
-            </div>
-          )}
-
-          {partidoReset && (
-            <div className="bracket-compacta-ronda">
-              <h4 className="bracket-round-title">Revancha (bracket reset)</h4>
-              {renderPartidoCompacto(partidoReset)}
-            </div>
-          )}
-        </>
-      );
-    }
-
-    return (
-      <>
-        {renderGrillaCompacta(
-          armarGrilla(matches.filter((m) => !m.es_tercer_lugar), !!nombresRondaPersonalizados),
-          "unica"
-        )}
-        {partidoTercerLugar && (
-          <div className="bracket-compacta-ronda">
-            <h4 className="bracket-round-title">Partido por el 3er lugar</h4>
-            {renderPartidoCompacto(partidoTercerLugar)}
-          </div>
-        )}
-      </>
-    );
-  }
 
   if (esEmbudo && !esEliminacionDoble) {
     return (

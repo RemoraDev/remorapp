@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
+import { LayoutGrid, Sparkles, Zap, Palette, Type, Baseline, BadgeCheck } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import {
   FONDO_BRACKET_OPTIONS,
@@ -70,9 +71,9 @@ function PreviewEstructura({ variante }: { variante: EstructuraBracket }) {
       </div>
     );
   }
-  if (variante === "compacta") {
+  if (variante === "escalera") {
     return (
-      <div className="estructura-bracket-preview estructura-bracket-preview-compacta">
+      <div className="estructura-bracket-preview estructura-bracket-preview-escalera">
         <span />
         <span />
         <span />
@@ -159,6 +160,13 @@ export default function BracketStylePicker({
   // la base todavía no tenía los valores nuevos), no pasaba nada
   // visible -- parecía que el botón "no hacía nada". Ahora se avisa.
   const [error, setError] = useState<string | null>(null);
+  // Migración 187, a pedido del usuario: Panel de control > Apariencia
+  // reorganiza este mismo picker en sub-pestañas (antes era una lista
+  // larga de grupos, uno debajo del otro) -- mismo patrón que
+  // tabsOrganizador en TournamentDetailPage.tsx.
+  const [subtab, setSubtab] = useState<
+    "estructura" | "fondo" | "lineas" | "color_linea" | "titulo" | "color_texto" | "insignia"
+  >("estructura");
   const [fuenteTextoDraft, setFuenteTextoDraft] = useState(fuenteTexto ?? "");
   const [fuentesLocales, setFuentesLocales] = useState<string[] | null>(null);
   const [buscandoFuentes, setBuscandoFuentes] = useState(false);
@@ -300,10 +308,39 @@ export default function BracketStylePicker({
     else onCambio();
   };
 
+  const SUBTABS: { key: typeof subtab; label: string; icon: JSX.Element }[] = [
+    { key: "estructura", label: "Estructura", icon: <LayoutGrid size={15} /> },
+    { key: "fondo", label: "Fondo", icon: <Sparkles size={15} /> },
+    { key: "lineas", label: "Efectos de líneas", icon: <Zap size={15} /> },
+    { key: "color_linea", label: "Color de línea", icon: <Palette size={15} /> },
+    { key: "titulo", label: "Estilo de título", icon: <Type size={15} /> },
+    { key: "color_texto", label: "Color de texto", icon: <Baseline size={15} /> },
+    { key: "insignia", label: "Insignia del participante", icon: <BadgeCheck size={15} /> },
+  ];
+
   return (
     <div className="bracket-picker">
       {error && <div className="form-error">{error}</div>}
 
+      {/* Migración 187, a pedido del usuario: "Apariencia" (pestaña
+          nueva en Panel de control) organiza todo este picker en
+          sub-pestañas, en vez de una lista larga de grupos uno debajo
+          del otro. */}
+      <div className="bracket-picker-subtabs">
+        {SUBTABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            className={`bracket-picker-subtab ${subtab === t.key ? "selected" : ""}`}
+            onClick={() => setSubtab(t.key)}
+          >
+            <span className="bracket-picker-subtab-icon">{t.icon}</span>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {subtab === "estructura" && (
       <div className="bracket-picker-group">
         <h3 className="detail-subtitle">Estructura</h3>
         <div className="bracket-picker-options estructura-picker-options">
@@ -321,7 +358,9 @@ export default function BracketStylePicker({
           ))}
         </div>
       </div>
+      )}
 
+      {subtab === "lineas" && (
       <div className="bracket-picker-group">
         <h3 className="detail-subtitle">Efectos de líneas</h3>
         <div className="bracket-picker-options">
@@ -338,11 +377,13 @@ export default function BracketStylePicker({
           ))}
         </div>
       </div>
+      )}
 
       {/* Migración 179, a pedido del usuario: paleta para personalizar
           el color de cualquiera de los 3 efectos de arriba -- "Por
           defecto" vuelve al color de siempre de cada uno
           (color_linea_bracket = null). */}
+      {subtab === "color_linea" && (
       <div className="bracket-picker-group">
         <h3 className="detail-subtitle">Color de línea</h3>
         <div className="bracket-picker-options">
@@ -367,11 +408,14 @@ export default function BracketStylePicker({
           ))}
         </div>
       </div>
+      )}
 
       {/* Migración 181, a pedido del usuario: "modelos" de la franja con
           el nombre del torneo -- solo cambia algo visible con estilo
           "esports" (el único que muestra esta franja), pero se deja
           elegible siempre para que quede listo al cambiar de estilo. */}
+      {subtab === "titulo" && (
+      <>
       <div className="bracket-picker-group">
         <div className="bracket-picker-group-header">
           <h3 className="detail-subtitle">Estilo de título</h3>
@@ -481,10 +525,14 @@ export default function BracketStylePicker({
           )}
         </div>
       </div>
+      </>
+      )}
 
       {/* Migración 181, a pedido del usuario: color del texto de los
           nombres DENTRO de la llave -- misma paleta y mismo patrón que
           "Color de línea" de arriba ("Por defecto" = sin personalizar). */}
+      {subtab === "color_texto" && (
+      <>
       <div className="bracket-picker-group">
         <h3 className="detail-subtitle">Color de texto (llave)</h3>
         <div className="bracket-picker-options">
@@ -536,9 +584,12 @@ export default function BracketStylePicker({
           ))}
         </div>
       </div>
+      </>
+      )}
 
       {/* Migración 182, a pedido del usuario: qué se muestra junto al
           nombre de cada participante dentro de la llave. */}
+      {subtab === "insignia" && (
       <div className="bracket-picker-group">
         <h3 className="detail-subtitle">Insignia del participante</h3>
         <div className="bracket-picker-options">
@@ -554,7 +605,9 @@ export default function BracketStylePicker({
           ))}
         </div>
       </div>
+      )}
 
+      {subtab === "fondo" && (
       <div className="bracket-picker-group">
         <h3 className="detail-subtitle">Fondo</h3>
         <div className="bracket-picker-options">
@@ -571,6 +624,7 @@ export default function BracketStylePicker({
           ))}
         </div>
       </div>
+      )}
     </div>
   );
 }

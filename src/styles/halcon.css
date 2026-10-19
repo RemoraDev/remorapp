@@ -858,6 +858,20 @@ html.es-escritorio .section {
   }
 }
 
+/* A pedido del usuario: "Copiar URL para OBS" pasa a vivir pegado al
+   título del torneo (antes era su propio bloque debajo, con un texto
+   explicando qué hacer con la URL en OBS que ya no hace falta). */
+.detail-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.detail-obs-copy-btn {
+  font-size: 0.8rem;
+}
+
 /* ---------- Torneo destacado ---------- */
 
 .featured {
@@ -1050,9 +1064,12 @@ html.es-escritorio .section {
   font-weight: 600;
 }
 
+/* A pedido del usuario: antes "Finalizado" quedaba gris apagado, se
+   confundía con un estado neutro/sin información en vez de leerse
+   como un estado propio (como abierto/en curso, que sí tienen color). */
 .badge-estado-finalizado {
-  background: rgba(100, 116, 139, 0.15);
-  color: var(--color-text-muted);
+  background: rgba(96, 165, 250, 0.12);
+  color: #60a5fa;
   font-weight: 600;
 }
 
@@ -3976,70 +3993,16 @@ html.es-escritorio .player-detail-panel-inline {
   border-top: 1px dashed var(--color-border);
 }
 
-/* ---------- Estructura "compacta" (migración 177) ---------- */
-/* Lista densa por ronda, sin cajas grandes ni líneas de conexión --
-   pensada para torneos con muchos participantes o pantallas chicas. */
-
-.bracket-compacta {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  margin-top: 1rem;
-}
-
-.bracket-compacta-ronda {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.bracket-compacta-fila {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.6rem 0.8rem;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-card);
-}
-
-.bracket-compacta-nombres {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.85rem;
-}
-
-.bracket-compacta-nombres span {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--color-text-muted);
-}
-
-.bracket-compacta-nombres span.winner {
-  color: var(--color-accent);
-  font-weight: 700;
-}
-
-.bracket-compacta-nombres span.loser {
-  color: var(--color-text-faint);
-  text-decoration: line-through;
-}
-
-.bracket-compacta-vs {
-  color: var(--color-text-faint);
-  font-size: 0.7rem;
-  text-transform: uppercase;
-}
-
-.bracket-compacta-fila .bracket-report {
-  margin: 0;
-  flex-direction: row;
-  flex-wrap: wrap;
+/* ---------- Estructura "escalera" (migración 187, reemplaza a
+   "compacta") ---------- */
+/* Reutiliza el layout de columnas de "clasico" tal cual (mismo
+   .bracket/.bracket-round/.bracket-match de siempre) -- cada partido
+   se corre en zigzag (ver --escalon-index, calculado en BracketView.tsx)
+   para un look más dinámico que las columnas rectas. Acotado a 0/1
+   nada más a propósito: no se toca el alto fijo de .bracket (arriba,
+   overflow: hidden), así que no hay riesgo de recortar nada. */
+.bracket[data-estructura="escalera"] .bracket-match {
+  transform: translateY(calc(var(--escalon-index, 0) * 1.1rem));
 }
 
 /* ---------- Estructura "embudo al centro" (migración 177) ---------- */
@@ -4228,6 +4191,17 @@ html.es-escritorio .player-detail-panel-inline {
   background-color: #06070a;
   border-radius: 0;
   border: none;
+  /* A pedido del usuario: antes el contenido (BracketView devuelve
+     varios hijos sueltos -- franja de título, llave, partido por el
+     3er lugar) quedaba pegado arriba, con todo el resto de la
+     pantalla vacío debajo. flex column + centrado en los dos ejes
+     centra ese bloque completo dentro de la ventana; si la llave es
+     más grande que la pantalla, overflow: auto de arriba sigue
+     permitiendo hacer scroll. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .bracket-pantalla-completa-btn {
@@ -4510,6 +4484,55 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 /* ---------- Selector de estilo/fondo (organizador, /tournaments/:id) ---------- */
+
+/* Migración 187, a pedido del usuario: Panel de control > Apariencia
+   organiza Estructura/Fondo/Efectos de línea/Color de línea/Estilo de
+   título/Color de texto/Insignia en sub-pestañas, en vez de una lista
+   larga de grupos uno debajo del otro -- mismo espíritu que
+   .organizer-panel-tabs, pero en una barra propia (translúcida, con
+   degradé sutil) para que se note que es un segundo nivel de
+   navegación, no el mismo que Cuadro/Permisos/etc. */
+.bracket-picker-subtabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  padding: 0.4rem;
+  margin-bottom: 1.25rem;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent);
+  border: 1px solid var(--color-border);
+}
+
+.bracket-picker-subtab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.9rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bracket-picker-subtab:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bracket-picker-subtab.selected {
+  background: linear-gradient(135deg, var(--h-accent) 0%, var(--h-accent-hover) 100%);
+  color: var(--color-bg);
+  box-shadow: 0 2px 12px rgba(var(--h-accent-rgb), 0.4);
+}
+
+.bracket-picker-subtab-icon {
+  display: flex;
+  align-items: center;
+}
 
 .bracket-picker-group {
   margin: 1rem 0;
@@ -4934,16 +4957,27 @@ html.es-escritorio .player-detail-panel-inline {
   background: var(--color-accent);
 }
 
-/* "Compacta": 4 líneas finas apiladas, como filas de una lista. */
-.estructura-bracket-preview-compacta {
-  flex-direction: column;
-  justify-content: space-between;
+/* "Escalera" (migración 187, reemplaza a "compacta"): 4 barras en
+   zigzag -- mismas columnas que "clásico", pero cada una se escalona
+   arriba/abajo en vez de alinearse en la misma fila. */
+.estructura-bracket-preview-escalera {
+  flex-direction: row;
+  align-items: center;
 }
 
-.estructura-bracket-preview-compacta span {
-  flex: 0 0 15%;
-  border-radius: 0.15rem;
+.estructura-bracket-preview-escalera span {
+  flex: 1;
+  height: 55%;
+  border-radius: 0.2rem;
   background: rgba(var(--h-accent-rgb), 0.28);
+}
+
+.estructura-bracket-preview-escalera span:nth-child(odd) {
+  transform: translateY(-35%);
+}
+
+.estructura-bracket-preview-escalera span:nth-child(even) {
+  transform: translateY(35%);
 }
 
 /* Selector de dimensión de la tarjeta (migración 129) -- a diferencia
@@ -8802,6 +8836,21 @@ body.overlay-obs {
   background: var(--color-accent);
   color: var(--color-bg);
   box-shadow: 0 2px 10px rgba(var(--h-accent-rgb), 0.4);
+}
+
+/* A pedido del usuario: "Panel de control" vive solo, en su propia
+   píldora a la derecha (ver .detail-tabs-row) -- con color propio
+   siempre (no solo al pasar el mouse) se nota que es la acción
+   principal del organizador, no una pestaña más. */
+.organizer-panel-tab-cta {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  box-shadow: 0 2px 10px rgba(var(--h-accent-rgb), 0.35);
+}
+
+.organizer-panel-tab-cta:hover {
+  background: var(--h-accent-hover);
+  color: var(--color-bg);
 }
 
 .organizer-panel-tab-icon {
