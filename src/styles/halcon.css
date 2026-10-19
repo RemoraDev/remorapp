@@ -4071,6 +4071,14 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 .bracket-linea-preview svg {
+  /* .bracket-conectores (reutilizada acá para heredar el estilo de
+     cada efecto, ver MiniLinea en BracketStylePicker.tsx) trae
+     position: absolute; top/left: 0 pensado para la llave real, donde
+     su padre (.bracket) tiene position: relative -- acá .bracket-linea-
+     preview NO es relative, así que esa miniatura se escapaba y se
+     posicionaba contra el ancestro posicionado más cercano (el modal
+     entero). Se anula acá, adentro solo hace falta el tamaño normal. */
+  position: static;
   width: 80%;
   height: 70%;
   overflow: visible;
