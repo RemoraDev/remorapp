@@ -23683,3 +23683,5 @@ update public.tournaments set estilo_linea_bracket = 'ninguno' where estilo_brac
 alter table public.tournaments
   add column estructura_bracket text not null default 'clasico'
   check (estructura_bracket in ('clasico', 'vertical', 'embudo', 'compacta'));
+update public.tournaments set estilo_bracket = 'esports' where estilo_bracket <> 'esports';
+alter table public.tournaments alter column estilo_bracket set default 'esports';

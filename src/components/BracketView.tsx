@@ -66,6 +66,11 @@ interface BracketViewProps {
 // recortado -- el caso más alto es uno sin resultado con los dos
 // botones de "Ganó X/Y" visibles.
 const ALTURA_PARTIDO_PX = 150;
+// Estimación del ancho de UN partido en la estructura "vertical" (ver
+// halcon.css, .bracket-vertical .bracket-match { width: 12rem }) --
+// reusar ALTURA_PARTIDO_PX acá era un bug: 150px de "cupo" para una
+// tarjeta de 12rem (192px) la apretaba/recortaba.
+const ANCHO_PARTIDO_PX = 220;
 
 interface ConectorLinea {
   key: string;
@@ -158,6 +163,25 @@ export default function BracketView({
               const y2 = r2.top - rectContenedor.top;
               const yMedio = y1 + (y2 - y1) / 2;
               d = `M ${x1} ${y1} V ${yMedio} H ${x2} V ${y2}`;
+            } else if (keyPrefix === "embudo-der") {
+              // Migración 177, corrección: la mitad derecha del "embudo
+              // al centro" se probó primero espejando con CSS
+              // (transform: scaleX(-1)) -- pero el propio <svg> de las
+              // líneas quedaba DENTRO de ese mismo espejo, así que el
+              // trazo (calculado con la posición ya espejada de cada
+              // partido) se espejaba una segunda vez al pintarse,
+              // desalineándose por completo. Ahora, en vez de espejar
+              // con CSS, esta mitad simplemente RENDERIZA sus rondas en
+              // orden inverso (ver renderGrilla, invertir) y acá se usa
+              // la fórmula en espejo (sale del borde IZQUIERDO de cada
+              // partido, entra por el DERECHO del siguiente) -- sin
+              // ningún transform de por medio, nada se desalinea.
+              const x1 = r1.left - rectContenedor.left;
+              const y1 = r1.top + r1.height / 2 - rectContenedor.top;
+              const x2 = r2.right - rectContenedor.left;
+              const y2 = r2.top + r2.height / 2 - rectContenedor.top;
+              const xMedio = x1 + (x2 - x1) / 2;
+              d = `M ${x1} ${y1} H ${xMedio} V ${y2} H ${x2}`;
             } else {
               const x1 = r1.right - rectContenedor.left;
               const y1 = r1.top + r1.height / 2 - rectContenedor.top;
@@ -237,7 +261,7 @@ export default function BracketView({
     // rondas con menos partidas se centren solas dentro de ese mismo
     // alto -- así se ve el achicamiento típico de una llave sin tener
     // que calcular a mano en qué posición exacta va cada partida.
-    const alturaBracket = (partidosPorRonda[0]?.length ?? 1) * ALTURA_PARTIDO_PX;
+    const alturaBracket = (partidosPorRonda[0]?.length ?? 1) * (esVertical ? ANCHO_PARTIDO_PX : ALTURA_PARTIDO_PX);
     // Total real de rondas de la llave completa, aunque las rondas
     // siguientes todavía no se hayan creado en bracket_matches (se van
     // generando de a una a medida que se resuelve la anterior) -- se
@@ -286,21 +310,31 @@ export default function BracketView({
           </svg>
         )}
 
-        {grilla.partidosPorRonda.map((partidos, indiceRonda) => (
-          <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
-            <div className="bracket-round-title">
-              {grilla.nombresTradicionales
-                ? nombreDeRondaTradicional(grilla.rondas, indiceRonda, grilla.totalRondasReal, partidos.length)
-                : `Ronda ${grilla.rondas[indiceRonda]}`}
-            </div>
+        {(keyPrefix === "embudo-der"
+          ? grilla.partidosPorRonda.map((_, i) => i).reverse()
+          : grilla.partidosPorRonda.map((_, i) => i)
+        ).map((indiceRonda) => {
+          const partidos = grilla.partidosPorRonda[indiceRonda];
+          return (
+            <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
+              <div className="bracket-round-title">
+                {grilla.nombresTradicionales
+                  ? nombreDeRondaTradicional(grilla.rondas, indiceRonda, grilla.totalRondasReal, partidos.length)
+                  : `Ronda ${grilla.rondas[indiceRonda]}`}
+              </div>
 
-            <div className="bracket-round-matches">
-              {partidos.map((match) =>
-                renderPartido(match, { keyPrefix, round: grilla.rondas[indiceRonda], matchNumber: match.match_number })
-              )}
+              <div className="bracket-round-matches">
+                {partidos.map((match) =>
+                  renderPartido(match, {
+                    keyPrefix,
+                    round: grilla.rondas[indiceRonda],
+                    matchNumber: match.match_number,
+                  })
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -552,16 +586,19 @@ export default function BracketView({
 
   // ---------- Estructura "embudo al centro" (migración 177) ----------
   // Parte el cuadro en dos mitades que convergen hacia el medio, con
-  // la final centrada -- el look clásico de transmisiones grandes. La
-  // mitad derecha reutiliza armarGrilla/renderGrilla SIN TOCAR nada
-  // (mismo cálculo de líneas de siempre, izquierda a derecha) y se
-  // espeja entera con CSS (transform: scaleX(-1) en .bracket-embudo-flip,
-  // ver halcon.css) -- eso invierte el orden de las rondas Y la
-  // dirección de las líneas de una sola vez. El texto/logos de adentro
-  // llevan un segundo scaleX(-1) (en .bracket-match/.bracket-round-title)
-  // que cancela el espejado solo para lo que se lee, sin tocar la
-  // posición real de cada partido (los transforms no cambian el
-  // layout, por eso la medición de líneas sigue funcionando igual).
+  // la final centrada -- el look clásico de transmisiones grandes.
+  //
+  // Corrección: la primera versión espejaba la mitad derecha entera
+  // con CSS (transform: scaleX(-1)) -- pero el <svg> de las líneas
+  // quedaba DENTRO de ese mismo espejo, así que el trazo (calculado
+  // con la posición ya espejada de cada partido) se espejaba una
+  // SEGUNDA vez al pintarse y quedaba completamente desalineado.
+  // Ahora la mitad derecha no usa ningún transform: renderGrilla
+  // simplemente dibuja sus rondas en orden visual inverso cuando
+  // keyPrefix es "embudo-der" (última ronda primero, Ronda 1 al
+  // final) y la medición de líneas usa la fórmula en espejo para ese
+  // mismo keyPrefix (ver el useLayoutEffect más arriba) -- mismos
+  // datos, mismo DOM sin transformar, solo el orden de pintado cambia.
   const partidosParaEmbudo = (partidos: BracketMatchRow[]) => {
     const porRonda = new Map<number, BracketMatchRow[]>();
     partidos.forEach((m) => {
@@ -618,9 +655,7 @@ export default function BracketView({
           </div>
         )}
 
-        <div className="bracket-embudo-flip">
-          {renderGrilla(armarGrilla(derecha, false), "embudo-der")}
-        </div>
+        {renderGrilla(armarGrilla(derecha, false), "embudo-der")}
       </div>
     );
   };

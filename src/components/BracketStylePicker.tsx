@@ -1,16 +1,14 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import {
-  ESTILO_BRACKET_OPTIONS,
   FONDO_BRACKET_OPTIONS,
   ESTILO_LINEA_BRACKET_OPTIONS,
   ESTRUCTURA_BRACKET_OPTIONS,
 } from "../types/tournaments";
-import type { EstiloBracket, FondoBracket, EstiloLineaBracket, EstructuraBracket } from "../types/tournaments";
+import type { FondoBracket, EstiloLineaBracket, EstructuraBracket } from "../types/tournaments";
 
 interface BracketStylePickerProps {
   tournamentId: string;
-  estilo: EstiloBracket;
   fondo: FondoBracket;
   estiloLinea: EstiloLineaBracket;
   estructura: EstructuraBracket;
@@ -59,32 +57,6 @@ function PreviewEstructura({ variante }: { variante: EstructuraBracket }) {
   );
 }
 
-// Mini-render real del estilo: mismas clases .bracket-match/.bracket-slot
-// que la llave de verdad (ver BracketView.tsx y halcon.css), a tamaño
-// reducido -- no es una captura de imagen, es el mismo CSS. Dos
-// "rondas" de muestra para que también se vea la línea de conexión
-// (esa regla exige un .bracket-round que no sea el último).
-function MiniBracket({ estilo }: { estilo: EstiloBracket }) {
-  return (
-    <div className="bracket-style-preview" data-estilo-bracket={estilo}>
-      <div className="bracket-round">
-        <div className="bracket-match">
-          <div className="bracket-slot winner">
-            <span className="bracket-slot-logo" style={{ background: "var(--color-accent-soft)" }} />
-            Equipo A
-          </div>
-          <div className="bracket-slot loser">Equipo B</div>
-        </div>
-      </div>
-      <div className="bracket-round">
-        <div className="bracket-match">
-          <div className="bracket-slot">Final</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Mini-render del efecto de línea elegido (migración 176): a
 // diferencia de la llave real, acá no hay nada que medir en el DOM --
 // un trazo en escuadra fijo alcanza para mostrar el efecto, con el
@@ -99,14 +71,18 @@ function MiniLinea({ estiloLinea }: { estiloLinea: EstiloLineaBracket }) {
   );
 }
 
-// Selector de estilo de bracket + fondo + efecto de línea, solo para
-// el organizador. Cada opción se aplica al instante al elegirla (mismo
+// Selector de estructura + fondo + efecto de línea, solo para el
+// organizador. Cada opción se aplica al instante al elegirla (mismo
 // patrón que la selección de tema de equipo en TeamDetailPage.tsx) --
 // el mini-render de cada tarjeta ES la vista previa, no hace falta un
 // paso de "confirmar" aparte.
+//
+// Migración 178, a pedido del usuario: "Estilo de bracket" (Clásico/
+// Esports/StarCraft Oficial) sale del todo -- Esports queda como único
+// estilo (ya se setea por default en la base, ver migración 178), sin
+// selector visible acá.
 export default function BracketStylePicker({
   tournamentId,
-  estilo,
   fondo,
   estiloLinea,
   estructura,
@@ -116,17 +92,6 @@ export default function BracketStylePicker({
   // la base todavía no tenía los valores nuevos), no pasaba nada
   // visible -- parecía que el botón "no hacía nada". Ahora se avisa.
   const [error, setError] = useState<string | null>(null);
-
-  const handleCambiarEstilo = async (nuevoEstilo: EstiloBracket) => {
-    if (nuevoEstilo === estilo) return;
-    setError(null);
-    const { error: err } = await supabase
-      .from("tournaments")
-      .update({ estilo_bracket: nuevoEstilo })
-      .eq("id", tournamentId);
-    if (err) setError(err.message);
-    else onCambio();
-  };
 
   const handleCambiarFondo = async (nuevoFondo: FondoBracket) => {
     if (nuevoFondo === fondo) return;
@@ -178,23 +143,6 @@ export default function BracketStylePicker({
               <PreviewEstructura variante={o.value} />
               <span className="bracket-picker-option-label">{o.label}</span>
               <span className="estructura-picker-desc">{o.desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="bracket-picker-group">
-        <h3 className="detail-subtitle">Estilo de bracket</h3>
-        <div className="bracket-picker-options">
-          {ESTILO_BRACKET_OPTIONS.map((o) => (
-            <button
-              key={o.value}
-              type="button"
-              className={`bracket-picker-option ${estilo === o.value ? "selected" : ""}`}
-              onClick={() => handleCambiarEstilo(o.value)}
-            >
-              <MiniBracket estilo={o.value} />
-              <span className="bracket-picker-option-label">{o.label}</span>
             </button>
           ))}
         </div>

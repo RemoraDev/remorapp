@@ -3744,17 +3744,6 @@ html.es-escritorio .player-detail-panel-inline {
   border: none;
 }
 
-.bracket-embudo-flip {
-  flex: 1 1 0;
-  min-width: 0;
-  transform: scaleX(-1);
-}
-
-.bracket-embudo-flip .bracket-match,
-.bracket-embudo-flip .bracket-round-title {
-  transform: scaleX(-1);
-}
-
 /* ---------- Armar llave manualmente, arrastrar y soltar (migración 097) ---------- */
 
 .llave-manual-layout {
