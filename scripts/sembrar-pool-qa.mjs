@@ -60,25 +60,6 @@ function passwordAlAzar() {
   return "QaPool-" + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
 }
 
-// Mapa email -> user id, construido UNA vez desde auth.admin (la
-// fuente de verdad real) -- no desde la tabla profiles. Un intento
-// anterior puede haber creado el auth.user y fallado antes de
-// llegar a completar su profile (permisos insuficientes en ese
-// momento), y por alguna razón buscar ese profile por email tampoco
-// lo encontraba -- listUsers() no depende de nada de eso.
-async function mapaUsuariosExistentes() {
-  const mapa = new Map();
-  let page = 1;
-  for (;;) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage: 200 });
-    if (error) throw new Error(`No pude listar usuarios existentes: ${error.message}`);
-    for (const u of data.users) mapa.set(u.email, u.id);
-    if (data.users.length < 200) break;
-    page++;
-  }
-  return mapa;
-}
-
 async function completarProfile(id, nick) {
   const { error } = await admin
     .from("profiles")
@@ -87,43 +68,38 @@ async function completarProfile(id, nick) {
   if (error) throw new Error(`No pude completar el profile de ${nick} (${id}): ${error.message}`);
 }
 
-async function crearCuentaPool(nick, email, usuariosExistentes) {
-  const idExistente = usuariosExistentes.get(email);
-  if (idExistente) {
-    await completarProfile(idExistente, nick);
-    console.log(`  ${nick} ya existía en auth (${idExistente}), profile completado/confirmado.`);
-    return idExistente;
-  }
-
+// Nota: NO usa auth.admin.listUsers() para chequear duplicados --
+// ese proyecto tiene cuentas viejas con datos incompletos que hacen
+// fallar esa llamada con "Database error finding users" (no tiene
+// nada que ver con este script). En cambio, intenta crear
+// directamente; si el email ya existe, avisa con el mensaje de
+// Supabase y corta ahí -- hay que borrar esa cuenta puntual desde el
+// Dashboard (Authentication > Users > buscar el email > Delete user)
+// y volver a correr el script, no intenta adivinar su id.
+async function crearCuentaPool(nick, email) {
   const { data: creado, error: errorAuth } = await admin.auth.admin.createUser({
     email,
     password: passwordAlAzar(),
     email_confirm: true,
   });
   if (errorAuth || !creado?.user) {
-    throw new Error(`No pude crear ${email}: ${errorAuth?.message ?? "sin usuario devuelto"}`);
+    throw new Error(
+      `No pude crear ${email}: ${errorAuth?.message ?? "sin usuario devuelto"} -- si ya existe, ` +
+        `borrala desde el Dashboard (Authentication > Users) y volvé a correr el script.`
+    );
   }
 
   await completarProfile(creado.user.id, nick);
-  usuariosExistentes.set(email, creado.user.id);
 
   console.log(`  ${nick} creado (${creado.user.id}).`);
   return creado.user.id;
 }
 
-console.log("0) Revisando cuentas que ya existen en auth...");
-const usuariosExistentes = await mapaUsuariosExistentes();
-console.log(`  ${usuariosExistentes.size} cuenta(s) encontrada(s) en total (de cualquier tipo).`);
-
 console.log("1) Cuentas individuales sueltas (1v1)...");
 const idsJugadores = [];
 for (let i = 1; i <= 20; i++) {
   const n = String(i).padStart(2, "0");
-  const id = await crearCuentaPool(
-    `QAPoolJugador${n}`,
-    `qa.pool.jugador.${n}@remorapp-qa-pool.invalid`,
-    usuariosExistentes
-  );
+  const id = await crearCuentaPool(`QAPoolJugador${n}`, `qa.pool.jugador.${n}@remorapp-qa-pool.invalid`);
   idsJugadores.push(id);
 }
 
@@ -135,8 +111,7 @@ for (let equipo = 1; equipo <= 8; equipo++) {
   for (let miembro = 1; miembro <= 4; miembro++) {
     const id = await crearCuentaPool(
       `QAPoolEquipo${nEquipo}_${miembro}`,
-      `qa.pool.equipo.${nEquipo}.${miembro}@remorapp-qa-pool.invalid`,
-      usuariosExistentes
+      `qa.pool.equipo.${nEquipo}.${miembro}@remorapp-qa-pool.invalid`
     );
     idsMiembros.push(id);
   }
