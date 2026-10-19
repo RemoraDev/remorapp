@@ -318,6 +318,9 @@ export default function TournamentDetailPage() {
   // inscripciones). No es la llave final -- es solo un vistazo
   // ordenado por inscripción, con los cupos vacíos como placeholder.
   const [mostrarVistaPreviaLlaves, setMostrarVistaPreviaLlaves] = useState(false);
+  // Migración 169: "Rellenar con equipos y jugadores" (staff/admin).
+  const [rellenandoPrueba, setRellenandoPrueba] = useState(false);
+  const [errorRellenarPrueba, setErrorRellenarPrueba] = useState<string | null>(null);
   const [errorOpcionesAvanzadas, setErrorOpcionesAvanzadas] = useState<string | null>(null);
   // Migración 144: reglamento en PDF -- subida (desde el Panel de
   // organizador) y visor embebido (público, con PDF.js) del archivo
@@ -1077,6 +1080,28 @@ export default function TournamentDetailPage() {
     }
 
     setEditandoFechaFinId(null);
+    await cargarTorneo();
+  };
+
+  const handleRellenarTorneoPrueba = async () => {
+    if (!torneo) return;
+    setErrorRellenarPrueba(null);
+    setRellenandoPrueba(true);
+
+    const { data, error } = await supabase.rpc("rellenar_torneo_prueba", { p_tournament_id: torneo.id });
+
+    setRellenandoPrueba(false);
+
+    if (error) {
+      setErrorRellenarPrueba(error.message);
+      return;
+    }
+
+    if (!data || data === 0) {
+      setErrorRellenarPrueba("No quedan cuentas de prueba sin usar en este torneo -- corré scripts/sembrar-pool-qa.mjs de nuevo con más cantidad si hace falta.");
+      return;
+    }
+
     await cargarTorneo();
   };
 
@@ -1912,6 +1937,43 @@ export default function TournamentDetailPage() {
                         2v2/3v3/4v4 inscribe clanes en vez de jugadores individuales. Una vez que
                         alguien se inscriba, esto deja de poder cambiarse.
                       </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Migración 169, a pedido del usuario: botón para
+                    probar funciones sin armar participantes a mano --
+                    visible solo para staff/admin (nunca para un
+                    organizador común, sería una forma fácil de
+                    inflar un torneo público de verdad). Completa los
+                    cupos que falten con el pool de cuentas reales de
+                    scripts/sembrar-pool-qa.mjs. */}
+                {(profile?.es_admin || profile?.es_staff) && torneo.estado === "abierto" && (
+                  <div className="organizer-panel-card">
+                    <div className="organizer-panel-card-header">
+                      <span className="organizer-panel-card-icon">
+                        <Users size={18} />
+                      </span>
+                      <h3 className="organizer-panel-card-title">Rellenar con equipos y jugadores</h3>
+                    </div>
+                    <div className="organizer-panel-card-body">
+                      {errorRellenarPrueba && <div className="form-error">{errorRellenarPrueba}</div>}
+                      <p className="form-hint">
+                        Completa los cupos que falten con cuentas de prueba reales (solo vos y staff
+                        ven este botón).
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={rellenandoPrueba || cuposDisponibles <= 0}
+                        onClick={handleRellenarTorneoPrueba}
+                      >
+                        {rellenandoPrueba
+                          ? "Rellenando..."
+                          : cuposDisponibles <= 0
+                            ? "Ya no hay cupos libres"
+                            : "Rellenar con equipos y jugadores"}
+                      </button>
                     </div>
                   </div>
                 )}
