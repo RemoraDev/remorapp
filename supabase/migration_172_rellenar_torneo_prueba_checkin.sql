@@ -1,8 +1,3 @@
--- Migración 172: rellenar_torneo_prueba() (migraciones 169/171) insertaba
--- a las cuentas del pool con checked_in = false -- como son cuentas de
--- prueba, nadie puede entrar a confirmarlas a mano, así que la llave
--- nunca se podía generar ("Necesitas al menos 2 jugadores confirmados").
--- Las insertamos ya confirmadas.
 create or replace function public.rellenar_torneo_prueba(p_tournament_id uuid)
 returns integer
 language plpgsql
