@@ -6,7 +6,8 @@ export const MODOS: { value: TorneoModo; label: string; descripcion: string }[] 
   {
     value: "eliminacion_simple",
     label: "Eliminación simple",
-    descripcion: "Quien pierde una partida queda eliminado del torneo.",
+    descripcion:
+      "Quien pierde su enfrentamiento queda eliminado del torneo. Cada enfrentamiento se decide con un solo resultado reportado, jueguen uno o varios mapas entre ustedes -- la final se marca automáticamente para jugarse al mejor de 5.",
   },
   {
     value: "eliminacion_doble",

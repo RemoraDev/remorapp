@@ -89,14 +89,16 @@ export default function MyTournamentsPage() {
                 <h3 className="tournament-card-title">{torneo.nombre}</h3>
                 <p className="tournament-card-meta">Comienza el {formatFecha(torneo.fecha_inicio)}</p>
               </div>
-              <div className="tournament-card-foot">
-                <div>
-                  <p className="tournament-card-stat-label">Pozo</p>
-                  <p className="tournament-card-stat-value tournament-card-stat-value-accent">
-                    {formatPozo(torneo.pozo_premio)}
-                  </p>
+              {torneo.pozo_premio !== null && (
+                <div className="tournament-card-foot">
+                  <div>
+                    <p className="tournament-card-stat-label">Pozo</p>
+                    <p className="tournament-card-stat-value tournament-card-stat-value-accent">
+                      {formatPozo(torneo.pozo_premio)}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </Link>
           ))}
         </div>

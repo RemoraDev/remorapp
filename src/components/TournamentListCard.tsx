@@ -47,7 +47,7 @@ export default function TournamentListCard({ evento }: TournamentListCardProps) 
           Comienza el {formatFecha(evento.fecha)}
         </p>
       </div>
-      {esTorneo && (
+      {esTorneo && evento.pozo_premio !== null && (
         <div className="tournament-card-foot">
           <div>
             <p className="tournament-card-stat-label">Pozo</p>

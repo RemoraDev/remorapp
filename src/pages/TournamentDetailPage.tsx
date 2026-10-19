@@ -1791,12 +1791,19 @@ export default function TournamentDetailPage() {
       </div>
 
       <div className="detail-stats">
-        <div>
-          <p className="featured-stat-label">Pozo</p>
-          <p className="featured-stat-value featured-stat-value-accent">
-            {formatPozo(torneo.pozo_premio)}
-          </p>
-        </div>
+        {/* Migración 168, a pedido del usuario: si no se cargó pozo de
+            premios, ni se menciona el tema -- antes mostraba "Pozo:
+            Sin premio en efectivo" igual, dando a entender que el
+            dinero era parte de la conversación aunque nadie lo haya
+            tocado. */}
+        {torneo.pozo_premio !== null && (
+          <div>
+            <p className="featured-stat-label">Pozo</p>
+            <p className="featured-stat-value featured-stat-value-accent">
+              {formatPozo(torneo.pozo_premio)}
+            </p>
+          </div>
+        )}
         <div>
           <p className="featured-stat-label">Cupos</p>
           <p className="featured-stat-value">

@@ -159,7 +159,8 @@ export default function TournamentHistoryPage() {
 
               <h3 className="tournament-card-title">{torneo.nombre}</h3>
               <p className="tournament-card-meta">
-                {formatFecha(torneo.fecha_inicio)} · Pozo: {formatPozo(torneo.pozo_premio)}
+                {formatFecha(torneo.fecha_inicio)}
+                {torneo.pozo_premio !== null && <> · Pozo: {formatPozo(torneo.pozo_premio)}</>}
               </p>
 
               {esEliminacionSimple ? (

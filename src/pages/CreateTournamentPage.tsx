@@ -372,7 +372,9 @@ export default function CreateTournamentPage() {
 
   const puedeAvanzarDesdePaso1 = nombre.trim().length > 0;
   const puedeAvanzarDesdePaso2 = fechaInicio.length > 0 && Number(cuposTotales) >= 2;
-  const puedeAvanzarDesdePaso3 = !esLiga || !!ligaId;
+  // Migración 168, a pedido del usuario: elegir una liga ya no es
+  // obligatorio para avanzar -- un torneo puede quedar sin liga
+  // asignada (liga_id null), igual que ya puede quedar sin división.
 
   const handleSiguiente = () => {
     if (paso === 1 && !puedeAvanzarDesdePaso1) {
@@ -381,10 +383,6 @@ export default function CreateTournamentPage() {
     }
     if (paso === 2 && !puedeAvanzarDesdePaso2) {
       toast.error("Elige la fecha de inicio y una cantidad de cupos válida.");
-      return;
-    }
-    if (paso === 3 && !puedeAvanzarDesdePaso3) {
-      toast.error("Elige una liga antes de seguir.");
       return;
     }
     setPaso((p) => Math.min(p + 1, totalPasos));
@@ -949,10 +947,10 @@ export default function CreateTournamentPage() {
 
             <div className="form-group">
               <label className="form-label" htmlFor="torneo-liga">
-                Liga
+                Liga (opcional)
               </label>
               <select id="torneo-liga" className="form-select" value={ligaId} onChange={(e) => setLigaId(e.target.value)}>
-                <option value="">Elige una liga</option>
+                <option value="">Sin liga</option>
                 {ligas.map((liga) => (
                   <option key={liga.id} value={liga.id}>
                     {liga.nombre}
