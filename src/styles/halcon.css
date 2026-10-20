@@ -4103,6 +4103,24 @@ html.es-escritorio .player-detail-panel-inline {
   color: var(--color-bg);
 }
 
+/* Vista panorámica (migración 189) cuando la Estructura NO es "Embudo
+   al centro" -- los dos grupos apilados (mismo criterio que "Llave de
+   ganadores"/"Llave de perdedores" en eliminación doble: cada uno
+   puede tener varias columnas de ronda, lado a lado se vuelven
+   ilegibles), cada uno respetando la Estructura elegida (Clásico/
+   Vertical/Escalera), con scroll horizontal propio si no entra
+   entero. La gran final (y el partido por el 3er lugar, si
+   corresponde) quedan al final. */
+.bracket-panoramica-grupos {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.bracket-panoramica-grupo {
+  overflow-x: auto;
+}
+
 /* ---------- Estructura "embudo al centro" (migración 177) ---------- */
 /* Las dos mitades del cuadro convergen hacia el medio, con la final
    centrada -- el look de transmisiones grandes. La mitad derecha es

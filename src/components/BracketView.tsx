@@ -882,13 +882,21 @@ export default function BracketView({
 
   // Migración 189, a pedido del usuario: 16+ participantes pisa la
   // Estructura elegida -- Grupo A/Grupo B, cada uno su propia llave de
-  // 3 rondas, más una Vista panorámica (mismo armado visual que
-  // "Embudo al centro", reutiliza renderEmbudo tal cual). El botón de
-  // pantalla completa ya existente (TournamentDetailPage.tsx) aplica a
-  // lo que esté elegido acá, sin ningún mecanismo nuevo.
+  // 3 rondas, más una Vista panorámica. El botón de pantalla completa
+  // ya existente (TournamentDetailPage.tsx) aplica a lo que esté
+  // elegido acá, sin ningún mecanismo nuevo.
+  //
+  // Corrección: Vista panorámica llamaba siempre a renderEmbudo(), que
+  // fuerza el look de "Embudo al centro" (líneas convergiendo al
+  // medio) sin importar qué Estructura hubiera elegido el organizador
+  // -- a pedido del usuario, "la Estructura elegida no se aplica". Esa
+  // convergencia solo tiene sentido si realmente se eligió "Embudo al
+  // centro"; para Clásico/Vertical/Escalera, Vista panorámica ahora
+  // muestra los dos grupos lado a lado, cada uno con su propia
+  // Estructura respetada (mismo renderGrilla que Grupo A/Grupo B solos).
   if (esLlaveGrande) {
     const partidosSinTercerLugar = matches.filter((m) => !m.es_tercer_lugar);
-    const { izquierda, derecha } = partidosParaEmbudo(partidosSinTercerLugar);
+    const { izquierda, derecha, final } = partidosParaEmbudo(partidosSinTercerLugar);
 
     return (
       <>
@@ -920,17 +928,41 @@ export default function BracketView({
 
         {vistaGrupo === "a" && renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a")}
         {vistaGrupo === "b" && renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b")}
-        {vistaGrupo === "panoramica" && (
-          <>
-            {renderEmbudo()}
-            {partidoTercerLugar && (
-              <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
-                <div className="bracket-round-title">Partido por el 3er lugar</div>
-                {renderPartido(partidoTercerLugar)}
+        {vistaGrupo === "panoramica" &&
+          (esEmbudo ? (
+            <>
+              {renderEmbudo()}
+              {partidoTercerLugar && (
+                <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
+                  <div className="bracket-round-title">Partido por el 3er lugar</div>
+                  {renderPartido(partidoTercerLugar)}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="bracket-panoramica-grupos">
+              <div className="bracket-panoramica-grupo">
+                <div className="bracket-round-title bracket-seccion-titulo">Grupo A</div>
+                {renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a-pan")}
               </div>
-            )}
-          </>
-        )}
+              <div className="bracket-panoramica-grupo">
+                <div className="bracket-round-title bracket-seccion-titulo">Grupo B</div>
+                {renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b-pan")}
+              </div>
+              {final && (
+                <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
+                  <div className="bracket-round-title">Final</div>
+                  {renderPartido(final, { keyPrefix: "grupo-final-pan", round: 0, matchNumber: 1 })}
+                </div>
+              )}
+              {partidoTercerLugar && (
+                <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
+                  <div className="bracket-round-title">Partido por el 3er lugar</div>
+                  {renderPartido(partidoTercerLugar)}
+                </div>
+              )}
+            </div>
+          ))}
       </>
     );
   }
