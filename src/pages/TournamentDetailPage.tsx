@@ -367,6 +367,14 @@ export default function TournamentDetailPage() {
   // Migración 169: "Rellenar con equipos y jugadores" (staff/admin).
   const [rellenandoPrueba, setRellenandoPrueba] = useState(false);
   const [errorRellenarPrueba, setErrorRellenarPrueba] = useState<string | null>(null);
+  // Migración 193, a pedido del usuario: simula el torneo completo de
+  // una sola vez (genera la llave si hace falta, resultados al azar
+  // ronda por ronda, con lineup y puntaje por jugador cuando el
+  // cruce tiene una Clan War vinculada) -- para poder probar la
+  // pantalla de lineup/resultado sin tener que reportar partido por
+  // partido a mano.
+  const [simulandoPrueba, setSimulandoPrueba] = useState(false);
+  const [errorSimularPrueba, setErrorSimularPrueba] = useState<string | null>(null);
   const [errorOpcionesAvanzadas, setErrorOpcionesAvanzadas] = useState<string | null>(null);
   // Migración 144: reglamento en PDF -- subida (desde el Panel de
   // organizador) y visor embebido (público, con PDF.js) del archivo
@@ -1076,6 +1084,23 @@ export default function TournamentDetailPage() {
 
     if (!data || data === 0) {
       setErrorRellenarPrueba("No quedan cuentas de prueba sin usar en este torneo -- corré scripts/sembrar-pool-qa.mjs de nuevo con más cantidad si hace falta.");
+      return;
+    }
+
+    await cargarTorneo();
+  };
+
+  const handleSimularTorneoPrueba = async () => {
+    if (!torneo) return;
+    setErrorSimularPrueba(null);
+    setSimulandoPrueba(true);
+
+    const { error } = await supabase.rpc("simular_torneo_prueba", { p_tournament_id: torneo.id });
+
+    setSimulandoPrueba(false);
+
+    if (error) {
+      setErrorSimularPrueba(error.message);
       return;
     }
 
@@ -2026,6 +2051,30 @@ export default function TournamentDetailPage() {
                           : cuposDisponibles <= 0
                             ? "Ya no hay cupos libres"
                             : "Rellenar con equipos y jugadores"}
+                      </button>
+
+                      {/* Migración 193, a pedido del usuario: simula el
+                          torneo completo (genera la llave si hace
+                          falta, resultados al azar ronda por ronda,
+                          con lineup y puntaje por jugador si el cruce
+                          es por clanes) -- para probar la pantalla de
+                          lineup/resultado sin reportar partido por
+                          partido a mano. Solo eliminación simple por
+                          ahora, y no resuelve el partido por el 3er
+                          lugar. */}
+                      {errorSimularPrueba && <div className="form-error">{errorSimularPrueba}</div>}
+                      <p className="form-hint">
+                        Simula el torneo entero de una sola vez: genera la llave si hace falta y resuelve
+                        cada cruce al azar (con lineup y puntaje por jugador si es por clanes), hasta
+                        tener un campeón. Solo eliminación simple por ahora.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-ghost"
+                        disabled={simulandoPrueba}
+                        onClick={handleSimularTorneoPrueba}
+                      >
+                        {simulandoPrueba ? "Simulando..." : "Simular"}
                       </button>
                     </div>
                   </div>

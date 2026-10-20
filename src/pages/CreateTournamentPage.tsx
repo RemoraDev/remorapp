@@ -97,7 +97,20 @@ export default function CreateTournamentPage() {
   // Jugadores/Clanes -- esa pestaña sigue existiendo para cambiarlo
   // después, mientras no haya nadie inscrito todavía). "1v1" sigue
   // siendo el default, es lo más común.
-  const [formato, setFormato] = useState<TorneoFormato>("1v1");
+  //
+  // Corrección, a pedido del usuario: "2v2"/"3v3"/"4v4" (TorneoFormato)
+  // significan varios jugadores jugando AL MISMO TIEMPO en el mismo
+  // mapa -- esa modalidad todavía no está construida. "Clanes" acá
+  // significa lo que sí existe hoy: cada clan presenta N jugadores,
+  // cada uno juega SU PROPIO mapa 1v1 contra la posición equivalente
+  // del rival (el mismo sistema de lineup/sets que ya usan los torneos
+  // "wtl"/First Stand) -- por eso esClanes guarda formato: "wtl" en vez
+  // de "2v2"/"3v3"/"4v4", con jugadoresPorEquipo definiendo cuántas
+  // posiciones tiene el lineup.
+  const [esClanes, setEsClanes] = useState(false);
+  const [jugadoresPorEquipo, setJugadoresPorEquipo] = useState("3");
+  const [mapasPorSet, setMapasPorSet] = useState("2");
+  const formato: TorneoFormato = esClanes ? "wtl" : "1v1";
   const [modo, setModo] = useState<TorneoModo>("eliminacion_simple");
 
   // Migración 091/093: Clan War Amistosa -- formulario mínimo, sin
@@ -464,9 +477,7 @@ export default function CreateTournamentPage() {
       // sacan del formulario de creación -- a pedido del usuario, pasan
       // a ser ajustes editables desde la propia ficha del torneo una
       // vez creado, no algo que preguntar de entrada. Quedan en su
-      // valor "sin activar" acá; formato_clan_war/jugadores_por_set/
-      // mapas_por_set tampoco aplican más (eran solo para 2v2+/WTL, que
-      // ya no se puede elegir en este formulario).
+      // valor "sin activar" acá.
       tiene_fase_grupos: false,
       cantidad_grupos: null,
       avanzan_por_grupo: null,
@@ -476,8 +487,12 @@ export default function CreateTournamentPage() {
       puntos_victoria_2_1: 3,
       formato_clan_war: "simple",
       ventana_revelacion_minutos: 30,
-      jugadores_por_set: 3,
-      mapas_por_set: 2,
+      // Migración 192, a pedido del usuario: jugadores_por_set/
+      // mapas_por_set vuelven a ser elegibles acá (ver "¿Cuántos
+      // jugadores por equipo?"/"Best Of de cada set" más arriba) --
+      // solo tienen efecto real cuando esClanes (formato "wtl").
+      jugadores_por_set: esClanes ? Math.min(3, Math.max(1, Number(jugadoresPorEquipo) || 1)) : 3,
+      mapas_por_set: Number(mapasPorSet) || 1,
       liga_id: esLiga ? ligaId || null : null,
       swiss_rondas_totales: modo === "suizo" && swissRondas ? Number(swissRondas) : null,
     };
@@ -800,27 +815,84 @@ export default function CreateTournamentPage() {
             </div>
 
             {/* Migración 192, a pedido del usuario: vuelve a preguntarse
-                acá (mismo selector/pattern que "Jugadores/Clanes" en el
-                Panel de organizador, ver TournamentDetailPage.tsx) --
-                1v1 sigue siendo el default. */}
+                acá. "Clanes" arma el mismo sistema de lineup/sets por
+                jugador que ya usan los torneos "wtl"/First Stand -- cada
+                clan presenta N jugadores, cada uno juega su propio mapa
+                1v1 contra la posición equivalente del rival (todavía no
+                existe la modalidad de varios jugadores en el MISMO mapa
+                al mismo tiempo). */}
             <div className="form-group">
               <span className="form-label">¿Jugadores o clanes?</span>
               <div className="pill-radio-group">
-                {(["1v1", "2v2", "3v3", "4v4"] as const).map((f) => (
-                  <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
-                    <input
-                      type="radio"
-                      className="sr-only"
-                      name="torneo-formato"
-                      checked={formato === f}
-                      onChange={() => setFormato(f)}
-                    />
-                    {f === "1v1" ? "Individual (1v1)" : f}
-                  </label>
-                ))}
+                <label className={`pill-radio-option ${!esClanes ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="torneo-jugadores-o-clanes"
+                    checked={!esClanes}
+                    onChange={() => setEsClanes(false)}
+                  />
+                  Individual (1v1)
+                </label>
+                <label className={`pill-radio-option ${esClanes ? "selected" : ""}`}>
+                  <input
+                    type="radio"
+                    className="sr-only"
+                    name="torneo-jugadores-o-clanes"
+                    checked={esClanes}
+                    onChange={() => setEsClanes(true)}
+                  />
+                  Clanes
+                </label>
               </div>
-              <p className="form-hint">2v2/3v3/4v4 inscribe clanes en vez de jugadores individuales.</p>
+              <p className="form-hint">
+                Clanes inscribe equipos en vez de jugadores individuales -- cada clan arma su lineup,
+                cada jugador juega su propio mapa 1v1 contra la posición equivalente del rival.
+              </p>
             </div>
+
+            {esClanes && (
+              <>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="torneo-jugadores-por-equipo">
+                    ¿Cuántos jugadores por equipo?
+                  </label>
+                  <input
+                    id="torneo-jugadores-por-equipo"
+                    className="form-input"
+                    type="number"
+                    min={1}
+                    max={3}
+                    value={jugadoresPorEquipo}
+                    onChange={(e) => setJugadoresPorEquipo(e.target.value)}
+                  />
+                  <p className="form-hint">
+                    Hasta 3 por ahora (un set 1v1 por posición, mismo sistema que First Stand). Cada
+                    titular juega su propio set 1v1 contra la posición equivalente del rival. Es
+                    editable más adelante, directo desde el lineup de cada Clan War.
+                  </p>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="torneo-mapas-por-set">
+                    Best Of de cada set
+                  </label>
+                  <input
+                    id="torneo-mapas-por-set"
+                    className="form-input"
+                    type="number"
+                    min={1}
+                    placeholder="1"
+                    value={mapasPorSet}
+                    onChange={(e) => setMapasPorSet(e.target.value)}
+                  />
+                  <p className="form-hint">
+                    Cuántos mapas como máximo se juegan en cada set -- se cierra apenas alguien alcanza
+                    la mayoría necesaria. En blanco queda en Bo1 (un solo mapa).
+                  </p>
+                </div>
+              </>
+            )}
 
             <div className="form-group">
               <span className="form-label">Modo de juego</span>
