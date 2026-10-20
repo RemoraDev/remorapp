@@ -189,6 +189,11 @@ export default function BracketView({
   // escalona cada partido en zigzag vía CSS ([data-estructura="escalera"],
   // ver halcon.css) -- no hace falta ninguna función de render propia.
   const esEmbudo = estructura === "embudo";
+  // Migración 189: qué sub-vista del modo "llave grande" (Grupo
+  // A/Grupo B/Vista panorámica, ver esLlaveGrande más abajo) está
+  // activa -- declarado acá arriba (no junto a esLlaveGrande) porque el
+  // useLayoutEffect de abajo necesita re-medir cuando cambia.
+  const [vistaGrupo, setVistaGrupo] = useState<"a" | "b" | "panoramica">("a");
 
   useLayoutEffect(() => {
     if (!muestraConectores) return;
@@ -329,7 +334,7 @@ export default function BracketView({
     medir();
     window.addEventListener("resize", medir);
     return () => window.removeEventListener("resize", medir);
-  }, [matches, estiloLinea, muestraConectores, esVertical, estructura]);
+  }, [matches, estiloLinea, muestraConectores, esVertical, estructura, vistaGrupo]);
 
   // El partido por el tercer lugar (migración 046) comparte la ronda
   // de la final pero se muestra aparte, en su propia cajita -- se
@@ -343,6 +348,25 @@ export default function BracketView({
   // otro valor, se sigue viendo exactamente como antes (una sola
   // llave, sin secciones).
   const esEliminacionDoble = matches.some((m) => m.bracket_tipo !== "ganadores" && !m.es_tercer_lugar);
+
+  // Migración 189, a pedido del usuario: a partir de 16 participantes
+  // (ronda 1 con 8 partidos o más) una sola imagen de llave se vuelve
+  // difícil de leer -- se parte en grupos de 8 (Grupo A, Grupo B), cada
+  // uno su propia llave de 3 rondas completa, más una "Vista
+  // panorámica" que muestra ambos grupos juntos (mismo armado que
+  // "Embudo al centro", ver partidosParaEmbudo/renderEmbudo más abajo).
+  // Pisa cualquier Estructura elegida -- de ahí el "ya no toma ningún
+  // modelo" que reportó el usuario al llegar a este tamaño. Por ahora
+  // solo soporta exactamente 2 grupos (16 participantes); 24/32/64
+  // quedan para más adelante.
+  const esLlaveGrande =
+    !esEliminacionDoble &&
+    (() => {
+      const principales = matches.filter((m) => !m.es_tercer_lugar);
+      if (principales.length === 0) return false;
+      const rondaMinima = Math.min(...principales.map((m) => m.round));
+      return principales.filter((m) => m.round === rondaMinima).length >= 8;
+    })();
 
   // Migración 069: nombre tradicional según la distancia a la final --
   // "distancia 0" es la final, 1 semifinal, 2 cuartos, 3 octavos; más
@@ -545,13 +569,25 @@ export default function BracketView({
     return false;
   };
 
+  // Migración 188, a pedido del usuario: puntaje opcional (ej. "2-1")
+  // junto con el ganador -- borrador local por partido, se manda tal
+  // cual al RPC (que lo guarda solo si el partido efectivamente queda
+  // "jugado" en esta llamada, ver reportar_resultado() en la base).
+  const [scoreDraft, setScoreDraft] = useState<Record<string, { p1: string; p2: string }>>({});
+
   const handleReportar = async (matchId: string, ganadorId: string) => {
     setReportando(matchId);
     setErrores((prev) => ({ ...prev, [matchId]: "" }));
 
+    const borrador = scoreDraft[matchId];
+    const resultado1 = borrador?.p1.trim() ? Number(borrador.p1) : null;
+    const resultado2 = borrador?.p2.trim() ? Number(borrador.p2) : null;
+
     const { error } = await supabase.rpc("reportar_resultado", {
       p_match_id: matchId,
       p_ganador_id: ganadorId,
+      p_resultado_participant1: resultado1,
+      p_resultado_participant2: resultado2,
     });
 
     setReportando(null);
@@ -600,7 +636,10 @@ export default function BracketView({
         {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
         <div className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""}`}>
           {renderInsignia(match.participant1_id)}
-          {nombreDe(match.participant1_id)}
+          <span className="bracket-slot-nombre">{nombreDe(match.participant1_id)}</span>
+          {match.resultado_participant1 !== null && (
+            <span className="bracket-slot-score">{match.resultado_participant1}</span>
+          )}
         </div>
         <div
           className={`bracket-slot ${
@@ -608,7 +647,10 @@ export default function BracketView({
           }`}
         >
           {renderInsignia(match.participant2_id)}
-          {nombreDe(match.participant2_id)}
+          <span className="bracket-slot-nombre">{nombreDe(match.participant2_id)}</span>
+          {match.resultado_participant2 !== null && (
+            <span className="bracket-slot-score">{match.resultado_participant2}</span>
+          )}
         </div>
 
         {match.status === "en_disputa" && (
@@ -652,6 +694,40 @@ export default function BracketView({
           !match.clan_war_id &&
           puedeReportar(match) && (
             <div className="bracket-report">
+              {/* Migración 188, a pedido del usuario: puntaje opcional
+                  (mapas/rondas ganadas) -- se puede dejar vacío, el
+                  resultado se reporta igual solo con el botón de abajo. */}
+              <div className="bracket-report-score">
+                <input
+                  type="number"
+                  min={0}
+                  className="form-input bracket-report-score-input"
+                  placeholder="0"
+                  aria-label={`Puntaje de ${nombreDe(match.participant1_id)}`}
+                  value={scoreDraft[match.id]?.p1 ?? ""}
+                  onChange={(e) =>
+                    setScoreDraft((prev) => ({
+                      ...prev,
+                      [match.id]: { p1: e.target.value, p2: prev[match.id]?.p2 ?? "" },
+                    }))
+                  }
+                />
+                <span className="bracket-report-score-vs">-</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="form-input bracket-report-score-input"
+                  placeholder="0"
+                  aria-label={`Puntaje de ${nombreDe(match.participant2_id)}`}
+                  value={scoreDraft[match.id]?.p2 ?? ""}
+                  onChange={(e) =>
+                    setScoreDraft((prev) => ({
+                      ...prev,
+                      [match.id]: { p1: prev[match.id]?.p1 ?? "", p2: e.target.value },
+                    }))
+                  }
+                />
+              </div>
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -803,6 +879,61 @@ export default function BracketView({
       </div>
     );
   };
+
+  // Migración 189, a pedido del usuario: 16+ participantes pisa la
+  // Estructura elegida -- Grupo A/Grupo B, cada uno su propia llave de
+  // 3 rondas, más una Vista panorámica (mismo armado visual que
+  // "Embudo al centro", reutiliza renderEmbudo tal cual). El botón de
+  // pantalla completa ya existente (TournamentDetailPage.tsx) aplica a
+  // lo que esté elegido acá, sin ningún mecanismo nuevo.
+  if (esLlaveGrande) {
+    const partidosSinTercerLugar = matches.filter((m) => !m.es_tercer_lugar);
+    const { izquierda, derecha } = partidosParaEmbudo(partidosSinTercerLugar);
+
+    return (
+      <>
+        {renderBanner()}
+
+        <div className="bracket-grupos-tabs">
+          <button
+            type="button"
+            className={`bracket-grupos-tab ${vistaGrupo === "a" ? "selected" : ""}`}
+            onClick={() => setVistaGrupo("a")}
+          >
+            Grupo A
+          </button>
+          <button
+            type="button"
+            className={`bracket-grupos-tab ${vistaGrupo === "b" ? "selected" : ""}`}
+            onClick={() => setVistaGrupo("b")}
+          >
+            Grupo B
+          </button>
+          <button
+            type="button"
+            className={`bracket-grupos-tab ${vistaGrupo === "panoramica" ? "selected" : ""}`}
+            onClick={() => setVistaGrupo("panoramica")}
+          >
+            Vista panorámica
+          </button>
+        </div>
+
+        {vistaGrupo === "a" && renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a")}
+        {vistaGrupo === "b" && renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b")}
+        {vistaGrupo === "panoramica" && (
+          <>
+            {renderEmbudo()}
+            {partidoTercerLugar && (
+              <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
+                <div className="bracket-round-title">Partido por el 3er lugar</div>
+                {renderPartido(partidoTercerLugar)}
+              </div>
+            )}
+          </>
+        )}
+      </>
+    );
+  }
 
   if (esEmbudo && !esEliminacionDoble) {
     return (

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toPng } from "html-to-image";
 import confetti from "canvas-confetti";
@@ -10,7 +10,6 @@ import {
   Download,
   FileText,
   Upload,
-  Calendar,
   Users,
   X,
   ArrowLeft,
@@ -78,7 +77,7 @@ const CONFETTI_COLORES_CELEBRACION: Partial<Record<EstiloCelebracion, string[]>>
 };
 import type { AvatarForma } from "../types/profile";
 import type { BracketMatchRow } from "../types/bracket";
-import type { TemporadaRow, TorneoSolicitudEquipoRow } from "../types/teams";
+import type { TorneoSolicitudEquipoRow } from "../types/teams";
 
 // Representa un participante de la llave sea cual sea el formato del
 // torneo: en 1v1 es un jugador (userId, nombre y avatar de su perfil);
@@ -124,16 +123,6 @@ interface ParticipanteConNombre {
   imagenCelebracionUrl: string | null;
 }
 
-// Convierte una fecha ISO (como llega de la base) al formato que
-// entiende el atributo value/min de un <input type="datetime-local">
-// ("YYYY-MM-DDTHH:mm", en hora local) -- para poder usar la fecha de
-// inicio del torneo como piso del selector de fecha de fin.
-function fechaInicioComoInputLocal(fechaIso: string): string {
-  const d = new Date(fechaIso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
 // Íconos de las tarjetas del panel de organizador -- mismo estilo
 // lineal (viewBox 24x24, stroke currentColor) que ModoIcono.tsx, para
 // que la ficha del torneo se sienta parte de la misma app.
@@ -174,25 +163,6 @@ function IconoFormato() {
       <rect x="13.5" y="3.5" width="7" height="7" rx="1.3" />
       <rect x="8.5" y="13.5" width="7" height="7" rx="1.3" />
       <path d="M7 10.5v3M17 10.5v3M7 13.5h5M17 13.5h-5" />
-    </svg>
-  );
-}
-
-function IconoCuadro() {
-  return (
-    <svg {...iconoComun}>
-      <path d="M4 5h5M4 10h5M9 5v5M9 7.5h5" />
-      <path d="M4 15h5M4 20h5M9 15v5M9 17.5h5" />
-      <path d="M14 7.5v10" strokeDasharray="1.5 2.5" />
-    </svg>
-  );
-}
-
-function IconoPermisos() {
-  return (
-    <svg {...iconoComun}>
-      <path d="M12 3.5 5 6v5.5c0 4.4 2.9 7.6 7 9 4.1-1.4 7-4.6 7-9V6z" />
-      <path d="M9.3 12l1.9 1.9 3.6-3.8" />
     </svg>
   );
 }
@@ -373,13 +343,6 @@ export default function TournamentDetailPage() {
   const [respondiendoSolicitudId, setRespondiendoSolicitudId] = useState<string | null>(null);
   const [erroresResponderSolicitud, setErroresResponderSolicitud] = useState<Record<string, string>>({});
 
-  // --- Temporadas (migración 047): solo el organizador las administra ---
-  const [temporadas, setTemporadas] = useState<TemporadaRow[]>([]);
-  const [nombreTemporada, setNombreTemporada] = useState("");
-  const [fechaFinTemporada, setFechaFinTemporada] = useState("");
-  const [creandoTemporada, setCreandoTemporada] = useState(false);
-  const [errorTemporada, setErrorTemporada] = useState<string | null>(null);
-
   // Opciones avanzadas (migración 079): antes se elegían al crear el
   // torneo, ahora se ajustan en cualquier momento después, desde acá
   // -- exclusivo del organizador. tournaments_update_organizador (RLS
@@ -423,17 +386,6 @@ export default function TournamentDetailPage() {
   // confeti -- ahora además abre una tarjeta centrada con el
   // avatar/logo del campeón y una copa, más "gamer".
   const [mostrandoCelebracion, setMostrandoCelebracion] = useState(false);
-  const [guardandoInscripciones, setGuardandoInscripciones] = useState<string | null>(null);
-  const [temporadaRangosAbierta, setTemporadaRangosAbierta] = useState<string | null>(null);
-  const [rangosMmrForm, setRangosMmrForm] = useState<Record<string, string>>({});
-  const [guardandoRangos, setGuardandoRangos] = useState<string | null>(null);
-  const [errorRangos, setErrorRangos] = useState<string | null>(null);
-  // Migración 166: editar la fecha de fin de una temporada que se
-  // creó sin ella (ya no es obligatoria al crearla).
-  const [editandoFechaFinId, setEditandoFechaFinId] = useState<string | null>(null);
-  const [fechaFinEditada, setFechaFinEditada] = useState("");
-  const [guardandoFechaFin, setGuardandoFechaFin] = useState<string | null>(null);
-  const [errorFechaFin, setErrorFechaFin] = useState<string | null>(null);
 
   // Vencimiento automático de torneos sin actividad (migración 095).
   const [reactivandoTorneo, setReactivandoTorneo] = useState(false);
@@ -663,16 +615,6 @@ export default function TournamentDetailPage() {
       setPartidasGrupo([]);
       setPosiciones([]);
     }
-
-    // Temporadas (migración 047): públicas, pero solo el organizador
-    // las administra -- se traen siempre, así cualquiera puede ver
-    // qué temporada eligió un equipo aliado/mercenario más adelante.
-    const { data: temporadasData } = await supabase
-      .from("temporadas")
-      .select("*")
-      .eq("torneo_id", id)
-      .order("fecha_inicio", { ascending: false });
-    setTemporadas((temporadasData ?? []) as TemporadaRow[]);
 
     setLoading(false);
   }, [id]);
@@ -1101,51 +1043,6 @@ export default function TournamentDetailPage() {
     await cargarTorneo();
   };
 
-  // --- Temporadas (migración 047) ---
-  const handleCrearTemporada = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!torneo) return;
-    setErrorTemporada(null);
-
-    if (!nombreTemporada.trim()) {
-      setErrorTemporada("Escribe un nombre para la temporada.");
-      return;
-    }
-    // Migración 166, a pedido del usuario: la fecha de fin ya no es
-    // obligatoria -- se puede completar después (ver
-    // handleGuardarFechaFinTemporada más abajo).
-    if (fechaFinTemporada && new Date(fechaFinTemporada) <= new Date(torneo.fecha_inicio)) {
-      setErrorTemporada("La fecha de fin debe ser posterior a la fecha de inicio del torneo.");
-      return;
-    }
-
-    setCreandoTemporada(true);
-
-    // temporadas_insert_organizador (RLS) ya exige ser el creador del
-    // torneo o un administrador -- no hace falta una función aparte
-    // para un insert directo, mismo criterio que el resto de ajustes
-    // sueltos del organizador en esta página (abrir check-in, etc.).
-    // La fecha de inicio de la temporada es la misma del torneo -- no
-    // tiene sentido pedirla de nuevo por separado.
-    const { error } = await supabase.from("temporadas").insert({
-      torneo_id: torneo.id,
-      nombre: nombreTemporada.trim(),
-      fecha_inicio: torneo.fecha_inicio,
-      fecha_fin: fechaFinTemporada ? new Date(fechaFinTemporada).toISOString() : null,
-    });
-
-    setCreandoTemporada(false);
-
-    if (error) {
-      setErrorTemporada(error.message);
-      return;
-    }
-
-    setNombreTemporada("");
-    setFechaFinTemporada("");
-    await cargarTorneo();
-  };
-
   const handleReactivarTorneo = async () => {
     if (!torneo) return;
     setReactivandoTorneo(true);
@@ -1160,114 +1057,6 @@ export default function TournamentDetailPage() {
       return;
     }
 
-    await cargarTorneo();
-  };
-
-  const handleToggleInscripciones = async (temporadaId: string, abrir: boolean) => {
-    setGuardandoInscripciones(temporadaId);
-
-    const { error } = await supabase
-      .from("temporadas")
-      .update({ inscripciones_abiertas: abrir })
-      .eq("id", temporadaId);
-
-    setGuardandoInscripciones(null);
-
-    if (!error) await cargarTorneo();
-  };
-
-  const handleAbrirRangos = (temporada: TemporadaRow) => {
-    if (temporadaRangosAbierta === temporada.id) {
-      setTemporadaRangosAbierta(null);
-      return;
-    }
-    setTemporadaRangosAbierta(temporada.id);
-    setErrorRangos(null);
-
-    const valores: Record<string, string> = {};
-    for (const posicion of [1, 2, 3] as const) {
-      const rango = temporada.rangos_mmr_por_posicion?.find((r) => r.posicion === posicion);
-      valores[`${temporada.id}-${posicion}-min`] = rango ? String(rango.mmr_min) : "";
-      valores[`${temporada.id}-${posicion}-max`] = rango ? String(rango.mmr_max) : "";
-    }
-    setRangosMmrForm((prev) => ({ ...prev, ...valores }));
-  };
-
-  const handleGuardarRangos = async (temporadaId: string) => {
-    setErrorRangos(null);
-
-    const rangos: { posicion: 1 | 2 | 3; mmr_min: number; mmr_max: number }[] = [];
-    for (const posicion of [1, 2, 3] as const) {
-      const min = rangosMmrForm[`${temporadaId}-${posicion}-min`]?.trim();
-      const max = rangosMmrForm[`${temporadaId}-${posicion}-max`]?.trim();
-      // Una posición se guarda solo si tiene los dos valores -- dejar
-      // ambos vacíos significa "sin restricción para esa posición".
-      if (!min && !max) continue;
-      if (!min || !max || Number(min) > Number(max)) {
-        setErrorRangos(`La posición ${posicion} necesita un mínimo y un máximo válidos (mínimo ≤ máximo).`);
-        return;
-      }
-      rangos.push({ posicion, mmr_min: Number(min), mmr_max: Number(max) });
-    }
-
-    setGuardandoRangos(temporadaId);
-
-    // temporadas_update_organizador (RLS) ya exige ser el creador del
-    // torneo o un administrador.
-    const { error } = await supabase
-      .from("temporadas")
-      .update({ rangos_mmr_por_posicion: rangos.length > 0 ? rangos : null })
-      .eq("id", temporadaId);
-
-    setGuardandoRangos(null);
-
-    if (error) {
-      setErrorRangos(error.message);
-      return;
-    }
-
-    setTemporadaRangosAbierta(null);
-    await cargarTorneo();
-  };
-
-  const handleAbrirFechaFin = (temporada: TemporadaRow) => {
-    if (editandoFechaFinId === temporada.id) {
-      setEditandoFechaFinId(null);
-      return;
-    }
-    setEditandoFechaFinId(temporada.id);
-    setErrorFechaFin(null);
-    setFechaFinEditada("");
-  };
-
-  const handleGuardarFechaFin = async (temporadaId: string) => {
-    setErrorFechaFin(null);
-    if (!fechaFinEditada) {
-      setErrorFechaFin("Elige una fecha de fin.");
-      return;
-    }
-    if (!torneo || new Date(fechaFinEditada) <= new Date(torneo.fecha_inicio)) {
-      setErrorFechaFin("La fecha de fin debe ser posterior a la fecha de inicio del torneo.");
-      return;
-    }
-
-    setGuardandoFechaFin(temporadaId);
-
-    // temporadas_update_organizador (RLS) ya exige ser el creador del
-    // torneo o un administrador.
-    const { error } = await supabase
-      .from("temporadas")
-      .update({ fecha_fin: new Date(fechaFinEditada).toISOString() })
-      .eq("id", temporadaId);
-
-    setGuardandoFechaFin(null);
-
-    if (error) {
-      setErrorFechaFin(error.message);
-      return;
-    }
-
-    setEditandoFechaFinId(null);
     await cargarTorneo();
   };
 
@@ -2124,17 +1913,21 @@ export default function TournamentDetailPage() {
                     icon: <IconoFormato />,
                     visible: torneo.modo === "eliminacion_simple" && !torneo.formato_liga && torneo.estado === "abierto",
                   },
-                  { key: "cuadro", label: "Cuadro", icon: <IconoCuadro />, visible: true },
+                  // A pedido del usuario: "Cuadro" y "Permisos" se
+                  // fusionan en una sola pestaña ("Configuración").
+                  { key: "configuracion", label: "Configuración", icon: <IconoEngranaje />, visible: true },
                   // A pedido del usuario: todo el picker de
                   // estructura/fondo/línea/título/insignia (antes
                   // mezclado dentro de "Cuadro") pasa a su propia
                   // pestaña, organizado en sub-pestañas (ver
                   // BracketStylePicker.tsx).
                   { key: "apariencia", label: "Apariencia", icon: <Palette size={16} />, visible: true },
-                  { key: "permisos", label: "Permisos", icon: <IconoPermisos />, visible: true },
+                  // A pedido del usuario: "Estilo de celebración" +
+                  // "Imagen de celebración" (antes mezclados dentro de
+                  // "Cuadro") pasan a su propia pestaña.
+                  { key: "celebracion", label: "Celebración", icon: <Trophy size={16} />, visible: true },
                   { key: "visualizacion", label: "Visualización", icon: <IconoVisualizacion />, visible: true },
                   { key: "reglamento", label: "Reglamento", icon: <FileText size={16} />, visible: true },
-                  { key: "temporadas", label: "Temporadas", icon: <Calendar size={16} />, visible: true },
                   // A pedido del usuario: acción peligrosa, su propia
                   // pestaña en rojo, al final de todas las demás.
                   { key: "eliminar", label: "Eliminar torneo", icon: <Trash2 size={16} />, visible: true, peligro: true },
@@ -2313,13 +2106,13 @@ export default function TournamentDetailPage() {
                   </div>
                 )}
 
-                {tabActivo === "cuadro" && (
+                {tabActivo === "configuracion" && (
                 <div className="organizer-panel-card">
                   <div className="organizer-panel-card-header">
                     <span className="organizer-panel-card-icon">
-                      <IconoCuadro />
+                      <IconoEngranaje />
                     </span>
-                    <h3 className="organizer-panel-card-title">Cuadro</h3>
+                    <h3 className="organizer-panel-card-title">Configuración</h3>
                   </div>
                   <div className="organizer-panel-card-body">
                     <OpcionToggle
@@ -2356,7 +2149,32 @@ export default function TournamentDetailPage() {
                       </select>
                       <p className="form-hint">Solo tiene efecto la próxima vez que generes la llave.</p>
                     </div>
+                    {/* A pedido del usuario: "Permisos" se fusiona
+                        acá adentro, en vez de ser su propia pestaña. */}
+                    <OpcionToggle
+                      label="Autoreporte de resultados"
+                      hint="Los participantes pueden reportar su propio resultado."
+                      checked={torneo.permite_autoreporte}
+                      onChange={(checked) => handleActualizarOpcionAvanzada("permite_autoreporte", checked)}
+                    />
+                    <OpcionToggle
+                      label="Excluir del buscador público"
+                      checked={torneo.excluido_de_busqueda}
+                      onChange={(checked) => handleActualizarOpcionAvanzada("excluido_de_busqueda", checked)}
+                    />
+                  </div>
+                </div>
+                )}
 
+                {tabActivo === "celebracion" && (
+                <div className="organizer-panel-card">
+                  <div className="organizer-panel-card-header">
+                    <span className="organizer-panel-card-icon">
+                      <Trophy size={18} />
+                    </span>
+                    <h3 className="organizer-panel-card-title">Celebración</h3>
+                  </div>
+                  <div className="organizer-panel-card-body">
                     {/* Migración 183, a pedido del usuario: "modelos" de
                         la tarjeta de celebración del campeón ("Ver
                         celebración") -- inspirados en momentos de
@@ -2460,30 +2278,6 @@ export default function TournamentDetailPage() {
                 </div>
                 )}
 
-                {tabActivo === "permisos" && (
-                <div className="organizer-panel-card">
-                  <div className="organizer-panel-card-header">
-                    <span className="organizer-panel-card-icon">
-                      <IconoPermisos />
-                    </span>
-                    <h3 className="organizer-panel-card-title">Permisos</h3>
-                  </div>
-                  <div className="organizer-panel-card-body">
-                    <OpcionToggle
-                      label="Autoreporte de resultados"
-                      hint="Los participantes pueden reportar su propio resultado."
-                      checked={torneo.permite_autoreporte}
-                      onChange={(checked) => handleActualizarOpcionAvanzada("permite_autoreporte", checked)}
-                    />
-                    <OpcionToggle
-                      label="Excluir del buscador público"
-                      checked={torneo.excluido_de_busqueda}
-                      onChange={(checked) => handleActualizarOpcionAvanzada("excluido_de_busqueda", checked)}
-                    />
-                  </div>
-                </div>
-                )}
-
                 {tabActivo === "visualizacion" && (
                 <div className="organizer-panel-card">
                   <div className="organizer-panel-card-header">
@@ -2553,157 +2347,6 @@ export default function TournamentDetailPage() {
                     las alianzas entre equipos tengan un límite de
                     tiempo real. Los equipos las eligen al proponer una
                     Clan War, no acá. */}
-                {tabActivo === "temporadas" && (
-                <div className="organizer-panel-card">
-                  <div className="organizer-panel-card-header">
-                    <span className="organizer-panel-card-icon">
-                      <Calendar size={18} />
-                    </span>
-                    <h3 className="organizer-panel-card-title">Temporadas</h3>
-                  </div>
-                  <div className="organizer-panel-card-body">
-                    {temporadas.length === 0 ? (
-                      <p className="detail-empty">Todavía no creaste ninguna temporada para este torneo.</p>
-                    ) : (
-                      <div className="detail-participant-list">
-                        {temporadas.map((t) => (
-                          <div key={t.id} className="reto-item">
-                            <p className="reto-desc">
-                              {t.nombre}
-                              <span className="reto-status">
-                                {t.inscripciones_abiertas ? "Inscripciones abiertas" : "Inscripciones cerradas"}
-                              </span>
-                            </p>
-                            <p className="tournament-card-meta">
-                              {formatFecha(t.fecha_inicio)} —{" "}
-                              {t.fecha_fin ? formatFecha(t.fecha_fin) : "sin fecha de fin todavía"}
-                            </p>
-                            <div className="bracket-report">
-                              <button
-                                type="button"
-                                className="btn btn-ghost"
-                                disabled={guardandoInscripciones === t.id}
-                                onClick={() => handleToggleInscripciones(t.id, !t.inscripciones_abiertas)}
-                              >
-                                {t.inscripciones_abiertas ? "Cerrar inscripciones" : "Abrir inscripciones"}
-                              </button>
-                              <button type="button" className="btn btn-ghost" onClick={() => handleAbrirRangos(t)}>
-                                {temporadaRangosAbierta === t.id ? "Cerrar rangos de MMR" : "Rangos de MMR por posición"}
-                              </button>
-                              <button type="button" className="btn btn-ghost" onClick={() => handleAbrirFechaFin(t)}>
-                                {editandoFechaFinId === t.id
-                                  ? "Cancelar"
-                                  : t.fecha_fin
-                                    ? "Cambiar fecha de fin"
-                                    : "Agregar fecha de fin"}
-                              </button>
-                            </div>
-
-                            {editandoFechaFinId === t.id && (
-                              <div className="form-group">
-                                {errorFechaFin && <div className="form-error">{errorFechaFin}</div>}
-                                <input
-                                  className="form-input"
-                                  type="datetime-local"
-                                  min={fechaInicioComoInputLocal(torneo.fecha_inicio)}
-                                  value={fechaFinEditada}
-                                  onChange={(e) => setFechaFinEditada(e.target.value)}
-                                />
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                  disabled={guardandoFechaFin === t.id}
-                                  onClick={() => handleGuardarFechaFin(t.id)}
-                                >
-                                  {guardandoFechaFin === t.id ? "Guardando..." : "Guardar fecha de fin"}
-                                </button>
-                              </div>
-                            )}
-
-                            {temporadaRangosAbierta === t.id && (
-                              <div className="form-group">
-                                <p className="tournament-card-meta">
-                                  Rango de mmr_equipos permitido para cada posición del set (formato WTL). Deja
-                                  una posición vacía (mínimo y máximo) para no restringirla.
-                                </p>
-                                {errorRangos && <div className="form-error">{errorRangos}</div>}
-                                {([1, 2, 3] as const).map((posicion) => (
-                                  <div key={posicion} className="form-group">
-                                    <label className="form-label">Posición {posicion}</label>
-                                    <input
-                                      className="form-input"
-                                      type="number"
-                                      placeholder="MMR mínimo"
-                                      value={rangosMmrForm[`${t.id}-${posicion}-min`] ?? ""}
-                                      onChange={(e) =>
-                                        setRangosMmrForm((prev) => ({ ...prev, [`${t.id}-${posicion}-min`]: e.target.value }))
-                                      }
-                                    />
-                                    <input
-                                      className="form-input"
-                                      type="number"
-                                      placeholder="MMR máximo"
-                                      value={rangosMmrForm[`${t.id}-${posicion}-max`] ?? ""}
-                                      onChange={(e) =>
-                                        setRangosMmrForm((prev) => ({ ...prev, [`${t.id}-${posicion}-max`]: e.target.value }))
-                                      }
-                                    />
-                                  </div>
-                                ))}
-                                <button
-                                  type="button"
-                                  className="btn btn-primary"
-                                  disabled={guardandoRangos === t.id}
-                                  onClick={() => handleGuardarRangos(t.id)}
-                                >
-                                  {guardandoRangos === t.id ? "Guardando..." : "Guardar rangos de MMR"}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <form className="auth-form" onSubmit={handleCrearTemporada}>
-                      {errorTemporada && <div className="form-error">{errorTemporada}</div>}
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="temporada-nombre">
-                          Nombre de la nueva temporada
-                        </label>
-                        <input
-                          id="temporada-nombre"
-                          className="form-input"
-                          type="text"
-                          placeholder="Escribí el nombre de la temporada"
-                          value={nombreTemporada}
-                          onChange={(e) => setNombreTemporada(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="temporada-fin">
-                          Fecha de fin (opcional, se puede agregar después)
-                        </label>
-                        <p className="form-hint">
-                          Arranca el mismo día que el torneo ({formatFecha(torneo.fecha_inicio)}).
-                        </p>
-                        <input
-                          id="temporada-fin"
-                          className="form-input"
-                          type="datetime-local"
-                          min={fechaInicioComoInputLocal(torneo.fecha_inicio)}
-                          value={fechaFinTemporada}
-                          onChange={(e) => setFechaFinTemporada(e.target.value)}
-                        />
-                      </div>
-                      <button type="submit" className="btn btn-ghost btn-block" disabled={creandoTemporada}>
-                        {creandoTemporada ? "Creando..." : "Crear temporada"}
-                      </button>
-                    </form>
-                  </div>
-                </div>
-                )}
-
                 {tabActivo === "eliminar" && (
                 <div className="organizer-panel-card organizer-panel-card-peligro">
                   <div className="organizer-panel-card-header">

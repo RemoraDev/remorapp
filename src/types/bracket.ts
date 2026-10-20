@@ -31,4 +31,10 @@ export interface BracketMatchRow {
   // capitanes) -- no null significa que el resultado se carga desde
   // ahí, no con el botón "Ganó X" de siempre.
   clan_war_id: string | null;
+  // Migración 188, a pedido del usuario: puntaje opcional (mapas o
+  // rondas ganadas por cada lado, ej. 2-1) -- se carga junto con el
+  // ganador al reportar, null si no se cargó ninguno. No existe
+  // validación de formato Bo3/Bo5 acá, es solo informativo.
+  resultado_participant1: number | null;
+  resultado_participant2: number | null;
 }

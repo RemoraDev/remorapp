@@ -3877,9 +3877,36 @@ html.es-escritorio .player-detail-panel-inline {
   /* Migración 185, a pedido del usuario: fuente personalizable -- sin
      elegir ninguna, usa la fuente de siempre (la que ya heredaba). */
   font-family: var(--fuente-texto-personalizada, inherit);
+}
+
+/* Migración 188: el nombre es el que se trunca con "...", no toda la
+   fila -- así el puntaje (ver .bracket-slot-score) siempre queda
+   visible en vez de recortarse junto con un nombre largo. */
+.bracket-slot-nombre {
+  flex: 1;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Migración 188, a pedido del usuario: puntaje (mapas/rondas ganadas)
+   junto al nombre, para saber por cuánto ganó -- solo aparece si se
+   cargó un número al reportar. */
+.bracket-slot-score {
+  flex-shrink: 0;
+  min-width: 1.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.bracket-slot.winner .bracket-slot-score {
+  background: rgba(var(--h-accent-rgb), 0.2);
+  color: var(--color-accent);
 }
 
 /* Separa visualmente a los dos participantes del cruce -- antes eran
@@ -3947,6 +3974,28 @@ html.es-escritorio .player-detail-panel-inline {
   margin-top: 0.5rem;
 }
 
+/* Migración 188, a pedido del usuario: puntaje opcional antes de
+   reportar el ganador -- dos números chicos con un guión al medio,
+   nada invasivo si se deja vacío. */
+.bracket-report-score {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.bracket-report-score-input {
+  width: 2.75rem;
+  padding: 0.3rem 0.4rem;
+  text-align: center;
+  font-size: 0.8rem;
+}
+
+.bracket-report-score-vs {
+  color: var(--color-text-faint);
+  font-size: 0.75rem;
+}
+
 /* .bracket-report reutiliza .btn-ghost (transparente, sin borde, solo
    texto de color) -- perfecto para un botón secundario suelto en medio
    de un formulario, pero acá termina pareciendo texto plano, no un
@@ -4003,6 +4052,41 @@ html.es-escritorio .player-detail-panel-inline {
    overflow: hidden), así que no hay riesgo de recortar nada. */
 .bracket[data-estructura="escalera"] .bracket-match {
   transform: translateY(calc(var(--escalon-index, 0) * 1.1rem));
+}
+
+/* ---------- Llave grande, 16+ participantes (migración 189) ---------- */
+/* A pedido del usuario: Grupo A/Grupo B/Vista panorámica -- misma
+   estética de píldoras que .organizer-panel-tabs, para que se note que
+   es un control de navegación, no parte de la llave en sí. */
+.bracket-grupos-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.bracket-grupos-tab {
+  padding: 0.55rem 1.1rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-panel);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.bracket-grupos-tab:hover {
+  color: var(--color-text);
+  border-color: var(--color-accent-soft);
+}
+
+.bracket-grupos-tab.selected {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
 }
 
 /* ---------- Estructura "embudo al centro" (migración 177) ---------- */
