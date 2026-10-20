@@ -1798,30 +1798,30 @@ export default function TournamentDetailPage() {
         Volver a eventos
       </Link>
 
-      <div className="detail-badges">
-        <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
-        <span className={`badge ${torneo.publico ? "badge-public" : "badge-private"}`}>
-          {torneo.publico ? "Público" : "Privado"}
-        </span>
-        <span className={`badge badge-estado-${torneo.estado}`}>{ESTADO_LABEL[torneo.estado]}</span>
-      </div>
+      {/* A pedido del usuario: título, badges y Cupos/Inicio/Pozo en una
+          sola fila -- título a la izquierda, badges al medio, cupos a
+          la derecha (misma alineación que "Panel de control", justo
+          abajo en .detail-tabs-row). Antes eran 3 filas apiladas. */}
+      <div className="detail-header-row">
+        <div className="detail-header-titulo">
+          <h1 className="section-title">{torneo.nombre}</h1>
+          {/* A pedido del usuario: "Copiar URL para OBS" pasa de su
+              propio bloque (con el texto explicando qué hacer con la URL
+              en OBS) a vivir pegado al título, a la izquierda. */}
+          <button type="button" className="btn btn-ghost detail-obs-copy-btn" onClick={handleCopiarUrlObs}>
+            {urlObsCopiada ? "¡Copiado!" : "Copiar URL para OBS"}
+          </button>
+        </div>
 
-      {/* A pedido del usuario: Cupos/Inicio/Pozo quedan chicos y pegados
-          a la izquierda, debajo del título -- antes era una caja más
-          grande al lado. El texto largo de descripción del modo
-          (Eliminación simple -- "Quien pierde..." etc.) se saca del
-          todo, ya se explica en el Panel de control si hace falta. */}
-      <div className="detail-title-row">
-        <h1 className="section-title">{torneo.nombre}</h1>
-        {/* A pedido del usuario: "Copiar URL para OBS" pasa de su
-            propio bloque (con el texto explicando qué hacer con la URL
-            en OBS) a vivir pegado al título, a la izquierda. */}
-        <button type="button" className="btn btn-ghost detail-obs-copy-btn" onClick={handleCopiarUrlObs}>
-          {urlObsCopiada ? "¡Copiado!" : "Copiar URL para OBS"}
-        </button>
-      </div>
+        <div className="detail-badges">
+          <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
+          <span className={`badge ${torneo.publico ? "badge-public" : "badge-private"}`}>
+            {torneo.publico ? "Público" : "Privado"}
+          </span>
+          <span className={`badge badge-estado-${torneo.estado}`}>{ESTADO_LABEL[torneo.estado]}</span>
+        </div>
 
-      <div className="detail-stats detail-stats-chica">
+        <div className="detail-stats detail-stats-chica">
         {/* Migración 168, a pedido del usuario: si no se cargó pozo de
             premios, ni se menciona el tema -- antes mostraba "Pozo:
             Sin premio en efectivo" igual, dando a entender que el
@@ -1863,6 +1863,7 @@ export default function TournamentDetailPage() {
             <p className="featured-stat-value">{formatFecha(torneo.finalizado_en)}</p>
           </div>
         )}
+        </div>
       </div>
 
       {/* Vencimiento automático de torneos sin actividad (migración
@@ -2805,18 +2806,11 @@ export default function TournamentDetailPage() {
                 </p>
               ) : (
                 <>
-                  {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-                    <>
-                      <p className="form-success">
-                        <Trophy className="icon-inline" />Campeón:{" "}
-                        {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                          "Jugador de RemorApp"}
-                      </p>
-                      <button type="button" className="btn btn-ghost" onClick={handleVerCelebracion}>
-                        Ver celebración
-                      </button>
-                    </>
-                  )}
+                  {/* Migración 194, a pedido del usuario: el banner
+                      "Campeón: X" + "Ver celebración" se elimina -- la
+                      celebración ahora se abre directo al pinchar el
+                      nombre del campeón en la llave (ver BracketView.tsx,
+                      onClickCampeon). */}
                   {torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id && (
                     <p className="tournament-card-meta">
                       <Medal className="icon-inline" />Tercer lugar:{" "}
@@ -2890,6 +2884,8 @@ export default function TournamentDetailPage() {
                           onCambio={cargarTorneo}
                           miEquipoTag={miEquipo?.teamTag ?? null}
                           miParticipantId={participantes.find((p) => p.teamId === miEquipo?.team_id)?.id ?? null}
+                          campeonParticipantId={torneo.campeon_participant_id}
+                          onClickCampeon={handleVerCelebracion}
                         />
                       </div>
                     </>
@@ -2909,18 +2905,10 @@ export default function TournamentDetailPage() {
           <h2 className="detail-subtitle">Suizo</h2>
           {errorSuizo && <div className="form-error">{errorSuizo}</div>}
 
-          {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-            <>
-              <p className="form-success">
-                <Trophy className="icon-inline" />Campeón:{" "}
-                {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                  "Jugador de RemorApp"}
-              </p>
-              <button type="button" className="btn btn-ghost" onClick={handleVerCelebracion}>
-                Ver celebración
-              </button>
-            </>
-          )}
+          {/* Migración 194, a pedido del usuario: el banner "Campeón: X"
+              + "Ver celebración" se elimina -- la celebración ahora se
+              abre directo al pinchar el nombre del campeón en la
+              llave/tabla. */}
 
           {torneo.estado === "abierto" ? (
             esOrganizador && (
@@ -2997,18 +2985,10 @@ export default function TournamentDetailPage() {
           <h2 className="detail-subtitle">Todos contra todos</h2>
           {errorTodosContraTodos && <div className="form-error">{errorTodosContraTodos}</div>}
 
-          {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-            <>
-              <p className="form-success">
-                <Trophy className="icon-inline" />Campeón:{" "}
-                {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                  "Jugador de RemorApp"}
-              </p>
-              <button type="button" className="btn btn-ghost" onClick={handleVerCelebracion}>
-                Ver celebración
-              </button>
-            </>
-          )}
+          {/* Migración 194, a pedido del usuario: el banner "Campeón: X"
+              + "Ver celebración" se elimina -- la celebración ahora se
+              abre directo al pinchar el nombre del campeón en la
+              llave/tabla. */}
 
           {torneo.estado === "abierto" && (
             <>
@@ -3127,18 +3107,10 @@ export default function TournamentDetailPage() {
           <h2 className="detail-subtitle">Tabla de posiciones</h2>
           {errorLeaderboard && <div className="form-error">{errorLeaderboard}</div>}
 
-          {torneo.estado === "finalizado" && torneo.campeon_participant_id && (
-            <>
-              <p className="form-success">
-                <Trophy className="icon-inline" />Campeón:{" "}
-                {participantes.find((p) => p.id === torneo.campeon_participant_id)?.nombre ??
-                  "Jugador de RemorApp"}
-              </p>
-              <button type="button" className="btn btn-ghost" onClick={handleVerCelebracion}>
-                Ver celebración
-              </button>
-            </>
-          )}
+          {/* Migración 194, a pedido del usuario: el banner "Campeón: X"
+              + "Ver celebración" se elimina -- la celebración ahora se
+              abre directo al pinchar el nombre del campeón en la
+              llave/tabla. */}
 
           <table className="group-standings-table ranking-table">
             <thead>

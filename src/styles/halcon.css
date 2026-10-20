@@ -893,10 +893,28 @@ a.eventos-tab:hover {
   }
 }
 
-/* A pedido del usuario: "Copiar URL para OBS" pasa a vivir pegado al
-   título del torneo (antes era su propio bloque debajo, con un texto
-   explicando qué hacer con la URL en OBS que ya no hace falta). */
-.detail-title-row {
+/* A pedido del usuario: título, badges (1v1/Público/Finalizado) y
+   Cupos/Inicio/Fin en una sola fila -- título a la izquierda, badges
+   al medio, cupos a la derecha (misma alineación que "Panel de
+   control", justo abajo en .detail-tabs-row). Antes eran 3 filas
+   apiladas. Los hijos reusan .detail-badges/.detail-stats-chica tal
+   cual (compartidas con otras páginas), solo se les saca el margen
+   que asumía estar apiladas -- acá ya lo da el gap del flex padre. */
+.detail-header-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.detail-header-row .detail-badges,
+.detail-header-row .detail-stats {
+  margin: 0;
+}
+
+.detail-header-titulo {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -3257,6 +3275,17 @@ html.es-escritorio .player-detail-panel-inline {
   text-align: center;
   border-radius: var(--radius-xl);
   overflow: hidden;
+  /* A pedido del usuario: entrada animada compartida por los 10
+     modelos -- cada uno le suma, además, su propio brillo ambiente
+     (ver [data-estilo-celebracion="X"] más abajo, que repite esta
+     misma animación junto a la suya: "animation" no se combina solo,
+     hay que repetir las dos en la regla más específica). */
+  animation: celebracion-entrada 0.4s ease-out;
+}
+
+@keyframes celebracion-entrada {
+  from { opacity: 0; transform: scale(0.92) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .celebracion-campeon-copa {
@@ -3317,6 +3346,11 @@ html.es-escritorio .player-detail-panel-inline {
   border: 1px solid rgba(253, 224, 71, 0.5);
   background: radial-gradient(circle at 50% 0%, rgba(253, 224, 71, 0.18), transparent 60%), var(--color-panel);
   box-shadow: 0 0 60px rgba(253, 224, 71, 0.25), 0 24px 60px rgba(0, 0, 0, 0.55);
+  animation: celebracion-entrada 0.4s ease-out, celebracion-glow-dorado 2.6s ease-in-out infinite;
+}
+@keyframes celebracion-glow-dorado {
+  0%, 100% { box-shadow: 0 0 60px rgba(253, 224, 71, 0.25), 0 24px 60px rgba(0, 0, 0, 0.55); }
+  50% { box-shadow: 0 0 80px rgba(253, 224, 71, 0.4), 0 24px 60px rgba(0, 0, 0, 0.55); }
 }
 .celebracion-campeon[data-estilo-celebracion="dorado"] .celebracion-campeon-copa {
   color: #fde047;
@@ -3337,6 +3371,11 @@ html.es-escritorio .player-detail-panel-inline {
   background: radial-gradient(circle at 50% 0%, rgba(29, 78, 216, 0.4), transparent 60%),
     linear-gradient(165deg, #0b1330 0%, #152457 100%);
   box-shadow: 0 0 60px rgba(29, 78, 216, 0.35), 0 24px 60px rgba(0, 0, 0, 0.6);
+  animation: celebracion-entrada 0.4s ease-out, celebracion-glow-victory 2.6s ease-in-out infinite;
+}
+@keyframes celebracion-glow-victory {
+  0%, 100% { box-shadow: 0 0 60px rgba(29, 78, 216, 0.35), 0 24px 60px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 85px rgba(29, 78, 216, 0.55), 0 24px 60px rgba(0, 0, 0, 0.6); }
 }
 .celebracion-campeon[data-estilo-celebracion="victory_royale"] .celebracion-campeon-copa {
   color: #facc15;
@@ -3359,6 +3398,11 @@ html.es-escritorio .player-detail-panel-inline {
   border: 1px solid rgba(239, 68, 68, 0.55);
   background: radial-gradient(circle at 50% 0%, rgba(239, 68, 68, 0.3), transparent 60%), var(--color-panel);
   box-shadow: 0 0 60px rgba(239, 68, 68, 0.3), 0 24px 60px rgba(0, 0, 0, 0.55);
+  animation: celebracion-entrada 0.4s ease-out, celebracion-glow-pentakill 2s ease-in-out infinite;
+}
+@keyframes celebracion-glow-pentakill {
+  0%, 100% { box-shadow: 0 0 60px rgba(239, 68, 68, 0.3), 0 24px 60px rgba(0, 0, 0, 0.55); }
+  50% { box-shadow: 0 0 85px rgba(239, 68, 68, 0.5), 0 24px 60px rgba(0, 0, 0, 0.55); }
 }
 .celebracion-campeon[data-estilo-celebracion="pentakill"] .celebracion-campeon-copa {
   color: #ef4444;
@@ -3387,6 +3431,11 @@ html.es-escritorio .player-detail-panel-inline {
   border: 1px solid rgba(249, 115, 22, 0.5);
   background: linear-gradient(135deg, #1a1208 0%, #241406 60%, #140b03 100%);
   box-shadow: 0 0 50px rgba(249, 115, 22, 0.25), 0 24px 60px rgba(0, 0, 0, 0.6);
+  animation: celebracion-entrada 0.4s ease-out, celebracion-glow-ace 2.2s ease-in-out infinite;
+}
+@keyframes celebracion-glow-ace {
+  0%, 100% { box-shadow: 0 0 50px rgba(249, 115, 22, 0.25), 0 24px 60px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 75px rgba(249, 115, 22, 0.45), 0 24px 60px rgba(0, 0, 0, 0.6); }
 }
 .celebracion-campeon[data-estilo-celebracion="ace"] .celebracion-campeon-copa {
   color: #f97316;
@@ -3419,11 +3468,17 @@ html.es-escritorio .player-detail-panel-inline {
   box-shadow: 0 0 24px rgba(34, 211, 238, 0.5);
 }
 .celebracion-campeon[data-estilo-celebracion="rank_up"] .celebracion-campeon-titulo {
-  background: linear-gradient(90deg, #a78bfa, #22d3ee);
+  background: linear-gradient(90deg, #a78bfa, #22d3ee, #a78bfa);
+  background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   font-size: 1.25rem;
+  animation: celebracion-shimmer-rank 2.4s linear infinite;
+}
+@keyframes celebracion-shimmer-rank {
+  from { background-position: 0% center; }
+  to { background-position: -200% center; }
 }
 
 /* 6) Aegis: violeta/turquesa místico -- el objeto que se defiende en
@@ -3432,6 +3487,11 @@ html.es-escritorio .player-detail-panel-inline {
   border: 1px solid rgba(45, 212, 191, 0.45);
   background: radial-gradient(circle at 50% 0%, rgba(167, 139, 250, 0.3), transparent 60%), var(--color-panel);
   box-shadow: 0 0 60px rgba(45, 212, 191, 0.25), 0 24px 60px rgba(0, 0, 0, 0.6);
+  animation: celebracion-entrada 0.4s ease-out, celebracion-glow-aegis 2.8s ease-in-out infinite;
+}
+@keyframes celebracion-glow-aegis {
+  0%, 100% { box-shadow: 0 0 60px rgba(45, 212, 191, 0.25), 0 24px 60px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 85px rgba(167, 139, 250, 0.45), 0 24px 60px rgba(0, 0, 0, 0.6); }
 }
 .celebracion-campeon[data-estilo-celebracion="aegis"] .celebracion-campeon-copa {
   color: #2dd4bf;
@@ -3471,6 +3531,11 @@ html.es-escritorio .player-detail-panel-inline {
   border: 1px solid #f472b6;
   background: #0a0a12;
   box-shadow: 0 0 16px rgba(244, 114, 182, 0.5), inset 0 0 20px rgba(34, 211, 238, 0.12);
+  animation: celebracion-entrada 0.4s ease-out, celebracion-glow-neon 2.4s ease-in-out infinite;
+}
+@keyframes celebracion-glow-neon {
+  0%, 100% { box-shadow: 0 0 16px rgba(244, 114, 182, 0.5), inset 0 0 20px rgba(34, 211, 238, 0.12); }
+  50% { box-shadow: 0 0 28px rgba(244, 114, 182, 0.8), inset 0 0 28px rgba(34, 211, 238, 0.22); }
 }
 .celebracion-campeon[data-estilo-celebracion="neon_arcade"] .celebracion-campeon-copa {
   color: #22d3ee;
@@ -4022,6 +4087,27 @@ html.es-escritorio .player-detail-panel-inline {
   flex-shrink: 0;
   color: #fde047;
   margin-left: auto;
+}
+
+/* Migración 194, a pedido del usuario: reemplaza el banner "Campeón:
+   X" + "Ver celebración" de afuera de la llave -- el campeón tiene su
+   coronita dorada iluminada junto al nombre en cada partido que ganó,
+   y pinchar su nombre abre la misma tarjeta de celebración de siempre. */
+.bracket-slot-campeon {
+  cursor: pointer;
+}
+
+.bracket-slot-corona {
+  flex-shrink: 0;
+  margin-left: auto;
+  color: #fde047;
+  filter: drop-shadow(0 0 4px rgba(253, 224, 71, 0.9));
+  animation: bracket-corona-brillo 2s ease-in-out infinite;
+}
+
+@keyframes bracket-corona-brillo {
+  0%, 100% { filter: drop-shadow(0 0 3px rgba(253, 224, 71, 0.7)); }
+  50% { filter: drop-shadow(0 0 7px rgba(253, 224, 71, 1)); }
 }
 
 /* Empate (migración 083: partidos de liga con Clan War formato simple,

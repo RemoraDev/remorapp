@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { Check } from "lucide-react";
+import { Check, Crown } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import Avatar from "./Avatar";
 import type { BracketMatchRow } from "../types/bracket";
@@ -114,6 +114,13 @@ interface BracketViewProps {
   // GroupStage.tsx.
   miEquipoTag?: string | null;
   miParticipantId?: string | null;
+  // Migración 194, a pedido del usuario: el banner "Campeón: X" +
+  // "Ver celebración" (fuera de la llave) se elimina -- el campeón
+  // ahora tiene una coronita dorada junto al nombre en cada partido
+  // que ganó, y pinchar su nombre abre la misma celebración de
+  // siempre (ver TournamentDetailPage.tsx, handleVerCelebracion).
+  campeonParticipantId?: string | null;
+  onClickCampeon?: () => void;
 }
 
 // Estimación del alto de UN partido -- fija la altura total del
@@ -161,6 +168,8 @@ export default function BracketView({
   onCambio,
   miEquipoTag = null,
   miParticipantId = null,
+  campeonParticipantId = null,
+  onClickCampeon,
 }: BracketViewProps) {
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -665,38 +674,62 @@ export default function BracketView({
             cómo tienen que jugar esta partida puntual (usada por la
             final de los playoffs de First Stand). */}
         {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
-        <div
-          className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""} ${
-            puedeElegirGanador ? "bracket-slot-elegible" : ""
-          } ${seleccionado === match.participant1_id ? "bracket-slot-preseleccionado" : ""}`}
-          onClick={puedeElegirGanador ? () => toggleSeleccion(match.id, match.participant1_id as string) : undefined}
-          role={puedeElegirGanador ? "button" : undefined}
-          tabIndex={puedeElegirGanador ? 0 : undefined}
-        >
-          {renderInsignia(match.participant1_id)}
-          <span className="bracket-slot-nombre">{nombreDe(match.participant1_id)}</span>
-          {match.resultado_participant1 !== null && (
-            <span className="bracket-slot-score">{match.resultado_participant1}</span>
-          )}
-          {seleccionado === match.participant1_id && <Check size={14} className="bracket-slot-check" />}
-        </div>
-        <div
-          className={`bracket-slot ${
-            p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""
-          } ${puedeElegirGanador ? "bracket-slot-elegible" : ""} ${
-            seleccionado === match.participant2_id ? "bracket-slot-preseleccionado" : ""
-          }`}
-          onClick={puedeElegirGanador ? () => toggleSeleccion(match.id, match.participant2_id as string) : undefined}
-          role={puedeElegirGanador ? "button" : undefined}
-          tabIndex={puedeElegirGanador ? 0 : undefined}
-        >
-          {renderInsignia(match.participant2_id)}
-          <span className="bracket-slot-nombre">{nombreDe(match.participant2_id)}</span>
-          {match.resultado_participant2 !== null && (
-            <span className="bracket-slot-score">{match.resultado_participant2}</span>
-          )}
-          {seleccionado === match.participant2_id && <Check size={14} className="bracket-slot-check" />}
-        </div>
+        {(() => {
+          const esCampeon1 = p1Gana && !!campeonParticipantId && match.participant1_id === campeonParticipantId;
+          const esCampeon2 = p2Gana && !!campeonParticipantId && match.participant2_id === campeonParticipantId;
+          return (
+            <>
+              <div
+                className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""} ${
+                  puedeElegirGanador ? "bracket-slot-elegible" : ""
+                } ${seleccionado === match.participant1_id ? "bracket-slot-preseleccionado" : ""} ${
+                  esCampeon1 ? "bracket-slot-campeon" : ""
+                }`}
+                onClick={
+                  puedeElegirGanador
+                    ? () => toggleSeleccion(match.id, match.participant1_id as string)
+                    : esCampeon1
+                      ? onClickCampeon
+                      : undefined
+                }
+                role={puedeElegirGanador || esCampeon1 ? "button" : undefined}
+                tabIndex={puedeElegirGanador || esCampeon1 ? 0 : undefined}
+              >
+                {renderInsignia(match.participant1_id)}
+                <span className="bracket-slot-nombre">{nombreDe(match.participant1_id)}</span>
+                {match.resultado_participant1 !== null && (
+                  <span className="bracket-slot-score">{match.resultado_participant1}</span>
+                )}
+                {seleccionado === match.participant1_id && <Check size={14} className="bracket-slot-check" />}
+                {esCampeon1 && <Crown size={14} className="bracket-slot-corona" />}
+              </div>
+              <div
+                className={`bracket-slot ${
+                  p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""
+                } ${puedeElegirGanador ? "bracket-slot-elegible" : ""} ${
+                  seleccionado === match.participant2_id ? "bracket-slot-preseleccionado" : ""
+                } ${esCampeon2 ? "bracket-slot-campeon" : ""}`}
+                onClick={
+                  puedeElegirGanador
+                    ? () => toggleSeleccion(match.id, match.participant2_id as string)
+                    : esCampeon2
+                      ? onClickCampeon
+                      : undefined
+                }
+                role={puedeElegirGanador || esCampeon2 ? "button" : undefined}
+                tabIndex={puedeElegirGanador || esCampeon2 ? 0 : undefined}
+              >
+                {renderInsignia(match.participant2_id)}
+                <span className="bracket-slot-nombre">{nombreDe(match.participant2_id)}</span>
+                {match.resultado_participant2 !== null && (
+                  <span className="bracket-slot-score">{match.resultado_participant2}</span>
+                )}
+                {seleccionado === match.participant2_id && <Check size={14} className="bracket-slot-check" />}
+                {esCampeon2 && <Crown size={14} className="bracket-slot-corona" />}
+              </div>
+            </>
+          );
+        })()}
 
         {match.status === "en_disputa" && (
           <p className="bracket-disputa">
