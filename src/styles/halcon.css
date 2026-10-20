@@ -3985,7 +3985,12 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 .bracket-report-score-input {
-  width: 2.75rem;
+  /* .form-input (más abajo en este archivo) pone width: 100% -- misma
+     especificidad (una sola clase), gana el que aparece después en la
+     hoja de estilos, así que esto necesita !important para no terminar
+     ocupando todo el ancho de la tarjeta del partido. */
+  width: 2.75rem !important;
+  flex: 0 0 auto;
   padding: 0.3rem 0.4rem;
   text-align: center;
   font-size: 0.8rem;
