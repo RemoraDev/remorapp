@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
+import { Check } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import Avatar from "./Avatar";
 import type { BracketMatchRow } from "../types/bracket";
@@ -574,6 +575,24 @@ export default function BracketView({
   // cual al RPC (que lo guarda solo si el partido efectivamente queda
   // "jugado" en esta llamada, ver reportar_resultado() en la base).
   const [scoreDraft, setScoreDraft] = useState<Record<string, { p1: string; p2: string }>>({});
+  // Migración 191, a pedido del usuario: en vez de dos botones "Ganó
+  // X"/"Ganó Y" sueltos, se pincha directo el nombre del participante
+  // -- se ve resaltado al toque (selección en el momento, antes de
+  // reportar de verdad) y se puede volver a pinchar para deseleccionar.
+  // Recién al confirmar se llama al RPC de siempre (handleReportar).
+  const [ganadorSeleccionado, setGanadorSeleccionado] = useState<Record<string, string>>({});
+
+  const toggleSeleccion = (matchId: string, participantId: string) => {
+    setGanadorSeleccionado((prev) => {
+      const siguiente = { ...prev };
+      if (siguiente[matchId] === participantId) {
+        delete siguiente[matchId];
+      } else {
+        siguiente[matchId] = participantId;
+      }
+      return siguiente;
+    });
+  };
 
   const handleReportar = async (matchId: string, ganadorId: string) => {
     setReportando(matchId);
@@ -597,6 +616,11 @@ export default function BracketView({
       return;
     }
 
+    setGanadorSeleccionado((prev) => {
+      const siguiente = { ...prev };
+      delete siguiente[matchId];
+      return siguiente;
+    });
     onCambio();
   };
 
@@ -607,6 +631,13 @@ export default function BracketView({
     const p1Gana = !!match.winner_id && match.winner_id === match.participant1_id;
     const p2Gana = !!match.winner_id && match.winner_id === match.participant2_id;
     const refKey = refInfo ? `${refInfo.keyPrefix}::${refInfo.round}::${refInfo.matchNumber}` : null;
+    const puedeElegirGanador =
+      match.status === "pendiente" &&
+      !!match.participant1_id &&
+      !!match.participant2_id &&
+      !match.clan_war_id &&
+      puedeReportar(match);
+    const seleccionado = ganadorSeleccionado[match.id];
 
     return (
       <div
@@ -634,23 +665,37 @@ export default function BracketView({
             cómo tienen que jugar esta partida puntual (usada por la
             final de los playoffs de First Stand). */}
         {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
-        <div className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""}`}>
+        <div
+          className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""} ${
+            puedeElegirGanador ? "bracket-slot-elegible" : ""
+          } ${seleccionado === match.participant1_id ? "bracket-slot-preseleccionado" : ""}`}
+          onClick={puedeElegirGanador ? () => toggleSeleccion(match.id, match.participant1_id as string) : undefined}
+          role={puedeElegirGanador ? "button" : undefined}
+          tabIndex={puedeElegirGanador ? 0 : undefined}
+        >
           {renderInsignia(match.participant1_id)}
           <span className="bracket-slot-nombre">{nombreDe(match.participant1_id)}</span>
           {match.resultado_participant1 !== null && (
             <span className="bracket-slot-score">{match.resultado_participant1}</span>
           )}
+          {seleccionado === match.participant1_id && <Check size={14} className="bracket-slot-check" />}
         </div>
         <div
           className={`bracket-slot ${
             p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""
+          } ${puedeElegirGanador ? "bracket-slot-elegible" : ""} ${
+            seleccionado === match.participant2_id ? "bracket-slot-preseleccionado" : ""
           }`}
+          onClick={puedeElegirGanador ? () => toggleSeleccion(match.id, match.participant2_id as string) : undefined}
+          role={puedeElegirGanador ? "button" : undefined}
+          tabIndex={puedeElegirGanador ? 0 : undefined}
         >
           {renderInsignia(match.participant2_id)}
           <span className="bracket-slot-nombre">{nombreDe(match.participant2_id)}</span>
           {match.resultado_participant2 !== null && (
             <span className="bracket-slot-score">{match.resultado_participant2}</span>
           )}
+          {seleccionado === match.participant2_id && <Check size={14} className="bracket-slot-check" />}
         </div>
 
         {match.status === "en_disputa" && (
@@ -688,64 +733,60 @@ export default function BracketView({
           </div>
         )}
 
-        {match.status === "pendiente" &&
-          match.participant1_id &&
-          match.participant2_id &&
-          !match.clan_war_id &&
-          puedeReportar(match) && (
-            <div className="bracket-report">
-              {/* Migración 188, a pedido del usuario: puntaje opcional
-                  (mapas/rondas ganadas) -- se puede dejar vacío, el
-                  resultado se reporta igual solo con el botón de abajo. */}
-              <div className="bracket-report-score">
-                <input
-                  type="number"
-                  min={0}
-                  className="form-input bracket-report-score-input"
-                  placeholder="0"
-                  aria-label={`Puntaje de ${nombreDe(match.participant1_id)}`}
-                  value={scoreDraft[match.id]?.p1 ?? ""}
-                  onChange={(e) =>
-                    setScoreDraft((prev) => ({
-                      ...prev,
-                      [match.id]: { p1: e.target.value, p2: prev[match.id]?.p2 ?? "" },
-                    }))
-                  }
-                />
-                <span className="bracket-report-score-vs">-</span>
-                <input
-                  type="number"
-                  min={0}
-                  className="form-input bracket-report-score-input"
-                  placeholder="0"
-                  aria-label={`Puntaje de ${nombreDe(match.participant2_id)}`}
-                  value={scoreDraft[match.id]?.p2 ?? ""}
-                  onChange={(e) =>
-                    setScoreDraft((prev) => ({
-                      ...prev,
-                      [match.id]: { p1: prev[match.id]?.p1 ?? "", p2: e.target.value },
-                    }))
-                  }
-                />
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={reportando === match.id}
-                onClick={() => handleReportar(match.id, match.participant1_id as string)}
-              >
-                Ganó {nombreDe(match.participant1_id)}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost"
-                disabled={reportando === match.id}
-                onClick={() => handleReportar(match.id, match.participant2_id as string)}
-              >
-                Ganó {nombreDe(match.participant2_id)}
-              </button>
+        {/* Migración 191, a pedido del usuario: antes eran dos botones
+            "Ganó X"/"Ganó Y" sueltos -- ahora se pincha directo el
+            nombre del participante (arriba, bracket-slot-elegible) para
+            preseleccionarlo con resalte al toque, y se puede volver a
+            pinchar para deseleccionar. El puntaje queda igual de
+            opcional, y "Confirmar resultado" recién ahí llama al RPC
+            de siempre. */}
+        {puedeElegirGanador && (
+          <div className="bracket-report">
+            <div className="bracket-report-score">
+              <input
+                type="number"
+                min={0}
+                className="form-input bracket-report-score-input"
+                placeholder="0"
+                aria-label={`Puntaje de ${nombreDe(match.participant1_id)}`}
+                value={scoreDraft[match.id]?.p1 ?? ""}
+                onChange={(e) =>
+                  setScoreDraft((prev) => ({
+                    ...prev,
+                    [match.id]: { p1: e.target.value, p2: prev[match.id]?.p2 ?? "" },
+                  }))
+                }
+              />
+              <span className="bracket-report-score-vs">-</span>
+              <input
+                type="number"
+                min={0}
+                className="form-input bracket-report-score-input"
+                placeholder="0"
+                aria-label={`Puntaje de ${nombreDe(match.participant2_id)}`}
+                value={scoreDraft[match.id]?.p2 ?? ""}
+                onChange={(e) =>
+                  setScoreDraft((prev) => ({
+                    ...prev,
+                    [match.id]: { p1: prev[match.id]?.p1 ?? "", p2: e.target.value },
+                  }))
+                }
+              />
             </div>
-          )}
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={reportando === match.id || !seleccionado}
+              onClick={() => seleccionado && handleReportar(match.id, seleccionado)}
+            >
+              {reportando === match.id
+                ? "Reportando..."
+                : seleccionado
+                  ? `Confirmar: ganó ${nombreDe(seleccionado)}`
+                  : "Elegí un ganador arriba"}
+            </button>
+          </div>
+        )}
 
         {errores[match.id] && <div className="form-error">{errores[match.id]}</div>}
       </div>

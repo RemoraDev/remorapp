@@ -3994,6 +3994,36 @@ html.es-escritorio .player-detail-panel-inline {
   text-decoration: line-through;
 }
 
+/* Migración 191, a pedido del usuario: en vez de dos botones "Ganó
+   X"/"Ganó Y" sueltos, se pincha directo el nombre -- bracket-slot-elegible
+   marca que ese nombre responde al click (cursor + resalte al pasar el
+   mouse), bracket-slot-preseleccionado es el resaltado "en tiempo real"
+   de a quién se eligió ANTES de confirmar (todavía no se reportó nada,
+   por eso usa su propio color -- dorado -- en vez de pisar .winner,
+   que es el estado YA confirmado). Un segundo click sobre el mismo
+   nombre deselecciona (ver toggleSeleccion en BracketView.tsx). */
+.bracket-slot-elegible {
+  cursor: pointer;
+  transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.bracket-slot-elegible:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.bracket-slot-preseleccionado {
+  background: rgba(253, 224, 71, 0.14) !important;
+  box-shadow: inset 0 0 0 1px rgba(253, 224, 71, 0.5);
+  color: #fde047 !important;
+  font-weight: 700;
+}
+
+.bracket-slot-check {
+  flex-shrink: 0;
+  color: #fde047;
+  margin-left: auto;
+}
+
 /* Empate (migración 083: partidos de liga con Clan War formato simple,
    que puede terminar con la misma cantidad de partidas de cada lado)
    -- ni .winner ni .loser, un tercer estado neutro propio. */
