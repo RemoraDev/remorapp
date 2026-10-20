@@ -8,7 +8,7 @@ import InfoTooltip from "../components/InfoTooltip";
 import ModoIcono from "../components/ModoIcono";
 import TipoEventoIcono from "../components/TipoEventoIcono";
 import FechaHoraInput from "../components/FechaHoraInput";
-import { MODOS } from "../lib/tournamentOptions";
+import { MODOS, esFormatoPorEquipo } from "../lib/tournamentOptions";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import { datetimeLocalAIso } from "../lib/clanWars";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
@@ -91,14 +91,13 @@ export default function CreateTournamentPage() {
 
   const [nombre, setNombre] = useState("");
   const [tipoEvento, setTipoEvento] = useState<TipoEvento>("amistosa");
-  // Migración 162: a pedido del usuario, un torneo por ligas creado
-  // desde acá siempre arranca en 1v1 -- es lo más común, un evento de
-  // clanes (2v2/3v3/4v4) es la excepción. Migración 167: el cambio a
-  // formato de equipo se mueve a la ficha del torneo (Panel de
-  // organizador → Formato), editable después de creado -- no se
-  // vuelve a preguntar acá (la migración 166 lo había agregado en
-  // este paso, mala decisión, se revierte).
-  const formato: TorneoFormato = "1v1";
+  // Migración 192, a pedido del usuario: vuelve a preguntarse acá en el
+  // paso 1 (antes la migración 167 lo había sacado de este paso y lo
+  // movía a la ficha del torneo ya creado, Panel de organizador →
+  // Jugadores/Clanes -- esa pestaña sigue existiendo para cambiarlo
+  // después, mientras no haya nadie inscrito todavía). "1v1" sigue
+  // siendo el default, es lo más común.
+  const [formato, setFormato] = useState<TorneoFormato>("1v1");
   const [modo, setModo] = useState<TorneoModo>("eliminacion_simple");
 
   // Migración 091/093: Clan War Amistosa -- formulario mínimo, sin
@@ -214,13 +213,14 @@ export default function CreateTournamentPage() {
   }, [ligaId]);
 
   // Default de cupos -- solo mientras el organizador no haya tocado el
-  // campo a mano, para no pisarle un valor que ya eligió. Todo torneo
-  // creado desde acá arranca en 1v1 (migración 167) -- el cambio a
-  // formato de equipo se hace después, desde la ficha del torneo.
+  // campo a mano, para no pisarle un valor que ya eligió. 16 es
+  // razonable para 1v1; en equipos (2v2/3v3/4v4) rara vez se junta esa
+  // cantidad de clanes, así que ahí baja a 8 (migración 192, ver
+  // comentario de "formato" más arriba).
   useEffect(() => {
     if (cuposTocados) return;
-    setCuposTotales("16");
-  }, [cuposTocados]);
+    setCuposTotales(esFormatoPorEquipo(formato) ? "8" : "16");
+  }, [cuposTocados, formato]);
 
   // Migración 091: mi propio equipo, para saber si puedo proponer una
   // Clan War Amistosa (hace falta pertenecer a uno) y para no
@@ -797,6 +797,29 @@ export default function CreateTournamentPage() {
                 value={nombre}
                 onChange={(e) => setNombre(e.target.value)}
               />
+            </div>
+
+            {/* Migración 192, a pedido del usuario: vuelve a preguntarse
+                acá (mismo selector/pattern que "Jugadores/Clanes" en el
+                Panel de organizador, ver TournamentDetailPage.tsx) --
+                1v1 sigue siendo el default. */}
+            <div className="form-group">
+              <span className="form-label">¿Jugadores o clanes?</span>
+              <div className="pill-radio-group">
+                {(["1v1", "2v2", "3v3", "4v4"] as const).map((f) => (
+                  <label key={f} className={`pill-radio-option ${formato === f ? "selected" : ""}`}>
+                    <input
+                      type="radio"
+                      className="sr-only"
+                      name="torneo-formato"
+                      checked={formato === f}
+                      onChange={() => setFormato(f)}
+                    />
+                    {f === "1v1" ? "Individual (1v1)" : f}
+                  </label>
+                ))}
+              </div>
+              <p className="form-hint">2v2/3v3/4v4 inscribe clanes en vez de jugadores individuales.</p>
             </div>
 
             <div className="form-group">
