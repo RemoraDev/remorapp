@@ -3985,15 +3985,24 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 .bracket-report-score-input {
-  /* .form-input (más abajo en este archivo) pone width: 100% -- misma
-     especificidad (una sola clase), gana el que aparece después en la
-     hoja de estilos, así que esto necesita !important para no terminar
-     ocupando todo el ancho de la tarjeta del partido. */
+  /* .form-input (más abajo en este archivo) pone width/background/
+     border/color propios -- misma especificidad (una sola clase) y
+     aparece después en la hoja de estilos, así que gana a menos que
+     esto use !important. Colores explícitos en vez de las variables
+     de tema: dentro de la tarjeta del partido (fondo bien oscuro)
+     var(--color-panel)/var(--color-border) rendían casi invisibles. */
   width: 2.75rem !important;
   flex: 0 0 auto;
-  padding: 0.3rem 0.4rem;
+  padding: 0.3rem 0.4rem !important;
   text-align: center;
   font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: #fff !important;
+}
+
+.bracket-report-score-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .bracket-report-score-vs {
