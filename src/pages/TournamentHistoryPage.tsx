@@ -133,9 +133,15 @@ export default function TournamentHistoryPage() {
     <section className="section section-page">
       <div className="section-head">
         <h1 className="section-title">Historial</h1>
-        <Link to="/tournaments" className="btn-link">
-          Ver torneos abiertos
+      </div>
+
+      {/* A pedido del usuario: mismo ida y vuelta que TournamentsPage.tsx,
+          como pestañas en vez de un link de texto suelto. */}
+      <div className="eventos-tabs">
+        <Link to="/tournaments" className="eventos-tab">
+          Eventos
         </Link>
+        <span className="eventos-tab selected">Historial de eventos</span>
       </div>
 
       {loading && <p className="tournament-card-meta">Cargando historial...</p>}

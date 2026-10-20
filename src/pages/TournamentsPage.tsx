@@ -49,15 +49,15 @@ export default function TournamentsPage() {
         </div>
       </div>
 
-      <p className="tournament-card-meta">
-        <Link to="/tournaments/history" className="btn-link">
-          Ver historial de torneos finalizados
+      {/* A pedido del usuario: el link de texto suelto pasa a ser una
+          pestaña (mismo ida y vuelta que TournamentHistoryPage.tsx) --
+          "Ver torneos históricos (pre-RemorApp)" se elimina del todo. */}
+      <div className="eventos-tabs">
+        <span className="eventos-tab selected">Eventos</span>
+        <Link to="/tournaments/history" className="eventos-tab">
+          Historial de eventos
         </Link>
-        {" · "}
-        <Link to="/torneos-historicos" className="btn-link">
-          Ver torneos históricos (pre-RemorApp)
-        </Link>
-      </p>
+      </div>
 
       {loading && <p className="tournament-card-meta">Cargando eventos...</p>}
 
