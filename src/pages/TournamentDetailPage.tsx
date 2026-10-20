@@ -2464,10 +2464,11 @@ export default function TournamentDetailPage() {
           </button>
 
           {/* Migración 175, a pedido del usuario: visible siempre (tenga
-              o no reglamento subido), no solo cuando ya hay uno. Si el
-              organizador la aprieta sin reglamento, la abre directo en
-              el Panel de control para subirla ahí mismo; si es
-              cualquier otra persona, solo avisa que todavía no hay. */}
+              o no reglamento subido), no solo cuando ya hay uno.
+              Corrección, a pedido del usuario: nunca manda a Panel de
+              control, ni siquiera siendo el organizador -- con
+              reglamento subido abre el visor, sin reglamento solo
+              avisa, para cualquiera que la apriete. */}
           <button
             type="button"
             className="organizer-panel-tab"
@@ -2477,10 +2478,6 @@ export default function TournamentDetailPage() {
                 return;
               }
               setAvisoSinReglamento(true);
-              if (esOrganizador) {
-                setOrganizerPanelTab("reglamento");
-                setMostrarOpcionesAvanzadas(true);
-              }
             }}
           >
             <FileText size={14} className="icon-inline" aria-hidden="true" />
@@ -2502,8 +2499,8 @@ export default function TournamentDetailPage() {
         )}
       </div>
 
-      {avisoSinReglamento && !torneo.pdf_reglamento_url && !esOrganizador && (
-        <p className="tournament-card-meta">El organizador todavía no subió un reglamento.</p>
+      {avisoSinReglamento && !torneo.pdf_reglamento_url && (
+        <p className="tournament-card-meta">El creador no ha subido un reglamento para este evento.</p>
       )}
 
       {pestanaTorneo === "participantes" && (

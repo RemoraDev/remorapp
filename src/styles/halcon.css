@@ -3957,6 +3957,12 @@ html.es-escritorio .player-detail-panel-inline {
 
 .bracket-match {
   position: relative;
+  /* A pedido del usuario: la tarjeta quedaba "atrapada detrás" del
+     trazo de conexión (.bracket-conectores, position: absolute, sin
+     z-index propio) -- un SVG posicionado sin z-index pinta por
+     encima de cualquier hijo en flujo normal como este, sin importar
+     el orden en el DOM. Un z-index explícito acá lo pone adelante. */
+  z-index: 1;
   border-radius: var(--radius-md);
   border: 1px solid var(--color-border);
   background: var(--color-card);
@@ -4260,8 +4266,7 @@ html.es-escritorio .player-detail-panel-inline {
    puede tener varias columnas de ronda, lado a lado se vuelven
    ilegibles), cada uno respetando la Estructura elegida (Clásico/
    Vertical/Escalera), con scroll horizontal propio si no entra
-   entero. La gran final (y el partido por el 3er lugar, si
-   corresponde) quedan al final. */
+   entero. */
 .bracket-panoramica-grupos {
   display: flex;
   flex-direction: column;
@@ -4270,6 +4275,29 @@ html.es-escritorio .player-detail-panel-inline {
 
 .bracket-panoramica-grupo {
   overflow-x: auto;
+}
+
+/* Corrección, a pedido del usuario: la gran final (ganador de Grupo A
+   vs ganador de Grupo B) va PRIMERO, no al final de las dos llaves
+   completas -- en pantalla completa quedaba enterrada, había que
+   bajar mucho el scroll para verla. Acento dorado propio para que se
+   note que es el partido más importante de los tres. */
+.bracket-panoramica-final {
+  align-self: center;
+  max-width: 15rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.bracket-panoramica-final .bracket-round-title {
+  color: #fde047;
+}
+
+.bracket-panoramica-final .bracket-match {
+  border-color: rgba(253, 224, 71, 0.4);
+  box-shadow: 0 0 20px rgba(253, 224, 71, 0.15);
 }
 
 /* ---------- Estructura "embudo al centro" (migración 177) ---------- */

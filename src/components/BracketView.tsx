@@ -1015,6 +1015,18 @@ export default function BracketView({
             </>
           ) : (
             <div className="bracket-panoramica-grupos">
+              {/* Corrección, a pedido del usuario: la gran final (ganador
+                  de Grupo A vs ganador de Grupo B) quedaba al final del
+                  todo, después de las dos llaves completas -- en
+                  pantalla completa, eso obligaba a bajar mucho el
+                  scroll para verla. Ahora va primero, bien visible
+                  apenas se abre Vista panorámica. */}
+              {final && (
+                <div className="bracket-panoramica-final" data-estilo-bracket={estilo}>
+                  <div className="bracket-round-title">Final</div>
+                  {renderPartido(final, { keyPrefix: "grupo-final-pan", round: 0, matchNumber: 1 })}
+                </div>
+              )}
               <div className="bracket-panoramica-grupo">
                 <div className="bracket-round-title bracket-seccion-titulo">Grupo A</div>
                 {renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a-pan")}
@@ -1023,12 +1035,6 @@ export default function BracketView({
                 <div className="bracket-round-title bracket-seccion-titulo">Grupo B</div>
                 {renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b-pan")}
               </div>
-              {final && (
-                <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
-                  <div className="bracket-round-title">Final</div>
-                  {renderPartido(final, { keyPrefix: "grupo-final-pan", round: 0, matchNumber: 1 })}
-                </div>
-              )}
               {partidoTercerLugar && (
                 <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
                   <div className="bracket-round-title">Partido por el 3er lugar</div>
