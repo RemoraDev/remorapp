@@ -1,3 +1,5 @@
+import type { TemaEquipo } from "./teams";
+
 // Comunidades (migración 198, a pedido del usuario): grupos públicos,
 // libres de crear y de unirse sin aprobación -- solo quien la creó
 // administra (banner, logo, descripción, eliminarla).
@@ -9,6 +11,11 @@ export interface ComunidadRow {
   logo_url: string | null;
   creador_id: string;
   creado_en: string;
+  // Migración 202, a pedido del usuario: mismo catálogo de 5 paletas
+  // que tournaments.tema_equipo (ver TEMAS_EQUIPO en types/teams.ts) --
+  // se aplica con el mismo atributo data-tema-equipo en la raíz de la
+  // página, los selectores de halcon.css ya son genéricos.
+  tema_comunidad: TemaEquipo;
 }
 
 export interface ComunidadMiembroRow {

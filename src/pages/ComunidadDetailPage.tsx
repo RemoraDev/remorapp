@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Users, Calendar } from "lucide-react";
+import { Users, Calendar, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { comprimirImagen } from "../lib/imageCompression";
@@ -13,6 +13,8 @@ import Avatar from "../components/Avatar";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import type { ComunidadRow, EventoComunidad } from "../types/comunidades";
 import type { AvatarForma } from "../types/profile";
+import { TEMAS_EQUIPO } from "../types/teams";
+import type { TemaEquipo } from "../types/teams";
 
 const LOGO_MAX_BYTES = 15 * 1024 * 1024;
 
@@ -42,11 +44,17 @@ export default function ComunidadDetailPage() {
 
   const [uniendose, setUniendose] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
-  // Migración 200, a pedido del usuario: Panel de control ordenado en
-  // pestañas hermanas (Apariencia/Logo/Banner/Integrantes), mismo
-  // lenguaje visual que "Configuración" de Mi Clan
-  // (.team-config-media-tabs/.team-config-media-tab).
-  const [tabConfig, setTabConfig] = useState<"apariencia" | "logo" | "banner" | "integrantes">("apariencia");
+  // Migración 200/202, a pedido del usuario: Panel de control ordenado
+  // en pestañas hermanas (Apariencia/Descripción/Logo/Banner/
+  // Integrantes), mismo lenguaje visual que "Configuración" de Mi Clan
+  // (.team-config-media-tabs/.team-config-media-tab). "Apariencia" es
+  // el selector de color (como tournaments.tema_equipo) -- la
+  // descripción tiene su propia pestaña aparte, antes vivía (mal
+  // etiquetada) dentro de "Apariencia".
+  const [tabConfig, setTabConfig] = useState<"apariencia" | "descripcion" | "logo" | "banner" | "integrantes">(
+    "apariencia"
+  );
+  const [guardandoTema, setGuardandoTema] = useState(false);
 
   const [descripcion, setDescripcion] = useState("");
   const [archivoParaRecortarLogo, setArchivoParaRecortarLogo] = useState<File | null>(null);
@@ -162,6 +170,20 @@ export default function ComunidadDetailPage() {
     }
 
     toast.success("Saliste de la comunidad.");
+    cargarComunidad();
+  };
+
+  const handleCambiarTema = async (nuevoTema: TemaEquipo) => {
+    if (!user || nuevoTema === comunidad.tema_comunidad) return;
+    setGuardandoTema(true);
+    const { error } = await supabase.from("comunidades").update({ tema_comunidad: nuevoTema }).eq("id", comunidad.id);
+    setGuardandoTema(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
     cargarComunidad();
   };
 
@@ -348,7 +370,7 @@ export default function ComunidadDetailPage() {
   };
 
   return (
-    <section className="section section-page">
+    <section className="section section-page" data-tema-equipo={comunidad.tema_comunidad}>
       <div className="team-detail-banner-wrap">
         {comunidad.banner_url ? (
           <img src={comunidad.banner_url} alt="" className="team-detail-banner" />
@@ -404,43 +426,82 @@ export default function ComunidadDetailPage() {
       </div>
 
       {panelAbierto && esCreador && (
-        <div className="detail-card">
-          <h3 className="detail-subtitle">Configuración</h3>
+        <div className="modal-backdrop" onClick={() => setPanelAbierto(false)}>
+          <div className="comunidad-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setPanelAbierto(false)}
+              aria-label="Cerrar panel de control"
+            >
+              <X size={18} />
+            </button>
+            <h3 className="detail-subtitle" style={{ marginTop: 0 }}>
+              Configuración
+            </h3>
 
-          <div className="team-config-media-tabs">
-            <button
-              type="button"
-              className={`team-config-media-tab ${tabConfig === "apariencia" ? "is-active" : ""}`}
-              onClick={() => setTabConfig("apariencia")}
-            >
-              Apariencia
-            </button>
-            <button
-              type="button"
-              className={`team-config-media-tab ${tabConfig === "logo" ? "is-active" : ""}`}
-              onClick={() => setTabConfig("logo")}
-            >
-              Logo
-            </button>
-            <button
-              type="button"
-              className={`team-config-media-tab ${tabConfig === "banner" ? "is-active" : ""}`}
-              onClick={() => setTabConfig("banner")}
-            >
-              Banner
-            </button>
-            <button
-              type="button"
-              className={`team-config-media-tab ${tabConfig === "integrantes" ? "is-active" : ""}`}
-              onClick={() => setTabConfig("integrantes")}
-            >
-              Integrantes
-            </button>
-          </div>
+            <div className="team-config-media-tabs comunidad-panel-tabs">
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfig === "apariencia" ? "is-active" : ""}`}
+                onClick={() => setTabConfig("apariencia")}
+              >
+                Apariencia
+              </button>
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfig === "descripcion" ? "is-active" : ""}`}
+                onClick={() => setTabConfig("descripcion")}
+              >
+                Descripción
+              </button>
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfig === "logo" ? "is-active" : ""}`}
+                onClick={() => setTabConfig("logo")}
+              >
+                Logo
+              </button>
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfig === "banner" ? "is-active" : ""}`}
+                onClick={() => setTabConfig("banner")}
+              >
+                Banner
+              </button>
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfig === "integrantes" ? "is-active" : ""}`}
+                onClick={() => setTabConfig("integrantes")}
+              >
+                Integrantes
+              </button>
+            </div>
 
-          {(tabConfig === "apariencia" || tabConfig === "logo" || tabConfig === "banner") && (
-            <form className="auth-form" onSubmit={handleGuardarPanel}>
+            <div className="comunidad-panel-body">
               {tabConfig === "apariencia" && (
+                <div className="form-group">
+                  <span className="form-label">Color de acento de la página</span>
+                  <div className="team-tema-options">
+                    {TEMAS_EQUIPO.map((t) => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        className={`team-tema-option ${comunidad.tema_comunidad === t.value ? "selected" : ""}`}
+                        disabled={guardandoTema}
+                        onClick={() => handleCambiarTema(t.value)}
+                      >
+                        <span className="team-tema-swatch" style={{ background: t.color }} />
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {(tabConfig === "descripcion" || tabConfig === "logo" || tabConfig === "banner") && (
+            <form className="auth-form" onSubmit={handleGuardarPanel}>
+              {tabConfig === "descripcion" && (
                 <div className="form-group">
                   <label className="form-label" htmlFor="comunidad-descripcion-panel">
                     Descripción
@@ -570,7 +631,7 @@ export default function ComunidadDetailPage() {
               )}
 
               <h3 className="detail-subtitle">Integrantes actuales</h3>
-              <div className="detail-participant-list">
+              <div className="comunidad-panel-integrantes-lista detail-participant-list">
                 {miembros.map((m) => (
                   <div key={m.userId} className="detail-participant-item">
                     <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
@@ -594,20 +655,22 @@ export default function ComunidadDetailPage() {
             </>
           )}
 
-          <div className="team-panel-danger-zone">
-            <h3 className="detail-subtitle">Zona de peligro</h3>
-            <p className="tournament-card-meta">
-              Eliminar la comunidad es una acción irreversible: todos los integrantes quedan libres (ya no
-              va a figurar en su perfil) y deja de poder vincularse a eventos nuevos.
-            </p>
-            <button
-              type="button"
-              className="btn btn-danger btn-block"
-              onClick={handleEliminarComunidad}
-              disabled={eliminando}
-            >
-              {eliminando ? "Eliminando..." : "Eliminar comunidad"}
-            </button>
+              <div className="team-panel-danger-zone">
+                <h3 className="detail-subtitle">Zona de peligro</h3>
+                <p className="tournament-card-meta">
+                  Eliminar la comunidad es una acción irreversible: todos los integrantes quedan libres (ya
+                  no va a figurar en su perfil) y deja de poder vincularse a eventos nuevos.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-block"
+                  onClick={handleEliminarComunidad}
+                  disabled={eliminando}
+                >
+                  {eliminando ? "Eliminando..." : "Eliminar comunidad"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -9541,6 +9541,47 @@ body.overlay-obs {
   white-space: nowrap;
 }
 
+/* ---------- Panel de control de Comunidad (migración 202) ----------
+   Modal centrado, mismo .modal-backdrop de siempre que ya usa el Panel
+   de control de Mi Clan (.team-leader-panel-propio) -- antes quedaba
+   en línea, empujando el resto de la ficha hacia abajo. Tamaño fijo
+   (no cambia de alto entre pestañas) -- el cuerpo (todo menos el
+   título y las pestañas) tiene su propio scroll interno como
+   respaldo, para que ninguna cantidad de integrantes rompa el tamaño
+   del panel. */
+.comunidad-panel {
+  position: relative;
+  width: min(92vw, 34rem);
+  height: min(85vh, 38rem);
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-accent);
+  box-shadow: 0 0 44px rgba(var(--h-accent-rgb), 0.3), 0 24px 60px rgba(0, 0, 0, 0.55);
+  background: linear-gradient(160deg, rgba(var(--h-accent-rgb), 0.08), transparent 55%), var(--color-panel);
+}
+
+.comunidad-panel-tabs {
+  flex-shrink: 0;
+  margin-top: 0.75rem;
+}
+
+.comunidad-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.comunidad-panel-integrantes-lista {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
 /* ---------- Comunidades (migración 198) ----------
    Ficha de "Eventos de la comunidad" -- mismo .detail-participant-item
    de siempre, pero como <Link> con la fecha empujada a la derecha. */
