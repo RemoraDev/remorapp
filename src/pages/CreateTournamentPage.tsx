@@ -209,6 +209,14 @@ export default function CreateTournamentPage() {
   const [temporadaNombreManual, setTemporadaNombreManual] = useState("");
 
   const [loading, setLoading] = useState(false);
+  // Corrección QA/UX: esta página tiene varios sub-formularios (pasos
+  // del torneo, Clan War Amistosa, Race War, crear liga) que antes
+  // solo mostraban sus errores por toast -- un toast que ya se cerró
+  // no deja rastro de qué estuvo mal en un formulario largo de varios
+  // pasos. Un solo banner (siempre en el mismo lugar, arriba de todo)
+  // alcanza porque el usuario solo interactúa con un sub-formulario a
+  // la vez.
+  const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
 
   const esLiga = tipoEvento === "liga";
   // Corrección, a pedido del usuario: "Liga y divisiones" (equipos
@@ -318,18 +326,19 @@ export default function CreateTournamentPage() {
   const handleProponerClanWarAmistosa = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
+    setErrorFormulario(null);
 
     if (!cwEquipoElegido) {
-      toast.error("Elige un clan rival en el buscador.");
+      setErrorFormulario("Elige un clan rival en el buscador.");
       return;
     }
     if (!cwFechaHora) {
-      toast.error("Elige la fecha y hora de la Clan War.");
+      setErrorFormulario("Elige la fecha y hora de la Clan War.");
       return;
     }
     const jugadores = Number(cwJugadoresPorSet);
     if (!jugadores || jugadores < 1) {
-      toast.error("La cantidad de jugadores por lado tiene que ser al menos 1.");
+      setErrorFormulario("La cantidad de jugadores por lado tiene que ser al menos 1.");
       return;
     }
 
@@ -351,7 +360,7 @@ export default function CreateTournamentPage() {
     setCwEnviando(false);
 
     if (proponerError) {
-      toast.error(proponerError.message);
+      setErrorFormulario(proponerError.message);
       return;
     }
 
@@ -366,6 +375,7 @@ export default function CreateTournamentPage() {
 
   const handleCrearRaceWar = async () => {
     if (!user) return;
+    setErrorFormulario(null);
     setCreandoRaceWar(true);
     const { data, error } = await supabase.rpc("crear_race_war", {
       p_titulo: raceWarTitulo.trim() || null,
@@ -374,7 +384,7 @@ export default function CreateTournamentPage() {
     setCreandoRaceWar(false);
 
     if (error) {
-      toast.error(error.message);
+      setErrorFormulario(error.message);
       return;
     }
 
@@ -384,9 +394,10 @@ export default function CreateTournamentPage() {
   const handleCrearLiga = async () => {
     const nombreLimpio = nuevaLigaNombre.trim();
     if (!nombreLimpio) return;
+    setErrorFormulario(null);
 
     if (contieneLenguajeInapropiado(nombreLimpio)) {
-      toast.error("Ese nombre no está permitido.");
+      setErrorFormulario("Ese nombre no está permitido.");
       return;
     }
 
@@ -397,7 +408,7 @@ export default function CreateTournamentPage() {
     setCreandoLiga(false);
 
     if (crearError || !data) {
-      toast.error(crearError?.message ?? "No se pudo crear la liga.");
+      setErrorFormulario(crearError?.message ?? "No se pudo crear la liga.");
       return;
     }
 
@@ -419,12 +430,13 @@ export default function CreateTournamentPage() {
   // asignada (liga_id null), igual que ya puede quedar sin división.
 
   const handleSiguiente = () => {
+    setErrorFormulario(null);
     if (paso === 1 && !puedeAvanzarDesdePaso1) {
-      toast.error("Ponle un nombre al torneo antes de seguir.");
+      setErrorFormulario("Ponle un nombre al torneo antes de seguir.");
       return;
     }
     if (paso === 2 && !puedeAvanzarDesdePaso2) {
-      toast.error("Elige la fecha de inicio y una cantidad de cupos válida.");
+      setErrorFormulario("Elige la fecha de inicio y una cantidad de cupos válida.");
       return;
     }
     setPaso((p) => Math.min(p + 1, totalPasos));
@@ -437,12 +449,13 @@ export default function CreateTournamentPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
+    setErrorFormulario(null);
 
     // También bloqueado a nivel de RLS (tournaments_insert_propio, ver
     // migración 004) -- este chequeo acá es solo para no dejar mandar
     // el formulario y mostrar el aviso al toque, no la única barrera.
     if (profile?.suspendido) {
-      toast.error("Tu cuenta está suspendida.");
+      setErrorFormulario("Tu cuenta está suspendida.");
       return;
     }
 
@@ -451,28 +464,28 @@ export default function CreateTournamentPage() {
     // para mostrar el aviso al toque. Solo el nick (país, servidor/ID
     // de SC2 quedaron opcionales, RemorApp no exige jugar StarCraft II).
     if (!profile?.cuenta_validada) {
-      toast.error("Necesitas completar tu perfil (el nick) antes de crear un torneo.");
+      setErrorFormulario("Necesitas completar tu perfil (el nick) antes de crear un torneo.");
       return;
     }
 
     // El nombre del torneo se muestra públicamente (listado y detalle),
     // así que pasa por el mismo filtro que el nick.
     if (contieneLenguajeInapropiado(nombre)) {
-      toast.error("Ese nombre no está permitido. Por favor elige otro.");
+      setErrorFormulario("Ese nombre no está permitido. Por favor elige otro.");
       return;
     }
 
     // Migración 074: mismo margen de tolerancia que el trigger de la
     // base.
     if (new Date(fechaInicio).getTime() < Date.now() - TOLERANCIA_FECHA_MS) {
-      toast.error("La fecha de inicio no puede ser en el pasado.");
+      setErrorFormulario("La fecha de inicio no puede ser en el pasado.");
       return;
     }
 
     // Migración 095: mismo límite de 60 días que exige
     // validar_fecha_inicio_torneo() en la base.
     if (new Date(fechaInicio).getTime() > Date.now() + LIMITE_ANTICIPACION_DIAS * 24 * 60 * 60 * 1000) {
-      toast.error(
+      setErrorFormulario(
         `La fecha de inicio no puede ser más de ${LIMITE_ANTICIPACION_DIAS} días en el futuro. Si necesitas programar con más anticipación, pídele a un administrador que extienda el plazo una vez creado el torneo.`
       );
       return;
@@ -481,7 +494,7 @@ export default function CreateTournamentPage() {
     const divisionesElegidas = esLiga ? divisiones.filter((d) => divisionesSeleccionadas[d.id]) : [];
 
     if (esLiga && temporadaModo === "manual" && !temporadaNombreManual.trim()) {
-      toast.error("Escribe el nombre de la temporada, o cambia a numerada.");
+      setErrorFormulario("Escribe el nombre de la temporada, o cambia a numerada.");
       return;
     }
 
@@ -545,7 +558,7 @@ export default function CreateTournamentPage() {
 
       if (torneoError || !torneo) {
         setLoading(false);
-        toast.error(
+        setErrorFormulario(
           idsCreados.length > 0
             ? `Se crearon ${idsCreados.length} de ${tandas.length} torneos antes de este error: ${
                 torneoError?.message ?? "No se pudo crear el torneo."
@@ -618,6 +631,7 @@ export default function CreateTournamentPage() {
           Paso {paso} de {totalPasos}
         </p>
       )}
+      {errorFormulario && <div className="form-error">{errorFormulario}</div>}
       <div className="form-group">
         <span className="form-label">Tipo de evento</span>
         <div className="modo-grid">

@@ -39,6 +39,11 @@ export default function CreateTeamPage() {
   const [cargandoEquipoActual, setCargandoEquipoActual] = useState(true);
 
   const [loading, setLoading] = useState(false);
+  // Corrección QA/UX: antes los errores de este formulario solo
+  // salían por toast (desaparece solo, sin rastro de qué campo
+  // falló) -- mismo patrón form-error que ya usan los formularios de
+  // auth (Login/Register).
+  const [errorFormulario, setErrorFormulario] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) {
@@ -127,20 +132,21 @@ export default function CreateTeamPage() {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
+    setErrorFormulario(null);
 
     const nombreLimpio = nombre.trim();
     const tagNormalizado = tag.trim().toUpperCase();
 
     if (nombreLimpio.length < 3 || nombreLimpio.length > 20) {
-      toast.error("El nombre del equipo tiene que tener entre 3 y 20 caracteres.");
+      setErrorFormulario("El nombre del equipo tiene que tener entre 3 y 20 caracteres.");
       return;
     }
     if (!TAG_REGEX.test(tagNormalizado)) {
-      toast.error("El tag tiene que ser de 3 a 6 letras mayúsculas, sin números ni símbolos.");
+      setErrorFormulario("El tag tiene que ser de 3 a 6 letras mayúsculas, sin números ni símbolos.");
       return;
     }
     if (regiones.length === 0) {
-      toast.error("Elige al menos un servidor.");
+      setErrorFormulario("Elige al menos un servidor.");
       return;
     }
     if (
@@ -148,7 +154,7 @@ export default function CreateTeamPage() {
       contieneLenguajeInapropiado(tagNormalizado) ||
       (descripcion.trim() && contieneLenguajeInapropiado(descripcion))
     ) {
-      toast.error("Ese nombre, tag o descripción no está permitido. Por favor cámbialo.");
+      setErrorFormulario("Ese nombre, tag o descripción no está permitido. Por favor cámbialo.");
       return;
     }
 
@@ -169,7 +175,7 @@ export default function CreateTeamPage() {
         .find((r) => regiones.includes(r));
       const label =
         SC2_REGION_OPTIONS.find((o) => o.value === regionEnConflicto)?.label ?? "ese servidor";
-      toast.error(`Ese tag ya está en uso en ${label}. Intenta con otro.`);
+      setErrorFormulario(`Ese tag ya está en uso en ${label}. Intenta con otro.`);
       setLoading(false);
       return;
     }
@@ -186,14 +192,14 @@ export default function CreateTeamPage() {
           .upload(ruta, logoComprimido, { contentType: logoComprimido.type });
 
         if (uploadError) {
-          toast.error("No se pudo subir el logo: " + uploadError.message);
+          setErrorFormulario("No se pudo subir el logo: " + uploadError.message);
           setLoading(false);
           return;
         }
 
         logoUrl = supabase.storage.from("team-logos").getPublicUrl(ruta).data.publicUrl;
       } catch {
-        toast.error("No se pudo procesar el logo, prueba con otra imagen.");
+        setErrorFormulario("No se pudo procesar el logo, prueba con otra imagen.");
         setLoading(false);
         return;
       }
@@ -216,7 +222,7 @@ export default function CreateTeamPage() {
     setLoading(false);
 
     if (teamError || !equipo) {
-      toast.error(teamError?.message ?? "No se pudo crear el equipo.");
+      setErrorFormulario(teamError?.message ?? "No se pudo crear el equipo.");
       return;
     }
 
@@ -230,6 +236,7 @@ export default function CreateTeamPage() {
       <p className="auth-sub">Arma tu clan y compite en RemorApp.</p>
 
       <form className="auth-form" onSubmit={handleSubmit}>
+        {errorFormulario && <div className="form-error">{errorFormulario}</div>}
         <div className="form-group">
           <label className="form-label" htmlFor="team-nombre">
             Nombre del equipo

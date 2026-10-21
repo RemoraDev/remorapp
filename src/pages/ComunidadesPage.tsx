@@ -29,6 +29,9 @@ export default function ComunidadesPage() {
   const [nombreNueva, setNombreNueva] = useState("");
   const [descripcionNueva, setDescripcionNueva] = useState("");
   const [creando, setCreando] = useState(false);
+  // Corrección QA/UX: mismo patrón form-error que auth -- antes el
+  // error solo salía por toast, sin rastro de qué falló.
+  const [errorCrear, setErrorCrear] = useState<string | null>(null);
 
   const panelCrearRef = useModalEscapeYFoco(() => setMostrarCrear(false), mostrarCrear);
 
@@ -80,17 +83,18 @@ export default function ComunidadesPage() {
   const handleCrear = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
+    setErrorCrear(null);
 
     const nombreLimpio = nombreNueva.trim();
     if (nombreLimpio.length < 3 || nombreLimpio.length > 40) {
-      toast.error("El nombre tiene que tener entre 3 y 40 caracteres.");
+      setErrorCrear("El nombre tiene que tener entre 3 y 40 caracteres.");
       return;
     }
     if (
       contieneLenguajeInapropiado(nombreLimpio) ||
       (descripcionNueva.trim() && contieneLenguajeInapropiado(descripcionNueva))
     ) {
-      toast.error("Ese nombre o descripción no está permitido. Por favor cámbialo.");
+      setErrorCrear("Ese nombre o descripción no está permitido. Por favor cámbialo.");
       return;
     }
 
@@ -102,7 +106,7 @@ export default function ComunidadesPage() {
     setCreando(false);
 
     if (error || !data) {
-      toast.error(error?.message ?? "No se pudo crear la comunidad.");
+      setErrorCrear(error?.message ?? "No se pudo crear la comunidad.");
       return;
     }
 
@@ -189,6 +193,7 @@ export default function ComunidadesPage() {
             </button>
             <h2 className="modal-title">Crear comunidad</h2>
             <form className="modal-form" onSubmit={handleCrear}>
+              {errorCrear && <div className="form-error">{errorCrear}</div>}
               <div className="form-group">
                 <label className="form-label" htmlFor="comunidad-nombre">
                   Nombre

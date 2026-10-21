@@ -23,6 +23,12 @@ interface ResultadoEquipo {
   logo_url: string | null;
 }
 
+interface ResultadoComunidad {
+  id: string;
+  nombre: string;
+  logo_url: string | null;
+}
+
 interface ResultadoJugador {
   id: string;
   nick: string;
@@ -46,6 +52,7 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
   const [buscando, setBuscando] = useState(false);
   const [torneos, setTorneos] = useState<ResultadoTorneo[]>([]);
   const [equipos, setEquipos] = useState<ResultadoEquipo[]>([]);
+  const [comunidades, setComunidades] = useState<ResultadoComunidad[]>([]);
   const [jugadores, setJugadores] = useState<ResultadoJugador[]>([]);
 
   useEffect(() => {
@@ -55,6 +62,7 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
       setBusqueda("");
       setTorneos([]);
       setEquipos([]);
+      setComunidades([]);
       setJugadores([]);
     }
   }, [abierto]);
@@ -64,6 +72,7 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
     if (termino.length < 2) {
       setTorneos([]);
       setEquipos([]);
+      setComunidades([]);
       setJugadores([]);
       setBuscando(false);
       return;
@@ -74,7 +83,7 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
       const partesNick = termino.split("#");
       const esNickId = partesNick.length === 2 && partesNick[0].trim() && partesNick[1].trim();
 
-      const [torneosRes, equiposRes, jugadoresRes] = await Promise.all([
+      const [torneosRes, equiposRes, comunidadesRes, jugadoresRes] = await Promise.all([
         supabase
           .from("tournaments")
           .select("id, nombre, estado")
@@ -92,6 +101,11 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
           .or(`name.ilike.%${termino}%,tag.ilike.%${termino}%`)
           .order("name")
           .limit(5),
+        // Corrección QA/UX: el buscador global no indexaba Comunidades
+        // -- se podía encontrar un clan por Ctrl+K pero no una
+        // comunidad, aunque las dos son entidades de primer nivel con
+        // su propio listado público.
+        supabase.from("comunidades").select("id, nombre, logo_url").ilike("nombre", `%${termino}%`).order("nombre").limit(5),
         esNickId
           ? supabase
               .from("profiles")
@@ -113,6 +127,7 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
 
       setTorneos((torneosRes.data ?? []) as ResultadoTorneo[]);
       setEquipos((equiposRes.data ?? []) as ResultadoEquipo[]);
+      setComunidades((comunidadesRes.data ?? []) as ResultadoComunidad[]);
       setJugadores((jugadoresRes.data ?? []) as ResultadoJugador[]);
       setBuscando(false);
     }, 300);
@@ -126,7 +141,12 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
   };
 
   const sinResultados =
-    busqueda.trim().length >= 2 && !buscando && torneos.length === 0 && equipos.length === 0 && jugadores.length === 0;
+    busqueda.trim().length >= 2 &&
+    !buscando &&
+    torneos.length === 0 &&
+    equipos.length === 0 &&
+    comunidades.length === 0 &&
+    jugadores.length === 0;
 
   return (
     <Command.Dialog
@@ -142,7 +162,7 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
         <Command.Input
           value={busqueda}
           onValueChange={setBusqueda}
-          placeholder="Buscar torneos, equipos o jugadores (Nick#ID)..."
+          placeholder="Buscar torneos, equipos, comunidades o jugadores (Nick#ID)..."
           autoFocus
         />
       </div>
@@ -177,6 +197,21 @@ export default function BuscadorGlobal({ abierto, onClose }: Props) {
                 )}
                 <span>{e.name}</span>
                 <span className="cmdk-item-meta">{e.tag}</span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        )}
+
+        {comunidades.length > 0 && (
+          <Command.Group heading="Comunidades">
+            {comunidades.map((c) => (
+              <Command.Item key={c.id} value={`comunidad-${c.id}`} onSelect={() => irA(`/comunidades/${c.id}`)}>
+                {c.logo_url ? (
+                  <img src={c.logo_url} alt="" className="cmdk-item-avatar" />
+                ) : (
+                  <Users size={16} className="cmdk-item-icon" />
+                )}
+                <span>{c.nombre}</span>
               </Command.Item>
             ))}
           </Command.Group>
