@@ -56,7 +56,11 @@ html.es-escritorio-sin-foco *::after {
 
   --color-text: #eceae4;
   --color-text-muted: #a39b8a;
-  --color-text-faint: #6b6459;
+  /* Corrección QA/UX: #6b6459 contra --color-bg (#06070a) da ~3.4:1,
+     por debajo del mínimo AA de 4.5:1 para texto normal -- se usa en
+     20+ lugares para metadatos secundarios. Subido a #8c8374 (~5.4:1),
+     mismo tono cálido apagado, legible. */
+  --color-text-faint: #8c8374;
 
   --font-display: "Orbitron", sans-serif;
   --font-body: "Inter", sans-serif;
@@ -150,7 +154,10 @@ html.es-escritorio-sin-foco *::after {
 
   --color-text: #171b21;
   --color-text-muted: #4b5563;
-  --color-text-faint: #6b7480;
+  /* Corrección QA/UX: #6b7480 contra --color-bg claro (#eef1f5) da
+     ~4.2:1, por debajo del mínimo AA de 4.5:1. Bajado a #5b6472
+     (~5.3:1), mismo tono, legible. */
+  --color-text-faint: #5b6472;
 
   --shadow-accent: 0 0 0 1px rgba(8, 145, 178, 0.3), 0 0 20px rgba(8, 145, 178, 0.12);
   --shadow-accent-lg: 0 0 0 1px rgba(8, 145, 178, 0.4), 0 0 28px rgba(8, 145, 178, 0.18);
@@ -3739,15 +3746,13 @@ html.es-escritorio .player-detail-panel-inline {
   border: 1px solid var(--color-border);
 }
 
-/* Vista previa de la franja lateral de escritorio (migración 156) --
-   angosta y alta, como la columna real que va a reemplazar. */
+/* Corrección QA/UX: esto era una copia pixel-por-pixel de
+   .franja-lateral-preview (más abajo en esta hoja) -- ahora solo
+   agrega el margen propio de Mi Clan; el resto de las propiedades
+   vive en la clase compartida. Se usa junto a ella en el markup
+   (className="franja-lateral-preview team-franja-lateral-preview"). */
 .team-franja-lateral-preview {
   margin-top: 0.6rem;
-  width: 6rem;
-  height: 10rem;
-  object-fit: cover;
-  border-radius: 0.5rem;
-  border: 1px solid var(--color-border);
 }
 
 /* ---------- Llave de eliminación simple ---------- */
@@ -7162,6 +7167,28 @@ html.es-escritorio .player-detail-panel-inline {
   }
 }
 
+/* Corrección QA/UX: con 7 ítems (tieneComunidad) y etiquetas de dos
+   palabras ("Mi comunidad", "Mis Eventos"), un celular angosto de
+   verdad (320-375px) no tenía margen real -- la media query de
+   <400px de arriba agranda los tokens de ícono/letra en vez de
+   achicarlos, pensada para 5 ítems. Acá, solo con 7 ítems, la
+   etiqueta de texto pasa a invisible-pero-accesible (mismo truco que
+   .sr-only) y queda solo el ícono -- el aria-label del NavLink (ver
+   BottomNav.tsx) sigue describiéndolo para lectores de pantalla. */
+@media (max-width: 380px) {
+  .bottom-nav-inner-expandida .bottom-nav-item span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+
 .hex-pattern polygon {
   fill: none;
   stroke: var(--h-accent);
@@ -8135,8 +8162,10 @@ html.es-escritorio .fan-menu-item-label {
   gap: 0.6rem;
 }
 
-/* Vista previa de la franja lateral de escritorio propia (migración
-   156) -- mismas proporciones angostas/altas que .team-franja-lateral-preview. */
+/* Vista previa de la franja lateral de escritorio -- angosta y alta,
+   como la columna real que va a reemplazar. Clase compartida entre
+   Mi Clan (que le suma .team-franja-lateral-preview para el margen)
+   y Comunidades. */
 .franja-lateral-preview {
   margin-bottom: 0.75rem;
   width: 6rem;

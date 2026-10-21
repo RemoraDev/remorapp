@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { X, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 
 // Visor de PDF embebido con PDF.js (Mozilla, Apache-2.0) -- se renderiza
 // página por página en un <canvas>, sin redirigir a ningún lector
@@ -22,6 +23,12 @@ export default function VisorPdf({ url, titulo, onCerrar }: VisorPdfProps) {
   const [error, setError] = useState<string | null>(null);
   const [paginaActual, setPaginaActual] = useState(1);
   const [totalPaginas, setTotalPaginas] = useState(0);
+
+  // Corrección QA/UX: a diferencia del recortador de imagen, no hay
+  // ningún trabajo en progreso que se pueda perder acá -- se suma
+  // click afuera para cerrar (como el resto de los modales de la
+  // app, que antes no tenía) más Escape y foco atrapado.
+  const panelRef = useModalEscapeYFoco(onCerrar, true);
 
   // Carga del documento: una sola vez por URL. pdfjs-dist necesita un
   // Worker propio para parsear el PDF fuera del hilo principal -- se
@@ -85,8 +92,8 @@ export default function VisorPdf({ url, titulo, onCerrar }: VisorPdfProps) {
   }, [paginaActual, totalPaginas]);
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal-panel visor-pdf-panel">
+    <div className="modal-backdrop" onClick={onCerrar}>
+      <div className="modal-panel visor-pdf-panel" onClick={(e) => e.stopPropagation()} ref={panelRef} tabIndex={-1}>
         <button type="button" className="modal-close" onClick={onCerrar} aria-label="Cerrar">
           <X size={18} />
         </button>

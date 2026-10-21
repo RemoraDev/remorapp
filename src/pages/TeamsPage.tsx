@@ -243,7 +243,16 @@ export default function TeamsPage() {
       <div className="equipos-lista-scroll">
         {cargando && <p className="tournament-card-meta">Cargando equipos...</p>}
         {!cargando && equiposFiltrados.length === 0 && (
-          <p className="tournament-card-meta">No hay equipos que calcen con esa búsqueda.</p>
+          equipos.length === 0 && !busqueda.trim() && !regionFiltro ? (
+            <p className="detail-empty">
+              Todavía no hay ningún equipo.{" "}
+              <Link to="/equipos/crear" className="btn-link">
+                Crea el primero
+              </Link>
+            </p>
+          ) : (
+            <p className="tournament-card-meta">No hay equipos que calcen con esa búsqueda.</p>
+          )
         )}
 
         <div className="team-grid">

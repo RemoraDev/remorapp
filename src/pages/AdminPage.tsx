@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 import ListaNoticiasReordenable from "../components/ListaNoticiasReordenable";
 import { useAuth } from "../context/AuthContext";
 import { useOverlayPanel } from "../hooks/useOverlayPanel";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 import { formatFecha } from "../lib/formatters";
 import { datetimeLocalAIso } from "../lib/clanWars";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
@@ -232,6 +233,8 @@ export default function AdminPage() {
   // Migración 151: mismo tratamiento de "ventana superpuesta" que Mi
   // perfil y Panel Staff -- ver StaffPage.tsx.
   const { esOverlay, cerrarOverlay } = useOverlayPanel();
+  // Corrección QA/UX: Escape y atrapar el foco cuando se muestra como overlay.
+  const panelOverlayRef = useModalEscapeYFoco<HTMLElement>(cerrarOverlay, esOverlay);
 
   // --- Torneos por confirmar ---
   const [torneos, setTorneos] = useState<TournamentRow[]>([]);
@@ -1820,6 +1823,8 @@ export default function AdminPage() {
           : "section section-page"
       }
       onClick={esOverlay ? (e) => e.stopPropagation() : undefined}
+      ref={esOverlay ? panelOverlayRef : undefined}
+      tabIndex={esOverlay ? -1 : undefined}
     >
       {esOverlay ? (
         <>

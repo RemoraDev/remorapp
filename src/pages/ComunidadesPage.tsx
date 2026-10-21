@@ -7,6 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import type { ComunidadRow } from "../types/comunidades";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 
 interface ComunidadConInfo extends ComunidadRow {
   memberCount: number;
@@ -28,6 +29,8 @@ export default function ComunidadesPage() {
   const [nombreNueva, setNombreNueva] = useState("");
   const [descripcionNueva, setDescripcionNueva] = useState("");
   const [creando, setCreando] = useState(false);
+
+  const panelCrearRef = useModalEscapeYFoco(() => setMostrarCrear(false), mostrarCrear);
 
   const cargarComunidades = async () => {
     setCargando(true);
@@ -137,7 +140,18 @@ export default function ComunidadesPage() {
       <div className="equipos-lista-scroll">
         {cargando && <p className="tournament-card-meta">Cargando comunidades...</p>}
         {!cargando && comunidadesFiltradas.length === 0 && (
-          <p className="tournament-card-meta">No hay comunidades que calcen con esa búsqueda.</p>
+          comunidades.length === 0 && !busqueda.trim() ? (
+            <p className="detail-empty">
+              Todavía no hay ninguna comunidad.{" "}
+              {user && (
+                <button type="button" className="btn-link" onClick={() => setMostrarCrear(true)}>
+                  Crea la primera
+                </button>
+              )}
+            </p>
+          ) : (
+            <p className="tournament-card-meta">No hay comunidades que calcen con esa búsqueda.</p>
+          )
         )}
 
         <div className="team-grid">
@@ -164,7 +178,7 @@ export default function ComunidadesPage() {
 
       {mostrarCrear && (
         <div className="modal-backdrop" onClick={() => setMostrarCrear(false)}>
-          <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} ref={panelCrearRef} tabIndex={-1}>
             <button
               type="button"
               className="modal-close"

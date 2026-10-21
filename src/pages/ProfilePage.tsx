@@ -12,6 +12,7 @@ import { useSkinWeb, SKINS_WEB } from "../context/SkinWebContext";
 import { validarNick } from "../lib/nickValidation";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import { useOverlayPanel } from "../hooks/useOverlayPanel";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import { formatFecha } from "../lib/formatters";
 import { COUNTRY_OPTIONS, LIGA_OPTIONS, SC2_REGION_OPTIONS, perfilEstaCompleto } from "../types/profile";
@@ -231,6 +232,10 @@ export default function ProfilePage() {
   // perder su lugar. Sin ese state (entrar directo por URL, recargar,
   // o venir de un <Link> normal) se sigue viendo como página completa.
   const { esOverlay, abrirOverlay, cerrarOverlay } = useOverlayPanel();
+  // Corrección QA/UX: Escape y atrapar el foco cuando se muestra como
+  // overlay -- en la página normal (esOverlay false) el hook queda
+  // inactivo, no tiene sentido atrapar el foco en una página entera.
+  const panelOverlayRef = useModalEscapeYFoco<HTMLElement>(cerrarOverlay, esOverlay);
 
   // --- Estadísticas (nuevo botón de primer nivel): solo hace falta
   // saber si el usuario pertenece a un equipo, para decidir si
@@ -1454,6 +1459,8 @@ export default function ProfilePage() {
     <section
       className={esOverlay ? "auth-page profile-overlay-panel" : "auth-page"}
       onClick={esOverlay ? (e) => e.stopPropagation() : undefined}
+      ref={esOverlay ? panelOverlayRef : undefined}
+      tabIndex={esOverlay ? -1 : undefined}
     >
       {esOverlay && (
         <button type="button" className="modal-close" onClick={cerrarOverlay} aria-label="Cerrar panel de Mi perfil">

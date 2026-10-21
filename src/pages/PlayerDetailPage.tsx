@@ -23,6 +23,7 @@ import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import { COLOR_PLATAFORMA_STREAM, extraerNombreCanal, normalizarUrlStream } from "../lib/streamLinks";
 import { obtenerComunidadesDelUsuario } from "../lib/comunidades";
 import type { ComunidadRow } from "../types/comunidades";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 
 interface PerfilPublico {
   id: string;
@@ -127,6 +128,8 @@ export default function PlayerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
+  // Corrección QA/UX: Escape y atrapar el foco dentro del panel.
+  const panelControlRef = useModalEscapeYFoco(() => setPanelAbierto(false), panelAbierto);
   // Pestañas de la vista de escritorio (Perfil/Stream/Logros) -- la
   // vista móvil de arriba no las usa, se mantiene como una sola página
   // apilada de siempre.
@@ -723,7 +726,12 @@ export default function PlayerDetailPage() {
               {panelAbierto &&
                 createPortal(
                   <div className="modal-backdrop" onClick={() => setPanelAbierto(false)}>
-                    <div className="team-leader-panel team-leader-panel-propio" onClick={(e) => e.stopPropagation()}>
+                    <div
+                      className="team-leader-panel team-leader-panel-propio"
+                      onClick={(e) => e.stopPropagation()}
+                      ref={panelControlRef}
+                      tabIndex={-1}
+                    >
                       <button
                         type="button"
                         className="modal-close"

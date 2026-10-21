@@ -9,6 +9,7 @@ import { formatFecha } from "../lib/formatters";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import ListaNoticiasReordenable from "../components/ListaNoticiasReordenable";
 import { useOverlayPanel } from "../hooks/useOverlayPanel";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 
 interface ReporteStaff {
   id: string;
@@ -53,6 +54,8 @@ export default function StaffPage() {
   // página de fondo en vez de navegar de lleno. Entrando directo por
   // URL/marcador, sigue siendo una página completa como siempre.
   const { esOverlay, cerrarOverlay } = useOverlayPanel();
+  // Corrección QA/UX: Escape y atrapar el foco cuando se muestra como overlay.
+  const panelOverlayRef = useModalEscapeYFoco<HTMLElement>(cerrarOverlay, esOverlay);
 
   // --- Crear liga de clanes (mismo mecanismo que ya usa cualquier
   // cuenta autenticada desde /tournaments/create, ver crear_liga()) ---
@@ -271,6 +274,8 @@ export default function StaffPage() {
     <section
       className={esOverlay ? "section section-page team-leader-panel team-leader-panel-propio" : "section section-page"}
       onClick={esOverlay ? (e) => e.stopPropagation() : undefined}
+      ref={esOverlay ? panelOverlayRef : undefined}
+      tabIndex={esOverlay ? -1 : undefined}
     >
       {esOverlay ? (
         <>

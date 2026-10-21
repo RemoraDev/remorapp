@@ -88,24 +88,37 @@ export default function BottomNav() {
             derecha no necesita este botón para nada -- ahí vuelve a
             ser "Inicio" (chatFijoVisible, ver más arriba). */}
         {chatFijoVisible ? (
-          <NavLink to="/" end className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <NavLink
+            to="/"
+            end
+            className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}
+            aria-label="Inicio"
+          >
             <Home />
             <span>Inicio</span>
           </NavLink>
         ) : (
-          <NavLink to="/chat-lideres" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <NavLink
+            to="/chat-lideres"
+            className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}
+            aria-label="Chat"
+          >
             <MessageSquare />
             <span>Chat</span>
           </NavLink>
         )}
 
-        <NavLink to={miClanHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+        <NavLink to={miClanHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`} aria-label="Mi Clan">
           <Shield />
           <span>Mi Clan</span>
         </NavLink>
 
         {tieneComunidad && (
-          <NavLink to={miComunidadHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <NavLink
+            to={miComunidadHref}
+            className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}
+            aria-label="Mi comunidad"
+          >
             <Users />
             <span>Mi comunidad</span>
           </NavLink>
@@ -130,7 +143,11 @@ export default function BottomNav() {
         </div>
 
         {tieneComunidad && (
-          <NavLink to="/mis-eventos" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+          <NavLink
+            to="/mis-eventos"
+            className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}
+            aria-label="Mis Eventos"
+          >
             <CalendarCheck />
             <span>Mis Eventos</span>
           </NavLink>
@@ -139,12 +156,12 @@ export default function BottomNav() {
         {/* Ranking (migración 059) ocupa el lugar que dejó Tienda --
             Torneos ya vive en el abanico central, no hace falta
             moverlo de nuevo (ver el comentario en FanMenu.tsx). */}
-        <NavLink to="/ranking" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+        <NavLink to="/ranking" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`} aria-label="Ranking">
           <BarChart3 />
           <span>Ranking</span>
         </NavLink>
 
-        <NavLink to={miPerfilHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+        <NavLink to={miPerfilHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`} aria-label="Mi perfil">
           <User />
           <span>Mi perfil</span>
         </NavLink>

@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import MisTitulosPadreHijoList from "../components/MisTitulosPadreHijoList";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 import type {
   DetalleActividadClan,
   DivisionLiga,
@@ -52,6 +53,8 @@ export default function RankingPage() {
   // cuenta como actividad de ESE clan puntual -- transparencia sobre
   // el número de más arriba, para que se note que no hay trampa.
   const [detalleActividadClan, setDetalleActividadClan] = useState<RankingActividadClan | null>(null);
+  // Corrección QA/UX: Escape y atrapar el foco dentro del modal.
+  const panelDetalleRef = useModalEscapeYFoco(() => setDetalleActividadClan(null), !!detalleActividadClan);
   const [detalleActividad, setDetalleActividad] = useState<DetalleActividadClan[]>([]);
   const [cargandoDetalleActividad, setCargandoDetalleActividad] = useState(false);
 
@@ -558,7 +561,12 @@ export default function RankingPage() {
           trampa. */}
       {detalleActividadClan && (
         <div className="modal-backdrop" onClick={() => setDetalleActividadClan(null)}>
-          <div className="modal-panel detalle-actividad-panel" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-panel detalle-actividad-panel"
+            onClick={(e) => e.stopPropagation()}
+            ref={panelDetalleRef}
+            tabIndex={-1}
+          >
             <button
               type="button"
               className="modal-close"

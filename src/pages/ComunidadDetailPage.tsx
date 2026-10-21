@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Users, X, Clock, Radio, Globe2, Languages, Gamepad2 } from "lucide-react";
+import { Users, X, Clock, Radio, Globe2, Languages, Gamepad2, ArrowLeft } from "lucide-react";
 // Performance: antes vivía en main.tsx (cargaba para cualquier visita
 // a la app) -- acá solo entra en el chunk de esta página, la única
 // otra que muestra una bandera real (país del streamer).
@@ -10,6 +10,7 @@ import "flag-icons/css/flag-icons.min.css";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { comprimirImagen } from "../lib/imageCompression";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 import Avatar from "../components/Avatar";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
 import type { ComunidadRow } from "../types/comunidades";
@@ -171,6 +172,11 @@ export default function ComunidadDetailPage() {
     cargarComunidad();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Corrección QA/UX: Escape y atrapar el foco dentro del modal
+  // abierto -- antes ninguno de los dos cerraba con Escape.
+  const panelControlRef = useModalEscapeYFoco(() => setPanelAbierto(false), panelAbierto);
+  const panelIntegrantesRef = useModalEscapeYFoco(() => setMostrandoIntegrantes(false), mostrandoIntegrantes);
 
   if (cargando) {
     return <p className="tournament-card-meta">Cargando comunidad...</p>;
@@ -489,6 +495,15 @@ export default function ComunidadDetailPage() {
 
   return (
     <section className="section section-page" data-tema-equipo={comunidad.tema_comunidad}>
+      {/* Corrección QA/UX: esta ficha solo tenía "Volver a Comunidades"
+          en el estado de no-encontrada -- quien llega acá desde otro
+          lado (no desde /comunidades) dependía del botón atrás del
+          navegador. */}
+      <Link to="/comunidades" className="btn-link detail-volver-eventos">
+        <ArrowLeft size={16} className="icon-inline" aria-hidden="true" />
+        Volver a Comunidades
+      </Link>
+
       <div className="team-detail-banner-wrap">
         {comunidad.banner_url ? (
           <img src={comunidad.banner_url} alt="" className="team-detail-banner" />
@@ -545,7 +560,7 @@ export default function ComunidadDetailPage() {
 
       {panelAbierto && esCreador && (
         <div className="modal-backdrop" onClick={() => setPanelAbierto(false)}>
-          <div className="comunidad-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="comunidad-panel" onClick={(e) => e.stopPropagation()} ref={panelControlRef} tabIndex={-1}>
             <button
               type="button"
               className="modal-close"
@@ -1006,7 +1021,7 @@ export default function ComunidadDetailPage() {
 
       {mostrandoIntegrantes && (
         <div className="modal-backdrop" onClick={() => setMostrandoIntegrantes(false)}>
-          <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} ref={panelIntegrantesRef} tabIndex={-1}>
             <button
               type="button"
               className="modal-close"

@@ -26,6 +26,7 @@ import {
   Radio,
   HelpCircle,
   X,
+  ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
@@ -69,6 +70,7 @@ import LogrosClanWarList from "../components/LogrosClanWarList";
 import LogrosTorneosList from "../components/LogrosTorneosList";
 import MiniEventosClanList from "../components/MiniEventosClanList";
 import ActividadClanList from "../components/ActividadClanList";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 
 // Migración 145: el límite subió de 2MB/3MB a 15MB -- comprimirImagen()
 // baja el peso antes de subir, así que acá solo hace falta cubrir una
@@ -620,6 +622,8 @@ export default function TeamDetailPage() {
   // Adentro, el panel es un menú de 5 secciones (más "configuracion");
   // seccionPanel === null muestra el menú, no una sección puntual.
   const [panelAbierto, setPanelAbierto] = useState(false);
+  // Corrección QA/UX: Escape y atrapar el foco dentro del panel.
+  const panelControlRef = useModalEscapeYFoco(() => setPanelAbierto(false), panelAbierto);
   const [seccionPanel, setSeccionPanel] = useState<SeccionPanel | null>(null);
   // Pestañas de Configuración (migración 158, ampliada en la 160): antes
   // Apariencia/Logo/Banner/Franja lateral/Editar equipo/Eliminar equipo
@@ -3548,6 +3552,15 @@ export default function TeamDetailPage() {
 
   return (
     <section className="section section-page" data-tema-equipo={equipo.tema_equipo}>
+      {/* Corrección QA/UX: esta ficha solo tenía "Volver a equipos" en
+          los estados de error -- quien llega acá desde el Ranking o el
+          perfil de otro jugador (no desde /equipos) dependía del botón
+          atrás del navegador. */}
+      <Link to="/equipos" className="btn-link detail-volver-eventos">
+        <ArrowLeft size={16} className="icon-inline" aria-hidden="true" />
+        Volver a Clanes
+      </Link>
+
       <div className="team-detail-banner-wrap">
         {equipo.banner_url ? (
           <img src={equipo.banner_url} alt="" className="team-detail-banner" />
@@ -4159,7 +4172,12 @@ export default function TeamDetailPage() {
               del panel no dispare el cierre del backdrop. */}
           {panelAbierto && (
             <div className="modal-backdrop" onClick={() => setPanelAbierto(false)}>
-              <div className="team-leader-panel team-leader-panel-propio" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="team-leader-panel team-leader-panel-propio"
+                onClick={(e) => e.stopPropagation()}
+                ref={panelControlRef}
+                tabIndex={-1}
+              >
               <button
                 type="button"
                 className="modal-close"
@@ -4558,7 +4576,7 @@ export default function TeamDetailPage() {
                   <img
                     src={franjaLateralPreview ?? equipo.escritorio_lateral_url ?? ""}
                     alt="Vista previa de la franja lateral"
-                    className="team-franja-lateral-preview"
+                    className="franja-lateral-preview team-franja-lateral-preview"
                   />
                 )}
               </div>

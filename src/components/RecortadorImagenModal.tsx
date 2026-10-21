@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import Cropper from "react-easy-crop";
 import type { Area, Point } from "react-easy-crop";
 import { recortarImagenDesdeArea } from "../lib/imageCrop";
+import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
 
 interface RecortadorImagenModalProps {
   archivo: File;
@@ -36,6 +37,13 @@ export default function RecortadorImagenModal({
   const [procesando, setProcesando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Corrección QA/UX: Escape y atrapar el foco dentro del modal --
+  // sigue sin cerrar al clickear afuera a propósito (a diferencia del
+  // resto de los modales de la app), para no perder un recorte en
+  // progreso por un click accidental; Escape sí cierra, igual que el
+  // botón X de arriba, para quien prefiere el teclado.
+  const panelRef = useModalEscapeYFoco(onCancelar, true);
+
   useEffect(() => {
     const url = URL.createObjectURL(archivo);
     setImagenUrl(url);
@@ -57,7 +65,7 @@ export default function RecortadorImagenModal({
 
   return (
     <div className="modal-backdrop">
-      <div className="modal-panel modal-panel-recorte">
+      <div className="modal-panel modal-panel-recorte" ref={panelRef} tabIndex={-1}>
         <button type="button" className="modal-close" onClick={onCancelar} aria-label="Cancelar">
           <X size={18} />
         </button>
