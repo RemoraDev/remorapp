@@ -256,6 +256,14 @@ export default function TournamentDetailPage() {
   // suma una clase que lo saca del flujo normal (position: fixed,
   // cubre toda la ventana) en vez de desmontar/remontar BracketView.
   const [bracketPantallaCompleta, setBracketPantallaCompleta] = useState(false);
+  // Migración 199, a pedido del usuario: nodo DOM FUERA de
+  // .tournament-bracket-wrap donde BracketView porta los botones
+  // "Grupo A/Grupo B/Vista panorámica" (antes quedaban adentro de la
+  // caja donde se dibuja la llave). Se guarda en estado (no en un ref
+  // común) porque un ref recién se llena después del commit -- con
+  // estado, el callback ref dispara un re-render apenas el nodo existe,
+  // así el portal encuentra destino ya en la primera pasada útil.
+  const [tabsGruposSlot, setTabsGruposSlot] = useState<HTMLDivElement | null>(null);
 
   // Esc cierra la pantalla completa de la llave.
   useEffect(() => {
@@ -2831,6 +2839,12 @@ export default function TournamentDetailPage() {
                           {descargandoBracket ? "Generando imagen..." : "Descargar como imagen"}
                         </button>
                       </div>
+                      {/* A pedido del usuario: "Grupo A"/"Grupo B"/"Vista
+                          panorámica" (llaves de 16+ participantes) tienen
+                          que quedar FUERA de la caja donde se dibuja la
+                          llave -- BracketView los portalea acá cuando
+                          corresponde (ver tabsSlotEl más abajo). */}
+                      <div ref={setTabsGruposSlot} />
                       <div
                         className={`tournament-bracket-wrap ${
                           bracketPantallaCompleta ? "tournament-bracket-wrap-completa" : ""
@@ -2873,6 +2887,7 @@ export default function TournamentDetailPage() {
                           paisesPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.pais]))}
                           bannersPorParticipante={Object.fromEntries(participantes.map((p) => [p.id, p.bannerUrl]))}
                           nombreTorneo={torneo.nombre}
+                          tabsSlotEl={tabsGruposSlot}
                           nombresRondaPersonalizados={torneo.mostrar_nombres_ronda_personalizados}
                           permiteAutoreporte={torneo.permite_autoreporte}
                           puedeReportarPorParticipante={puedeReportarPorParticipante}

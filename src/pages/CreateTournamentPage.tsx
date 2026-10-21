@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { ArrowLeft } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import InfoTooltip from "../components/InfoTooltip";
@@ -593,6 +594,13 @@ export default function CreateTournamentPage() {
 
   return (
     <section className="create-tournament-page">
+      <Link
+        to={comunidadId ? `/comunidades/${comunidadId}` : "/tournaments"}
+        className="btn-link detail-volver-eventos"
+      >
+        <ArrowLeft size={16} className="icon-inline" aria-hidden="true" />
+        {comunidadId ? "Volver a la comunidad" : "Volver a eventos"}
+      </Link>
       <div className="section-head">
         <h1 className="section-title">Crear evento</h1>
       </div>

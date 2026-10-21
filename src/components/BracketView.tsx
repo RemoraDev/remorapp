@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Check, Crown } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
@@ -121,6 +122,14 @@ interface BracketViewProps {
   // siempre (ver TournamentDetailPage.tsx, handleVerCelebracion).
   campeonParticipantId?: string | null;
   onClickCampeon?: () => void;
+  // Migración 199, a pedido del usuario: en una llave grande
+  // (Grupo A/Grupo B/Vista panorámica), esos 3 botones quedaban
+  // adentro de la caja donde se dibuja la llave (.tournament-bracket-wrap)
+  // -- con esto el llamador puede pasar el nodo DOM de un lugar FUERA
+  // de esa caja (ver TournamentDetailPage.tsx) y los botones se
+  // portalean ahí. Sin este prop, siguen renderizando en su lugar de
+  // siempre (por ejemplo, el overlay de OBS no lo pasa).
+  tabsSlotEl?: HTMLElement | null;
 }
 
 // Estimación del alto de UN partido -- fija la altura total del
@@ -170,6 +179,7 @@ export default function BracketView({
   miParticipantId = null,
   campeonParticipantId = null,
   onClickCampeon,
+  tabsSlotEl = null,
 }: BracketViewProps) {
   const [reportando, setReportando] = useState<string | null>(null);
   const [errores, setErrores] = useState<Record<string, string>>({});
@@ -451,7 +461,16 @@ export default function BracketView({
     return { rondas, partidosPorRonda, alturaBracket, totalRondasReal, nombresTradicionales, permiteFinal };
   };
 
-  const renderGrilla = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => {
+  const renderGrilla = (
+    grilla: ReturnType<typeof armarGrilla>,
+    keyPrefix: string,
+    // Migración 199, a pedido del usuario: en Vista panorámica, el
+    // último partido de CADA grupo también se llamaba "Final" (mismo
+    // nombre que la gran final de arriba) -- confuso, parecía que
+    // había dos finales. Solo se usa acá (Grupo A/B solos no lo
+    // necesitan, ahí no conviven con otra "Final" en la misma pantalla).
+    tituloFinal?: string
+  ) => {
     const lineas = conectoresPorGrilla[keyPrefix] ?? [];
     const tamano = tamanoPorGrilla[keyPrefix];
     // Migración 177: "vertical" fija el ANCHO total (las rondas se
@@ -500,13 +519,16 @@ export default function BracketView({
           return (
             <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
               <div className="bracket-round-title">
-                {nombreDeRondaTradicional(
-                  grilla.rondas,
-                  indiceRonda,
-                  grilla.totalRondasReal,
-                  partidos.length,
-                  grilla.permiteFinal
-                )}
+                {(() => {
+                  const nombreRonda = nombreDeRondaTradicional(
+                    grilla.rondas,
+                    indiceRonda,
+                    grilla.totalRondasReal,
+                    partidos.length,
+                    grilla.permiteFinal
+                  );
+                  return nombreRonda === "Final" && tituloFinal ? tituloFinal : nombreRonda;
+                })()}
               </div>
 
               <div className="bracket-round-matches">
@@ -972,33 +994,42 @@ export default function BracketView({
     const partidosSinTercerLugar = matches.filter((m) => !m.es_tercer_lugar);
     const { izquierda, derecha, final } = partidosParaEmbudo(partidosSinTercerLugar);
 
+    const tabsGrupos = (
+      <div className="bracket-grupos-tabs">
+        <button
+          type="button"
+          className={`bracket-grupos-tab ${vistaGrupo === "a" ? "selected" : ""}`}
+          onClick={() => setVistaGrupo("a")}
+        >
+          Grupo A
+        </button>
+        <button
+          type="button"
+          className={`bracket-grupos-tab ${vistaGrupo === "b" ? "selected" : ""}`}
+          onClick={() => setVistaGrupo("b")}
+        >
+          Grupo B
+        </button>
+        <button
+          type="button"
+          className={`bracket-grupos-tab ${vistaGrupo === "panoramica" ? "selected" : ""}`}
+          onClick={() => setVistaGrupo("panoramica")}
+        >
+          Vista panorámica
+        </button>
+      </div>
+    );
+
     return (
       <>
         {renderBanner()}
 
-        <div className="bracket-grupos-tabs">
-          <button
-            type="button"
-            className={`bracket-grupos-tab ${vistaGrupo === "a" ? "selected" : ""}`}
-            onClick={() => setVistaGrupo("a")}
-          >
-            Grupo A
-          </button>
-          <button
-            type="button"
-            className={`bracket-grupos-tab ${vistaGrupo === "b" ? "selected" : ""}`}
-            onClick={() => setVistaGrupo("b")}
-          >
-            Grupo B
-          </button>
-          <button
-            type="button"
-            className={`bracket-grupos-tab ${vistaGrupo === "panoramica" ? "selected" : ""}`}
-            onClick={() => setVistaGrupo("panoramica")}
-          >
-            Vista panorámica
-          </button>
-        </div>
+        {/* Migración 199, a pedido del usuario: estos 3 botones quedaban
+            adentro de la caja donde se dibuja la llave -- con tabsSlotEl
+            se portalean a un lugar FUERA de esa caja (ver
+            TournamentDetailPage.tsx). Sin ese prop (el overlay de OBS,
+            por ejemplo), siguen acá adentro como antes. */}
+        {tabsSlotEl ? createPortal(tabsGrupos, tabsSlotEl) : tabsGrupos}
 
         {vistaGrupo === "a" && renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a")}
         {vistaGrupo === "b" && renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b")}
@@ -1029,11 +1060,11 @@ export default function BracketView({
               )}
               <div className="bracket-panoramica-grupo">
                 <div className="bracket-round-title bracket-seccion-titulo">Grupo A</div>
-                {renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a-pan")}
+                {renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a-pan", "Final Grupo A")}
               </div>
               <div className="bracket-panoramica-grupo">
                 <div className="bracket-round-title bracket-seccion-titulo">Grupo B</div>
-                {renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b-pan")}
+                {renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b-pan", "Final Grupo B")}
               </div>
               {partidoTercerLugar && (
                 <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>

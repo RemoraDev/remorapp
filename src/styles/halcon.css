@@ -3887,6 +3887,12 @@ html.es-escritorio .player-detail-panel-inline {
      menos partidos. Ahora los títulos de todas las rondas quedan
      siempre a la misma altura. */
   flex-shrink: 0;
+  /* Mismo bug que .bracket-match: .bracket-conectores es position:
+     absolute sin z-index, así que por las reglas normales de stacking
+     pinta ENCIMA del texto en vez de quedar detrás (a pedido del
+     usuario, "FINAL" quedaba tapado por el láser). */
+  position: relative;
+  z-index: 1;
   text-align: center;
   font-family: var(--font-display);
   font-weight: 700;
