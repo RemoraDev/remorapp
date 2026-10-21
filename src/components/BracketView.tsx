@@ -409,8 +409,21 @@ export default function BracketView({
   // veía visualmente IGUAL al autoreporte normal de jugador -- mismo
   // riesgo que el aviso de arriba, acá sirve para mostrar un recordatorio
   // fijo y pintar los recuadros elegibles con un estilo distinto
-  // (ver .bracket-slot-organizador-live en halcon.css).
-  const modoOrganizadorLive = userId === organizadorId && !esEliminacionDoble;
+  // (ver .bracket-slot-organizador-live en halcon.css). El `some(...)`
+  // evita mostrar el aviso cuando no hay NINGÚN partido al que de
+  // verdad le aplique el modo en vivo (ej. una llave con Clan War
+  // vinculada, o ya completamente jugada) -- mismas condiciones que
+  // esOrganizadorLive más abajo, sin repetirlas partido por partido.
+  const modoOrganizadorLive =
+    userId === organizadorId &&
+    !esEliminacionDoble &&
+    matches.some(
+      (m) =>
+        !m.clan_war_id &&
+        !!m.participant1_id &&
+        !!m.participant2_id &&
+        (m.status === "pendiente" || m.status === "jugado")
+    );
 
   // Migración 189, a pedido del usuario: a partir de 16 participantes
   // (ronda 1 con 8 partidos o más) una sola imagen de llave se vuelve
