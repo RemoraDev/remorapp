@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import type { PosicionGrupo, TournamentGroupMatchRow, TournamentGroupRow } from "../types/tournaments";
@@ -89,13 +89,36 @@ export default function GroupStage({
   // Migración 083: un partido de liga (Clan War vinculada) puede
   // terminar empatado -- ganador_id null con status 'jugado' ya no es
   // automáticamente una derrota.
-  const historialDe = (partidasGrupo: TournamentGroupMatchRow[], participantId: string) =>
-    partidasGrupo
-      .filter(
-        (m) => m.status === "jugado" && (m.participant1_id === participantId || m.participant2_id === participantId)
-      )
-      .sort((a, b) => (a.jornada ?? 0) - (b.jornada ?? 0))
-      .map((m) => (m.ganador_id === null ? "E" : m.ganador_id === participantId ? "W" : "L"));
+  //
+  // Performance: antes esto era una función que recorría TODOS los
+  // partidos del grupo por cada participante de la tabla de
+  // posiciones (O(participantes × partidos)) -- con Todos contra
+  // todos/Suizo/First Stand de 16-20 jugadores son ~150-200 partidos
+  // recorridos una y otra vez, en cada render (incluido uno por cada
+  // tecla tipeada en un puntaje). Ahora es un solo pasada sobre TODOS
+  // los partidos del torneo (no solo los de un grupo), memoizada --
+  // solo se recalcula si "partidas" cambia de verdad.
+  const historialPorParticipante = useMemo(() => {
+    const mapa: Record<string, ("W" | "E" | "L")[]> = {};
+    const jugadosEnOrden = partidas
+      .filter((m) => m.status === "jugado")
+      .sort((a, b) => (a.jornada ?? 0) - (b.jornada ?? 0));
+
+    for (const m of jugadosEnOrden) {
+      if (m.participant1_id) {
+        (mapa[m.participant1_id] ??= []).push(
+          m.ganador_id === null ? "E" : m.ganador_id === m.participant1_id ? "W" : "L"
+        );
+      }
+      if (m.participant2_id) {
+        (mapa[m.participant2_id] ??= []).push(
+          m.ganador_id === null ? "E" : m.ganador_id === m.participant2_id ? "W" : "L"
+        );
+      }
+    }
+
+    return mapa;
+  }, [partidas]);
 
   const puedeReportar = (match: TournamentGroupMatchRow) => {
     if (!userId) return false;
@@ -163,7 +186,7 @@ export default function GroupStage({
                     <span className="ranking-strip-puesto">#{indice + 1}</span>
                     <span className="ranking-strip-nombre">{nombreDe(p.participant_id)}</span>
                     <span className="ranking-strip-historial">
-                      {historialDe(partidasGrupo, p.participant_id).map((resultado, i) => (
+                      {(historialPorParticipante[p.participant_id] ?? []).map((resultado, i) => (
                         <span
                           key={i}
                           className={`ranking-strip-badge ${

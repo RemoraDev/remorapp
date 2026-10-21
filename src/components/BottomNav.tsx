@@ -126,7 +126,7 @@ export default function BottomNav() {
               R
             </span>
           </button>
-          <FanMenu isOpen={fanOpen} onClose={() => setFanOpen(false)} />
+          <FanMenu isOpen={fanOpen} onClose={() => setFanOpen(false)} miEquipo={miEquipo} />
         </div>
 
         {tieneComunidad && (

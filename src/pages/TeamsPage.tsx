@@ -8,9 +8,16 @@ import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import { SC2_REGION_OPTIONS } from "../types/profile";
 import type { Sc2Region } from "../types/profile";
-import type { TeamRow } from "../types/teams";
 
-interface TeamConInfo extends TeamRow {
+// Fila angosta (ver el comentario en cargarEquipos) -- ya no extiende
+// TeamRow completo, que trae campos como banner/bio/mmr que esta
+// tarjeta nunca muestra.
+interface TeamConInfo {
+  id: string;
+  name: string;
+  tag: string;
+  logo_url: string | null;
+  sc2_regions: Sc2Region[];
   ownerNick: string | null;
   ownerUniqueId: string | null;
   memberCount: number;
@@ -38,9 +45,13 @@ export default function TeamsPage() {
     const cargarEquipos = async () => {
       setCargando(true);
 
+      // Performance: antes traía la fila completa de "teams" (banner,
+      // bio, mmr, temas, links de stream, etc.) para una tarjeta que
+      // solo muestra estas columnas -- en un listado público que
+      // cualquiera visita, eso es payload de más en cada carga.
       let query = supabase
         .from("teams")
-        .select("*, profiles!owner_id(nick, unique_id)")
+        .select("id, name, tag, logo_url, sc2_regions, created_at, profiles!owner_id(nick, unique_id)")
         .eq("is_public", true)
         // Migración 019: un equipo disuelto (el dueño era el único
         // miembro y salió) no debe seguir apareciendo en el buscador.
@@ -81,7 +92,11 @@ export default function TeamsPage() {
           // mapas de un torneo).
           const propietario = Array.isArray(t.profiles) ? t.profiles[0] : t.profiles;
           return {
-            ...(t as TeamRow),
+            id: t.id as string,
+            name: t.name as string,
+            tag: t.tag as string,
+            logo_url: t.logo_url as string | null,
+            sc2_regions: t.sc2_regions as Sc2Region[],
             ownerNick: propietario?.nick ?? null,
             ownerUniqueId: propietario?.unique_id ?? null,
             memberCount: conteoPorEquipo[t.id as string] ?? 0,

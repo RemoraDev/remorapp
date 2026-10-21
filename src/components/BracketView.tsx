@@ -3,6 +3,10 @@ import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { Check, Crown } from "lucide-react";
+// Performance: antes vivía en main.tsx (cargaba para cualquier
+// visita a la app) -- acá solo entra en el chunk de quien realmente
+// muestra un bracket.
+import "flag-icons/css/flag-icons.min.css";
 import { supabase } from "../lib/supabaseClient";
 import Avatar from "./Avatar";
 import type { BracketMatchRow } from "../types/bracket";
@@ -192,6 +196,11 @@ export default function BracketView({
   const grillaElRefs = useRef(new Map<string, HTMLDivElement>());
   const [conectoresPorGrilla, setConectoresPorGrilla] = useState<Record<string, ConectorLinea[]>>({});
   const [tamanoPorGrilla, setTamanoPorGrilla] = useState<Record<string, { ancho: number; alto: number }>>({});
+  // Performance: último valor medido, para no volver a setState (y
+  // disparar un re-render de toda la llave) cuando el layout no
+  // cambió de verdad -- ver el useLayoutEffect más abajo.
+  const conectoresPrevRef = useRef<string>("");
+  const tamanosPrevRef = useRef<string>("");
 
   const muestraConectores = estiloLinea !== "ninguno";
   // Migración 177: "vertical" rota todo el árbol -- las rondas quedan
@@ -358,8 +367,23 @@ export default function BracketView({
         nuevosTamanos["embudo-wrap"] = { ancho: wrapEmbudo.scrollWidth, alto: wrapEmbudo.scrollHeight };
       }
 
-      setConectoresPorGrilla(nuevosConectores);
-      setTamanoPorGrilla(nuevosTamanos);
+      // Performance: esto corre en CADA recarga de la llave
+      // (cargarTorneo() en TournamentDetailPage.tsx, disparado por
+      // cualquier acción que toque bracket_matches), no solo cuando el
+      // layout realmente cambió -- sin este chequeo, setState siempre
+      // dispara un segundo render de toda la llave aunque los trazos
+      // hayan quedado pixel por pixel iguales. Comparar como texto es
+      // barato al lado de volver a reconciliar cada tarjeta.
+      const siguienteConectores = JSON.stringify(nuevosConectores);
+      const siguienteTamanos = JSON.stringify(nuevosTamanos);
+      if (siguienteConectores !== conectoresPrevRef.current) {
+        conectoresPrevRef.current = siguienteConectores;
+        setConectoresPorGrilla(nuevosConectores);
+      }
+      if (siguienteTamanos !== tamanosPrevRef.current) {
+        tamanosPrevRef.current = siguienteTamanos;
+        setTamanoPorGrilla(nuevosTamanos);
+      }
     };
 
     medir();

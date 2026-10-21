@@ -24,7 +24,10 @@ export default function Avatar({ url, nombre, className, forma = "redondo" }: Av
   const claseForma = forma === "cuadrado" ? "avatar-shape-cuadrado" : "avatar-shape-redondo";
 
   if (url) {
-    return <img src={url} alt="" className={`${className} ${claseForma}`} />;
+    // Performance: la mayoría de los usos son listas largas
+    // (participantes, integrantes, ranking) -- loading="lazy" evita
+    // pedir de entrada las que todavía no entran en pantalla.
+    return <img src={url} alt="" loading="lazy" className={`${className} ${claseForma}`} />;
   }
 
   return (

@@ -1,8 +1,6 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { toPng } from "html-to-image";
-import confetti from "canvas-confetti";
 import { toast } from "sonner";
 import {
   Trophy,
@@ -28,7 +26,10 @@ import BracketView from "../components/BracketView";
 import BracketStylePicker from "../components/BracketStylePicker";
 import GroupStage from "../components/GroupStage";
 import Avatar from "../components/Avatar";
-import ArmarLlaveManual from "../components/ArmarLlaveManual";
+// Performance: @dnd-kit (drag and drop) solo lo usa el organizador al
+// armar la llave a mano -- casi nunca para un visitante normal. lazy()
+// lo saca del chunk de esta página (la de más tráfico de la app).
+const ArmarLlaveManual = lazy(() => import("../components/ArmarLlaveManual"));
 import type { ParticipanteParaLlave } from "../components/ArmarLlaveManual";
 // Migración 144: PDF.js (y el visor que lo usa) solo se descargan
 // cuando alguien realmente abre el reglamento -- React.lazy() separa
@@ -219,6 +220,14 @@ export default function TournamentDetailPage() {
 
   const [torneo, setTorneo] = useState<TournamentRow | null>(null);
   const [participantes, setParticipantes] = useState<ParticipanteConNombre[]>([]);
+  // Performance: antes se ordenaba de nuevo en cada render (incluida
+  // cada tecla tipeada en el puntaje de tabla de posiciones, estado
+  // que vive en este mismo componente) -- memoizado, solo se reordena
+  // cuando la lista de participantes cambia de verdad.
+  const participantesPorPuntaje = useMemo(
+    () => [...participantes].sort((a, b) => (b.puntosLeaderboard ?? 0) - (a.puntosLeaderboard ?? 0)),
+    [participantes]
+  );
   const [partidas, setPartidas] = useState<BracketMatchRow[]>([]);
   // Migración 041: etapa de grupos, previa a la llave -- solo se
   // llenan mientras torneo.fase_actual === "grupos".
@@ -1023,8 +1032,12 @@ export default function TournamentDetailPage() {
   // además abre la tarjeta centrada del campeón (ver mostrandoCelebracion).
   // Migración 183: el color del confeti sigue el "modelo" de
   // celebración elegido -- "minimalista" no tira confeti, a propósito.
-  const handleVerCelebracion = () => {
+  const handleVerCelebracion = async () => {
     if (torneo?.estilo_celebracion !== "minimalista") {
+      // Performance: canvas-confetti (112KB) solo hace falta al
+      // disparar la celebración -- import dinámico, no entra en el
+      // chunk normal de la página.
+      const { default: confetti } = await import("canvas-confetti");
       confetti({
         particleCount: 150,
         spread: 70,
@@ -1198,6 +1211,10 @@ export default function TournamentDetailPage() {
         );
       }
 
+      // Performance: html-to-image (452KB) solo hace falta acá, al
+      // descargar la llave como imagen -- import dinámico para que no
+      // entre en el chunk normal de la página (la de más tráfico).
+      const { toPng } = await import("html-to-image");
       const dataUrl = await toPng(wrap, {
         cacheBust: true,
         pixelRatio: 2,
@@ -1267,13 +1284,15 @@ export default function TournamentDetailPage() {
   const renderControlGenerarLlave = (textoBotonAuto: string) => {
     if (mostrandoLlaveManual) {
       return (
-        <ArmarLlaveManual
-          participantes={participantesParaLlaveManual()}
-          guardando={generandoLlave}
-          error={errorLlave}
-          onConfirmar={handleGenerarLlaveManual}
-          onCancelar={() => setMostrandoLlaveManual(false)}
-        />
+        <Suspense fallback={<p className="tournament-card-meta">Cargando...</p>}>
+          <ArmarLlaveManual
+            participantes={participantesParaLlaveManual()}
+            guardando={generandoLlave}
+            error={errorLlave}
+            onConfirmar={handleGenerarLlaveManual}
+            onCancelar={() => setMostrandoLlaveManual(false)}
+          />
+        </Suspense>
       );
     }
 
@@ -3143,8 +3162,7 @@ export default function TournamentDetailPage() {
               </tr>
             </thead>
             <tbody>
-              {[...participantes]
-                .sort((a, b) => (b.puntosLeaderboard ?? 0) - (a.puntosLeaderboard ?? 0))
+              {participantesPorPuntaje
                 .map((p, indice) => (
                   <tr key={p.id}>
                     <td>{indice + 1}</td>

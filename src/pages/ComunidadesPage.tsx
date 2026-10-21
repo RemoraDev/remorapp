@@ -31,9 +31,12 @@ export default function ComunidadesPage() {
 
   const cargarComunidades = async () => {
     setCargando(true);
+    // Performance: antes traía la fila completa (banners, tema,
+    // datos de streamer, etc.) para una tarjeta que solo muestra
+    // estas columnas -- mismo ajuste que TeamsPage.tsx.
     const { data, error } = await supabase
       .from("comunidades")
-      .select("*")
+      .select("id, nombre, descripcion, logo_url, creado_en")
       .order("creado_en", { ascending: false });
 
     if (error || !data) {

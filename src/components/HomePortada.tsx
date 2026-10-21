@@ -6,8 +6,6 @@ import { supabase } from "../lib/supabaseClient";
 import { formatFecha } from "../lib/formatters";
 import { formatearCuentaRegresiva, formatoHora, LogoEquipo, useAhora, yaComenzo } from "./ProximasClanWars";
 import FondoParticulas from "./FondoParticulas";
-import { useAuth } from "../context/AuthContext";
-import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import type { NoticiaPreview } from "./NewsSection";
 import type { ClanWarProxima } from "../types/clanWars";
@@ -16,6 +14,11 @@ import type { MiniEvento } from "../types/ranking";
 interface Props {
   noticiasDestacadas: NoticiaPreview[];
   onVerProximosEventos: () => void;
+  // Performance: antes HomePortada pedía esto por su cuenta -- HomePage.tsx
+  // ya lo carga una sola vez para repartirlo entre esta y
+  // ProximasClanWars (las dos vivían en la misma página, cada una
+  // pidiéndolo por separado).
+  miEquipo: EquipoDelUsuario | null;
 }
 
 // Mismo link estable de GitHub Releases que antes usaba
@@ -128,11 +131,9 @@ function IconoDescargaEscritorio() {
 // próximos a la derecha (también horizontal) -- rediseño a pedido del
 // usuario, "ultra gaming moderno minimalista", con un fondo de
 // partículas subiendo en zigzag (puro CSS, ver .home-particula).
-export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }: Props) {
-  const { user } = useAuth();
+export default function HomePortada({ noticiasDestacadas, onVerProximosEventos, miEquipo }: Props) {
   const [esEscritorio, setEsEscritorio] = useState(false);
   const [clanWars, setClanWars] = useState<ClanWarProxima[] | null>(null);
-  const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
   const [minieventos, setMinieventos] = useState<MiniEvento[]>([]);
   const ahora = useAhora(60000);
 
@@ -150,10 +151,6 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos }
       setClanWars((data ?? []) as ClanWarProxima[]);
     });
   }, []);
-
-  useEffect(() => {
-    if (user) obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
-  }, [user]);
 
   const proximos = useMemo(
     () => (clanWars ? elegirProximos(clanWars, ahora, EVENTOS_DESTACADOS) : []),

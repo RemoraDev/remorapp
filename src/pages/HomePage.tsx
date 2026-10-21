@@ -6,6 +6,9 @@ import ProximasClanWars from "../components/ProximasClanWars";
 import NewsSection from "../components/NewsSection";
 import type { NoticiaPreview } from "../components/NewsSection";
 import { supabase } from "../lib/supabaseClient";
+import { useAuth } from "../context/AuthContext";
+import { obtenerEquipoDelUsuario } from "../lib/teams";
+import type { EquipoDelUsuario } from "../lib/teams";
 
 const NOTICIAS_POR_PAGINA = 3;
 // Tope de noticias a traer para Inicio -- 3 en la portada + 2 páginas
@@ -28,8 +31,17 @@ function partirEnGrupos<T>(items: T[], tamaño: number): T[][] {
 // (sin cambiar de ruta). Si hay MÁS de 3 noticias, el resto se reparte
 // en páginas de Noticias aparte, a continuación de la portada.
 export default function HomePage() {
+  const { user } = useAuth();
   const [noticias, setNoticias] = useState<NoticiaPreview[] | null>(null);
+  // Performance: se pide UNA vez acá y se reparte entre HomePortada y
+  // ProximasClanWars -- antes cada una lo pedía por su cuenta, 2
+  // consultas idénticas en paralelo en cada visita a Inicio.
+  const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
   const carruselRef = useRef<CarruselHandle>(null);
+
+  useEffect(() => {
+    if (user) obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
+  }, [user]);
 
   useEffect(() => {
     supabase
@@ -69,11 +81,12 @@ export default function HomePage() {
               <HomePortada
                 noticiasDestacadas={noticiasDestacadas}
                 onVerProximosEventos={() => carruselRef.current?.irAPagina(indiceClanWars)}
+                miEquipo={miEquipo}
               />
             ),
           },
           ...paginasNoticiasExtra,
-          { key: "clanwars", contenido: <ProximasClanWars /> },
+          { key: "clanwars", contenido: <ProximasClanWars miEquipo={miEquipo} /> },
         ]}
       />
     </div>

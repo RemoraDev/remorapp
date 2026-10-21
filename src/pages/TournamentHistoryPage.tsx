@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Trophy, Medal } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
-import { obtenerNombresDeParticipantes, obtenerNombreDeParticipante } from "../lib/participants";
+import { obtenerNombresDeParticipantes, obtenerNombresDeParticipantesMixto } from "../lib/participants";
 import { getModoLabel, getFormatoLabel } from "../lib/tournamentOptions";
 import { formatFecha, formatPozo } from "../lib/formatters";
 import type { TournamentRow } from "../types/tournaments";
@@ -27,6 +27,13 @@ interface PosicionRanking {
   participantId: string;
   nombre: string;
   puntos: number;
+}
+
+interface FilaResultado {
+  tournament_id: string;
+  participant_id: string;
+  gano: boolean;
+  puntaje: number | null;
 }
 
 // Ordena por puntos acumulados (mayor a menor); solo tiene sentido cuando
@@ -70,44 +77,67 @@ export default function TournamentHistoryPage() {
         return;
       }
 
-      const resultado: TorneoFinalizado[] = [];
+      // Performance: antes esto era un for..of secuencial que hacía
+      // 2-4 consultas POR TORNEO, una tras otra -- con el historial
+      // completo de la app eso son cientos de viajes de ida y vuelta
+      // en serie. Ahora se arma en lote: primero se separan los
+      // torneos de llave (eliminación simple) de los demás, se junta
+      // TODO lo que hay que resolver de cada grupo, y se resuelve con
+      // un puñado de consultas .in(...) en vez de una por torneo.
+      const torneos = torneosData as TournamentRow[];
+      const torneosLlave = torneos.filter((t) => t.modo === "eliminacion_simple");
+      const torneosConResultados = torneos.filter((t) => t.modo !== "eliminacion_simple");
 
-      for (const torneo of torneosData as TournamentRow[]) {
-        // La llave (eliminación simple) guarda su propio campeón en
-        // tournaments.campeon_participant_id -- no pasa por
-        // tournament_results, que es el sistema genérico que ya
-        // existía para los demás modos.
-        if (torneo.modo === "eliminacion_simple") {
-          let campeonNombre: string | null = null;
-          if (torneo.campeon_participant_id) {
-            // obtenerNombreDeParticipante() (no el plural) resuelve un
-            // participante que puede ser jugador O equipo -- acá no se
-            // sabe de antemano cuál de los dos es sin mirar el torneo,
-            // y esta función ya lo resuelve sola.
-            const resuelto = await obtenerNombreDeParticipante(torneo.campeon_participant_id);
-            campeonNombre = resuelto?.nombre ?? "Jugador de RemorApp";
-          }
-          let tercerLugarNombre: string | null = null;
-          if (torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id) {
-            const resuelto = await obtenerNombreDeParticipante(torneo.tercer_lugar_participant_id);
-            tercerLugarNombre = resuelto?.nombre ?? "Jugador de RemorApp";
-          }
-          resultado.push({ torneo, resultados: [], campeonNombre, tercerLugarNombre });
-          continue;
-        }
+      const idsCampeonesYTerceros = [
+        ...torneosLlave.flatMap((t) => [t.campeon_participant_id, t.tercer_lugar_participant_id]),
+      ].filter((id): id is string => !!id);
+      const nombresLlavePromise = obtenerNombresDeParticipantesMixto(idsCampeonesYTerceros);
 
-        const { data: resultadosData } = await supabase
+      let todosLosResultados: FilaResultado[] = [];
+      if (torneosConResultados.length > 0) {
+        const { data } = await supabase
           .from("tournament_results")
-          .select("participant_id, gano, puntaje")
-          .eq("tournament_id", torneo.id);
+          .select("tournament_id, participant_id, gano, puntaje")
+          .in(
+            "tournament_id",
+            torneosConResultados.map((t) => t.id)
+          );
+        todosLosResultados = (data ?? []) as FilaResultado[];
+      }
 
-        const filas = resultadosData ?? [];
-        const participantIds = [...new Set(filas.map((r) => r.participant_id as string))];
-        const infoPorParticipante = await obtenerNombresDeParticipantes(participantIds);
+      const nombresLlave = await nombresLlavePromise;
 
+      const filasPorTorneo = new Map<string, FilaResultado[]>();
+      for (const fila of todosLosResultados) {
+        const lista = filasPorTorneo.get(fila.tournament_id) ?? [];
+        lista.push(fila);
+        filasPorTorneo.set(fila.tournament_id, lista);
+      }
+
+      const todosLosParticipantIds = [...new Set(todosLosResultados.map((r) => r.participant_id))];
+      const infoPorParticipante = await obtenerNombresDeParticipantes(todosLosParticipantIds);
+
+      const resultadoPorTorneo = new Map<string, TorneoFinalizado>();
+
+      for (const torneo of torneosLlave) {
+        resultadoPorTorneo.set(torneo.id, {
+          torneo,
+          resultados: [],
+          campeonNombre: torneo.campeon_participant_id
+            ? nombresLlave[torneo.campeon_participant_id]?.nombre ?? "Jugador de RemorApp"
+            : null,
+          tercerLugarNombre:
+            torneo.tiene_tercer_lugar && torneo.tercer_lugar_participant_id
+              ? nombresLlave[torneo.tercer_lugar_participant_id]?.nombre ?? "Jugador de RemorApp"
+              : null,
+        });
+      }
+
+      for (const torneo of torneosConResultados) {
+        const filas = filasPorTorneo.get(torneo.id) ?? [];
         // Las cuentas suspendidas no aparecen en listados públicos,
         // incluido el historial de resultados/ranking.
-        resultado.push({
+        resultadoPorTorneo.set(torneo.id, {
           torneo,
           campeonNombre: null,
           tercerLugarNombre: null,
@@ -121,6 +151,10 @@ export default function TournamentHistoryPage() {
             })),
         });
       }
+
+      // El orden original (fecha_inicio desc) ya venía de la consulta
+      // de torneos -- se reconstruye acá en vez de ordenar de nuevo.
+      const resultado = torneos.map((t) => resultadoPorTorneo.get(t.id)).filter((r): r is TorneoFinalizado => !!r);
 
       setItems(resultado);
       setLoading(false);

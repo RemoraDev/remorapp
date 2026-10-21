@@ -3,6 +3,10 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { Users, X, Clock, Radio, Globe2, Languages, Gamepad2 } from "lucide-react";
+// Performance: antes vivía en main.tsx (cargaba para cualquier visita
+// a la app) -- acá solo entra en el chunk de esta página, la única
+// otra que muestra una bandera real (país del streamer).
+import "flag-icons/css/flag-icons.min.css";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { comprimirImagen } from "../lib/imageCompression";

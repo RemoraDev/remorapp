@@ -1,5 +1,11 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import BuscadorGlobal from "../components/BuscadorGlobal";
+import { createContext, useContext, useEffect, useState, Suspense, lazy, type ReactNode } from "react";
+
+// Performance: cmdk (la librería del buscador) pesa ~111KB y SearchProvider
+// envuelve TODA la app -- antes esto entraba en el chunk principal, cargado
+// en cada visita, aunque casi nadie abre el buscador (Ctrl+K). lazy() lo
+// saca a su propio chunk, que recién se pide la primera vez que "abierto"
+// pasa a true.
+const BuscadorGlobal = lazy(() => import("../components/BuscadorGlobal"));
 
 interface SearchContextValue {
   abrirBuscador: () => void;
@@ -37,7 +43,11 @@ export function SearchProvider({ children }: { children: ReactNode }) {
   return (
     <SearchContext.Provider value={{ abrirBuscador: () => setAbierto(true) }}>
       {children}
-      <BuscadorGlobal abierto={abierto} onClose={() => setAbierto(false)} />
+      {abierto && (
+        <Suspense fallback={null}>
+          <BuscadorGlobal abierto={abierto} onClose={() => setAbierto(false)} />
+        </Suspense>
+      )}
     </SearchContext.Provider>
   );
 }

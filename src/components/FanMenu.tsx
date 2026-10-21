@@ -1,14 +1,19 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { supabase } from "../lib/supabaseClient";
-import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 
 interface FanMenuProps {
   isOpen: boolean;
   onClose: () => void;
+  // Performance: antes FanMenu pedía esto por su cuenta -- como
+  // siempre está montado junto a BottomNav (que YA lo tiene, lo usa
+  // para "Mi Clan"), y los dos se renderizan juntos en cada carga de
+  // la app, eran 2 consultas idénticas en paralelo. Ahora lo pasa el
+  // padre, sin volver a pedirlo acá.
+  miEquipo: EquipoDelUsuario | null;
 }
 
 interface FanItem {
@@ -52,21 +57,10 @@ const FAN_ITEMS: FanItem[] = [
   { key: "checkin", label: "Check-in", requiresAuth: true },
 ];
 
-export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
+export default function FanMenu({ isOpen, onClose, miEquipo }: FanMenuProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [notice, setNotice] = useState<string | null>(null);
-  // Equipo del usuario (si tiene uno), para "Mi equipo" y "Check-in" --
-  // hace falta el id (para buscar la Clan War) y el tag (para navegar).
-  const [miEquipo, setMiEquipo] = useState<EquipoDelUsuario | null>(null);
-
-  useEffect(() => {
-    if (!user) {
-      setMiEquipo(null);
-      return;
-    }
-    obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
-  }, [user]);
 
   const handleItemClick = async (item: FanItem) => {
     if (item.requiresAuth && !user) {

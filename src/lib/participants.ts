@@ -75,32 +75,54 @@ export interface ParticipanteResuelto {
 export async function obtenerNombreDeParticipante(
   participantId: string
 ): Promise<ParticipanteResuelto | null> {
-  const { data: participante } = await supabase
+  const resueltos = await obtenerNombresDeParticipantesMixto([participantId]);
+  return resueltos[participantId] ?? null;
+}
+
+// Performance: versión en lote de obtenerNombreDeParticipante -- antes
+// TournamentHistoryPage.tsx (listado público) llamaba a la de arriba
+// UNA VEZ POR TORNEO dentro de un for..of secuencial (2 consultas por
+// torneo de llave, una tras otra), así que el historial hacía
+// 2-4×cantidad_de_torneos viajes de ida y vuelta, en serie. Esta
+// resuelve cualquier cantidad de participantes (jugador O equipo
+// mezclados) en 3 consultas totales sin importar cuántos sean.
+export async function obtenerNombresDeParticipantesMixto(
+  participantIds: string[]
+): Promise<Record<string, ParticipanteResuelto>> {
+  if (participantIds.length === 0) return {};
+
+  const idsUnicos = [...new Set(participantIds)];
+  const { data: participantesData } = await supabase
     .from("tournament_participants")
-    .select("user_id, team_id")
-    .eq("id", participantId)
-    .maybeSingle();
+    .select("id, user_id, team_id")
+    .in("id", idsUnicos);
 
-  if (!participante) return null;
+  const filas = participantesData ?? [];
+  const userIds = [...new Set(filas.filter((p) => p.user_id).map((p) => p.user_id as string))];
+  const teamIds = [...new Set(filas.filter((p) => p.team_id).map((p) => p.team_id as string))];
 
-  if (participante.team_id) {
-    const { data: equipo } = await supabase
-      .from("teams")
-      .select("name, logo_url")
-      .eq("id", participante.team_id)
-      .maybeSingle();
-    return { nombre: equipo?.name ?? "Equipo de RemorApp", logoUrl: equipo?.logo_url ?? null };
+  const [{ data: perfilesData }, { data: equiposData }] = await Promise.all([
+    userIds.length > 0
+      ? supabase.from("profiles").select("id, nick, unique_id, avatar_url").in("id", userIds)
+      : Promise.resolve({ data: [] as { id: string; nick: string | null; unique_id: string; avatar_url: string | null }[] }),
+    teamIds.length > 0
+      ? supabase.from("teams").select("id, name, logo_url").in("id", teamIds)
+      : Promise.resolve({ data: [] as { id: string; name: string; logo_url: string | null }[] }),
+  ]);
+
+  const perfilPorUserId = Object.fromEntries((perfilesData ?? []).map((p) => [p.id, p]));
+  const equipoPorTeamId = Object.fromEntries((equiposData ?? []).map((e) => [e.id, e]));
+
+  const resultado: Record<string, ParticipanteResuelto> = {};
+  for (const fila of filas) {
+    if (fila.team_id) {
+      const equipo = equipoPorTeamId[fila.team_id];
+      resultado[fila.id] = { nombre: equipo?.name ?? "Equipo de RemorApp", logoUrl: equipo?.logo_url ?? null };
+    } else if (fila.user_id) {
+      const perfil = perfilPorUserId[fila.user_id];
+      const nombre = perfil?.nick ? `${perfil.nick}#${perfil.unique_id}` : "Jugador de RemorApp";
+      resultado[fila.id] = { nombre, logoUrl: perfil?.avatar_url ?? null };
+    }
   }
-
-  if (participante.user_id) {
-    const { data: perfil } = await supabase
-      .from("profiles")
-      .select("nick, unique_id, avatar_url")
-      .eq("id", participante.user_id)
-      .maybeSingle();
-    const nombre = perfil?.nick ? `${perfil.nick}#${perfil.unique_id}` : "Jugador de RemorApp";
-    return { nombre, logoUrl: perfil?.avatar_url ?? null };
-  }
-
-  return null;
+  return resultado;
 }
