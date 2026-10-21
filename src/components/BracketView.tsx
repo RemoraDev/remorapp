@@ -678,6 +678,55 @@ export default function BracketView({
     onCambio();
   };
 
+  // Migración 206, a pedido del usuario: el organizador ya no pasa por
+  // "preseleccionar + confirmar" -- pincha directo a quien ganó y
+  // queda reportado al toque, en tiempo real. Si se equivoca, puede
+  // volver a pinchar al mismo ganador (lo deshace, deshacer_resultado()
+  // en la base) o pinchar al rival directo (deshace y reporta al otro
+  // en un solo gesto). Solo para el organizador -- el autoreporte de
+  // jugadores sigue con el flujo de siempre (toggleSeleccion/
+  // handleReportar más arriba), que no toca.
+  const handleClickGanadorOrganizador = async (match: BracketMatchRow, participantId: string) => {
+    setReportando(match.id);
+    setErrores((prev) => ({ ...prev, [match.id]: "" }));
+
+    if (match.winner_id === participantId) {
+      const { error } = await supabase.rpc("deshacer_resultado", { p_match_id: match.id });
+      setReportando(null);
+      if (error) {
+        setErrores((prev) => ({ ...prev, [match.id]: error.message }));
+        return;
+      }
+      onCambio();
+      return;
+    }
+
+    if (match.winner_id) {
+      const { error: errorDeshacer } = await supabase.rpc("deshacer_resultado", { p_match_id: match.id });
+      if (errorDeshacer) {
+        setReportando(null);
+        setErrores((prev) => ({ ...prev, [match.id]: errorDeshacer.message }));
+        return;
+      }
+    }
+
+    const borrador = scoreDraft[match.id];
+    const { error } = await supabase.rpc("reportar_resultado", {
+      p_match_id: match.id,
+      p_ganador_id: participantId,
+      p_resultado_participant1: borrador?.p1.trim() ? Number(borrador.p1) : null,
+      p_resultado_participant2: borrador?.p2.trim() ? Number(borrador.p2) : null,
+    });
+    setReportando(null);
+
+    if (error) {
+      setErrores((prev) => ({ ...prev, [match.id]: error.message }));
+      return;
+    }
+
+    onCambio();
+  };
+
   const renderPartido = (
     match: BracketMatchRow,
     refInfo?: { keyPrefix: string; round: number; matchNumber: number; indiceEnRonda?: number }
@@ -692,6 +741,18 @@ export default function BracketView({
       !match.clan_war_id &&
       puedeReportar(match);
     const seleccionado = ganadorSeleccionado[match.id];
+    // Migración 206, a pedido del usuario: solo el organizador (no el
+    // autoreporte de jugadores) y solo fuera de eliminación doble (el
+    // "deshacer" ahí -- ganadores + perdedores + gran final -- no está
+    // armado todavía) -- clic directo reporta o deshace al toque, sin
+    // paso de "elegí y confirmá" aparte.
+    const esOrganizadorLive =
+      userId === organizadorId &&
+      !esEliminacionDoble &&
+      !match.clan_war_id &&
+      !!match.participant1_id &&
+      !!match.participant2_id &&
+      (match.status === "pendiente" || match.status === "jugado");
 
     return (
       <div
@@ -729,19 +790,21 @@ export default function BracketView({
             <>
               <div
                 className={`bracket-slot ${p1Gana ? "winner" : match.winner_id ? "loser" : ""} ${
-                  puedeElegirGanador ? "bracket-slot-elegible" : ""
+                  puedeElegirGanador || esOrganizadorLive ? "bracket-slot-elegible" : ""
                 } ${seleccionado === match.participant1_id ? "bracket-slot-preseleccionado" : ""} ${
                   esCampeon1 ? "bracket-slot-campeon" : ""
                 }`}
                 onClick={
-                  puedeElegirGanador
-                    ? () => toggleSeleccion(match.id, match.participant1_id as string)
-                    : esCampeon1
-                      ? onClickCampeon
-                      : undefined
+                  esOrganizadorLive
+                    ? () => handleClickGanadorOrganizador(match, match.participant1_id as string)
+                    : puedeElegirGanador
+                      ? () => toggleSeleccion(match.id, match.participant1_id as string)
+                      : esCampeon1
+                        ? onClickCampeon
+                        : undefined
                 }
-                role={puedeElegirGanador || esCampeon1 ? "button" : undefined}
-                tabIndex={puedeElegirGanador || esCampeon1 ? 0 : undefined}
+                role={puedeElegirGanador || esOrganizadorLive || esCampeon1 ? "button" : undefined}
+                tabIndex={puedeElegirGanador || esOrganizadorLive || esCampeon1 ? 0 : undefined}
               >
                 {renderInsignia(match.participant1_id)}
                 <span className="bracket-slot-nombre">{nombreDe(match.participant1_id)}</span>
@@ -754,18 +817,20 @@ export default function BracketView({
               <div
                 className={`bracket-slot ${
                   p2Gana ? "winner" : match.winner_id && match.participant2_id ? "loser" : ""
-                } ${puedeElegirGanador ? "bracket-slot-elegible" : ""} ${
+                } ${puedeElegirGanador || esOrganizadorLive ? "bracket-slot-elegible" : ""} ${
                   seleccionado === match.participant2_id ? "bracket-slot-preseleccionado" : ""
                 } ${esCampeon2 ? "bracket-slot-campeon" : ""}`}
                 onClick={
-                  puedeElegirGanador
-                    ? () => toggleSeleccion(match.id, match.participant2_id as string)
-                    : esCampeon2
-                      ? onClickCampeon
-                      : undefined
+                  esOrganizadorLive
+                    ? () => handleClickGanadorOrganizador(match, match.participant2_id as string)
+                    : puedeElegirGanador
+                      ? () => toggleSeleccion(match.id, match.participant2_id as string)
+                      : esCampeon2
+                        ? onClickCampeon
+                        : undefined
                 }
-                role={puedeElegirGanador || esCampeon2 ? "button" : undefined}
-                tabIndex={puedeElegirGanador || esCampeon2 ? 0 : undefined}
+                role={puedeElegirGanador || esOrganizadorLive || esCampeon2 ? "button" : undefined}
+                tabIndex={puedeElegirGanador || esOrganizadorLive || esCampeon2 ? 0 : undefined}
               >
                 {renderInsignia(match.participant2_id)}
                 <span className="bracket-slot-nombre">{nombreDe(match.participant2_id)}</span>
@@ -814,14 +879,60 @@ export default function BracketView({
           </div>
         )}
 
+        {/* Migración 206, a pedido del usuario: el organizador ya no
+            preselecciona + confirma -- pincha directo a quien ganó
+            (arriba) y queda reportado al toque, en tiempo real; puede
+            volver a pinchar para deshacer, o pinchar al rival para
+            cambiar el ganador directo. El puntaje sigue siendo
+            opcional, se puede completar ANTES de pinchar al ganador
+            (una vez jugado el partido, para cambiar el puntaje hay que
+            deshacer primero). */}
+        {esOrganizadorLive && match.status === "pendiente" && (
+          <div className="bracket-report">
+            <div className="bracket-report-score">
+              <input
+                type="number"
+                min={0}
+                className="form-input bracket-report-score-input"
+                placeholder="0"
+                aria-label={`Puntaje de ${nombreDe(match.participant1_id)}`}
+                value={scoreDraft[match.id]?.p1 ?? ""}
+                onChange={(e) =>
+                  setScoreDraft((prev) => ({
+                    ...prev,
+                    [match.id]: { p1: e.target.value, p2: prev[match.id]?.p2 ?? "" },
+                  }))
+                }
+              />
+              <span className="bracket-report-score-vs">-</span>
+              <input
+                type="number"
+                min={0}
+                className="form-input bracket-report-score-input"
+                placeholder="0"
+                aria-label={`Puntaje de ${nombreDe(match.participant2_id)}`}
+                value={scoreDraft[match.id]?.p2 ?? ""}
+                onChange={(e) =>
+                  setScoreDraft((prev) => ({
+                    ...prev,
+                    [match.id]: { p1: prev[match.id]?.p1 ?? "", p2: e.target.value },
+                  }))
+                }
+              />
+            </div>
+            <p className="form-hint">Pinchá arriba a quien ganó -- queda reportado al toque.</p>
+          </div>
+        )}
+
         {/* Migración 191, a pedido del usuario: antes eran dos botones
             "Ganó X"/"Ganó Y" sueltos -- ahora se pincha directo el
             nombre del participante (arriba, bracket-slot-elegible) para
             preseleccionarlo con resalte al toque, y se puede volver a
             pinchar para deseleccionar. El puntaje queda igual de
             opcional, y "Confirmar resultado" recién ahí llama al RPC
-            de siempre. */}
-        {puedeElegirGanador && (
+            de siempre. Solo para el autoreporte de jugadores -- el
+            organizador usa el flujo en tiempo real de arriba. */}
+        {!esOrganizadorLive && puedeElegirGanador && (
           <div className="bracket-report">
             <div className="bracket-report-score">
               <input
