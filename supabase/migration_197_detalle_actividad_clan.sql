@@ -35,9 +35,10 @@ as $$
 
   select
     'race_war'::text,
-    'Race War: ' || coalesce(gr.titulo, 'Race War'),
+    'Race War: ' || gt.nombre,
     gr.creado_en
   from public.guerra_razas gr
+  join public.tournaments gt on gt.id = gr.tournament_id
   where gr.equipo_creador_id = p_team_id
 
   order by fecha desc;
