@@ -21,6 +21,7 @@ import type { TituloActivoTodos } from "../types/titulos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import { COLOR_PLATAFORMA_STREAM, extraerNombreCanal, normalizarUrlStream } from "../lib/streamLinks";
+import { obtenerComunidadesDelUsuario } from "../lib/comunidades";
 import type { ComunidadRow } from "../types/comunidades";
 
 interface PerfilPublico {
@@ -451,21 +452,10 @@ export default function PlayerDetailPage() {
   useEffect(() => {
     if (!perfil) return;
     setCargandoComunidades(true);
-    supabase
-      .from("comunidad_miembros")
-      .select("comunidad_id, comunidades(*)")
-      .eq("user_id", perfil.id)
-      .then(({ data }) => {
-        const lista = (data ?? [])
-          .map((fila) => {
-            const comunidad = Array.isArray(fila.comunidades) ? fila.comunidades[0] : fila.comunidades;
-            return (comunidad as ComunidadRow | undefined) ?? null;
-          })
-          .filter((c): c is ComunidadRow => c !== null)
-          .sort((a, b) => a.nombre.localeCompare(b.nombre));
-        setMisComunidades(lista);
-        setCargandoComunidades(false);
-      });
+    obtenerComunidadesDelUsuario(perfil.id).then((lista) => {
+      setMisComunidades(lista);
+      setCargandoComunidades(false);
+    });
   }, [perfil?.id]);
 
   if (loading) {

@@ -8,9 +8,10 @@ import { useAuth } from "../context/AuthContext";
 import { comprimirImagen } from "../lib/imageCompression";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import { formatFecha } from "../lib/formatters";
+import { obtenerEventosDeComunidad } from "../lib/comunidades";
 import Avatar from "../components/Avatar";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
-import type { ComunidadRow } from "../types/comunidades";
+import type { ComunidadRow, EventoComunidad } from "../types/comunidades";
 import type { AvatarForma } from "../types/profile";
 
 const LOGO_MAX_BYTES = 15 * 1024 * 1024;
@@ -21,14 +22,6 @@ interface MiembroConNombre {
   uniqueId: string | null;
   avatarUrl: string | null;
   avatarForma: AvatarForma;
-}
-
-interface EventoComunidad {
-  tipo: "torneo" | "race_war" | "clan_war_amistosa";
-  id: string;
-  titulo: string;
-  fecha: string;
-  href: string;
 }
 
 // Ficha pública de una comunidad (migración 198, a pedido del
@@ -112,57 +105,7 @@ export default function ComunidadDetailPage() {
       })
     );
 
-    const { data: torneosData } = await supabase
-      .from("tournaments")
-      .select("id, nombre, fecha_inicio")
-      .eq("comunidad_id", id)
-      .order("fecha_inicio", { ascending: false });
-
-    const torneoIds = (torneosData ?? []).map((t) => t.id as string);
-    let raceWarIdPorTorneo: Record<string, string> = {};
-
-    if (torneoIds.length > 0) {
-      const { data: raceWarsData } = await supabase
-        .from("guerra_razas")
-        .select("id, tournament_id")
-        .in("tournament_id", torneoIds);
-
-      raceWarIdPorTorneo = (raceWarsData ?? []).reduce<Record<string, string>>((acc, g) => {
-        acc[g.tournament_id as string] = g.id as string;
-        return acc;
-      }, {});
-    }
-
-    const eventosTorneos: EventoComunidad[] = (torneosData ?? []).map((t) => {
-      const raceWarId = raceWarIdPorTorneo[t.id as string];
-      return raceWarId
-        ? { tipo: "race_war", id: raceWarId, titulo: t.nombre as string, fecha: t.fecha_inicio as string, href: `/guerra-razas/${raceWarId}` }
-        : { tipo: "torneo", id: t.id as string, titulo: t.nombre as string, fecha: t.fecha_inicio as string, href: `/tournaments/${t.id}` };
-    });
-
-    const { data: clanWarsData } = await supabase
-      .from("clan_wars")
-      .select("id, fecha_hora_cet, titulo, challenger:teams!challenger_team_id(tag), challenged:teams!challenged_team_id(tag)")
-      .eq("comunidad_id", id)
-      .order("fecha_hora_cet", { ascending: false });
-
-    const eventosClanWars: EventoComunidad[] = (clanWarsData ?? []).map((cw) => {
-      const challenger = Array.isArray(cw.challenger) ? cw.challenger[0] : cw.challenger;
-      const challenged = Array.isArray(cw.challenged) ? cw.challenged[0] : cw.challenged;
-      return {
-        tipo: "clan_war_amistosa",
-        id: cw.id as string,
-        titulo: (cw.titulo as string | null) ?? `${challenger?.tag ?? "?"} vs ${challenged?.tag ?? "?"}`,
-        fecha: cw.fecha_hora_cet as string,
-        href: `/clan-war/${cw.id}`,
-      };
-    });
-
-    setEventos(
-      [...eventosTorneos, ...eventosClanWars].sort(
-        (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
-      )
-    );
+    setEventos(await obtenerEventosDeComunidad(id));
 
     setCargando(false);
   };

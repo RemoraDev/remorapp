@@ -17,3 +17,15 @@ export interface ComunidadMiembroRow {
   user_id: string;
   unido_en: string;
 }
+
+// Migración 201, a pedido del usuario: un evento (torneo, Race War o
+// Clan War Amistosa) vinculado a una comunidad -- ver
+// obtenerEventosDeComunidad() en lib/comunidades.ts, usado tanto por
+// ComunidadDetailPage.tsx como por MisEventosPage.tsx.
+export interface EventoComunidad {
+  tipo: "torneo" | "race_war" | "clan_war_amistosa";
+  id: string;
+  titulo: string;
+  fecha: string;
+  href: string;
+}

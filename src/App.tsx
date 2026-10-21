@@ -38,6 +38,7 @@ const CreateTeamPage = lazy(() => import("./pages/CreateTeamPage"));
 const TeamDetailPage = lazy(() => import("./pages/TeamDetailPage"));
 const ComunidadesPage = lazy(() => import("./pages/ComunidadesPage"));
 const ComunidadDetailPage = lazy(() => import("./pages/ComunidadDetailPage"));
+const MisEventosPage = lazy(() => import("./pages/MisEventosPage"));
 const NewsPage = lazy(() => import("./pages/NewsPage"));
 const AyudaPage = lazy(() => import("./pages/AyudaPage"));
 const RankingPage = lazy(() => import("./pages/RankingPage"));
@@ -141,6 +142,7 @@ function AppContent() {
                 <Route path="/equipos/:tag" element={<TeamDetailPage />} />
                 <Route path="/comunidades" element={<ComunidadesPage />} />
                 <Route path="/comunidades/:id" element={<ComunidadDetailPage />} />
+                <Route path="/mis-eventos" element={<MisEventosPage />} />
                 <Route path="/news" element={<NewsPage />} />
                 <Route path="/ayuda" element={<AyudaPage />} />
                 <Route path="/ranking" element={<RankingPage />} />

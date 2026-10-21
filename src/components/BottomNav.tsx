@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { MessageSquare, Shield, BarChart3, User, Home } from "lucide-react";
+import { MessageSquare, Shield, BarChart3, User, Home, Users, CalendarCheck } from "lucide-react";
 import FanMenu from "./FanMenu";
 import { useAuth } from "../context/AuthContext";
 import useChatFijoEscritorio from "../hooks/useChatFijoEscritorio";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
+import { obtenerComunidadesDelUsuario } from "../lib/comunidades";
+import type { ComunidadRow } from "../types/comunidades";
 
 // Migración 098: los 4 íconos de la barra inferior eran SVG a mano,
 // uno por uno -- se reemplazan por lucide-react (mismo trazo de 2px,
@@ -34,6 +36,26 @@ export default function BottomNav() {
     obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
   }, [user]);
   const miClanHref = !user ? "/login" : miEquipo?.teamTag ? `/equipos/${miEquipo.teamTag}` : "/equipos";
+
+  // Migración 201, a pedido del usuario: "Mi comunidad" (junto a "Mi
+  // Clan") y "Mis Eventos" (junto al botón central) solo aparecen si
+  // el usuario creó o pertenece a al menos una comunidad -- a
+  // diferencia de un clan (uno solo por persona), se puede pertenecer
+  // a varias, así que "Mi comunidad" manda directo solo cuando hay
+  // una sola; con más de una, manda al buscador general (todavía no
+  // hay una ficha propia de "todas mis comunidades" aparte de la
+  // pestaña Comunidades de Mi perfil).
+  const [misComunidades, setMisComunidades] = useState<ComunidadRow[]>([]);
+  useEffect(() => {
+    if (!user) {
+      setMisComunidades([]);
+      return;
+    }
+    obtenerComunidadesDelUsuario(user.id).then(setMisComunidades);
+  }, [user]);
+  const tieneComunidad = misComunidades.length > 0;
+  const miComunidadHref = misComunidades.length === 1 ? `/comunidades/${misComunidades[0].id}` : "/comunidades";
+
   const [fanOpen, setFanOpen] = useState(false);
   // Dispara la animación "poder" (ver .animar-poder en halcon.css) cada
   // vez que se toca el botón central; se saca sola al terminar, vía
@@ -52,7 +74,11 @@ export default function BottomNav() {
 
   return (
     <nav className="bottom-nav">
-      <div className="bottom-nav-inner">
+      {/* tieneComunidad agrega 2 ítems más (7 en vez de 5) -- la barra
+          achica un poco el padding/tamaño en ese caso, ver
+          .bottom-nav-inner-expandida en halcon.css, para que sigan
+          entrando cómodos en un celular angosto. */}
+      <div className={`bottom-nav-inner ${tieneComunidad ? "bottom-nav-inner-expandida" : ""}`}>
         {/* Migración 109: "Chat" pasa de vivir en el abanico a ser un
             ícono fijo acá, en el lugar que tenía "Inicio" -- Inicio ya
             no tiene ícono propio en la barra, queda accesible desde el
@@ -78,6 +104,13 @@ export default function BottomNav() {
           <span>Mi Clan</span>
         </NavLink>
 
+        {tieneComunidad && (
+          <NavLink to={miComunidadHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+            <Users />
+            <span>Mi comunidad</span>
+          </NavLink>
+        )}
+
         <div className="bottom-nav-center">
           <button
             type="button"
@@ -95,6 +128,13 @@ export default function BottomNav() {
           </button>
           <FanMenu isOpen={fanOpen} onClose={() => setFanOpen(false)} />
         </div>
+
+        {tieneComunidad && (
+          <NavLink to="/mis-eventos" className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}>
+            <CalendarCheck />
+            <span>Mis Eventos</span>
+          </NavLink>
+        )}
 
         {/* Ranking (migración 059) ocupa el lugar que dejó Tienda --
             Torneos ya vive en el abanico central, no hace falta
