@@ -3890,9 +3890,16 @@ html.es-escritorio .player-detail-panel-inline {
   /* Mismo bug que .bracket-match: .bracket-conectores es position:
      absolute sin z-index, así que por las reglas normales de stacking
      pinta ENCIMA del texto en vez de quedar detrás (a pedido del
-     usuario, "FINAL" quedaba tapado por el láser). */
+     usuario, "FINAL" quedaba tapado por el láser). position+z-index
+     solos no alcanzaron (el usuario lo siguió viendo tapado) -- se
+     suma un fondo sólido propio como respaldo: así, pase lo que pase
+     con el orden de apilado, nunca hay nada atrás que lo tape. */
   position: relative;
-  z-index: 1;
+  z-index: 2;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm, 0.375rem);
+  padding: 0.15rem 0.5rem;
+  align-self: center;
   text-align: center;
   font-family: var(--font-display);
   font-weight: 700;
@@ -4502,7 +4509,17 @@ html.es-escritorio .player-detail-panel-inline {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* Bug corregido, a pedido del usuario: con Vista panorámica (Final +
+     Grupo A + Grupo B, mucho más alto que la ventana), "center" a
+     secas empuja la mitad del contenido por ARRIBA del viewport -- con
+     overflow: auto esa mitad queda inaccesible (no hay forma de
+     scrollear hasta ahí), se "pierde" contenido. "safe center" es
+     igual a "center" cuando todo entra, pero si no entra se comporta
+     como "start" (todo scrolleable desde arriba) en vez de recortar.
+     La primera línea es el respaldo para navegadores que no conocen
+     "safe center" (se ignora como valor inválido, queda la anterior). */
   justify-content: center;
+  justify-content: safe center;
 }
 
 .bracket-pantalla-completa-btn {

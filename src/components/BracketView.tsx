@@ -388,6 +388,30 @@ export default function BracketView({
       return principales.filter((m) => m.round === rondaMinima).length >= 8;
     })();
 
+  // Migración 200, a pedido del usuario: la corona dorada del campeón
+  // aparecía en TODOS los partidos que ganó en su camino (Ronda 1,
+  // Ronda 2, ..., no solo la final real) -- esCampeonN (más abajo, en
+  // renderPartido) solo chequeaba "ganó este partido Y es el campeón",
+  // sin importar en qué ronda. Acá se calcula una sola vez cuál es el
+  // ID del partido que de verdad decide el torneo, para comparar
+  // match.id === matchFinalId antes de mostrar la corona. En
+  // eliminación doble es el reset (si hubo) o si no la gran final; en
+  // cualquier otra estructura (incluida la llave grande de 16+, donde
+  // "Final Grupo A"/"Final Grupo B" NO son la final real) es el único
+  // partido de la ronda más alta.
+  const matchFinalId = (() => {
+    if (esEliminacionDoble) {
+      const reset = matches.find((m) => m.bracket_tipo === "reset");
+      if (reset) return reset.id;
+      return matches.find((m) => m.bracket_tipo === "final")?.id ?? null;
+    }
+    const principales = matches.filter((m) => !m.es_tercer_lugar);
+    if (principales.length === 0) return null;
+    const rondaMaxima = Math.max(...principales.map((m) => m.round));
+    const enRondaMaxima = principales.filter((m) => m.round === rondaMaxima);
+    return enRondaMaxima.length === 1 ? enRondaMaxima[0].id : null;
+  })();
+
   // Migración 069: nombre tradicional según la distancia a la final --
   // "distancia 0" es la final, 1 semifinal, 2 cuartos, 3 octavos; más
   // lejos que eso, se queda en "Ronda N" (no hay nombre tradicional
@@ -697,8 +721,11 @@ export default function BracketView({
             final de los playoffs de First Stand). */}
         {match.formato_partido === "bo5" && <span className="veto-tag bracket-bo5-tag">Bo5</span>}
         {(() => {
-          const esCampeon1 = p1Gana && !!campeonParticipantId && match.participant1_id === campeonParticipantId;
-          const esCampeon2 = p2Gana && !!campeonParticipantId && match.participant2_id === campeonParticipantId;
+          const esElPartidoFinal = !!matchFinalId && match.id === matchFinalId;
+          const esCampeon1 =
+            esElPartidoFinal && p1Gana && !!campeonParticipantId && match.participant1_id === campeonParticipantId;
+          const esCampeon2 =
+            esElPartidoFinal && p2Gana && !!campeonParticipantId && match.participant2_id === campeonParticipantId;
           return (
             <>
               <div
