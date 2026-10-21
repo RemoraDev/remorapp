@@ -3878,6 +3878,12 @@ html.es-escritorio .player-detail-panel-inline {
      "..." si no entra, ver .bracket-slot). */
   flex: 1 1 0;
   min-width: 8rem;
+  /* Corrección, a pedido del usuario: con pocas rondas visibles (por
+     ejemplo recién generada la llave, solo "Ronda 1") flex-grow la
+     estiraba a lo ancho de toda la pantalla -- un tope evita que crezca
+     de más, sin tocar cuánto se puede achicar (eso lo sigue manejando
+     flex-shrink + min-width de arriba). */
+  max-width: 17rem;
 }
 
 .bracket-round-title {

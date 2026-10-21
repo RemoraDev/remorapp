@@ -438,14 +438,24 @@ export default function BracketView({
   // en cada mitad de "Embudo al centro", la última ronda NO es la
   // final real (esa se muestra aparte, en su propia cajita), así que
   // ahí se pasa false.
+  //
+  // Corrección (a pedido del usuario): "es la final" se decidía
+  // mirando cantidadPartidos === 1 -- pero las rondas se crean de a
+  // una (avanzar_ganador), así que apenas se resuelve el primer
+  // partido de una ronda, ESA ronda recién nacida también tiene 1
+  // solo partido todavía, aunque le falten más (por ejemplo, Ronda 2
+  // de un grupo de 8 arranca con 1 partido y más tarde llega a 2). Eso
+  // la etiquetaba "Final" antes de tiempo, saltándose "Ronda 2" del
+  // todo. Ahora se decide por POSICIÓN real (totalRondas, calculado
+  // aparte a partir de la Ronda 1 completa, no cambia con lo que ya
+  // se jugó) -- solo la última ronda de verdad es "Final".
   const nombreDeRondaTradicional = (
     rondas: number[],
     indiceRonda: number,
     totalRondas: number,
-    cantidadPartidos: number,
     permitirFinal: boolean
   ) => {
-    if (permitirFinal && cantidadPartidos === 1) return "Final";
+    if (permitirFinal && indiceRonda === totalRondas - 1) return "Final";
     if (!nombresRondaPersonalizados) return `Ronda ${rondas[indiceRonda]}`;
     const distanciaDeLaFinal = totalRondas - 1 - indiceRonda;
     switch (distanciaDeLaFinal) {
@@ -545,13 +555,7 @@ export default function BracketView({
           return (
             <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
               <div className="bracket-round-title">
-                {nombreDeRondaTradicional(
-                  grilla.rondas,
-                  indiceRonda,
-                  grilla.totalRondasReal,
-                  partidos.length,
-                  grilla.permiteFinal
-                )}
+                {nombreDeRondaTradicional(grilla.rondas, indiceRonda, grilla.totalRondasReal, grilla.permiteFinal)}
               </div>
 
               <div className="bracket-round-matches">
