@@ -2450,7 +2450,10 @@ export default function TournamentDetailPage() {
           <button
             type="button"
             className={`organizer-panel-tab ${pestanaTorneo === "competencia" ? "selected" : ""}`}
-            onClick={() => setPestanaTorneo("competencia")}
+            onClick={() => {
+              setPestanaTorneo("competencia");
+              setAvisoSinReglamento(false);
+            }}
           >
             {torneo.fase_actual === "grupos"
               ? "Grupos"
@@ -2466,7 +2469,10 @@ export default function TournamentDetailPage() {
           <button
             type="button"
             className={`organizer-panel-tab ${pestanaTorneo === "participantes" ? "selected" : ""}`}
-            onClick={() => setPestanaTorneo("participantes")}
+            onClick={() => {
+              setPestanaTorneo("participantes");
+              setAvisoSinReglamento(false);
+            }}
           >
             {esPorEquipos ? "Equipos inscritos" : "Participantes"}
           </button>
@@ -2476,7 +2482,10 @@ export default function TournamentDetailPage() {
               Corrección, a pedido del usuario: nunca manda a Panel de
               control, ni siquiera siendo el organizador -- con
               reglamento subido abre el visor, sin reglamento solo
-              avisa, para cualquiera que la apriete. */}
+              avisa, para cualquiera que la apriete. Corrección
+              (migración 209): volver a apretarla no hacía nada --
+              ahora alterna el aviso (lo esconde si ya estaba
+              mostrándose), en vez de solo poder prenderlo. */}
           <button
             type="button"
             className="organizer-panel-tab"
@@ -2485,7 +2494,7 @@ export default function TournamentDetailPage() {
                 setMostrandoVisorReglamento(true);
                 return;
               }
-              setAvisoSinReglamento(true);
+              setAvisoSinReglamento((v) => !v);
             }}
           >
             <FileText size={14} className="icon-inline" aria-hidden="true" />
