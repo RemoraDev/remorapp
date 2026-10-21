@@ -24507,3 +24507,12 @@ create policy "comunidad_banners_subida_propia"
     bucket_id = 'comunidad-banners'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+grant select on public.comunidades to anon, authenticated;
+grant insert on public.comunidades to authenticated;
+grant update on public.comunidades to authenticated;
+grant delete on public.comunidades to authenticated;
+
+grant select on public.comunidad_miembros to anon, authenticated;
+grant insert on public.comunidad_miembros to authenticated;
+grant delete on public.comunidad_miembros to authenticated;
