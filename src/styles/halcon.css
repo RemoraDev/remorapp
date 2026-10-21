@@ -4280,38 +4280,24 @@ html.es-escritorio .player-detail-panel-inline {
    ilegibles), cada uno respetando la Estructura elegida (Clásico/
    Vertical/Escalera), con scroll horizontal propio si no entra
    entero. */
-.bracket-panoramica-grupos {
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
+/* "Gran Final" -- letra un poco más grande y con un pulso de brillo
+   propio, a pedido del usuario, para que se note que es el partido
+   más importante de la llave (ver .bracket-embudo-final más abajo,
+   que es donde vive ahora -- Vista panorámica usa siempre el mismo
+   armado de "Embudo al centro", ya no es configurable). */
+.bracket-gran-final-titulo {
+  font-size: 1.05rem;
+  animation: bracket-gran-final-pulso 2s ease-in-out infinite;
 }
 
-.bracket-panoramica-grupo {
-  overflow-x: auto;
-}
-
-/* Corrección, a pedido del usuario: la gran final (ganador de Grupo A
-   vs ganador de Grupo B) va entre Grupo A y Grupo B (antes probó
-   arriba de todo, pero en pantalla completa igual no se veía bien de
-   entrada) -- alineada a la izquierda, no centrada en todo el ancho.
-   Acento dorado propio para que se note que es el partido más
-   importante de los tres. */
-.bracket-panoramica-final {
-  align-self: flex-start;
-  max-width: 15rem;
-  width: 100%;
-  margin: 0;
-  padding: 0;
-  border: none;
-}
-
-.bracket-panoramica-final .bracket-round-title {
-  color: #fde047;
-}
-
-.bracket-panoramica-final .bracket-match {
-  border-color: rgba(253, 224, 71, 0.4);
-  box-shadow: 0 0 20px rgba(253, 224, 71, 0.15);
+@keyframes bracket-gran-final-pulso {
+  0%,
+  100% {
+    text-shadow: 0 0 8px rgba(253, 224, 71, 0.4);
+  }
+  50% {
+    text-shadow: 0 0 18px rgba(253, 224, 71, 0.9), 0 0 30px rgba(253, 224, 71, 0.5);
+  }
 }
 
 /* ---------- Estructura "embudo al centro" (migración 177) ---------- */
@@ -4339,6 +4325,17 @@ html.es-escritorio .player-detail-panel-inline {
   margin: 0;
   padding: 0;
   border: none;
+}
+
+/* Acento dorado propio, a pedido del usuario: se nota de un vistazo
+   que es el partido más importante de la llave (la Gran Final). */
+.bracket-embudo-final .bracket-round-title {
+  color: #fde047;
+}
+
+.bracket-embudo-final .bracket-match {
+  border-color: rgba(253, 224, 71, 0.4);
+  box-shadow: 0 0 20px rgba(253, 224, 71, 0.15);
 }
 
 /* ---------- Armar llave manualmente, arrastrar y soltar (migración 097) ---------- */
@@ -9586,6 +9583,75 @@ body.overlay-obs {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* ---------- Ficha del streamer de la comunidad (migración 204) ----------
+   Reemplaza a "Eventos de la comunidad" en el lobby público -- a
+   pedido del usuario, con una estética más "gaming": fondo degradado
+   oscuro, borde con brillo del acento de la comunidad (hereda
+   data-tema-equipo de la raíz) y datos en pastillas en vez de texto
+   plano. */
+.comunidad-streamer-card {
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-accent);
+  background: linear-gradient(160deg, rgba(var(--h-accent-rgb), 0.14), transparent 60%), var(--color-panel);
+  box-shadow: var(--shadow-accent-lg);
+}
+
+.comunidad-streamer-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-accent);
+  margin-bottom: 0.9rem;
+}
+
+.comunidad-streamer-card-header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.comunidad-streamer-card-datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+}
+
+.comunidad-streamer-dato {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.comunidad-streamer-dato .fi {
+  border-radius: 2px;
+}
+
+.comunidad-streamer-card-bio {
+  margin: 0 0 1rem;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.comunidad-streamer-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 /* ---------- Comunidades (migración 198) ----------

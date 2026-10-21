@@ -83,6 +83,19 @@ export const COUNTRY_OPTIONS: { value: Country; label: string }[] = [
   { value: "bolivia", label: "Bolivia" },
 ];
 
+// Código ISO 3166-1 alpha-2 de cada país del catálogo, para las
+// banderas reales de flag-icons (clase "fi fi-<iso>") -- antes vivía
+// solo en BracketView.tsx (BANDERA_ISO), movido acá porque ahora
+// también lo usa ComunidadDetailPage.tsx (país del streamer).
+export const PAIS_ISO: Record<Country, string> = {
+  chile: "cl",
+  guatemala: "gt",
+  puerto_rico: "pr",
+  argentina: "ar",
+  peru: "pe",
+  bolivia: "bo",
+};
+
 // Servidor real de StarCraft II al que se conecta el jugador. Lo elige
 // libremente el propio jugador (no se detecta por IP) -- sirve para
 // más adelante armar torneos entre servidores con distintos horarios.

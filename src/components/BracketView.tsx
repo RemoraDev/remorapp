@@ -13,21 +13,17 @@ import type {
   EstiloTituloBracket,
   InsigniaBracket,
 } from "../types/tournaments";
+import { PAIS_ISO } from "../types/profile";
 
 // Migración 182: el emoji de bandera (🇨🇱, etc.) depende de que el
 // sistema operativo tenga una fuente con glifos de emoji de bandera --
 // Windows no la tiene por default y cae a mostrar el código de país en
 // texto plano ("CL"). Se reemplaza por flag-icons (SVG reales,
 // paquete instalado, sin depender de ningún CDN externo) -- cada país
-// de profiles.country mapea a su código ISO 3166-1 alpha-2.
-const BANDERA_ISO: Record<string, string> = {
-  chile: "cl",
-  guatemala: "gt",
-  puerto_rico: "pr",
-  argentina: "ar",
-  peru: "pe",
-  bolivia: "bo",
-};
+// de profiles.country mapea a su código ISO 3166-1 alpha-2 (ver
+// PAIS_ISO en types/profile.ts, movido ahí para compartirlo con
+// ComunidadDetailPage.tsx).
+const BANDERA_ISO: Record<string, string> = PAIS_ISO;
 
 interface BracketViewProps {
   matches: BracketMatchRow[];
@@ -500,16 +496,7 @@ export default function BracketView({
     return { rondas, partidosPorRonda, alturaBracket, totalRondasReal, nombresTradicionales, permiteFinal };
   };
 
-  const renderGrilla = (
-    grilla: ReturnType<typeof armarGrilla>,
-    keyPrefix: string,
-    // Migración 199, a pedido del usuario: en Vista panorámica, el
-    // último partido de CADA grupo también se llamaba "Final" (mismo
-    // nombre que la gran final de arriba) -- confuso, parecía que
-    // había dos finales. Solo se usa acá (Grupo A/B solos no lo
-    // necesitan, ahí no conviven con otra "Final" en la misma pantalla).
-    tituloFinal?: string
-  ) => {
+  const renderGrilla = (grilla: ReturnType<typeof armarGrilla>, keyPrefix: string) => {
     const lineas = conectoresPorGrilla[keyPrefix] ?? [];
     const tamano = tamanoPorGrilla[keyPrefix];
     // Migración 177: "vertical" fija el ANCHO total (las rondas se
@@ -558,16 +545,13 @@ export default function BracketView({
           return (
             <div key={`${keyPrefix}-${grilla.rondas[indiceRonda]}`} className="bracket-round">
               <div className="bracket-round-title">
-                {(() => {
-                  const nombreRonda = nombreDeRondaTradicional(
-                    grilla.rondas,
-                    indiceRonda,
-                    grilla.totalRondasReal,
-                    partidos.length,
-                    grilla.permiteFinal
-                  );
-                  return nombreRonda === "Final" && tituloFinal ? tituloFinal : nombreRonda;
-                })()}
+                {nombreDeRondaTradicional(
+                  grilla.rondas,
+                  indiceRonda,
+                  grilla.totalRondasReal,
+                  partidos.length,
+                  grilla.permiteFinal
+                )}
               </div>
 
               <div className="bracket-round-matches">
@@ -1008,7 +992,7 @@ export default function BracketView({
 
         {final && (
           <div className="bracket-tercer-lugar bracket-embudo-final" data-estilo-bracket={estilo}>
-            <div className="bracket-round-title">Final</div>
+            <div className="bracket-round-title bracket-gran-final-titulo">Gran Final</div>
             {renderPartido(final, { keyPrefix: "embudo-final", round: 0, matchNumber: 1 })}
           </div>
         )}
@@ -1034,7 +1018,7 @@ export default function BracketView({
   // Estructura respetada (mismo renderGrilla que Grupo A/Grupo B solos).
   if (esLlaveGrande) {
     const partidosSinTercerLugar = matches.filter((m) => !m.es_tercer_lugar);
-    const { izquierda, derecha, final } = partidosParaEmbudo(partidosSinTercerLugar);
+    const { izquierda, derecha } = partidosParaEmbudo(partidosSinTercerLugar);
 
     const tabsGrupos = (
       <div className="bracket-grupos-tabs">
@@ -1075,48 +1059,25 @@ export default function BracketView({
 
         {vistaGrupo === "a" && renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a")}
         {vistaGrupo === "b" && renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b")}
-        {vistaGrupo === "panoramica" &&
-          (esEmbudo ? (
-            <>
-              {renderEmbudo()}
-              {partidoTercerLugar && (
-                <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
-                  <div className="bracket-round-title">Partido por el 3er lugar</div>
-                  {renderPartido(partidoTercerLugar)}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="bracket-panoramica-grupos">
-              <div className="bracket-panoramica-grupo">
-                <div className="bracket-round-title bracket-seccion-titulo">Grupo A</div>
-                {renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a-pan", "Final Grupo A")}
+        {/* Corrección, a pedido del usuario: Vista panorámica ahora
+            SIEMPRE se arma con el mismo armado de "Embudo al centro"
+            (renderEmbudo), sin importar qué Estructura haya elegido el
+            organizador para el resto de la llave -- no es configurable.
+            Antes, para Clásico/Vertical/Escalera, armaba Grupo A/Gran
+            Final/Grupo B apilados a mano (.bracket-panoramica-grupos,
+            ya eliminado) -- ese armado alternativo se reemplaza del
+            todo por este, más simple y ya probado. */}
+        {vistaGrupo === "panoramica" && (
+          <>
+            {renderEmbudo()}
+            {partidoTercerLugar && (
+              <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
+                <div className="bracket-round-title">Partido por el 3er lugar</div>
+                {renderPartido(partidoTercerLugar)}
               </div>
-              {/* Corrección, a pedido del usuario: la gran final (ganador
-                  de Grupo A vs ganador de Grupo B) primero se puso ARRIBA
-                  de todo (para que no quedara enterrada en pantalla
-                  completa), pero en pantalla completa igual no se veía
-                  bien de entrada -- ahora va ACÁ, entre Grupo A y Grupo
-                  B (donde queda "centrada" entre los dos), alineada a la
-                  izquierda en vez de centrada en todo el ancho. */}
-              {final && (
-                <div className="bracket-panoramica-final" data-estilo-bracket={estilo}>
-                  <div className="bracket-round-title">Final</div>
-                  {renderPartido(final, { keyPrefix: "grupo-final-pan", round: 0, matchNumber: 1 })}
-                </div>
-              )}
-              <div className="bracket-panoramica-grupo">
-                <div className="bracket-round-title bracket-seccion-titulo">Grupo B</div>
-                {renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b-pan", "Final Grupo B")}
-              </div>
-              {partidoTercerLugar && (
-                <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
-                  <div className="bracket-round-title">Partido por el 3er lugar</div>
-                  {renderPartido(partidoTercerLugar)}
-                </div>
-              )}
-            </div>
-          ))}
+            )}
+          </>
+        )}
       </>
     );
   }

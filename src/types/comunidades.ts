@@ -19,6 +19,15 @@ export interface ComunidadRow {
   // se aplica con el mismo atributo data-tema-equipo en la raíz de la
   // página, los selectores de halcon.css ya son genéricos.
   tema_comunidad: TemaEquipo;
+  // Migración 204, a pedido del usuario: ficha del streamer de la
+  // comunidad -- reemplaza a "Eventos de la comunidad" en la página
+  // pública (esos eventos se siguen viendo en Mis Eventos).
+  streamer_horario: string | null;
+  streamer_link: string | null;
+  streamer_pais: string | null;
+  streamer_idioma: string | null;
+  streamer_juegos: string | null;
+  streamer_bio: string | null;
 }
 
 export interface ComunidadMiembroRow {

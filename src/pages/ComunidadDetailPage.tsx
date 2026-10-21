@@ -2,16 +2,15 @@ import { useEffect, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { Users, Calendar, X } from "lucide-react";
+import { Users, X, Clock, Radio, Globe2, Languages, Gamepad2 } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { comprimirImagen } from "../lib/imageCompression";
-import { formatFecha } from "../lib/formatters";
-import { obtenerEventosDeComunidad } from "../lib/comunidades";
 import Avatar from "../components/Avatar";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
-import type { ComunidadRow, EventoComunidad } from "../types/comunidades";
-import type { AvatarForma } from "../types/profile";
+import type { ComunidadRow } from "../types/comunidades";
+import { COUNTRY_OPTIONS, PAIS_ISO } from "../types/profile";
+import type { AvatarForma, Country } from "../types/profile";
 import { TEMAS_EQUIPO } from "../types/teams";
 import type { TemaEquipo } from "../types/teams";
 
@@ -37,23 +36,25 @@ export default function ComunidadDetailPage() {
 
   const [comunidad, setComunidad] = useState<ComunidadRow | null>(null);
   const [miembros, setMiembros] = useState<MiembroConNombre[]>([]);
-  const [eventos, setEventos] = useState<EventoComunidad[]>([]);
   const [cargando, setCargando] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
   const [uniendose, setUniendose] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
-  // Migración 200/202/203, a pedido del usuario: Panel de control
-  // ordenado en pestañas hermanas (Apariencia/Avatar/Banner/
+  // Migración 205, a pedido del usuario: la lista de integrantes ya no
+  // se ve siempre en el lobby público -- queda detrás de este botón.
+  const [mostrandoIntegrantes, setMostrandoIntegrantes] = useState(false);
+  // Migración 200/202/203/204, a pedido del usuario: Panel de control
+  // ordenado en pestañas hermanas (Apariencia/Avatar/Banner/Streamer/
   // Integrantes/Eliminar), mismo lenguaje visual que "Configuración" de
   // Mi Clan (.team-config-media-tabs/.team-config-media-tab).
   // "Eliminar" pasa a ser una pestaña más, no un botón rojo siempre
   // visible en TODAS las pestañas (quedaba "amenazando" todo el
   // tiempo). "Descripción" se saca del todo -- ya no es editable desde
   // acá, solo se define al crear la comunidad.
-  const [tabConfig, setTabConfig] = useState<"apariencia" | "avatar" | "banner" | "integrantes" | "eliminar">(
-    "apariencia"
-  );
+  const [tabConfig, setTabConfig] = useState<
+    "apariencia" | "avatar" | "banner" | "streamer" | "integrantes" | "eliminar"
+  >("apariencia");
   const [guardandoTema, setGuardandoTema] = useState(false);
 
   const [archivoParaRecortarLogo, setArchivoParaRecortarLogo] = useState<File | null>(null);
@@ -69,6 +70,19 @@ export default function ComunidadDetailPage() {
   const [bannerLateralPreview, setBannerLateralPreview] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
+
+  // Streamer (migración 204, a pedido del usuario): reemplaza a
+  // "Eventos de la comunidad" en la ficha pública -- horario, link,
+  // país, idioma, juegos en cast y datos sobre el streamer. Se
+  // sincroniza con cargarComunidad() más abajo, mismo patrón que la
+  // descripción tenía antes.
+  const [streamerHorario, setStreamerHorario] = useState("");
+  const [streamerLink, setStreamerLink] = useState("");
+  const [streamerPais, setStreamerPais] = useState<Country | "">("");
+  const [streamerIdioma, setStreamerIdioma] = useState("");
+  const [streamerJuegos, setStreamerJuegos] = useState("");
+  const [streamerBio, setStreamerBio] = useState("");
+  const [guardandoStreamer, setGuardandoStreamer] = useState(false);
 
   // Integrantes (migración 200/203, a pedido del usuario): dos
   // subpestañas -- "Lista de integrantes" (solo ver) y "Agregar o
@@ -96,6 +110,12 @@ export default function ComunidadDetailPage() {
     }
 
     setComunidad(data as ComunidadRow);
+    setStreamerHorario((data as ComunidadRow).streamer_horario ?? "");
+    setStreamerLink((data as ComunidadRow).streamer_link ?? "");
+    setStreamerPais(((data as ComunidadRow).streamer_pais as Country | null) ?? "");
+    setStreamerIdioma((data as ComunidadRow).streamer_idioma ?? "");
+    setStreamerJuegos((data as ComunidadRow).streamer_juegos ?? "");
+    setStreamerBio((data as ComunidadRow).streamer_bio ?? "");
 
     const { data: miembrosData } = await supabase
       .from("comunidad_miembros")
@@ -114,8 +134,6 @@ export default function ComunidadDetailPage() {
         };
       })
     );
-
-    setEventos(await obtenerEventosDeComunidad(id));
 
     setCargando(false);
   };
@@ -314,6 +332,33 @@ export default function ComunidadDetailPage() {
     navigate("/comunidades");
   };
 
+  const handleGuardarStreamer = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!user) return;
+
+    setGuardandoStreamer(true);
+    const { error } = await supabase
+      .from("comunidades")
+      .update({
+        streamer_horario: streamerHorario.trim() || null,
+        streamer_link: streamerLink.trim() || null,
+        streamer_pais: streamerPais || null,
+        streamer_idioma: streamerIdioma.trim() || null,
+        streamer_juegos: streamerJuegos.trim() || null,
+        streamer_bio: streamerBio.trim() || null,
+      })
+      .eq("id", comunidad.id);
+    setGuardandoStreamer(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Comunidad actualizada.");
+    cargarComunidad();
+  };
+
   const handleBuscarJugador = async (event: FormEvent) => {
     event.preventDefault();
     setErrorBusqueda(null);
@@ -487,6 +532,13 @@ export default function ComunidadDetailPage() {
               </button>
               <button
                 type="button"
+                className={`team-config-media-tab ${tabConfig === "streamer" ? "is-active" : ""}`}
+                onClick={() => setTabConfig("streamer")}
+              >
+                Streamer
+              </button>
+              <button
+                type="button"
                 className={`team-config-media-tab ${tabConfig === "integrantes" ? "is-active" : ""}`}
                 onClick={() => setTabConfig("integrantes")}
               >
@@ -635,6 +687,99 @@ export default function ComunidadDetailPage() {
                 </form>
               )}
 
+              {tabConfig === "streamer" && (
+                <form className="auth-form" onSubmit={handleGuardarStreamer}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="comunidad-streamer-horario">
+                      Horario
+                    </label>
+                    <input
+                      id="comunidad-streamer-horario"
+                      className="form-input"
+                      type="text"
+                      placeholder="Lunes a viernes, 20:00-23:00 CET"
+                      maxLength={80}
+                      value={streamerHorario}
+                      onChange={(e) => setStreamerHorario(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="comunidad-streamer-link">
+                      Link de stream
+                    </label>
+                    <input
+                      id="comunidad-streamer-link"
+                      className="form-input"
+                      type="text"
+                      placeholder="https://twitch.tv/tucanal"
+                      value={streamerLink}
+                      onChange={(e) => setStreamerLink(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="comunidad-streamer-pais">
+                      País
+                    </label>
+                    <select
+                      id="comunidad-streamer-pais"
+                      className="form-select"
+                      value={streamerPais}
+                      onChange={(e) => setStreamerPais(e.target.value as Country | "")}
+                    >
+                      <option value="">Sin especificar</option>
+                      {COUNTRY_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="comunidad-streamer-idioma">
+                      Idioma
+                    </label>
+                    <input
+                      id="comunidad-streamer-idioma"
+                      className="form-input"
+                      type="text"
+                      placeholder="Español"
+                      maxLength={40}
+                      value={streamerIdioma}
+                      onChange={(e) => setStreamerIdioma(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="comunidad-streamer-juegos">
+                      Juegos en cast
+                    </label>
+                    <input
+                      id="comunidad-streamer-juegos"
+                      className="form-input"
+                      type="text"
+                      placeholder="StarCraft II"
+                      maxLength={80}
+                      value={streamerJuegos}
+                      onChange={(e) => setStreamerJuegos(e.target.value)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="comunidad-streamer-bio">
+                      Sobre el streamer
+                    </label>
+                    <textarea
+                      id="comunidad-streamer-bio"
+                      className="form-textarea"
+                      maxLength={280}
+                      value={streamerBio}
+                      onChange={(e) => setStreamerBio(e.target.value)}
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary" disabled={guardandoStreamer}>
+                    {guardandoStreamer ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                </form>
+              )}
+
               {tabConfig === "integrantes" && (
                 <>
                   <div className="team-info-subtabs">
@@ -773,40 +918,103 @@ export default function ComunidadDetailPage() {
         </div>
       )}
 
-      <h3 className="detail-subtitle">Integrantes</h3>
-      <div className="detail-participant-list">
-        {miembros.map((m) => (
-          <div key={m.userId} className="detail-participant-item">
-            <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
-            {m.nick ?? "Jugador de RemorApp"}
-            {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
-            {m.userId === comunidad.creador_id && <span className="team-owner-badge">Creador</span>}
-          </div>
-        ))}
-      </div>
+      {/* Migración 205, a pedido del usuario: la lista de integrantes
+          ya no se ve siempre en el lobby -- queda detrás de este botón,
+          en un modal. */}
+      <button type="button" className="btn btn-ghost" onClick={() => setMostrandoIntegrantes(true)}>
+        <Users size={16} className="icon-inline" aria-hidden="true" />
+        Ver integrantes ({miembros.length})
+      </button>
 
-      <h3 className="detail-subtitle">
-        <Calendar size={16} className="icon-inline" aria-hidden="true" />
-        Eventos de la comunidad
-      </h3>
-      <div className="detail-card player-tab-standalone-card">
-        {eventos.length === 0 ? (
-          <p className="detail-empty">Todavía no hay eventos creados para esta comunidad.</p>
-        ) : (
-          <div className="detail-participant-list">
-            {eventos.map((evento) => (
-              <Link
-                key={`${evento.tipo}-${evento.id}`}
-                to={evento.href}
-                className="detail-participant-item detail-participant-item-evento"
-              >
-                {evento.titulo}
-                <span className="tournament-card-meta">{formatFecha(evento.fecha)}</span>
-              </Link>
-            ))}
+      {mostrandoIntegrantes && (
+        <div className="modal-backdrop" onClick={() => setMostrandoIntegrantes(false)}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setMostrandoIntegrantes(false)}
+              aria-label="Cerrar"
+            >
+              <X size={18} />
+            </button>
+            <h2 className="modal-title">Integrantes</h2>
+            <div className="detail-participant-list" style={{ marginTop: "1rem" }}>
+              {miembros.map((m) => (
+                <div key={m.userId} className="detail-participant-item">
+                  <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
+                  {m.nick ?? "Jugador de RemorApp"}
+                  {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+                  {m.userId === comunidad.creador_id && <span className="team-owner-badge">Creador</span>}
+                </div>
+              ))}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* Migración 204, a pedido del usuario: reemplaza a "Eventos de
+          la comunidad" (esos eventos se siguen viendo en Mis Eventos,
+          ver BottomNav.tsx) -- ficha del streamer, con los mismos
+          datos que ya existen en "Mi perfil"/"Mi Clan" (país/idioma/
+          horario/link/juegos/bio) en una sola tarjeta. */}
+      {(comunidad.streamer_horario ||
+        comunidad.streamer_link ||
+        comunidad.streamer_pais ||
+        comunidad.streamer_idioma ||
+        comunidad.streamer_juegos ||
+        comunidad.streamer_bio) && (
+        <div className="comunidad-streamer-card">
+          <div className="comunidad-streamer-card-header">
+            <Radio size={18} aria-hidden="true" />
+            <h3>Streamer</h3>
+          </div>
+
+          <div className="comunidad-streamer-card-datos">
+            {comunidad.streamer_horario && (
+              <span className="comunidad-streamer-dato">
+                <Clock size={14} aria-hidden="true" />
+                {comunidad.streamer_horario}
+              </span>
+            )}
+            {comunidad.streamer_pais && (
+              <span className="comunidad-streamer-dato">
+                {PAIS_ISO[comunidad.streamer_pais as Country] ? (
+                  <span className={`fi fi-${PAIS_ISO[comunidad.streamer_pais as Country]}`} aria-hidden="true" />
+                ) : (
+                  <Globe2 size={14} aria-hidden="true" />
+                )}
+                {COUNTRY_OPTIONS.find((o) => o.value === comunidad.streamer_pais)?.label ?? comunidad.streamer_pais}
+              </span>
+            )}
+            {comunidad.streamer_idioma && (
+              <span className="comunidad-streamer-dato">
+                <Languages size={14} aria-hidden="true" />
+                {comunidad.streamer_idioma}
+              </span>
+            )}
+            {comunidad.streamer_juegos && (
+              <span className="comunidad-streamer-dato">
+                <Gamepad2 size={14} aria-hidden="true" />
+                {comunidad.streamer_juegos}
+              </span>
+            )}
+          </div>
+
+          {comunidad.streamer_bio && <p className="comunidad-streamer-card-bio">{comunidad.streamer_bio}</p>}
+
+          {comunidad.streamer_link && (
+            <a
+              href={comunidad.streamer_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-primary comunidad-streamer-card-link"
+            >
+              <Radio size={16} aria-hidden="true" />
+              Ver stream
+            </a>
+          )}
+        </div>
+      )}
     </section>
   );
 }
