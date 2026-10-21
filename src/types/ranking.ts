@@ -65,3 +65,12 @@ export interface RankingActividadClan {
   logo_url: string | null;
   actividades: number;
 }
+
+// Fila devuelta por detalle_actividad_clan() (migración 197, a pedido
+// del usuario): el detalle de qué cuenta como actividad de un clan en
+// particular -- transparencia sobre el número de ranking_actividad_clanes().
+export interface DetalleActividadClan {
+  tipo: "clan_war" | "torneo" | "race_war";
+  descripcion: string;
+  fecha: string;
+}

@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Swords, Trophy } from "lucide-react";
+import { Swords, Trophy, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
+import { formatFecha } from "../lib/formatters";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import MisTitulosPadreHijoList from "../components/MisTitulosPadreHijoList";
 import type {
+  DetalleActividadClan,
   DivisionLiga,
   Liga,
   MiniEvento,
@@ -46,6 +48,25 @@ export default function RankingPage() {
   const [cargandoMinieventos, setCargandoMinieventos] = useState(false);
   const [rankingActividad, setRankingActividad] = useState<RankingActividadClan[]>([]);
   const [cargandoActividad, setCargandoActividad] = useState(true);
+  // Migración 197, a pedido del usuario: "Ver" abre el detalle de qué
+  // cuenta como actividad de ESE clan puntual -- transparencia sobre
+  // el número de más arriba, para que se note que no hay trampa.
+  const [detalleActividadClan, setDetalleActividadClan] = useState<RankingActividadClan | null>(null);
+  const [detalleActividad, setDetalleActividad] = useState<DetalleActividadClan[]>([]);
+  const [cargandoDetalleActividad, setCargandoDetalleActividad] = useState(false);
+
+  const handleVerDetalleActividad = async (fila: RankingActividadClan) => {
+    setDetalleActividadClan(fila);
+    setCargandoDetalleActividad(true);
+    const { data, error } = await supabase.rpc("detalle_actividad_clan", { p_team_id: fila.team_id });
+    setCargandoDetalleActividad(false);
+    if (error) {
+      console.error("Error cargando el detalle de actividad:", error);
+      setDetalleActividad([]);
+      return;
+    }
+    setDetalleActividad((data ?? []) as DetalleActividadClan[]);
+  };
 
   useEffect(() => {
     if (user) obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
@@ -489,6 +510,7 @@ export default function RankingPage() {
                       <th>#</th>
                       <th>Clan</th>
                       <th>Actividades</th>
+                      <th></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -508,6 +530,18 @@ export default function RankingPage() {
                           </Link>
                         </td>
                         <td>{fila.actividades}</td>
+                        <td>
+                          {/* Migración 197, a pedido del usuario: muestra
+                              qué cuenta como actividad de este clan --
+                              transparencia sobre el número de al lado. */}
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => handleVerDetalleActividad(fila)}
+                          >
+                            Ver
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -516,6 +550,42 @@ export default function RankingPage() {
             )
           )}
         </>
+      )}
+
+      {/* Migración 197, a pedido del usuario: detalle de qué cuenta
+          como actividad de un clan puntual -- transparencia sobre el
+          número de "Clanes más activos", para que se note que no hay
+          trampa. */}
+      {detalleActividadClan && (
+        <div className="modal-backdrop" onClick={() => setDetalleActividadClan(null)}>
+          <div className="modal-panel detalle-actividad-panel" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="modal-close"
+              onClick={() => setDetalleActividadClan(null)}
+              aria-label="Cerrar"
+            >
+              <X size={18} />
+            </button>
+            <h2 className="detail-subtitle detalle-actividad-titulo">
+              Actividad de {detalleActividadClan.team_name} [{detalleActividadClan.team_tag}]
+            </h2>
+            {cargandoDetalleActividad ? (
+              <p className="tournament-card-meta">Cargando...</p>
+            ) : detalleActividad.length === 0 ? (
+              <p className="detail-empty">No se encontró el detalle de esta actividad.</p>
+            ) : (
+              <ul className="detalle-actividad-lista">
+                {detalleActividad.map((item, indice) => (
+                  <li key={indice}>
+                    <span className="detalle-actividad-descripcion">{item.descripcion}</span>
+                    <span className="detalle-actividad-fecha">{formatFecha(item.fecha)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       )}
     </section>
   );
