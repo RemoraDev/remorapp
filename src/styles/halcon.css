@@ -4480,6 +4480,13 @@ html.es-escritorio .player-detail-panel-inline {
 .tournament-bracket-wrap {
   position: relative;
   margin-top: 1rem;
+  /* El botón de pantalla completa (acá abajo, .bracket-pantalla-completa-btn)
+     es position: absolute DENTRO de esta misma caja -- sin este
+     padding de respaldo, cuando la llave es corta (por ejemplo recién
+     generada, todavía sin ningún resultado cargado) el botón termina
+     superpuesto encima del último partido en vez de tener su propio
+     espacio libre debajo. */
+  padding-bottom: 3.25rem;
 }
 
 /* Pantalla completa de la llave (a pedido del usuario): mismo
@@ -4553,7 +4560,10 @@ html.es-escritorio .player-detail-panel-inline {
    "estrellas"/"estrellado_2" (tomados del catálogo de lineup, ver más
    abajo); el resto se sacó del catálogo. */
 .tournament-bracket-wrap[data-fondo-bracket]:not([data-fondo-bracket="ninguno"]) {
-  padding: 1.5rem 1rem 1rem;
+  /* padding-bottom en 3.25rem acá también -- mismo motivo que la
+     regla base de .tournament-bracket-wrap (le gana por cascada, es
+     la misma especificidad pero viene después en la hoja). */
+  padding: 1.5rem 1rem 3.25rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
   background-color: #06070a;
