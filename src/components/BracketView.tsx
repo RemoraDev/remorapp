@@ -879,50 +879,14 @@ export default function BracketView({
           </div>
         )}
 
-        {/* Migración 206, a pedido del usuario: el organizador ya no
-            preselecciona + confirma -- pincha directo a quien ganó
-            (arriba) y queda reportado al toque, en tiempo real; puede
-            volver a pinchar para deshacer, o pinchar al rival para
-            cambiar el ganador directo. El puntaje sigue siendo
-            opcional, se puede completar ANTES de pinchar al ganador
-            (una vez jugado el partido, para cambiar el puntaje hay que
-            deshacer primero). */}
-        {esOrganizadorLive && match.status === "pendiente" && (
-          <div className="bracket-report">
-            <div className="bracket-report-score">
-              <input
-                type="number"
-                min={0}
-                className="form-input bracket-report-score-input"
-                placeholder="0"
-                aria-label={`Puntaje de ${nombreDe(match.participant1_id)}`}
-                value={scoreDraft[match.id]?.p1 ?? ""}
-                onChange={(e) =>
-                  setScoreDraft((prev) => ({
-                    ...prev,
-                    [match.id]: { p1: e.target.value, p2: prev[match.id]?.p2 ?? "" },
-                  }))
-                }
-              />
-              <span className="bracket-report-score-vs">-</span>
-              <input
-                type="number"
-                min={0}
-                className="form-input bracket-report-score-input"
-                placeholder="0"
-                aria-label={`Puntaje de ${nombreDe(match.participant2_id)}`}
-                value={scoreDraft[match.id]?.p2 ?? ""}
-                onChange={(e) =>
-                  setScoreDraft((prev) => ({
-                    ...prev,
-                    [match.id]: { p1: prev[match.id]?.p1 ?? "", p2: e.target.value },
-                  }))
-                }
-              />
-            </div>
-            <p className="form-hint">Pinchá arriba a quien ganó -- queda reportado al toque.</p>
-          </div>
-        )}
+        {/* Migración 207, a pedido del usuario: nada de puntaje ni
+            texto de ayuda debajo -- el partido pendiente tiene que
+            verse igual de limpio que uno ya jugado (mismas 2 cajitas,
+            sin ningún adorno de más), listo para tocar apenas carga la
+            llave. El organizador pincha directo a quien ganó (arriba)
+            y queda reportado al toque, en tiempo real; puede volver a
+            pinchar para deshacer, o pinchar al rival para cambiar el
+            ganador directo -- sin puntaje, esta llave no lo usa. */}
 
         {/* Migración 191, a pedido del usuario: antes eran dos botones
             "Ganó X"/"Ganó Y" sueltos -- ahora se pincha directo el
