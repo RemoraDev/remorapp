@@ -100,6 +100,10 @@ export default function ComunidadDetailPage() {
   const [resultadoBusqueda, setResultadoBusqueda] = useState<MiembroConNombre | null>(null);
   const [agregando, setAgregando] = useState(false);
   const [quitandoUserId, setQuitandoUserId] = useState<string | null>(null);
+  // Migración 209: integrantes expulsados (comunidad_kicks_log), solo
+  // visible/cargado para el creador -- ver handlePermitirReingreso.
+  const [expulsados, setExpulsados] = useState<MiembroConNombre[]>([]);
+  const [permitiendoUserId, setPermitiendoUserId] = useState<string | null>(null);
 
   const cargarComunidad = async () => {
     if (!id) return;
@@ -128,6 +132,27 @@ export default function ComunidadDetailPage() {
 
     setMiembros(
       (miembrosData ?? []).map((m) => {
+        const perfil = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+        return {
+          userId: m.user_id as string,
+          nick: perfil?.nick ?? null,
+          uniqueId: perfil?.unique_id ?? null,
+          avatarUrl: perfil?.avatar_url ?? null,
+          avatarForma: perfil?.avatar_forma ?? "redondo",
+        };
+      })
+    );
+
+    // La política de select de comunidad_kicks_log solo deja ver esto
+    // al creador -- para cualquier otro usuario esta consulta vuelve
+    // vacía, no hace falta chequear esCreador antes de pedirla.
+    const { data: expulsadosData } = await supabase
+      .from("comunidad_kicks_log")
+      .select("user_id, profiles(nick, unique_id, avatar_url, avatar_forma)")
+      .eq("comunidad_id", id);
+
+    setExpulsados(
+      (expulsadosData ?? []).map((m) => {
         const perfil = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
         return {
           userId: m.user_id as string,
@@ -170,7 +195,7 @@ export default function ComunidadDetailPage() {
   const handleUnirse = async () => {
     if (!user) return;
     setUniendose(true);
-    const { error } = await supabase.from("comunidad_miembros").insert({ comunidad_id: comunidad.id, user_id: user.id });
+    const { error } = await supabase.rpc("unirse_comunidad", { p_comunidad_id: comunidad.id });
     setUniendose(false);
 
     if (error) {
@@ -407,9 +432,10 @@ export default function ComunidadDetailPage() {
   const handleAgregarIntegrante = async () => {
     if (!resultadoBusqueda) return;
     setAgregando(true);
-    const { error } = await supabase
-      .from("comunidad_miembros")
-      .insert({ comunidad_id: comunidad.id, user_id: resultadoBusqueda.userId });
+    const { error } = await supabase.rpc("agregar_integrante_comunidad", {
+      p_comunidad_id: comunidad.id,
+      p_user_id: resultadoBusqueda.userId,
+    });
     setAgregando(false);
 
     if (error) {
@@ -425,11 +451,10 @@ export default function ComunidadDetailPage() {
 
   const handleQuitarIntegrante = async (userId: string) => {
     setQuitandoUserId(userId);
-    const { error } = await supabase
-      .from("comunidad_miembros")
-      .delete()
-      .eq("comunidad_id", comunidad.id)
-      .eq("user_id", userId);
+    const { error } = await supabase.rpc("quitar_integrante_comunidad", {
+      p_comunidad_id: comunidad.id,
+      p_user_id: userId,
+    });
     setQuitandoUserId(null);
 
     if (error) {
@@ -437,7 +462,28 @@ export default function ComunidadDetailPage() {
       return;
     }
 
-    toast.success("Integrante quitado.");
+    toast.success("Integrante quitado. No va a poder volver a unirse hasta que se lo permitas.");
+    cargarComunidad();
+  };
+
+  // Migración 209, corrección QA: antes "Quitar" era cosmético (el
+  // expulsado podía volver a unirse al toque) -- ahora queda bloqueado
+  // en comunidad_kicks_log hasta que el creador lo permita de nuevo
+  // desde acá.
+  const handlePermitirReingreso = async (userId: string) => {
+    setPermitiendoUserId(userId);
+    const { error } = await supabase.rpc("permitir_reingreso_comunidad", {
+      p_comunidad_id: comunidad.id,
+      p_user_id: userId,
+    });
+    setPermitiendoUserId(null);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Ahora puede volver a unirse.");
     cargarComunidad();
   };
 
@@ -893,6 +939,34 @@ export default function ComunidadDetailPage() {
                           </div>
                         ))}
                       </div>
+
+                      {expulsados.length > 0 && (
+                        <>
+                          <h3 className="detail-subtitle">Expulsados (no pueden volver a unirse)</h3>
+                          <div className="comunidad-panel-integrantes-lista detail-participant-list">
+                            {expulsados.map((m) => (
+                              <div key={m.userId} className="detail-participant-item">
+                                <Avatar
+                                  url={m.avatarUrl}
+                                  nombre={m.nick}
+                                  className="detail-participant-avatar"
+                                  forma={m.avatarForma}
+                                />
+                                {m.nick ?? "Jugador de RemorApp"}
+                                {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost"
+                                  onClick={() => handlePermitirReingreso(m.userId)}
+                                  disabled={permitiendoUserId === m.userId}
+                                >
+                                  {permitiendoUserId === m.userId ? "Permitiendo..." : "Permitir de nuevo"}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </>
