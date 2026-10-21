@@ -7097,9 +7097,12 @@ html.es-escritorio .player-detail-panel-inline {
 
 /* Migración 201, a pedido del usuario: "Mi comunidad"/"Mis Eventos"
    solo aparecen para quien tiene una comunidad -- ahí la barra pasa de
-   5 a 7 ítems, se achica un poco para que sigan entrando cómodos
-   (sobre todo en celular, donde --nav-icon-size/--nav-label-size ya
-   suben bastante en las media queries de más arriba). */
+   5 a 7 ítems. En escritorio hay ancho de sobra (max-width sube a
+   34rem), así que acá NO se achican ni el ícono ni la letra -- a
+   pedido del usuario, achicarlos los dejaba borrosos/poco legibles.
+   Solo se ajustan el padding/gap (más apretados) para que los 7
+   entren sin herirse; el achique real de ícono/letra queda reservado
+   para celular angosto, ver la media query de abajo. */
 .bottom-nav-inner-expandida {
   max-width: 34rem;
   padding: 0 0.6rem;
@@ -7110,13 +7113,15 @@ html.es-escritorio .player-detail-panel-inline {
   gap: 0.15rem;
 }
 
-.bottom-nav-inner-expandida .bottom-nav-item svg {
-  width: calc(var(--nav-icon-size) * 0.8);
-  height: calc(var(--nav-icon-size) * 0.8);
-}
+@media (max-width: 640px) {
+  .bottom-nav-inner-expandida .bottom-nav-item svg {
+    width: calc(var(--nav-icon-size) * 0.85);
+    height: calc(var(--nav-icon-size) * 0.85);
+  }
 
-.bottom-nav-inner-expandida .bottom-nav-item span {
-  font-size: calc(var(--nav-label-size) * 0.88);
+  .bottom-nav-inner-expandida .bottom-nav-item span {
+    font-size: calc(var(--nav-label-size) * 0.92);
+  }
 }
 
 .hex-pattern polygon {
