@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router-dom";
-import { Award, Settings, Shield, Pencil, User, Radio, ChevronRight, X } from "lucide-react";
+import { Award, Settings, Shield, Pencil, User, Radio, Users, ChevronRight, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
@@ -21,22 +21,7 @@ import type { TituloActivoTodos } from "../types/titulos";
 import type { DatosSc2, RazaSc2 } from "../types/juegos";
 import { obtenerJuegoIdSc2 } from "../lib/juegos";
 import { COLOR_PLATAFORMA_STREAM, extraerNombreCanal, normalizarUrlStream } from "../lib/streamLinks";
-import { getModoLabel, getFormatoLabel } from "../lib/tournamentOptions";
-import { formatFecha } from "../lib/formatters";
-import type { TournamentRow, TorneoEstado } from "../types/tournaments";
-
-const ESTADO_EVENTO_LABEL: Record<TorneoEstado, string> = {
-  abierto: "Inscripciones abiertas",
-  en_curso: "En curso",
-  finalizado: "Finalizado",
-};
-
-// PostgREST embebe tournaments como objeto o como array de 1 según la
-// versión, sin tipos generados -- mismo patrón que MyTournamentsPage.tsx.
-function extraerTorneo(torneos: unknown): TournamentRow | null {
-  const t = Array.isArray(torneos) ? torneos[0] : torneos;
-  return (t as TournamentRow | undefined) ?? null;
-}
+import type { ComunidadRow } from "../types/comunidades";
 
 interface PerfilPublico {
   id: string;
@@ -88,7 +73,7 @@ interface EquipoActual {
   fotoPresentacionUrl: string | null;
 }
 
-type TabPerfil = "perfil" | "stream" | "logros";
+type TabPerfil = "perfil" | "comunidades" | "logros";
 
 // El título más "importante" cuando hay varios activos a la vez: el
 // de mayor duracion_dias -- mismo criterio y mismo formato de texto
@@ -455,28 +440,31 @@ export default function PlayerDetailPage() {
     cargarPerfilPublico();
   }, [nick, uniqueId]);
 
-  // Pestaña "Actividades" (migración 163): torneos en los que este
-  // jugador está inscrito (propia participación, tournament_participants.
-  // user_id), con estado real -- abierto/en_curso/finalizado, sin
-  // filtrar como el Historial de Mi perfil (ese sí descarta los no
-  // finalizados). Mismo patrón que MyTournamentsPage.tsx.
-  const [eventosInscritos, setEventosInscritos] = useState<TournamentRow[]>([]);
-  const [cargandoEventos, setCargandoEventos] = useState(true);
+  // Pestaña "Comunidades" (migración 198, a pedido del usuario -- antes
+  // "Actividades", mostraba torneos inscritos): comunidades a las que
+  // este jugador está inscrito. Solo lectura acá -- crear una
+  // comunidad o unirse a otra se hace desde /comunidades, no desde
+  // acá (ver ComunidadesPage.tsx).
+  const [misComunidades, setMisComunidades] = useState<ComunidadRow[]>([]);
+  const [cargandoComunidades, setCargandoComunidades] = useState(true);
 
   useEffect(() => {
     if (!perfil) return;
-    setCargandoEventos(true);
+    setCargandoComunidades(true);
     supabase
-      .from("tournament_participants")
-      .select("tournament_id, tournaments!tournament_id(*)")
+      .from("comunidad_miembros")
+      .select("comunidad_id, comunidades(*)")
       .eq("user_id", perfil.id)
       .then(({ data }) => {
         const lista = (data ?? [])
-          .map((fila) => extraerTorneo(fila.tournaments))
-          .filter((t): t is TournamentRow => t !== null)
-          .sort((a, b) => new Date(b.fecha_inicio).getTime() - new Date(a.fecha_inicio).getTime());
-        setEventosInscritos(lista);
-        setCargandoEventos(false);
+          .map((fila) => {
+            const comunidad = Array.isArray(fila.comunidades) ? fila.comunidades[0] : fila.comunidades;
+            return (comunidad as ComunidadRow | undefined) ?? null;
+          })
+          .filter((c): c is ComunidadRow => c !== null)
+          .sort((a, b) => a.nombre.localeCompare(b.nombre));
+        setMisComunidades(lista);
+        setCargandoComunidades(false);
       });
   }, [perfil?.id]);
 
@@ -798,12 +786,12 @@ export default function PlayerDetailPage() {
           <button
             type="button"
             role="tab"
-            aria-selected={tabEscritorio === "stream"}
-            className={`team-info-tab ${tabEscritorio === "stream" ? "is-active" : ""}`}
-            onClick={() => setTabEscritorio("stream")}
+            aria-selected={tabEscritorio === "comunidades"}
+            className={`team-info-tab ${tabEscritorio === "comunidades" ? "is-active" : ""}`}
+            onClick={() => setTabEscritorio("comunidades")}
           >
-            <Radio size={16} className="icon-inline" aria-hidden="true" />
-            Actividades
+            <Users size={16} className="icon-inline" aria-hidden="true" />
+            Comunidades
           </button>
           <button
             type="button"
@@ -1076,38 +1064,35 @@ export default function PlayerDetailPage() {
           </div>
         )}
 
-        {tabEscritorio === "stream" && (
+        {tabEscritorio === "comunidades" && (
           <>
-            {/* Migración 163: lista real de eventos -- antes "Actividades"
-                solo repetía la Transmisión de la pestaña "Perfil".
-                Corrección (migración 166): a pedido del usuario, se saca
-                del todo esa Transmisión duplicada de acá -- Actividades
-                es solo para ver en qué estás inscrito, Transmisión ya
-                vive en "Perfil". Torneos en los que este jugador está
-                inscrito, con su estado real (abierto/en curso/
-                finalizado) -- clic manda al torneo. */}
-            <h3 className="detail-subtitle">Eventos inscritos</h3>
+            {/* Migración 198, a pedido del usuario: "Actividades" pasa a
+                ser "Comunidades" -- muestra las comunidades a las que
+                este jugador está inscrito (solo lectura, sin botón para
+                crear una: eso vive en /comunidades, ver ComunidadesPage). */}
+            <h3 className="detail-subtitle">Comunidades</h3>
             <div className="detail-card player-tab-standalone-card">
               <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-left" aria-hidden="true" />
               <div className="foto-presentacion-corner foto-presentacion-corner-top foto-presentacion-corner-right" aria-hidden="true" />
               <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-left" aria-hidden="true" />
               <div className="foto-presentacion-corner foto-presentacion-corner-bottom foto-presentacion-corner-right" aria-hidden="true" />
-              {cargandoEventos ? (
+              {cargandoComunidades ? (
                 <p className="tournament-card-meta">Cargando...</p>
-              ) : eventosInscritos.length === 0 ? (
-                <p className="detail-empty">Todavía no se inscribió a ningún torneo.</p>
+              ) : misComunidades.length === 0 ? (
+                <p className="detail-empty">Todavía no está inscrito en ninguna comunidad.</p>
               ) : (
-                <div className="tournament-grid">
-                  {eventosInscritos.map((torneo) => (
-                    <Link key={torneo.id} to={`/tournaments/${torneo.id}`} className="tournament-card">
-                      <div>
-                        <div className="tournament-card-head">
-                          <span className="badge badge-format">{getFormatoLabel(torneo.formato)}</span>
-                          <span className="badge badge-format">{getModoLabel(torneo.modo)}</span>
-                          <span className="badge badge-format">{ESTADO_EVENTO_LABEL[torneo.estado]}</span>
+                <div className="team-grid">
+                  {misComunidades.map((comunidad) => (
+                    <Link key={comunidad.id} to={`/comunidades/${comunidad.id}`} className="team-card">
+                      {comunidad.logo_url ? (
+                        <img src={comunidad.logo_url} alt={comunidad.nombre} className="team-card-logo" />
+                      ) : (
+                        <div className="team-card-logo team-card-logo-placeholder">
+                          <Users size={20} aria-hidden="true" />
                         </div>
-                        <h3 className="tournament-card-title">{torneo.nombre}</h3>
-                        <p className="tournament-card-meta">Comienza el {formatFecha(torneo.fecha_inicio)}</p>
+                      )}
+                      <div className="team-card-info">
+                        <p className="team-card-name">{comunidad.nombre}</p>
                       </div>
                     </Link>
                   ))}

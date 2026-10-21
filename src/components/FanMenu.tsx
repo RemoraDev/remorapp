@@ -45,6 +45,10 @@ interface FanItem {
 const FAN_ITEMS: FanItem[] = [
   { key: "torneos", label: "Eventos", requiresAuth: false },
   { key: "clanes", label: "Clanes", requiresAuth: false },
+  // Migración 198, a pedido del usuario: "Comunidades" -- grupos
+  // públicos, libres de crear y de unirse, con su propio perfil
+  // (banner/logo/integrantes/panel de control).
+  { key: "comunidades", label: "Comunidades", requiresAuth: false },
   { key: "checkin", label: "Check-in", requiresAuth: true },
 ];
 
@@ -80,6 +84,12 @@ export default function FanMenu({ isOpen, onClose }: FanMenuProps) {
 
     if (item.key === "clanes") {
       navigate("/equipos");
+      onClose();
+      return;
+    }
+
+    if (item.key === "comunidades") {
+      navigate("/comunidades");
       onClose();
       return;
     }

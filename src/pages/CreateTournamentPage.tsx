@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
@@ -82,6 +82,28 @@ function fechaMaximaDatetimeLocal(): string {
 export default function CreateTournamentPage() {
   const { user, profile, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Migración 198, a pedido del usuario: "Crear evento de comunidad"
+  // (ComunidadDetailPage.tsx) manda acá con ?comunidad=<id> -- se usa
+  // el mismo formulario de siempre, solo que el evento que se cree
+  // (torneo, Race War o Clan War Amistosa) queda vinculado a esa
+  // comunidad.
+  const comunidadId = searchParams.get("comunidad");
+  const [comunidadNombre, setComunidadNombre] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!comunidadId) {
+      setComunidadNombre(null);
+      return;
+    }
+    supabase
+      .from("comunidades")
+      .select("nombre")
+      .eq("id", comunidadId)
+      .maybeSingle()
+      .then(({ data }) => setComunidadNombre(data?.nombre ?? null));
+  }, [comunidadId]);
 
   // Paso del asistente (migración 079): 1 = info básica, 2 = fecha y
   // cupos, 3 = liga y divisiones (solo si tipoEvento === "liga"), 4 =
@@ -318,6 +340,7 @@ export default function CreateTournamentPage() {
       p_jugadores_por_set: jugadores,
       p_mapas_por_set: Number(cwMapasPorSet) || 1,
       p_titulo: cwTituloEvento.trim() || null,
+      p_comunidad_id: comunidadId,
     });
 
     setCwEnviando(false);
@@ -341,6 +364,7 @@ export default function CreateTournamentPage() {
     setCreandoRaceWar(true);
     const { data, error } = await supabase.rpc("crear_race_war", {
       p_titulo: raceWarTitulo.trim() || null,
+      p_comunidad_id: comunidadId,
     });
     setCreandoRaceWar(false);
 
@@ -495,6 +519,7 @@ export default function CreateTournamentPage() {
       mapas_por_set: Number(mapasPorSet) || 1,
       liga_id: esLiga ? ligaId || null : null,
       swiss_rondas_totales: modo === "suizo" && swissRondas ? Number(swissRondas) : null,
+      comunidad_id: comunidadId,
     };
 
     // Un torneo por división marcada (o uno solo, sin división, si no
@@ -571,6 +596,11 @@ export default function CreateTournamentPage() {
       <div className="section-head">
         <h1 className="section-title">Crear evento</h1>
       </div>
+      {comunidadId && (
+        <p className="form-hint">
+          Este evento va a quedar vinculado a la comunidad{comunidadNombre ? ` "${comunidadNombre}"` : ""}.
+        </p>
+      )}
       {!esClanWarAmistosa && !esRaceWar && (
         <p className="auth-sub" style={{ textAlign: "left", marginTop: 0, marginBottom: "0.5rem" }}>
           Paso {paso} de {totalPasos}

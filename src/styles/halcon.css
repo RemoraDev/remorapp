@@ -9494,6 +9494,13 @@ body.overlay-obs {
   white-space: nowrap;
 }
 
+/* ---------- Comunidades (migración 198) ----------
+   Ficha de "Eventos de la comunidad" -- mismo .detail-participant-item
+   de siempre, pero como <Link> con la fecha empujada a la derecha. */
+.detail-participant-item-evento {
+  justify-content: space-between;
+}
+
 .visor-pdf-header {
   display: flex;
   align-items: center;
