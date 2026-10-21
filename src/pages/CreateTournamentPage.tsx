@@ -211,7 +211,11 @@ export default function CreateTournamentPage() {
   const [loading, setLoading] = useState(false);
 
   const esLiga = tipoEvento === "liga";
-  const totalPasos = esLiga ? 4 : 2;
+  // Corrección, a pedido del usuario: "Liga y divisiones" (equipos
+  // entrando por invitación/solicitud, divisiones por MMR) es un
+  // concepto de Clanes -- un torneo de Jugadores (1v1) salta ese paso
+  // del todo, de "Fecha y cupos" directo a "Temporada".
+  const totalPasos = esLiga ? (esClanes ? 4 : 3) : 2;
 
   // Catálogo de ligas: se carga siempre (aunque tipoEvento no sea
   // "liga" todavía) para que el paso 3 no tenga que esperar.
@@ -1071,7 +1075,7 @@ export default function CreateTournamentPage() {
           </div>
         )}
 
-        {paso === 3 && esLiga && (
+        {paso === 3 && esLiga && esClanes && (
           <div className="form-section">
             <h2 className="form-section-title">
               <span className="form-section-title-numero">3</span>
@@ -1169,7 +1173,7 @@ export default function CreateTournamentPage() {
           </div>
         )}
 
-        {paso === 4 && esLiga && (
+        {paso === totalPasos && esLiga && (
           <div className="form-section">
             <h2 className="form-section-title">
               <span className="form-section-title-numero">4</span>
