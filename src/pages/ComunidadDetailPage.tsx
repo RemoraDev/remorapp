@@ -75,6 +75,9 @@ export default function ComunidadDetailPage() {
   const [bannerLateralPreview, setBannerLateralPreview] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
+  // Migración 210: transferir titularidad (ver handleTransferirTitularidad).
+  const [nuevoCreadorId, setNuevoCreadorId] = useState("");
+  const [transfiriendo, setTransfiriendo] = useState(false);
 
   // Streamer (migración 204, a pedido del usuario): reemplaza a
   // "Eventos de la comunidad" en la ficha pública -- horario, link,
@@ -365,6 +368,32 @@ export default function ComunidadDetailPage() {
 
     toast.success("Comunidad eliminada.");
     navigate("/comunidades");
+  };
+
+  // Migración 210, corrección QA/UX: Comunidades tenía un solo rol
+  // posible (el creador) sin forma de transferirlo -- punto único de
+  // falla si pierde acceso a la cuenta. Mismo criterio que
+  // "Transferir liderazgo" de Mi Clan.
+  const handleTransferirTitularidad = async () => {
+    if (!nuevoCreadorId) return;
+    if (!window.confirm("¿Confirmas que quieres transferir la titularidad de esta comunidad?")) return;
+
+    setTransfiriendo(true);
+    const { error } = await supabase.rpc("transferir_titularidad_comunidad", {
+      p_comunidad_id: comunidad.id,
+      p_nuevo_creador_id: nuevoCreadorId,
+    });
+    setTransfiriendo(false);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success("Titularidad transferida.");
+    setNuevoCreadorId("");
+    setPanelAbierto(false);
+    cargarComunidad();
   };
 
   const handleGuardarStreamer = async (event: FormEvent) => {
@@ -988,23 +1017,66 @@ export default function ComunidadDetailPage() {
               )}
 
               {tabConfig === "eliminar" && (
-                <div className="team-panel-danger-zone">
-                  <h3 className="detail-subtitle" style={{ marginTop: 0 }}>
-                    Zona de peligro
-                  </h3>
-                  <p className="tournament-card-meta">
-                    Eliminar la comunidad es una acción irreversible: todos los integrantes quedan libres (ya
-                    no va a figurar en su perfil) y deja de poder vincularse a eventos nuevos.
-                  </p>
-                  <button
-                    type="button"
-                    className="btn btn-danger btn-block"
-                    onClick={handleEliminarComunidad}
-                    disabled={eliminando}
-                  >
-                    {eliminando ? "Eliminando..." : "Eliminar comunidad"}
-                  </button>
-                </div>
+                <>
+                  {miembros.length > 1 && (
+                    <>
+                      <h3 className="detail-subtitle" style={{ marginTop: 0 }}>
+                        Transferir titularidad
+                      </h3>
+                      <p className="tournament-card-meta">
+                        Si dejás de poder administrar esta comunidad, transferíla a otro integrante -- vos
+                        quedás como un integrante más, sin acceso al Panel de control.
+                      </p>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="comunidad-nuevo-creador">
+                          Nuevo titular
+                        </label>
+                        <select
+                          id="comunidad-nuevo-creador"
+                          className="form-input"
+                          value={nuevoCreadorId}
+                          onChange={(e) => setNuevoCreadorId(e.target.value)}
+                        >
+                          <option value="">Selecciona un integrante</option>
+                          {miembros
+                            .filter((m) => m.userId !== comunidad.creador_id)
+                            .map((m) => (
+                              <option key={m.userId} value={m.userId}>
+                                {m.nick ?? "Jugador de RemorApp"}
+                                {m.uniqueId ? `#${m.uniqueId}` : ""}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-block"
+                        onClick={handleTransferirTitularidad}
+                        disabled={transfiriendo || !nuevoCreadorId}
+                      >
+                        {transfiriendo ? "Transfiriendo..." : "Transferir titularidad"}
+                      </button>
+                    </>
+                  )}
+
+                  <div className="team-panel-danger-zone">
+                    <h3 className="detail-subtitle" style={{ marginTop: 0 }}>
+                      Zona de peligro
+                    </h3>
+                    <p className="tournament-card-meta">
+                      Eliminar la comunidad es una acción irreversible: todos los integrantes quedan libres (ya
+                      no va a figurar en su perfil) y deja de poder vincularse a eventos nuevos.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-block"
+                      onClick={handleEliminarComunidad}
+                      disabled={eliminando}
+                    >
+                      {eliminando ? "Eliminando..." : "Eliminar comunidad"}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
           </div>
