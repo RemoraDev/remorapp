@@ -30,7 +30,12 @@ export type EstiloBracket = "clasico" | "esports" | "starcraft_oficial";
 // pedido del usuario: se recorta a solo 3 -- el resto "se elimina de
 // RemorApp" (ver migración 179 en supabase/, sigue reseteando
 // cualquier torneo viejo con uno de los valores sacados).
-export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2";
+// Migración 213, a pedido del usuario: 5 fondos WebGL de verdad
+// (shader + bloom real, ver src/components/FondoWebgl.tsx), no el
+// motor CSS de siempre -- se suman al catálogo, no lo reemplazan.
+export type FondoBracketWebgl = "nebulosa" | "campo_estelar" | "aurora" | "supernova" | "infierno";
+
+export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2" | FondoBracketWebgl;
 
 // Migración 176, a pedido del usuario: "efectos de líneas" -- antes la
 // línea de conexión entre rondas era un extra fijo de los estilos
@@ -155,7 +160,19 @@ export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
   { value: "estrellas", label: "Estrellas" },
   { value: "estrellado_2", label: "Estrellado 2" },
+  { value: "nebulosa", label: "Nebulosa" },
+  { value: "campo_estelar", label: "Campo estelar profundo" },
+  { value: "aurora", label: "Aurora cósmica" },
+  { value: "supernova", label: "Supernova" },
+  { value: "infierno", label: "Infierno" },
 ];
+
+// Para decidir si un valor de FondoBracket/FondoLineup necesita el
+// motor WebGL (FondoWebgl) en vez de las reglas CSS de siempre.
+export const FONDOS_WEBGL = ["nebulosa", "campo_estelar", "aurora", "supernova", "infierno"] as const;
+export function esFondoWebgl(valor: string): valor is FondoBracketWebgl {
+  return (FONDOS_WEBGL as readonly string[]).includes(valor);
+}
 
 // Migración 183, a pedido del usuario: "modelos" de la tarjeta de
 // celebración del campeón ("Ver celebración", ver TournamentDetailPage.tsx)

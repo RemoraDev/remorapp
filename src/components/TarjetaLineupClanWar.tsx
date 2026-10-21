@@ -1,4 +1,7 @@
 import type { LineupPublicoClanWar, LineupPublicoJugador } from "../types/clanWars";
+import { esFondoWebgl } from "../types/tournaments";
+import type { FondoBracketWebgl } from "../types/tournaments";
+import FondoWebgl from "./FondoWebgl";
 
 interface Fila {
   challenger: LineupPublicoJugador | null;
@@ -399,6 +402,9 @@ export default function TarjetaLineupClanWar({ datos }: { datos: LineupPublicoCl
         ...(conFondoImagen ? { backgroundImage: `url(${datos.fondo_imagen_url})` } : {}),
       }}
     >
+      {!conFondoImagen && esFondoWebgl(datos.fondo_clasico) && (
+        <FondoWebgl variante={datos.fondo_clasico as FondoBracketWebgl} />
+      )}
       <Maqueta datos={datosParaMostrar} filas={filas} />
     </div>
   );

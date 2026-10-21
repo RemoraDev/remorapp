@@ -216,6 +216,10 @@ export interface ClanWarRow {
 // "estrellado_2", sobre un modelo de referencia del usuario -- capas
 // de estrellas subiendo derecho hacia arriba (no en diagonal, como
 // "estrellado"), con más profundidad (chicas rápidas + grandes lentas).
+// Migración 213, a pedido del usuario: mismos 5 fondos WebGL que se
+// sumaron al catálogo de bracket (ver FondoBracketWebgl en
+// types/tournaments.ts) -- se usa el mismo nombre de tipo para los 5
+// valores, compartido entre ambos catálogos.
 export type FondoLineup =
   | "ninguno"
   | "estrellas"
@@ -224,7 +228,12 @@ export type FondoLineup =
   | "nova"
   | "planeta"
   | "viaje"
-  | "fuego";
+  | "fuego"
+  | "nebulosa"
+  | "campo_estelar"
+  | "aurora"
+  | "supernova"
+  | "infierno";
 
 export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
@@ -235,6 +244,11 @@ export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
   { value: "planeta", label: "Planeta" },
   { value: "viaje", label: "Viaje" },
   { value: "fuego", label: "Fuego" },
+  { value: "nebulosa", label: "Nebulosa" },
+  { value: "campo_estelar", label: "Campo estelar profundo" },
+  { value: "aurora", label: "Aurora cósmica" },
+  { value: "supernova", label: "Supernova" },
+  { value: "infierno", label: "Infierno" },
 ];
 
 // Temporadas (migración 047): contenedor mínimo para torneos/ligas,

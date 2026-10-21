@@ -71,6 +71,9 @@ import LogrosTorneosList from "../components/LogrosTorneosList";
 import MiniEventosClanList from "../components/MiniEventosClanList";
 import ActividadClanList from "../components/ActividadClanList";
 import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
+import FondoWebgl from "../components/FondoWebgl";
+import { esFondoWebgl } from "../types/tournaments";
+import type { FondoBracketWebgl } from "../types/tournaments";
 
 // Migración 145: el límite subió de 2MB/3MB a 15MB -- comprimirImagen()
 // baja el peso antes de subir, así que acá solo hace falta cubrir una
@@ -5468,6 +5471,9 @@ export default function TeamDetailPage() {
                               : undefined
                           }
                         >
+                        {!r.fondoLineupImagenId && esFondoWebgl(r.fondoLineup) && (
+                          <FondoWebgl variante={r.fondoLineup as FondoBracketWebgl} />
+                        )}
                         {/* Migración 062: visible para es_admin y para
                             dueño/capitán de cualquiera de los dos equipos
                             (que es exactamente quien puede ver esta fila,

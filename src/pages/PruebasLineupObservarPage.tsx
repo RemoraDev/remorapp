@@ -4,6 +4,9 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { formatFecha } from "../lib/formatters";
 import type { FondoLineup } from "../types/teams";
+import FondoWebgl from "../components/FondoWebgl";
+import { esFondoWebgl } from "../types/tournaments";
+import type { FondoBracketWebgl } from "../types/tournaments";
 
 // Se refresca sola cada 7s (mismo intervalo que las páginas de overlay)
 // para que el armado del lineup y el check-in se vean "en vivo" sin
@@ -149,6 +152,7 @@ export default function PruebasLineupObservarPage() {
 
       {reto && (
         <div className="clan-war-lineup-room" data-fondo-lineup={reto.fondoLineup}>
+          {esFondoWebgl(reto.fondoLineup) && <FondoWebgl variante={reto.fondoLineup as FondoBracketWebgl} />}
           <h2 className="detail-subtitle">
             {equipoChallenger?.tag ?? "Equipo A"} vs {equipoChallenged?.tag ?? "Equipo B"}
           </h2>

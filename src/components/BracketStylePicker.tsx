@@ -10,7 +10,9 @@ import {
   PALETA_COLOR_TEXTO_BRACKET,
   ESTILO_TITULO_BRACKET_OPTIONS,
   INSIGNIA_BRACKET_OPTIONS,
+  esFondoWebgl,
 } from "../types/tournaments";
+import FondoWebgl from "./FondoWebgl";
 import type {
   FondoBracket,
   EstiloLineaBracket,
@@ -618,7 +620,9 @@ export default function BracketStylePicker({
               className={`bracket-picker-option ${fondo === o.value ? "selected" : ""}`}
               onClick={() => handleCambiarFondo(o.value)}
             >
-              <div className="bracket-fondo-preview" data-fondo-bracket={o.value} />
+              <div className="bracket-fondo-preview" data-fondo-bracket={o.value}>
+                {esFondoWebgl(o.value) && <FondoWebgl variante={o.value} />}
+              </div>
               <span className="bracket-picker-option-label">{o.label}</span>
             </button>
           ))}

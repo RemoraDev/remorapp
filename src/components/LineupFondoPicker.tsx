@@ -3,6 +3,9 @@ import { supabase } from "../lib/supabaseClient";
 import { FONDO_LINEUP_OPTIONS } from "../types/teams";
 import type { FondoLineup } from "../types/teams";
 import type { FondoLineupImagen } from "../types/clanWars";
+import { esFondoWebgl } from "../types/tournaments";
+import type { FondoBracketWebgl } from "../types/tournaments";
+import FondoWebgl from "./FondoWebgl";
 
 interface LineupFondoPickerProps {
   fondo: FondoLineup;
@@ -76,7 +79,9 @@ export default function LineupFondoPicker({
             className={`bracket-picker-option ${!fondoImagenId && fondo === o.value ? "selected" : ""}`}
             onClick={() => handleCambiarFondoClasico(o.value)}
           >
-            <div className="lineup-fondo-preview" data-fondo-lineup={o.value} />
+            <div className="lineup-fondo-preview" data-fondo-lineup={o.value}>
+              {esFondoWebgl(o.value) && <FondoWebgl variante={o.value as FondoBracketWebgl} />}
+            </div>
             <span className="bracket-picker-option-label">{o.label}</span>
           </button>
         ))}

@@ -1983,6 +1983,21 @@ a.eventos-tab:hover {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+/* Fondo WebGL (ver src/components/FondoWebgl.tsx) -- mismo lugar que
+   ocupan los ::before/::after del motor CSS (position:absolute,
+   cubriendo todo el contenedor con position:relative de siempre), acá
+   un <canvas> real en vez de un pseudo-elemento. pointer-events:none
+   para que nunca tape un click al contenido de encima. */
+.fondo-webgl-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: block;
+}
+
 /* Skeletons (ver src/components/Skeleton.tsx) -- shimmer puro CSS,
    sin librería, pausado junto al resto de las animaciones cuando la
    app de escritorio pierde el foco (ver es-escritorio-sin-foco
@@ -5456,26 +5471,120 @@ html.es-escritorio .player-detail-panel-inline {
   pointer-events: none;
 }
 
+/* "Estrellas" rehecho para verse real (a pedido del usuario, primera
+   evolución CSS-avanzado antes de evaluar canvas/WebGL): el original
+   tenía solo 7 puntos sueltos en un tile de 180px -- muy pobre para
+   leerse como un cielo real. Ahora:
+   - Densidad real: 28 estrellas chicas/lejanas (::before) + 10
+     grandes/cercanas (::after), en vez de 7 -- mismo mosaico liviano
+     de siempre (radial-gradient, no cientos de box-shadow), solo con
+     más puntos y tamaños/opacidades variados (más chicas y tenues que
+     grandes y brillantes, como un cielo real).
+   - Parpadeo real: cada capa combina DOS animaciones a la vez (CSS
+     permite varias separadas por coma) -- la deriva de siempre
+     (background-position) más un pulso de opacidad propio, con
+     duración/fase distinta entre ::before y ::after para que no
+     titilen sincronizadas.
+   - Color: la mayoría blancas, pero varias con un tinte sutil (azulado
+     o ámbar) -- las estrellas reales no son blancas puras.
+   - Profundidad: dos manchas de nebulosa muy tenues (sin repetir,
+     mezcladas al final de la capa ::after, por detrás de sus
+     estrellas) para que no se sienta un fondo plano. */
 .lineup-card[data-fondo-lineup="estrellas"]::before,
 .guerra-razas-page[data-fondo-lineup="estrellas"]::before,
 .lineup-fondo-preview[data-fondo-lineup="estrellas"]::before,
 .tournament-bracket-wrap[data-fondo-bracket="estrellas"]::before,
 .bracket-fondo-preview[data-fondo-bracket="estrellas"]::before {
   background-image:
-    radial-gradient(1px 1px at 10% 20%, rgba(255, 255, 255, 0.85), transparent 60%),
-    radial-gradient(1px 1px at 40% 72%, rgba(255, 255, 255, 0.65), transparent 60%),
-    radial-gradient(1.5px 1.5px at 70% 32%, rgba(255, 255, 255, 0.8), transparent 60%),
-    radial-gradient(1px 1px at 85% 88%, rgba(255, 255, 255, 0.55), transparent 60%),
-    radial-gradient(1.5px 1.5px at 25% 92%, rgba(255, 255, 255, 0.7), transparent 60%),
-    radial-gradient(1px 1px at 55% 12%, rgba(255, 255, 255, 0.5), transparent 60%),
-    radial-gradient(1px 1px at 95% 45%, rgba(255, 255, 255, 0.6), transparent 60%);
-  background-size: 180px 180px;
-  animation: fondo-lineup-estrellas-drift 50s linear infinite;
+    radial-gradient(1px 1px at 6% 14%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.2px 1.2px at 13% 42%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(0.9px 0.9px at 9% 68%, rgba(200, 220, 255, 0.5), transparent 60%),
+    radial-gradient(1px 1px at 18% 22%, rgba(255, 255, 255, 0.6), transparent 60%),
+    radial-gradient(1.3px 1.3px at 22% 88%, rgba(255, 255, 255, 0.45), transparent 60%),
+    radial-gradient(0.9px 0.9px at 27% 55%, rgba(255, 255, 255, 0.35), transparent 60%),
+    radial-gradient(1.1px 1.1px at 31% 10%, rgba(255, 228, 196, 0.5), transparent 60%),
+    radial-gradient(1px 1px at 35% 75%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1.3px 1.3px at 39% 33%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(0.9px 0.9px at 44% 60%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(1.2px 1.2px at 48% 18%, rgba(200, 220, 255, 0.55), transparent 60%),
+    radial-gradient(1px 1px at 52% 90%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1.4px 1.4px at 56% 45%, rgba(255, 255, 255, 0.6), transparent 60%),
+    radial-gradient(0.9px 0.9px at 61% 8%, rgba(255, 255, 255, 0.35), transparent 60%),
+    radial-gradient(1.1px 1.1px at 64% 70%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(1px 1px at 68% 28%, rgba(255, 255, 255, 0.45), transparent 60%),
+    radial-gradient(1.3px 1.3px at 72% 95%, rgba(255, 228, 196, 0.45), transparent 60%),
+    radial-gradient(0.9px 0.9px at 76% 52%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1.2px 1.2px at 79% 18%, rgba(255, 255, 255, 0.55), transparent 60%),
+    radial-gradient(1px 1px at 83% 80%, rgba(255, 255, 255, 0.35), transparent 60%),
+    radial-gradient(1.3px 1.3px at 87% 40%, rgba(200, 220, 255, 0.5), transparent 60%),
+    radial-gradient(0.9px 0.9px at 91% 65%, rgba(255, 255, 255, 0.45), transparent 60%),
+    radial-gradient(1.1px 1.1px at 94% 12%, rgba(255, 255, 255, 0.5), transparent 60%),
+    radial-gradient(1px 1px at 97% 85%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1.2px 1.2px at 4% 92%, rgba(255, 255, 255, 0.45), transparent 60%),
+    radial-gradient(0.9px 0.9px at 15% 5%, rgba(255, 255, 255, 0.35), transparent 60%),
+    radial-gradient(1px 1px at 58% 62%, rgba(255, 255, 255, 0.4), transparent 60%),
+    radial-gradient(1.1px 1.1px at 85% 58%, rgba(255, 255, 255, 0.45), transparent 60%);
+  background-size: 200px 200px;
+  animation:
+    fondo-lineup-estrellas-drift 70s linear infinite,
+    fondo-lineup-estrellas-titilar-chicas 4s ease-in-out infinite;
+}
+
+.lineup-card[data-fondo-lineup="estrellas"]::after,
+.guerra-razas-page[data-fondo-lineup="estrellas"]::after,
+.lineup-fondo-preview[data-fondo-lineup="estrellas"]::after,
+.tournament-bracket-wrap[data-fondo-bracket="estrellas"]::after,
+.bracket-fondo-preview[data-fondo-bracket="estrellas"]::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(2px 2px at 12% 20%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(2.4px 2.4px at 30% 65%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(2px 2px at 48% 15%, rgba(200, 220, 255, 0.85), transparent 60%),
+    radial-gradient(2.6px 2.6px at 65% 80%, rgba(255, 255, 255, 1), transparent 60%),
+    radial-gradient(2.2px 2.2px at 82% 30%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(2px 2px at 20% 85%, rgba(255, 228, 196, 0.85), transparent 60%),
+    radial-gradient(2.3px 2.3px at 55% 45%, rgba(255, 255, 255, 0.95), transparent 60%),
+    radial-gradient(2px 2px at 75% 10%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(2.4px 2.4px at 90% 60%, rgba(255, 255, 255, 0.9), transparent 60%),
+    radial-gradient(2px 2px at 8% 50%, rgba(255, 255, 255, 0.8), transparent 60%),
+    radial-gradient(45% 35% at 25% 30%, rgba(56, 130, 246, 0.07), transparent 70%),
+    radial-gradient(40% 45% at 75% 68%, rgba(147, 51, 234, 0.05), transparent 70%);
+  background-size: 260px 260px, 260px 260px, 260px 260px, 260px 260px, 260px 260px, 260px 260px, 260px 260px,
+    260px 260px, 260px 260px, 260px 260px, 100% 100%, 100% 100%;
+  background-repeat: repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat, no-repeat,
+    no-repeat;
+  animation:
+    fondo-lineup-estrellas-drift-grandes 110s linear infinite,
+    fondo-lineup-estrellas-titilar-grandes 6s ease-in-out infinite;
 }
 
 @keyframes fondo-lineup-estrellas-drift {
   from { background-position: 0 0; }
-  to { background-position: -720px -720px; }
+  to { background-position: -800px -800px; }
+}
+
+@keyframes fondo-lineup-estrellas-drift-grandes {
+  from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0; }
+  to {
+    background-position: -1040px -1040px, -1040px -1040px, -1040px -1040px, -1040px -1040px, -1040px -1040px,
+      -1040px -1040px, -1040px -1040px, -1040px -1040px, -1040px -1040px, -1040px -1040px, 0 0, 0 0;
+  }
+}
+
+/* Desfasadas entre sí (4s vs 6s, distinto rango de opacidad) para que
+   las estrellas chicas y las grandes no titilen al mismo tiempo. */
+@keyframes fondo-lineup-estrellas-titilar-chicas {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes fondo-lineup-estrellas-titilar-grandes {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 /* "Estrellado" (migración 134; rehecho en la 142, corregido en la 143):
@@ -5602,6 +5711,11 @@ html.es-escritorio .player-detail-panel-inline {
    arriba como en la referencia, no diagonal como "Estrellado". El loop
    es perfecto porque cada capa se traslada exactamente un tile completo
    (background-size), no un valor cualquiera. */
+/* Mismo repaso de realismo que "Estrellas" de arriba -- color variado
+   (ya no todo #fff puro) y parpadeo (reusa las mismas @keyframes de
+   titilar, nunca compiten entre sí porque solo un fondo se renderiza
+   a la vez), manteniendo intacta la seña de identidad de este fondo:
+   el ascenso recto (translateY), no la deriva diagonal de "Estrellas". */
 .lineup-card[data-fondo-lineup="estrellado_2"]::before,
 .guerra-razas-page[data-fondo-lineup="estrellado_2"]::before,
 .lineup-fondo-preview[data-fondo-lineup="estrellado_2"]::before,
@@ -5609,19 +5723,21 @@ html.es-escritorio .player-detail-panel-inline {
 .bracket-fondo-preview[data-fondo-bracket="estrellado_2"]::before {
   background-image:
     radial-gradient(1px 1px at 5% 10%, #fff, transparent 60%),
-    radial-gradient(1px 1px at 15% 45%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 15% 45%, rgba(200, 220, 255, 0.95), transparent 60%),
     radial-gradient(1px 1px at 25% 80%, #fff, transparent 60%),
     radial-gradient(1px 1px at 35% 20%, #fff, transparent 60%),
-    radial-gradient(1px 1px at 45% 65%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 45% 65%, rgba(255, 228, 196, 0.9), transparent 60%),
     radial-gradient(1px 1px at 55% 5%, #fff, transparent 60%),
     radial-gradient(1px 1px at 65% 50%, #fff, transparent 60%),
-    radial-gradient(1px 1px at 75% 90%, #fff, transparent 60%),
+    radial-gradient(1px 1px at 75% 90%, rgba(200, 220, 255, 0.95), transparent 60%),
     radial-gradient(1px 1px at 85% 30%, #fff, transparent 60%),
     radial-gradient(1px 1px at 95% 70%, #fff, transparent 60%),
     radial-gradient(1px 1px at 10% 95%, #fff, transparent 60%),
     radial-gradient(1px 1px at 90% 12%, #fff, transparent 60%);
   background-size: 110px 110px;
-  animation: fondo-lineup-estrellado-2-subir-chicas 45s linear infinite;
+  animation:
+    fondo-lineup-estrellado-2-subir-chicas 45s linear infinite,
+    fondo-lineup-estrellas-titilar-chicas 4s ease-in-out infinite;
 }
 
 .lineup-card[data-fondo-lineup="estrellado_2"]::after,
@@ -5636,13 +5752,15 @@ html.es-escritorio .player-detail-panel-inline {
   pointer-events: none;
   background-image:
     radial-gradient(2.5px 2.5px at 20% 25%, #fff, transparent 65%),
-    radial-gradient(2px 2px at 50% 70%, #fff, transparent 65%),
+    radial-gradient(2px 2px at 50% 70%, rgba(200, 220, 255, 0.95), transparent 65%),
     radial-gradient(2.5px 2.5px at 80% 15%, #fff, transparent 65%),
     radial-gradient(2px 2px at 10% 60%, #fff, transparent 65%),
-    radial-gradient(2.5px 2.5px at 65% 85%, #fff, transparent 65%),
+    radial-gradient(2.5px 2.5px at 65% 85%, rgba(255, 228, 196, 0.9), transparent 65%),
     radial-gradient(2px 2px at 90% 50%, #fff, transparent 65%);
   background-size: 220px 220px;
-  animation: fondo-lineup-estrellado-2-subir-grandes 90s linear infinite;
+  animation:
+    fondo-lineup-estrellado-2-subir-grandes 90s linear infinite,
+    fondo-lineup-estrellas-titilar-grandes 6s ease-in-out infinite;
 }
 
 @keyframes fondo-lineup-estrellado-2-subir-chicas {
@@ -5786,6 +5904,11 @@ html.es-escritorio .player-detail-panel-inline {
    tarjeta: acá solo viven las sub-pestañas y sus selectores, tiene que
    quedarse legible. */
 .clan-war-lineup-room {
+  /* position:relative para anclar el <canvas> del fondo WebGL (ver
+     .fondo-webgl-canvas) -- sin overflow:hidden a propósito, el canvas
+     usa inset:0 (nunca se sale del borde) y este panel sí necesita
+     que algún contenido propio (ej. un desplegable) pueda sobresalir. */
+  position: relative;
   padding: 1.25rem 1rem 1rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
