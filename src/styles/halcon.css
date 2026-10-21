@@ -1991,7 +1991,14 @@ a.eventos-tab:hover {
 .fondo-webgl-canvas {
   position: absolute;
   inset: 0;
-  z-index: 0;
+  /* -1, no 0: en .overlay-page (y en general) el contenido real son
+     elementos sin position propia -- por orden de pintado de CSS, un
+     hijo position:absolute con z-index:0 pinta DESPUÉS que los hijos
+     normales sin posicionar (tapándolos), mientras que z-index
+     negativo pinta antes que cualquier contenido normal del mismo
+     contenedor, sin depender de que ese contenido tenga su propio
+     z-index explícito (como sí lo tiene .bracket, por ejemplo). */
+  z-index: -1;
   width: 100%;
   height: 100%;
   pointer-events: none;
@@ -8736,6 +8743,11 @@ body.overlay-obs {
 }
 
 .overlay-page {
+  /* position:relative para anclar el <canvas> del fondo WebGL (ver
+     .fondo-webgl-canvas) cuando el torneo elige uno -- el resto de los
+     fondos (o "ninguno") no se ven afectados, el overlay sigue
+     transparente de siempre en ese caso. */
+  position: relative;
   min-height: 100vh;
   padding: 1.5rem;
   display: flex;

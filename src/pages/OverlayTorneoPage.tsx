@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import type { EstiloBracket, FondoBracket } from "../types/tournaments";
+import { esFondoWebgl } from "../types/tournaments";
+import FondoWebgl from "../components/FondoWebgl";
 
 interface PartidaDestacada {
   nombreChallenger: string;
@@ -167,6 +169,7 @@ export default function OverlayTorneoPage() {
 
   return (
     <div className="overlay-page" data-estilo-bracket={torneo.estiloBracket} data-fondo-bracket={torneo.fondoBracket}>
+      {esFondoWebgl(torneo.fondoBracket) && <FondoWebgl variante={torneo.fondoBracket} />}
       <p className="overlay-torneo-nombre">{torneo.nombre}</p>
 
       {!partida ? (
