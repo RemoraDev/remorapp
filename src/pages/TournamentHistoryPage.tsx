@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Trophy, Medal } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
@@ -55,27 +55,50 @@ function calcularRanking(resultados: ResultadoConNombre[]): PosicionRanking[] {
   return [...puntosPorParticipante.values()].sort((a, b) => b.puntos - a.puntos);
 }
 
+// Corrección QA/UX: esta página traía TODO el historial de torneos
+// públicos finalizados de una sola vez, sin paginar ni filtrar --
+// crece sin tope con el tiempo. PAGINA_TAMANO acota cada consulta, y
+// el filtro de año (opcional) reduce el rango antes de pedirlo.
+const PAGINA_TAMANO = 20;
+const ANIO_ACTUAL = new Date().getFullYear();
+const OPCIONES_ANIO = Array.from({ length: 5 }, (_, i) => String(ANIO_ACTUAL - i));
+
 export default function TournamentHistoryPage() {
   const [items, setItems] = useState<TorneoFinalizado[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const [hayMas, setHayMas] = useState(true);
+  const [anioFiltro, setAnioFiltro] = useState("");
 
-  useEffect(() => {
-    const cargarHistorial = async () => {
+  const cargarHistorial = useCallback(
+    async (desde: number, reemplazar: boolean) => {
       // Igual que el listado público: solo torneos públicos, acá filtrando
       // por finalizado en vez de abierto. Los privados finalizados no se
       // listan acá (mismo modelo de "solo por link directo").
-      const { data: torneosData, error } = await supabase
+      let query = supabase
         .from("tournaments")
         .select("*")
         .eq("publico", true)
-        .eq("estado", "finalizado")
-        .order("fecha_inicio", { ascending: false });
+        .eq("estado", "finalizado");
+
+      if (anioFiltro) {
+        query = query
+          .gte("fecha_inicio", `${anioFiltro}-01-01`)
+          .lt("fecha_inicio", `${Number(anioFiltro) + 1}-01-01`);
+      }
+
+      const { data: torneosData, error } = await query
+        .order("fecha_inicio", { ascending: false })
+        .range(desde, desde + PAGINA_TAMANO - 1);
 
       if (error || !torneosData) {
         console.error("Error cargando historial:", error);
         setLoading(false);
+        setCargandoMas(false);
         return;
       }
+
+      setHayMas(torneosData.length === PAGINA_TAMANO);
 
       // Performance: antes esto era un for..of secuencial que hacía
       // 2-4 consultas POR TORNEO, una tras otra -- con el historial
@@ -156,12 +179,22 @@ export default function TournamentHistoryPage() {
       // de torneos -- se reconstruye acá en vez de ordenar de nuevo.
       const resultado = torneos.map((t) => resultadoPorTorneo.get(t.id)).filter((r): r is TorneoFinalizado => !!r);
 
-      setItems(resultado);
+      setItems((prev) => (reemplazar ? resultado : [...prev, ...resultado]));
       setLoading(false);
-    };
+      setCargandoMas(false);
+    },
+    [anioFiltro]
+  );
 
-    cargarHistorial();
-  }, []);
+  useEffect(() => {
+    setLoading(true);
+    cargarHistorial(0, true);
+  }, [cargarHistorial]);
+
+  const handleCargarMas = () => {
+    setCargandoMas(true);
+    cargarHistorial(items.length, false);
+  };
 
   return (
     <section className="section section-page">
@@ -178,10 +211,27 @@ export default function TournamentHistoryPage() {
         <span className="eventos-tab selected">Historial de eventos</span>
       </div>
 
+      {/* Corrección QA/UX: filtro de año -- antes no había ninguna
+          forma de acotar un historial que solo crece con el tiempo. */}
+      <select
+        className="form-select history-filtro-anio"
+        value={anioFiltro}
+        onChange={(e) => setAnioFiltro(e.target.value)}
+      >
+        <option value="">Todos los años</option>
+        {OPCIONES_ANIO.map((anio) => (
+          <option key={anio} value={anio}>
+            {anio}
+          </option>
+        ))}
+      </select>
+
       {loading && <p className="tournament-card-meta">Cargando historial...</p>}
 
       {!loading && items.length === 0 && (
-        <p className="tournament-card-meta">Todavía no hay torneos finalizados.</p>
+        <p className="tournament-card-meta">
+          {anioFiltro ? `No hay torneos finalizados en ${anioFiltro}.` : "Todavía no hay torneos finalizados."}
+        </p>
       )}
 
       <div className="history-list">
@@ -252,6 +302,18 @@ export default function TournamentHistoryPage() {
           );
         })}
       </div>
+
+      {!loading && hayMas && items.length > 0 && (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ marginTop: "1.25rem" }}
+          onClick={handleCargarMas}
+          disabled={cargandoMas}
+        >
+          {cargandoMas ? "Cargando..." : "Cargar más"}
+        </button>
+      )}
     </section>
   );
 }

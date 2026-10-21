@@ -237,6 +237,16 @@ export default function HomePortada({ noticiasDestacadas, onVerProximosEventos, 
             </button>
           </div>
 
+          {/* Corrección QA/UX: no había ningún link visible a la
+              lista de torneos desde Inicio -- el único acceso era el
+              abanico central o Ctrl+K. "Próximos eventos" de arriba
+              es otra cosa (Clan Wars), así que este link queda
+              separado, no reemplaza al de arriba. */}
+          <Link to="/tournaments" className="home-ver-todos-btn home-ver-torneos-link">
+            Ver todos los torneos
+            <ArrowRight size={14} className="icon-inline" aria-hidden="true" />
+          </Link>
+
           {proximos.length > 0 ? (
             <div className="home-eventos-grid">
               {proximos.map((cw) => (

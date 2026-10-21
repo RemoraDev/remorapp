@@ -6985,6 +6985,11 @@ html.es-escritorio .player-detail-panel-inline {
 
 /* ---------- Historial ---------- */
 
+.history-filtro-anio {
+  margin: 0.75rem 0 1rem;
+  max-width: 10rem;
+}
+
 .history-list {
   display: flex;
   flex-direction: column;
@@ -11802,6 +11807,10 @@ html.es-escritorio .escritorio-chat-fijo {
 
 .home-ver-todos-btn:hover {
   text-decoration: underline;
+}
+
+.home-ver-torneos-link {
+  margin-bottom: 0.6rem;
 }
 
 .home-noticias-grid {
