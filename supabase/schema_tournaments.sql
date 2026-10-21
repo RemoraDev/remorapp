@@ -24649,3 +24649,5 @@ end;
 $$;
 
 grant execute on function public.deshacer_resultado(uuid) to authenticated;
+
+alter table public.tournaments alter column fondo_bracket set default 'estrellas';
