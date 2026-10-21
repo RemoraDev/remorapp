@@ -32,3 +32,17 @@ export async function obtenerEquipoDelUsuario(userId: string): Promise<EquipoDel
     teamTag: (equipo as { tag?: string } | undefined)?.tag ?? null,
   };
 }
+
+// Corrección QA/UX: varias colas de "pendiente de respuesta" del Panel
+// de control (solicitudes de unión, retos de Clan War, títulos,
+// alianzas, reprogramaciones, extensiones de lineup, consentimiento
+// de torneos históricos) no generaban ninguna señal fuera de esa
+// página -- ver contar_pendientes_mi_clan() en el esquema.
+export async function contarPendientesMiClan(): Promise<number> {
+  const { data, error } = await supabase.rpc("contar_pendientes_mi_clan");
+  if (error) {
+    console.error("Error contando pendientes del clan:", error);
+    return 0;
+  }
+  return (data as number) ?? 0;
+}

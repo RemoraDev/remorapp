@@ -4,7 +4,7 @@ import { MessageSquare, Shield, BarChart3, User, Home, Users, CalendarCheck } fr
 import FanMenu from "./FanMenu";
 import { useAuth } from "../context/AuthContext";
 import useChatFijoEscritorio from "../hooks/useChatFijoEscritorio";
-import { obtenerEquipoDelUsuario } from "../lib/teams";
+import { obtenerEquipoDelUsuario, contarPendientesMiClan } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import { obtenerComunidadesDelUsuario } from "../lib/comunidades";
 import type { ComunidadRow } from "../types/comunidades";
@@ -36,6 +36,21 @@ export default function BottomNav() {
     obtenerEquipoDelUsuario(user.id).then(setMiEquipo);
   }, [user]);
   const miClanHref = !user ? "/login" : miEquipo?.teamTag ? `/equipos/${miEquipo.teamTag}` : "/equipos";
+
+  // Corrección QA/UX: varias colas de "pendiente de respuesta" del
+  // Panel de control de Mi Clan (solicitudes de unión, retos de Clan
+  // War, títulos, alianzas, reprogramaciones, extensiones, consentimiento
+  // de torneos históricos) no generaban ninguna señal fuera de esa
+  // página -- un contador acá resume el total sin armar un centro de
+  // notificaciones completo.
+  const [pendientesClan, setPendientesClan] = useState(0);
+  useEffect(() => {
+    if (!user) {
+      setPendientesClan(0);
+      return;
+    }
+    contarPendientesMiClan().then(setPendientesClan);
+  }, [user]);
 
   // Migración 201, a pedido del usuario: "Mi comunidad" (junto a "Mi
   // Clan") y "Mis Eventos" (junto al botón central) solo aparecen si
@@ -108,8 +123,13 @@ export default function BottomNav() {
           </NavLink>
         )}
 
-        <NavLink to={miClanHref} className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`} aria-label="Mi Clan">
+        <NavLink
+          to={miClanHref}
+          className={({ isActive }) => `bottom-nav-item ${isActive ? "active" : ""}`}
+          aria-label={pendientesClan > 0 ? `Mi Clan, ${pendientesClan} pendientes` : "Mi Clan"}
+        >
           <Shield />
+          {pendientesClan > 0 && <span className="bottom-nav-badge">{pendientesClan}</span>}
           <span>Mi Clan</span>
         </NavLink>
 
