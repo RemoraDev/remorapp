@@ -4291,12 +4291,13 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 /* Corrección, a pedido del usuario: la gran final (ganador de Grupo A
-   vs ganador de Grupo B) va PRIMERO, no al final de las dos llaves
-   completas -- en pantalla completa quedaba enterrada, había que
-   bajar mucho el scroll para verla. Acento dorado propio para que se
-   note que es el partido más importante de los tres. */
+   vs ganador de Grupo B) va entre Grupo A y Grupo B (antes probó
+   arriba de todo, pero en pantalla completa igual no se veía bien de
+   entrada) -- alineada a la izquierda, no centrada en todo el ancho.
+   Acento dorado propio para que se note que es el partido más
+   importante de los tres. */
 .bracket-panoramica-final {
-  align-self: center;
+  align-self: flex-start;
   max-width: 15rem;
   width: 100%;
   margin: 0;

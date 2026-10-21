@@ -256,7 +256,22 @@ export default function BracketView({
               const y1 = r1.bottom - rectContenedor.top;
               const x2 = r2.left + r2.width / 2 - rectContenedor.left;
               const y2 = r2.top - rectContenedor.top;
-              const yMedio = y1 + (y2 - y1) / 2;
+              let yMedio = y1 + (y2 - y1) / 2;
+              // Corrección, a pedido del usuario: el punto medio
+              // GEOMÉTRICO entre una ronda y la siguiente a veces caía
+              // justo donde está el título de la ronda destino (p.ej.
+              // "FINAL" o "FINAL GRUPO A") -- el tramo horizontal del
+              // merge pasaba por encima del texto. Acá se mide el
+              // título de la ronda destino (hermano anterior de
+              // .bracket-round-matches dentro de .bracket-round) y se
+              // obliga a que el trazo nunca empiece su tramo horizontal
+              // por ENCIMA de donde termina ese título.
+              const contenedorMatches = destino.el.parentElement;
+              const tituloDestino = contenedorMatches?.previousElementSibling;
+              if (tituloDestino?.classList.contains("bracket-round-title")) {
+                const tituloBottom = tituloDestino.getBoundingClientRect().bottom - rectContenedor.top;
+                if (yMedio < tituloBottom) yMedio = Math.min(tituloBottom, y2);
+              }
               d = `M ${x1} ${y1} V ${yMedio} H ${x2} V ${y2}`;
             } else if (keyPrefix === "embudo-der") {
               // Migración 177, corrección: la mitad derecha del "embudo
@@ -1073,22 +1088,23 @@ export default function BracketView({
             </>
           ) : (
             <div className="bracket-panoramica-grupos">
+              <div className="bracket-panoramica-grupo">
+                <div className="bracket-round-title bracket-seccion-titulo">Grupo A</div>
+                {renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a-pan", "Final Grupo A")}
+              </div>
               {/* Corrección, a pedido del usuario: la gran final (ganador
-                  de Grupo A vs ganador de Grupo B) quedaba al final del
-                  todo, después de las dos llaves completas -- en
-                  pantalla completa, eso obligaba a bajar mucho el
-                  scroll para verla. Ahora va primero, bien visible
-                  apenas se abre Vista panorámica. */}
+                  de Grupo A vs ganador de Grupo B) primero se puso ARRIBA
+                  de todo (para que no quedara enterrada en pantalla
+                  completa), pero en pantalla completa igual no se veía
+                  bien de entrada -- ahora va ACÁ, entre Grupo A y Grupo
+                  B (donde queda "centrada" entre los dos), alineada a la
+                  izquierda en vez de centrada en todo el ancho. */}
               {final && (
                 <div className="bracket-panoramica-final" data-estilo-bracket={estilo}>
                   <div className="bracket-round-title">Final</div>
                   {renderPartido(final, { keyPrefix: "grupo-final-pan", round: 0, matchNumber: 1 })}
                 </div>
               )}
-              <div className="bracket-panoramica-grupo">
-                <div className="bracket-round-title bracket-seccion-titulo">Grupo A</div>
-                {renderGrilla(armarGrilla(izquierda, !!nombresRondaPersonalizados, true), "grupo-a-pan", "Final Grupo A")}
-              </div>
               <div className="bracket-panoramica-grupo">
                 <div className="bracket-round-title bracket-seccion-titulo">Grupo B</div>
                 {renderGrilla(armarGrilla(derecha, !!nombresRondaPersonalizados, true), "grupo-b-pan", "Final Grupo B")}

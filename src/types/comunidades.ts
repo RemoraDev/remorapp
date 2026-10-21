@@ -11,6 +11,9 @@ export interface ComunidadRow {
   logo_url: string | null;
   creador_id: string;
   creado_en: string;
+  // Migración 203, a pedido del usuario: banner lateral aparte del
+  // banner superior -- mismo concepto que teams.escritorio_lateral_url.
+  banner_lateral_url: string | null;
   // Migración 202, a pedido del usuario: mismo catálogo de 5 paletas
   // que tournaments.tema_equipo (ver TEMAS_EQUIPO en types/teams.ts) --
   // se aplica con el mismo atributo data-tema-equipo en la raíz de la

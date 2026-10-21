@@ -6,7 +6,6 @@ import { Users, Calendar, X } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import { comprimirImagen } from "../lib/imageCompression";
-import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import { formatFecha } from "../lib/formatters";
 import { obtenerEventosDeComunidad } from "../lib/comunidades";
 import Avatar from "../components/Avatar";
@@ -44,35 +43,39 @@ export default function ComunidadDetailPage() {
 
   const [uniendose, setUniendose] = useState(false);
   const [panelAbierto, setPanelAbierto] = useState(false);
-  // Migración 200/202, a pedido del usuario: Panel de control ordenado
-  // en pestañas hermanas (Apariencia/Descripción/Logo/Banner/
-  // Integrantes), mismo lenguaje visual que "Configuración" de Mi Clan
-  // (.team-config-media-tabs/.team-config-media-tab). "Apariencia" es
-  // el selector de color (como tournaments.tema_equipo) -- la
-  // descripción tiene su propia pestaña aparte, antes vivía (mal
-  // etiquetada) dentro de "Apariencia".
-  const [tabConfig, setTabConfig] = useState<"apariencia" | "descripcion" | "logo" | "banner" | "integrantes">(
+  // Migración 200/202/203, a pedido del usuario: Panel de control
+  // ordenado en pestañas hermanas (Apariencia/Avatar/Banner/
+  // Integrantes/Eliminar), mismo lenguaje visual que "Configuración" de
+  // Mi Clan (.team-config-media-tabs/.team-config-media-tab).
+  // "Eliminar" pasa a ser una pestaña más, no un botón rojo siempre
+  // visible en TODAS las pestañas (quedaba "amenazando" todo el
+  // tiempo). "Descripción" se saca del todo -- ya no es editable desde
+  // acá, solo se define al crear la comunidad.
+  const [tabConfig, setTabConfig] = useState<"apariencia" | "avatar" | "banner" | "integrantes" | "eliminar">(
     "apariencia"
   );
   const [guardandoTema, setGuardandoTema] = useState(false);
 
-  const [descripcion, setDescripcion] = useState("");
   const [archivoParaRecortarLogo, setArchivoParaRecortarLogo] = useState<File | null>(null);
   const [logoFile, setLogoFile] = useState<Blob | null>(null);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [archivoParaRecortarBanner, setArchivoParaRecortarBanner] = useState<File | null>(null);
   const [bannerFile, setBannerFile] = useState<Blob | null>(null);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
+  // Migración 203, a pedido del usuario: banner lateral aparte del
+  // banner superior, dentro de la misma pestaña "Banner".
+  const [archivoParaRecortarBannerLateral, setArchivoParaRecortarBannerLateral] = useState<File | null>(null);
+  const [bannerLateralFile, setBannerLateralFile] = useState<Blob | null>(null);
+  const [bannerLateralPreview, setBannerLateralPreview] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [eliminando, setEliminando] = useState(false);
 
-  // Integrantes (migración 200, a pedido del usuario): buscar e
-  // invitar por Nick#ID, mismo patrón que "buscar e invitar" de Mi
-  // Clan (TeamDetailPage.tsx) -- la diferencia es que acá se suma
-  // directo (comunidad_miembros_unirse_propio exige user_id =
-  // auth.uid(), así que esto usa una política aparte para el creador:
-  // ver migration_200). Como unirse es libre, no hace falta pasar por
-  // una invitación que alguien deba aceptar.
+  // Integrantes (migración 200/203, a pedido del usuario): dos
+  // subpestañas -- "Lista de integrantes" (solo ver) y "Agregar o
+  // quitar integrantes" (buscar por Nick#ID y sumar directo, mismo
+  // patrón que "buscar e invitar" de Mi Clan -- acá se suma directo
+  // porque unirse ya es libre, no hace falta que nadie acepte nada).
+  const [subtabIntegrantes, setSubtabIntegrantes] = useState<"lista" | "gestionar">("lista");
   const [busquedaNick, setBusquedaNick] = useState("");
   const [buscando, setBuscando] = useState(false);
   const [errorBusqueda, setErrorBusqueda] = useState<string | null>(null);
@@ -93,7 +96,6 @@ export default function ComunidadDetailPage() {
     }
 
     setComunidad(data as ComunidadRow);
-    setDescripcion((data as ComunidadRow).descripcion ?? "");
 
     const { data: miembrosData } = await supabase
       .from("comunidad_miembros")
@@ -209,20 +211,24 @@ export default function ComunidadDetailPage() {
     setArchivoParaRecortarBanner(archivo);
   };
 
+  const handleBannerLateralChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const archivo = event.target.files?.[0] ?? null;
+    event.target.value = "";
+    if (!archivo) return;
+    if (archivo.size > LOGO_MAX_BYTES) {
+      toast.error("El banner lateral no puede pesar más de 15MB.");
+      return;
+    }
+    setArchivoParaRecortarBannerLateral(archivo);
+  };
+
   const handleGuardarPanel = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) return;
 
-    if (descripcion.trim() && contieneLenguajeInapropiado(descripcion)) {
-      toast.error("Esa descripción no está permitida.");
-      return;
-    }
-
     setGuardando(true);
 
-    const cambios: { descripcion: string | null; logo_url?: string; banner_url?: string } = {
-      descripcion: descripcion.trim() || null,
-    };
+    const cambios: { logo_url?: string; banner_url?: string; banner_lateral_url?: string } = {};
 
     try {
       if (logoFile) {
@@ -254,6 +260,21 @@ export default function ComunidadDetailPage() {
         }
         cambios.banner_url = supabase.storage.from("comunidad-banners").getPublicUrl(ruta).data.publicUrl;
       }
+
+      if (bannerLateralFile) {
+        const bannerLateralComprimido = await comprimirImagen(bannerLateralFile, "banner-lateral");
+        const extension = bannerLateralComprimido.type === "image/png" ? "png" : "jpg";
+        const ruta = `${user.id}/${Date.now()}-banner-lateral.${extension}`;
+        const { error: uploadError } = await supabase.storage
+          .from("comunidad-banners")
+          .upload(ruta, bannerLateralComprimido, { contentType: bannerLateralComprimido.type });
+        if (uploadError) {
+          toast.error("No se pudo subir el banner lateral: " + uploadError.message);
+          setGuardando(false);
+          return;
+        }
+        cambios.banner_lateral_url = supabase.storage.from("comunidad-banners").getPublicUrl(ruta).data.publicUrl;
+      }
     } catch {
       toast.error("No se pudo procesar alguna de las imágenes, prueba con otra.");
       setGuardando(false);
@@ -273,6 +294,8 @@ export default function ComunidadDetailPage() {
     setLogoPreview(null);
     setBannerFile(null);
     setBannerPreview(null);
+    setBannerLateralFile(null);
+    setBannerLateralPreview(null);
     cargarComunidad();
   };
 
@@ -450,17 +473,10 @@ export default function ComunidadDetailPage() {
               </button>
               <button
                 type="button"
-                className={`team-config-media-tab ${tabConfig === "descripcion" ? "is-active" : ""}`}
-                onClick={() => setTabConfig("descripcion")}
+                className={`team-config-media-tab ${tabConfig === "avatar" ? "is-active" : ""}`}
+                onClick={() => setTabConfig("avatar")}
               >
-                Descripción
-              </button>
-              <button
-                type="button"
-                className={`team-config-media-tab ${tabConfig === "logo" ? "is-active" : ""}`}
-                onClick={() => setTabConfig("logo")}
-              >
-                Logo
+                Avatar
               </button>
               <button
                 type="button"
@@ -475,6 +491,13 @@ export default function ComunidadDetailPage() {
                 onClick={() => setTabConfig("integrantes")}
               >
                 Integrantes
+              </button>
+              <button
+                type="button"
+                className={`team-config-media-tab ${tabConfig === "eliminar" ? "is-active" : ""}`}
+                onClick={() => setTabConfig("eliminar")}
+              >
+                Eliminar
               </button>
             </div>
 
@@ -499,177 +522,252 @@ export default function ComunidadDetailPage() {
                 </div>
               )}
 
-              {(tabConfig === "descripcion" || tabConfig === "logo" || tabConfig === "banner") && (
-            <form className="auth-form" onSubmit={handleGuardarPanel}>
-              {tabConfig === "descripcion" && (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="comunidad-descripcion-panel">
-                    Descripción
-                  </label>
-                  <textarea
-                    id="comunidad-descripcion-panel"
-                    className="form-textarea"
-                    maxLength={280}
-                    value={descripcion}
-                    onChange={(e) => setDescripcion(e.target.value)}
-                  />
-                </div>
+              {(tabConfig === "avatar" || tabConfig === "banner") && (
+                <form className="auth-form" onSubmit={handleGuardarPanel}>
+                  {tabConfig === "avatar" && (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="comunidad-logo-panel">
+                        Avatar (opcional, máx. 15MB, se recorta a 1:1)
+                      </label>
+                      <input
+                        id="comunidad-logo-panel"
+                        className="form-input"
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoChange}
+                      />
+                      {archivoParaRecortarLogo && (
+                        <RecortadorImagenModal
+                          archivo={archivoParaRecortarLogo}
+                          aspecto={1}
+                          titulo="Ajustar avatar de la comunidad"
+                          onConfirmar={(recorte) => {
+                            setLogoFile(recorte);
+                            setLogoPreview(URL.createObjectURL(recorte));
+                            setArchivoParaRecortarLogo(null);
+                          }}
+                          onCancelar={() => setArchivoParaRecortarLogo(null)}
+                        />
+                      )}
+                      {(logoPreview ?? comunidad.logo_url) && (
+                        <img
+                          src={logoPreview ?? comunidad.logo_url ?? ""}
+                          alt="Vista previa del avatar"
+                          className="team-logo-preview"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {tabConfig === "banner" && (
+                    <>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="comunidad-banner-panel">
+                          Banner superior (opcional, máx. 15MB, se recorta a 4:1)
+                        </label>
+                        <input
+                          id="comunidad-banner-panel"
+                          className="form-input"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleBannerChange}
+                        />
+                        {archivoParaRecortarBanner && (
+                          <RecortadorImagenModal
+                            archivo={archivoParaRecortarBanner}
+                            aspecto={4}
+                            titulo="Ajustar banner de la comunidad"
+                            onConfirmar={(recorte) => {
+                              setBannerFile(recorte);
+                              setBannerPreview(URL.createObjectURL(recorte));
+                              setArchivoParaRecortarBanner(null);
+                            }}
+                            onCancelar={() => setArchivoParaRecortarBanner(null)}
+                          />
+                        )}
+                        {(bannerPreview ?? comunidad.banner_url) && (
+                          <img
+                            src={bannerPreview ?? comunidad.banner_url ?? ""}
+                            alt="Vista previa del banner"
+                            className="team-detail-banner"
+                          />
+                        )}
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="comunidad-banner-lateral-panel">
+                          Banner lateral (opcional, máx. 15MB)
+                        </label>
+                        <input
+                          id="comunidad-banner-lateral-panel"
+                          className="form-input"
+                          type="file"
+                          accept="image/*"
+                          onChange={handleBannerLateralChange}
+                        />
+                        {archivoParaRecortarBannerLateral && (
+                          <RecortadorImagenModal
+                            archivo={archivoParaRecortarBannerLateral}
+                            aspecto={1 / 5}
+                            titulo="Ajustar banner lateral de la comunidad"
+                            onConfirmar={(recorte) => {
+                              setBannerLateralFile(recorte);
+                              setBannerLateralPreview(URL.createObjectURL(recorte));
+                              setArchivoParaRecortarBannerLateral(null);
+                            }}
+                            onCancelar={() => setArchivoParaRecortarBannerLateral(null)}
+                          />
+                        )}
+                        {(bannerLateralPreview ?? comunidad.banner_lateral_url) && (
+                          <img
+                            src={bannerLateralPreview ?? comunidad.banner_lateral_url ?? ""}
+                            alt="Vista previa del banner lateral"
+                            className="franja-lateral-preview"
+                          />
+                        )}
+                      </div>
+                    </>
+                  )}
+
+                  <button type="submit" className="btn btn-primary" disabled={guardando}>
+                    {guardando ? "Guardando..." : "Guardar cambios"}
+                  </button>
+                </form>
               )}
 
-              {tabConfig === "logo" && (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="comunidad-logo-panel">
-                    Logo (opcional, máx. 15MB, se recorta a 1:1)
-                  </label>
-                  <input
-                    id="comunidad-logo-panel"
-                    className="form-input"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleLogoChange}
-                  />
-                  {archivoParaRecortarLogo && (
-                    <RecortadorImagenModal
-                      archivo={archivoParaRecortarLogo}
-                      aspecto={1}
-                      titulo="Ajustar logo de la comunidad"
-                      onConfirmar={(recorte) => {
-                        setLogoFile(recorte);
-                        setLogoPreview(URL.createObjectURL(recorte));
-                        setArchivoParaRecortarLogo(null);
-                      }}
-                      onCancelar={() => setArchivoParaRecortarLogo(null)}
-                    />
+              {tabConfig === "integrantes" && (
+                <>
+                  <div className="team-info-subtabs">
+                    <button
+                      type="button"
+                      className={`team-info-subtab ${subtabIntegrantes === "lista" ? "is-active" : ""}`}
+                      onClick={() => setSubtabIntegrantes("lista")}
+                    >
+                      Lista de integrantes
+                    </button>
+                    <button
+                      type="button"
+                      className={`team-info-subtab ${subtabIntegrantes === "gestionar" ? "is-active" : ""}`}
+                      onClick={() => setSubtabIntegrantes("gestionar")}
+                    >
+                      Agregar o quitar integrantes
+                    </button>
+                  </div>
+
+                  {subtabIntegrantes === "lista" && (
+                    <div className="comunidad-panel-integrantes-lista detail-participant-list">
+                      {miembros.map((m) => (
+                        <div key={m.userId} className="detail-participant-item">
+                          <Avatar
+                            url={m.avatarUrl}
+                            nombre={m.nick}
+                            className="detail-participant-avatar"
+                            forma={m.avatarForma}
+                          />
+                          {m.nick ?? "Jugador de RemorApp"}
+                          {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+                          {m.userId === comunidad.creador_id && <span className="team-owner-badge">Creador</span>}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  {(logoPreview ?? comunidad.logo_url) && (
-                    <img
-                      src={logoPreview ?? comunidad.logo_url ?? ""}
-                      alt="Vista previa del logo"
-                      className="team-logo-preview"
-                    />
+
+                  {subtabIntegrantes === "gestionar" && (
+                    <>
+                      <form className="auth-form" onSubmit={handleBuscarJugador}>
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="comunidad-buscar-nick">
+                            Agregar integrante (Nick#ID)
+                          </label>
+                          <input
+                            id="comunidad-buscar-nick"
+                            className="form-input"
+                            type="text"
+                            placeholder="TuNick#BattleTag"
+                            value={busquedaNick}
+                            onChange={(e) => setBusquedaNick(e.target.value)}
+                          />
+                        </div>
+                        {errorBusqueda && <div className="form-error">{errorBusqueda}</div>}
+                        <button type="submit" className="btn btn-ghost" disabled={buscando}>
+                          {buscando ? "Buscando..." : "Buscar"}
+                        </button>
+                      </form>
+
+                      {resultadoBusqueda && (
+                        <div className="detail-participant-item">
+                          <Avatar
+                            url={resultadoBusqueda.avatarUrl}
+                            nombre={resultadoBusqueda.nick}
+                            className="detail-participant-avatar"
+                            forma={resultadoBusqueda.avatarForma}
+                          />
+                          {resultadoBusqueda.nick ?? "Jugador de RemorApp"}
+                          {resultadoBusqueda.uniqueId && (
+                            <span className="profile-nick-id">#{resultadoBusqueda.uniqueId}</span>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            onClick={handleAgregarIntegrante}
+                            disabled={agregando}
+                          >
+                            {agregando ? "Agregando..." : "Agregar"}
+                          </button>
+                        </div>
+                      )}
+
+                      <h3 className="detail-subtitle">Quitar integrantes</h3>
+                      <div className="comunidad-panel-integrantes-lista detail-participant-list">
+                        {miembros.map((m) => (
+                          <div key={m.userId} className="detail-participant-item">
+                            <Avatar
+                              url={m.avatarUrl}
+                              nombre={m.nick}
+                              className="detail-participant-avatar"
+                              forma={m.avatarForma}
+                            />
+                            {m.nick ?? "Jugador de RemorApp"}
+                            {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
+                            {m.userId === comunidad.creador_id ? (
+                              <span className="team-owner-badge">Creador</span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-ghost"
+                                onClick={() => handleQuitarIntegrante(m.userId)}
+                                disabled={quitandoUserId === m.userId}
+                              >
+                                {quitandoUserId === m.userId ? "Quitando..." : "Quitar"}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   )}
-                </div>
+                </>
               )}
 
-              {tabConfig === "banner" && (
-                <div className="form-group">
-                  <label className="form-label" htmlFor="comunidad-banner-panel">
-                    Banner (opcional, máx. 15MB, se recorta a 4:1)
-                  </label>
-                  <input
-                    id="comunidad-banner-panel"
-                    className="form-input"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleBannerChange}
-                  />
-                  {archivoParaRecortarBanner && (
-                    <RecortadorImagenModal
-                      archivo={archivoParaRecortarBanner}
-                      aspecto={4}
-                      titulo="Ajustar banner de la comunidad"
-                      onConfirmar={(recorte) => {
-                        setBannerFile(recorte);
-                        setBannerPreview(URL.createObjectURL(recorte));
-                        setArchivoParaRecortarBanner(null);
-                      }}
-                      onCancelar={() => setArchivoParaRecortarBanner(null)}
-                    />
-                  )}
-                  {(bannerPreview ?? comunidad.banner_url) && (
-                    <img
-                      src={bannerPreview ?? comunidad.banner_url ?? ""}
-                      alt="Vista previa del banner"
-                      className="team-detail-banner"
-                    />
-                  )}
-                </div>
-              )}
-
-              <button type="submit" className="btn btn-primary" disabled={guardando}>
-                {guardando ? "Guardando..." : "Guardar cambios"}
-              </button>
-            </form>
-          )}
-
-          {tabConfig === "integrantes" && (
-            <>
-              <form className="auth-form" onSubmit={handleBuscarJugador}>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="comunidad-buscar-nick">
-                    Agregar integrante (Nick#ID)
-                  </label>
-                  <input
-                    id="comunidad-buscar-nick"
-                    className="form-input"
-                    type="text"
-                    placeholder="TuNick#BattleTag"
-                    value={busquedaNick}
-                    onChange={(e) => setBusquedaNick(e.target.value)}
-                  />
-                </div>
-                {errorBusqueda && <div className="form-error">{errorBusqueda}</div>}
-                <button type="submit" className="btn btn-ghost" disabled={buscando}>
-                  {buscando ? "Buscando..." : "Buscar"}
-                </button>
-              </form>
-
-              {resultadoBusqueda && (
-                <div className="detail-participant-item">
-                  <Avatar
-                    url={resultadoBusqueda.avatarUrl}
-                    nombre={resultadoBusqueda.nick}
-                    className="detail-participant-avatar"
-                    forma={resultadoBusqueda.avatarForma}
-                  />
-                  {resultadoBusqueda.nick ?? "Jugador de RemorApp"}
-                  {resultadoBusqueda.uniqueId && <span className="profile-nick-id">#{resultadoBusqueda.uniqueId}</span>}
-                  <button type="button" className="btn btn-primary" onClick={handleAgregarIntegrante} disabled={agregando}>
-                    {agregando ? "Agregando..." : "Agregar"}
+              {tabConfig === "eliminar" && (
+                <div className="team-panel-danger-zone">
+                  <h3 className="detail-subtitle" style={{ marginTop: 0 }}>
+                    Zona de peligro
+                  </h3>
+                  <p className="tournament-card-meta">
+                    Eliminar la comunidad es una acción irreversible: todos los integrantes quedan libres (ya
+                    no va a figurar en su perfil) y deja de poder vincularse a eventos nuevos.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-block"
+                    onClick={handleEliminarComunidad}
+                    disabled={eliminando}
+                  >
+                    {eliminando ? "Eliminando..." : "Eliminar comunidad"}
                   </button>
                 </div>
               )}
-
-              <h3 className="detail-subtitle">Integrantes actuales</h3>
-              <div className="comunidad-panel-integrantes-lista detail-participant-list">
-                {miembros.map((m) => (
-                  <div key={m.userId} className="detail-participant-item">
-                    <Avatar url={m.avatarUrl} nombre={m.nick} className="detail-participant-avatar" forma={m.avatarForma} />
-                    {m.nick ?? "Jugador de RemorApp"}
-                    {m.uniqueId && <span className="profile-nick-id">#{m.uniqueId}</span>}
-                    {m.userId === comunidad.creador_id ? (
-                      <span className="team-owner-badge">Creador</span>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn btn-ghost"
-                        onClick={() => handleQuitarIntegrante(m.userId)}
-                        disabled={quitandoUserId === m.userId}
-                      >
-                        {quitandoUserId === m.userId ? "Quitando..." : "Quitar"}
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-
-              <div className="team-panel-danger-zone">
-                <h3 className="detail-subtitle">Zona de peligro</h3>
-                <p className="tournament-card-meta">
-                  Eliminar la comunidad es una acción irreversible: todos los integrantes quedan libres (ya
-                  no va a figurar en su perfil) y deja de poder vincularse a eventos nuevos.
-                </p>
-                <button
-                  type="button"
-                  className="btn btn-danger btn-block"
-                  onClick={handleEliminarComunidad}
-                  disabled={eliminando}
-                >
-                  {eliminando ? "Eliminando..." : "Eliminar comunidad"}
-                </button>
-              </div>
             </div>
           </div>
         </div>
