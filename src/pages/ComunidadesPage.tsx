@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext";
 import { contieneLenguajeInapropiado } from "../lib/profanityFilter";
 import type { ComunidadRow } from "../types/comunidades";
 import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
+import { CardGridSkeleton } from "../components/Skeleton";
 
 interface ComunidadConInfo extends ComunidadRow {
   memberCount: number;
@@ -142,7 +143,7 @@ export default function ComunidadesPage() {
       </div>
 
       <div className="equipos-lista-scroll">
-        {cargando && <p className="tournament-card-meta">Cargando comunidades...</p>}
+        {cargando && <CardGridSkeleton />}
         {!cargando && comunidadesFiltradas.length === 0 && (
           comunidades.length === 0 && !busqueda.trim() ? (
             <p className="detail-empty">
@@ -158,26 +159,28 @@ export default function ComunidadesPage() {
           )
         )}
 
-        <div className="team-grid">
-          {comunidadesFiltradas.map((comunidad) => (
-            <Link key={comunidad.id} to={`/comunidades/${comunidad.id}`} className="team-card">
-              {comunidad.logo_url ? (
-                <img src={comunidad.logo_url} alt={comunidad.nombre} className="team-card-logo" />
-              ) : (
-                <div className="team-card-logo team-card-logo-placeholder">
-                  <Users size={20} aria-hidden="true" />
+        {!cargando && (
+          <div className="team-grid">
+            {comunidadesFiltradas.map((comunidad) => (
+              <Link key={comunidad.id} to={`/comunidades/${comunidad.id}`} className="team-card">
+                {comunidad.logo_url ? (
+                  <img src={comunidad.logo_url} alt={comunidad.nombre} className="team-card-logo" />
+                ) : (
+                  <div className="team-card-logo team-card-logo-placeholder">
+                    <Users size={20} aria-hidden="true" />
+                  </div>
+                )}
+                <div className="team-card-info">
+                  <p className="team-card-name">{comunidad.nombre}</p>
+                  {comunidad.descripcion && <p className="team-card-tag">{comunidad.descripcion}</p>}
+                  <p className="team-card-meta">
+                    {comunidad.memberCount} {comunidad.memberCount === 1 ? "integrante" : "integrantes"}
+                  </p>
                 </div>
-              )}
-              <div className="team-card-info">
-                <p className="team-card-name">{comunidad.nombre}</p>
-                {comunidad.descripcion && <p className="team-card-tag">{comunidad.descripcion}</p>}
-                <p className="team-card-meta">
-                  {comunidad.memberCount} {comunidad.memberCount === 1 ? "integrante" : "integrantes"}
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {mostrarCrear && (

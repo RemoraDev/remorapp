@@ -8,6 +8,7 @@ import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import { SC2_REGION_OPTIONS } from "../types/profile";
 import type { Sc2Region } from "../types/profile";
+import { CardGridSkeleton } from "../components/Skeleton";
 
 // Fila angosta (ver el comentario en cargarEquipos) -- ya no extiende
 // TeamRow completo, que trae campos como banner/bio/mmr que esta
@@ -241,7 +242,7 @@ export default function TeamsPage() {
           arriba), solo esta lista tiene scroll propio -- la página
           completa nunca se mueve. */}
       <div className="equipos-lista-scroll">
-        {cargando && <p className="tournament-card-meta">Cargando equipos...</p>}
+        {cargando && <CardGridSkeleton />}
         {!cargando && equiposFiltrados.length === 0 && (
           equipos.length === 0 && !busqueda.trim() && !regionFiltro ? (
             <p className="detail-empty">
@@ -255,31 +256,33 @@ export default function TeamsPage() {
           )
         )}
 
-        <div className="team-grid">
-          {equiposFiltrados.map((equipo) => (
-            <Link key={equipo.id} to={`/equipos/${equipo.tag}`} className="team-card">
-              {equipo.logo_url ? (
-                <img src={equipo.logo_url} alt={equipo.name} className="team-card-logo" />
-              ) : (
-                <div className="team-card-logo team-card-logo-placeholder">{equipo.tag.charAt(0)}</div>
-              )}
-              <div className="team-card-info">
-                <p className="team-card-name">{equipo.name}</p>
-                <p className="team-card-tag">[{equipo.tag}]</p>
-                <div className="team-card-regions">
-                  {equipo.sc2_regions.map((region) => (
-                    <span key={region} className="badge badge-format">
-                      {SC2_REGION_OPTIONS.find((o) => o.value === region)?.label ?? region}
-                    </span>
-                  ))}
+        {!cargando && (
+          <div className="team-grid">
+            {equiposFiltrados.map((equipo) => (
+              <Link key={equipo.id} to={`/equipos/${equipo.tag}`} className="team-card">
+                {equipo.logo_url ? (
+                  <img src={equipo.logo_url} alt={equipo.name} className="team-card-logo" />
+                ) : (
+                  <div className="team-card-logo team-card-logo-placeholder">{equipo.tag.charAt(0)}</div>
+                )}
+                <div className="team-card-info">
+                  <p className="team-card-name">{equipo.name}</p>
+                  <p className="team-card-tag">[{equipo.tag}]</p>
+                  <div className="team-card-regions">
+                    {equipo.sc2_regions.map((region) => (
+                      <span key={region} className="badge badge-format">
+                        {SC2_REGION_OPTIONS.find((o) => o.value === region)?.label ?? region}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="team-card-meta">
+                    {equipo.memberCount} {equipo.memberCount === 1 ? "miembro" : "miembros"}
+                  </p>
                 </div>
-                <p className="team-card-meta">
-                  {equipo.memberCount} {equipo.memberCount === 1 ? "miembro" : "miembros"}
-                </p>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

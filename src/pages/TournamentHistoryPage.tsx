@@ -6,6 +6,7 @@ import { obtenerNombresDeParticipantes, obtenerNombresDeParticipantesMixto } fro
 import { getModoLabel, getFormatoLabel } from "../lib/tournamentOptions";
 import { formatFecha, formatPozo } from "../lib/formatters";
 import type { TournamentRow } from "../types/tournaments";
+import { ListSkeleton } from "../components/Skeleton";
 
 interface ResultadoConNombre {
   participantId: string;
@@ -226,7 +227,7 @@ export default function TournamentHistoryPage() {
         ))}
       </select>
 
-      {loading && <p className="tournament-card-meta">Cargando historial...</p>}
+      {loading && <ListSkeleton />}
 
       {!loading && items.length === 0 && (
         <p className="tournament-card-meta">

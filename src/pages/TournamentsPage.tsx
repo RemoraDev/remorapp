@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 import { useAuth } from "../context/AuthContext";
 import TournamentListCard from "../components/TournamentListCard";
 import type { EventoPublico } from "../types/tournaments";
+import { TournamentGridSkeleton } from "../components/Skeleton";
 
 // Migración 109: "Torneos" pasa a llamarse "Eventos" y lista los tres
 // tipos juntos (torneo por ligas, Clan War Amistosa, Race War) -- ver
@@ -59,7 +60,7 @@ export default function TournamentsPage() {
         </Link>
       </div>
 
-      {loading && <p className="tournament-card-meta">Cargando eventos...</p>}
+      {loading && <TournamentGridSkeleton />}
 
       {!loading && eventos.length === 0 && (
         <p className="tournament-card-meta">No hay eventos abiertos por ahora.</p>

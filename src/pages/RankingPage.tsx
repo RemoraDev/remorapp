@@ -8,6 +8,7 @@ import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import MisTitulosPadreHijoList from "../components/MisTitulosPadreHijoList";
 import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
+import { ListSkeleton } from "../components/Skeleton";
 import type {
   DetalleActividadClan,
   DivisionLiga,
@@ -391,7 +392,7 @@ export default function RankingPage() {
               )}
 
               {cargando ? (
-                <p className="tournament-card-meta">Cargando ranking...</p>
+                <ListSkeleton />
               ) : ranking.length === 0 ? (
                 <p className="detail-empty">
                   Todavía no hay ningún torneo finalizado en esta categoría con un clan campeón.
@@ -437,7 +438,7 @@ export default function RankingPage() {
               simple y sets WTL en un solo número por jugador. */}
           {subtabRanking === "jugadores" && (
             cargandoJugadores ? (
-              <p className="tournament-card-meta">Cargando ranking de jugadores...</p>
+              <ListSkeleton />
             ) : rankingJugadores.length === 0 ? (
               <p className="detail-empty">Todavía nadie tiene ninguna partida ganada registrada.</p>
             ) : (
@@ -502,7 +503,7 @@ export default function RankingPage() {
               rankings. */}
           {subtabRanking === "actividad" && (
             cargandoActividad ? (
-              <p className="tournament-card-meta">Cargando ranking de actividad...</p>
+              <ListSkeleton />
             ) : rankingActividad.length === 0 ? (
               <p className="detail-empty">Todavía ningún clan tiene actividad registrada.</p>
             ) : (
