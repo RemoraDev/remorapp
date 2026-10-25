@@ -45,6 +45,27 @@ export const RUIDO_WGSL = wgslFn(
   [comoInclude(HASH_WGSL)],
 );
 
+// Ruido fractal de DOS octavas.
+//
+// Existe por rendimiento, y la diferencia no es menor: cada octava son
+// 4 llamadas a hash21, así que fbm (4 octavas) cuesta 16 hashes por
+// llamada. El telón del bosque hacía ~13 llamadas a fbm por píxel, o
+// sea más de 200 hashes por píxel, y a 1280x720 eso son 190 millones
+// por cuadro -- medido, le comía el 43% de una GPU Turing.
+//
+// Para siluetas (el borde de una línea de bosque, el dentado de una
+// copa) las octavas finas no se ven: la forma ya la da la primera. Se
+// usa fbm completo solo donde el detalle fino sí se nota, como las
+// nubes.
+export const FBM2_WGSL = wgslFn(
+  /* wgsl */ `
+  fn fbm2( p: vec2<f32> ) -> f32 {
+    return ruido( p ) * 0.62 + ruido( p * 2.03 ) * 0.38;
+  }
+`,
+  [comoInclude(RUIDO_WGSL), comoInclude(HASH_WGSL)],
+);
+
 // Ruido fractal de 4 octavas. Es el ladrillo de casi todo lo orgánico
 // de estas escenas: el borde irregular de las copas, las nubes y la
 // textura del follaje.

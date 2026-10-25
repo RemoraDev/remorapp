@@ -643,18 +643,21 @@ const ESCENAS: Record<FondoBracketWebgpu, (scene: THREE.Scene) => Promise<Result
 };
 
 // ~30 FPS. Ver la nota de rendimiento dentro de frame().
-// 60 FPS en escritorio, 30 en web/mobile.
+// 30 FPS, en escritorio y en web.
 //
-// El tope de 30 se puso cuando el fondo era una foto con un zoom
-// lentísimo encima, donde no se notaba. Con el pastizal del bosque sí
-// se nota: son miles de briznas moviéndose, y a 30 FPS el movimiento se
-// ve a tirones -- el usuario lo describió como "se ve medio lag", y no
-// era falta de potencia sino justamente este tope.
+// Estuvo en 60 en escritorio por una versión: el usuario dijo que el
+// pasto "se ve medio lag" y lo atribuí al tope de cuadros. Medido
+// después sobre la máquina real, esa decisión le costaba el 43% del
+// motor 3D de una GPU Turing solo para el fondo -- inaceptable para
+// alguien que transmite con el juego, OBS y Discord abiertos, que es
+// justo el caso para el que se hizo todo esto.
 //
-// El presupuesto da de sobra: la escena más cara medida sobre WebGPU
-// real cuesta ~1,8 ms por frame, o sea un 11% de los 16,6 ms que hay
-// entre cuadro y cuadro a 60 FPS.
-const INTERVALO_FRAME = 1000 / (isTauri() ? 60 : 30);
+// Volver a 30 lo baja a la mitad. El tirón que él veía no era falta de
+// cuadros sino que el viento avanzaba demasiado rápido PARA 30 FPS:
+// entre cuadro y cuadro la brizna saltaba un tramo visible. Con el
+// viento más lento (ver bosqueElfico.ts) el movimiento se lee fluido a
+// 30, y sale la mitad de caro.
+const INTERVALO_FRAME = 1000 / 30;
 
 // Tope de renderers WebGPU vivos a la vez en toda la página.
 //

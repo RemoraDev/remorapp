@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { MeshBasicNodeMaterial } from "three/webgpu";
 import { uv, time, uniform, wgslFn, positionLocal, instanceIndex, mix, vec3, varying, float } from "three/tsl";
-import { comoInclude, FBM_WGSL, RUIDO_WGSL, HASH_WGSL } from "./wgslComun";
+import { comoInclude, FBM_WGSL, FBM2_WGSL, RUIDO_WGSL, HASH_WGSL } from "./wgslComun";
 import type { ResultadoEscena } from "./tipos";
 
 // Bosque élfico al atardecer, 100% procedural (no hay ninguna imagen
@@ -35,7 +35,7 @@ const SKYLINE_WGSL = wgslFn(
     let xx = x * escala + vaiven;
 
     // Ondulación lenta del terreno sobre el que se apoya el bosque.
-    let terreno = fbm( vec2<f32>( xx * 0.35, 0.0 ) ) * amplitud;
+    let terreno = fbm2( vec2<f32>( xx * 0.35, 0.0 ) ) * amplitud;
 
     // Los árboles: un diente triangular por celda, cada uno con su
     // altura y su ancho. Con fbm solo salían LOMAS -- el ruido fractal
@@ -56,12 +56,31 @@ const SKYLINE_WGSL = wgslFn(
 
     // Una pizca de ruido fino sobre la copa, para que el borde no sea
     // una recta perfecta sino follaje.
-    let picado = ( fbm( vec2<f32>( xx * 7.0, 13.0 ) ) - 0.5 ) * amplitud * 0.22;
+    let picado = ( fbm2( vec2<f32>( xx * 7.0, 13.0 ) ) - 0.5 ) * amplitud * 0.22;
 
     return base + terreno + copa + picado;
   }
 `,
-  [comoInclude(FBM_WGSL), comoInclude(RUIDO_WGSL), comoInclude(HASH_WGSL)],
+  [comoInclude(FBM2_WGSL), comoInclude(FBM_WGSL), comoInclude(RUIDO_WGSL), comoInclude(HASH_WGSL)],
+);
+
+// Geometría de los árboles de primer plano, compartida entre el shader
+// del telón (que pinta tronco y masa de copa) y el de las hojas (que
+// las reparte). Las dos tienen que coincidir o las hojas quedan
+// flotando al lado del árbol, así que sale de una sola función.
+const ARBOL_WGSL = wgslFn(
+  /* wgsl */ `
+  fn arbolDato( fi: f32, cual: f32 ) -> f32 {
+    let lado = select( -1.0, 1.0, hash21( vec2<f32>( fi, 31.0 ) ) > 0.45 );
+    let cx = lado * ( 0.54 + hash21( vec2<f32>( fi, 7.0 ) ) * 0.32 );
+    let cy = 1.02 + hash21( vec2<f32>( fi, 41.0 ) ) * 0.10;
+    let radio = 0.30 + hash21( vec2<f32>( fi, 53.0 ) ) * 0.12;
+    if ( cual < 0.5 ) { return cx; }
+    if ( cual < 1.5 ) { return cy; }
+    return radio;
+  }
+`,
+  [comoInclude(HASH_WGSL)],
 );
 
 const BOSQUE_WGSL = wgslFn(
@@ -100,9 +119,20 @@ const BOSQUE_WGSL = wgslFn(
     // El 0.013 de antes era tan lento que el usuario directamente no
     // veía moverse las nubes. Además se deforman con el tiempo (el
     // segundo eje también avanza), así que no es un calco corriéndose.
-    let nube = fbm( vec2<f32>( p.x * 3.4 + t * 0.055, uvIn.y * 7.0 + t * 0.012 ) );
-    let altoCielo = smoothstep( 0.52, 0.98, uvIn.y );
-    col = mix( col, vec3<f32>( 1.0, 0.86, 0.72 ), smoothstep( 0.60, 0.95, nube ) * altoCielo * 0.35 );
+    // Dos muestras a distinta altura. La diferencia entre ellas dice
+    // hacia dónde "crece" la nube, y con eso se ilumina el filo de
+    // arriba y se deja el cuerpo en sombra. Eso es lo que le da volumen
+    // de cúmulo: con una sola muestra y un degradé queda el borrón que
+    // el usuario describió como una mancha.
+    let qn = vec2<f32>( p.x * 2.4 + t * 0.050, uvIn.y * 5.0 + t * 0.010 );
+    let nube = fbm( qn );
+    let nubeArriba = fbm( qn + vec2<f32>( 0.0, 0.16 ) );
+    let altoCielo = smoothstep( 0.46, 0.99, uvIn.y );
+    // Borde más duro que antes (0.60-0.95 era un degradé largo).
+    let cuerpo = smoothstep( 0.52, 0.63, nube ) * altoCielo;
+    let filo = clamp( ( nubeArriba - nube ) * 7.0, 0.0, 1.0 );
+    col = mix( col, vec3<f32>( 0.80, 0.78, 0.82 ), cuerpo * 0.78 );
+    col = col + vec3<f32>( 1.0, 0.94, 0.82 ) * cuerpo * filo * 0.75;
 
     // ---------- 4. Rayos de luz ----------
     // Se calculan sobre el ÁNGULO respecto del sol, no sobre x: así
@@ -110,7 +140,7 @@ const BOSQUE_WGSL = wgslFn(
     // como bandas verticales paralelas.
     let dir = p - solPos;
     let ang = atan2( dir.y, dir.x );
-    let rayo = fbm( vec2<f32>( ang * 2.8, t * 0.06 ) );
+    let rayo = fbm2( vec2<f32>( ang * 2.8, t * 0.06 ) );
     let fuerzaRayo = smoothstep( 0.46, 1.0, rayo )
       * smoothstep( 1.5, 0.05, length( dir ) )
       * smoothstep( 0.08, 0.5, uvIn.y );
@@ -122,6 +152,11 @@ const BOSQUE_WGSL = wgslFn(
     // color del cielo (perspectiva atmosférica), que es lo que las
     // manda al fondo.
     let bordeSuave = 0.004;
+    // Por encima de esta altura no hay bosque posible (la capa más alta
+    // llega a ~0.33), así que se saltea el cálculo de las tres líneas
+    // de árboles para la mayor parte del cielo, que es donde está la
+    // mayoría de los píxeles del cuadro.
+    if ( uvIn.y < 0.42 ) {
 
     // Capa lejana.
     let hLejos = skyline( p.x, 2.6, 0.30, 0.055, 0.004, t );
@@ -142,13 +177,15 @@ const BOSQUE_WGSL = wgslFn(
     let mCerca = smoothstep( hCerca + bordeSuave, hCerca - bordeSuave, uvIn.y );
     col = mix( col, vec3<f32>( 0.045, 0.10, 0.09 ), mCerca );
 
+    }
+
     // ---------- 6. Follaje de primer plano ----------
     // Enmarca arriba y en los costados. Es lo que hace que la escena se
     // sienta "adentro del bosque" y no una postal mirada de lejos.
     let vientoF = sin( t * 0.50 ) * 0.035 + sin( t * 0.31 + 1.3 ) * 0.020;
     // Frecuencia alta: con la escala baja de antes salían manchones del
     // tamaño de una nube y parecían un borrón oscuro, no hojas.
-    let hojas = fbm( vec2<f32>( p.x * 7.5 + vientoF, ( 1.0 - uvIn.y ) * 8.5 + vientoF * 0.4 ) );
+    let hojas = fbm2( vec2<f32>( p.x * 7.5 + vientoF, ( 1.0 - uvIn.y ) * 8.5 + vientoF * 0.4 ) );
     // Umbral DURO (0.50 a 0.53). Un smoothstep ancho difumina el borde
     // y es justo lo que arruinaba la silueta: el follaje a contraluz se
     // ve como recorte nítido, no como degradé.
@@ -173,8 +210,7 @@ const BOSQUE_WGSL = wgslFn(
     var copa = 0.0;
     for ( var i = 0; i < 3; i = i + 1 ) {
       let fi = f32( i );
-      let lado = select( -1.0, 1.0, hash21( vec2<f32>( fi, 31.0 ) ) > 0.45 );
-      let cx = lado * ( 0.54 + hash21( vec2<f32>( fi, 7.0 ) ) * 0.32 );
+      let cx = arbolDato( fi, 0.0 );
       // Inclinación propia: tres postes perfectamente verticales se ven
       // artificiales, un árbol nunca crece a plomo.
       let inclina = ( hash21( vec2<f32>( fi, 17.0 ) ) - 0.5 ) * 0.12;
@@ -211,13 +247,17 @@ const BOSQUE_WGSL = wgslFn(
       // escena colgando). Antes era una campana vertical y el ruido se
       // escapaba por abajo formando goterones: una copa es una masa
       // redondeada, así que hay que medirla de forma radial.
-      let centroCopaY = 1.02 + hash21( vec2<f32>( fi, 41.0 ) ) * 0.10;
+      // Misma geometría que usan las hojas instanciadas (arbolDato), o
+      // quedarían flotando al lado del árbol en vez de sobre él.
+      let centroCopaY = arbolDato( fi, 1.0 );
       // El 1.45 achata la copa: un círculo perfecto se ve a globo.
       let rel = vec2<f32>( p.x - cxx + desvio, ( uvIn.y - centroCopaY ) * 1.45 );
-      let radio = 0.30 + hash21( vec2<f32>( fi, 53.0 ) ) * 0.12;
+      // Un poco más chica que el disco de las hojas: la masa es la
+      // sombra interior del follaje, y las hojas sobresalen del borde.
+      let radio = arbolDato( fi, 2.0 ) * 0.88;
       // El ruido se le suma al RADIO, no al relleno: así dentella el
       // borde (que es lo que hace leer "hojas") sin agujerear el centro.
-      let dentado = ( fbm( vec2<f32>( ( p.x - cxx ) * 7.0 + desvio * 2.0, uvIn.y * 7.0 ) ) - 0.5 ) * 0.30;
+      let dentado = ( fbm2( vec2<f32>( ( p.x - cxx ) * 7.0 + desvio * 2.0, uvIn.y * 7.0 ) ) - 0.5 ) * 0.30;
       copa = max( copa, smoothstep( 0.012, -0.012, length( rel ) - ( radio + dentado ) ) );
     }
     col = mix( col, vec3<f32>( 0.010, 0.026, 0.024 ), tronco );
@@ -252,7 +292,77 @@ const BOSQUE_WGSL = wgslFn(
     return vec4<f32>( clamp( col, vec3<f32>( 0.0 ), vec3<f32>( 4.0 ) ), 1.0 );
   }
 `,
-  [comoInclude(SKYLINE_WGSL), comoInclude(FBM_WGSL), comoInclude(RUIDO_WGSL), comoInclude(HASH_WGSL)],
+  [comoInclude(SKYLINE_WGSL), comoInclude(ARBOL_WGSL), comoInclude(FBM2_WGSL), comoInclude(FBM_WGSL), comoInclude(RUIDO_WGSL), comoInclude(HASH_WGSL)],
+);
+
+// Posición de cada vértice de una HOJA.
+//
+// El usuario dijo que los árboles "solo parecen manchas verdes", y
+// tenía razón: una silueta hecha con ruido recortado es, por
+// definición, una mancha. No hay forma de que una masa de ruido lea
+// como follaje. Las hojas tienen que existir como hojas.
+//
+// Misma técnica que ya funciona con el pasto: geometría instanciada con
+// el viento en el vertex shader. Cada hoja es un cuadrito con su propia
+// posición dentro de la copa, su rotación y su fase de viento.
+const HOJA_POS_WGSL = wgslFn(
+  /* wgsl */ `
+  fn hojaPos( local: vec3<f32>, idx: f32, t: f32, aspecto: f32 ) -> vec3<f32> {
+    // Repartidas entre los 3 árboles.
+    let arbol = idx - floor( idx / 3.0 ) * 3.0;
+    let cx = arbolDato( arbol, 0.0 );
+    let cy = arbolDato( arbol, 1.0 );
+    let radio = arbolDato( arbol, 2.0 );
+
+    // Punto dentro del disco de la copa. La raíz cuadrada del radio es
+    // lo que reparte parejo: sin ella se amontonan todas en el centro.
+    let ang = hash21( vec2<f32>( idx, 2.1 ) ) * 6.28318;
+    let frac = sqrt( hash21( vec2<f32>( idx, 4.3 ) ) );
+    let rad = frac * radio;
+    // El 1.45 achata la copa igual que en el telón, para que las hojas
+    // caigan justo sobre la masa y no alrededor.
+    var px = cx + cos( ang ) * rad;
+    var py = cy + sin( ang ) * rad / 1.45;
+
+    // Viento: las hojas del borde se mueven mucho más que las del
+    // centro, donde la rama es gruesa y no cede.
+    let fase = hash21( vec2<f32>( idx, 9.7 ) ) * 6.28318;
+    let viento = ( sin( t * 0.60 + fase + px * 4.0 ) * 0.55 + sin( t * 1.05 + fase * 2.0 ) * 0.28 )
+      * 0.022 * ( 0.25 + frac );
+    px = px + viento;
+    py = py + viento * 0.35;
+
+    // La hoja es un cuadrito rotado. La rotación también se mueve con
+    // el viento: una hoja real se da vuelta, no solo se desplaza.
+    // Chicas a propósito: grandes se leen como confeti, no como hojas.
+    let tam = 0.0055 + hash21( vec2<f32>( idx, 13.1 ) ) * 0.0045;
+    let giro = hash21( vec2<f32>( idx, 17.9 ) ) * 6.28318 + viento * 9.0;
+    let co = cos( giro );
+    let si = sin( giro );
+    let lx = local.x * tam * 2.0;
+    let ly = local.y * tam * 1.2;
+    let rx = lx * co - ly * si;
+    let ry = lx * si + ly * co;
+
+    // px está en espacio corregido por aspecto (como el telón) y el
+    // plano va de -0.5 a 0.5, así que se divide para volver a local.
+    // Sin esta división las hojas saldrían ovaladas en pantallas anchas.
+    return vec3<f32>( ( px + rx ) / aspecto, py - 0.5 + ry, 0.0 );
+  }
+`,
+  [comoInclude(ARBOL_WGSL), comoInclude(HASH_WGSL)],
+);
+
+// Tono de cada hoja: casi todas en sombra, unas pocas encendidas por el
+// sol que se cuela entre el follaje.
+const TONO_HOJA_WGSL = wgslFn(
+  /* wgsl */ `
+  fn tonoHoja( idx: f32 ) -> f32 {
+    let h = hash21( vec2<f32>( idx, 27.7 ) );
+    return h * h * h;
+  }
+`,
+  [comoInclude(HASH_WGSL)],
 );
 
 // Posición de cada vértice de una brizna de pasto.
@@ -288,8 +398,11 @@ const BRIZNA_POS_WGSL = wgslFn(
     // x * k dentro del seno), más la fase propia de cada brizna. Sin
     // ese desfase por brizna el pastizal se mueve en bloque, como una
     // alfombra, en vez de ondular.
-    let viento = sin( t * 1.15 + x * 5.2 + h1 * 6.28 ) * 0.55
-      + sin( t * 0.63 + x * 11.0 + h3 * 6.28 ) * 0.28;
+    // Más lento que antes (era 1.15 / 0.63). A 30 FPS la brizna
+    // avanzaba un tramo visible entre cuadro y cuadro y eso es lo que
+    // se leía como tirón: no faltaban cuadros, sobraba velocidad.
+    let viento = sin( t * 0.72 + x * 5.2 + h1 * 6.28 ) * 0.55
+      + sin( t * 0.41 + x * 11.0 + h3 * 6.28 ) * 0.28;
     // El doblez va con a*a: la base queda clavada en el suelo y solo
     // la punta se mueve. Con un doblez lineal las briznas se deslizan
     // enteras y parecen flotar.
@@ -329,6 +442,7 @@ const TONO_BRIZNA_WGSL = wgslFn(
 
 const PROFUNDIDAD_PLANO = -80;
 const BRIZNAS = 1400;
+const HOJAS = 4200;
 
 export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEscena> {
   // Valor inicial cualquiera: lo corrige el primer alRedimensionar(),
@@ -388,6 +502,31 @@ export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEs
     alturaBrizna.mul(alturaBrizna),
   ) as typeof matPasto.colorNode;
 
+  // ---------- Hojas ----------
+  const matHoja = new MeshBasicNodeMaterial({ transparent: false, depthWrite: true, depthTest: true });
+  matHoja.positionNode = HOJA_POS_WGSL({
+    local: positionLocal,
+    idx: instanceIndex.toFloat(),
+    t: time,
+    aspecto: aspectoUniform,
+  }) as typeof matHoja.positionNode;
+
+  const tonoHoja = varying(TONO_HOJA_WGSL({ idx: instanceIndex.toFloat() })) as unknown as ReturnType<typeof float>;
+  // Casi todas en sombra; unas pocas encendidas donde el sol se cuela
+  // entre el follaje. Ese contraste es lo que hace que una copa se lea
+  // como miles de hojas y no como una mancha plana.
+  matHoja.colorNode = mix(
+    vec3(0.028, 0.072, 0.050),
+    vec3(0.34, 0.40, 0.14),
+    tonoHoja,
+  ) as typeof matHoja.colorNode;
+
+  const hojas = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), matHoja, HOJAS);
+  hojas.frustumCulled = false;
+  hojas.position.set(0, 0, PROFUNDIDAD_PLANO + 2);
+  hojas.renderOrder = 2;
+  scene.add(hojas);
+
   const pasto = new THREE.InstancedMesh(geoBrizna, matPasto, BRIZNAS);
   // Las posiciones salen del shader a partir de instanceIndex, así que
   // las matrices por instancia no se usan: se deja la identidad y se
@@ -415,6 +554,9 @@ export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEs
       const distanciaPasto = camera.position.z - pasto.position.z;
       const altoPasto = 2 * distanciaPasto * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
       pasto.scale.set(altoPasto * camera.aspect, altoPasto, 1);
+      const distanciaHojas = camera.position.z - hojas.position.z;
+      const altoHojas = 2 * distanciaHojas * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+      hojas.scale.set(altoHojas * camera.aspect, altoHojas, 1);
     },
   });
 }
