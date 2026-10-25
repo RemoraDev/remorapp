@@ -22,7 +22,13 @@ export type TorneoEstado = "abierto" | "en_curso" | "finalizado";
 
 // Migración 040: layout de cajas/líneas de la llave y fondo
 // "galáctico" detrás -- independientes entre sí, se combinan.
-export type EstiloBracket = "clasico" | "esports" | "starcraft_oficial";
+// Migración 217, a pedido del usuario: "skins de llaves". Suma 3
+// diseños nuevos a esta misma dimensión (es la que ya significaba "cómo
+// se ven las cajas") en vez de abrir una columna paralela. Ojo: el
+// selector de esto estuvo sin exponer un tiempo -- la columna existía y
+// BracketView ya la pintaba vía data-estilo-bracket, pero el picker no
+// la ofrecía.
+export type EstiloBracket = "clasico" | "esports" | "starcraft_oficial" | "tactico" | "neon" | "cristal";
 // Migración 174, a pedido del usuario: sumó el catálogo de fondos de
 // lineup (ver FondoLineup en types/teams.ts) a los que ya tenía la
 // llave -- mismas animaciones, CSS compartido bajo data-fondo-bracket
@@ -144,10 +150,33 @@ export const ESTRUCTURA_BRACKET_OPTIONS: { value: EstructuraBracket; label: stri
   },
 ];
 
-export const ESTILO_BRACKET_OPTIONS: { value: EstiloBracket; label: string }[] = [
-  { value: "clasico", label: "Clásico" },
-  { value: "esports", label: "Esports" },
-  { value: "starcraft_oficial", label: "StarCraft Oficial" },
+// Migración 217: el catálogo de skins de llave. La descripción sale en
+// el selector, debajo de la miniatura.
+//
+// Regla de rendimiento de los 3 skins nuevos (ver halcon.css): el brillo
+// se pinta UNA vez y nada se anima por frame. Es a propósito -- la app
+// la van a tener abierta streamers junto al juego, OBS y Discord, y
+// animar box-shadow o filter sobre las 15-30 tarjetas de una llave
+// repinta en cada cuadro, que es justo lo que no puede pasar.
+export const ESTILO_BRACKET_OPTIONS: { value: EstiloBracket; label: string; desc?: string }[] = [
+  { value: "clasico", label: "Clásico", desc: "La caja de siempre: sobria y liviana." },
+  { value: "esports", label: "Esports", desc: "Barra de acento y tipografía marcada." },
+  { value: "starcraft_oficial", label: "StarCraft Oficial", desc: "Inspirado en las transmisiones oficiales." },
+  {
+    value: "tactico",
+    label: "Táctico",
+    desc: "HUD militar: esquinas biseladas y rieles de acento.",
+  },
+  {
+    value: "neon",
+    label: "Neón",
+    desc: "Negro profundo con el filo encendido, tipo pantalla de VS.",
+  },
+  {
+    value: "cristal",
+    label: "Cristal",
+    desc: "Vidrio esmerilado con un labio de luz arriba.",
+  },
 ];
 
 export const ESTILO_LINEA_BRACKET_OPTIONS: { value: EstiloLineaBracket; label: string }[] = [

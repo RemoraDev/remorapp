@@ -2339,6 +2339,7 @@ export default function TournamentDetailPage() {
                   <div className="organizer-panel-card-body">
                     <BracketStylePicker
                       tournamentId={torneo.id}
+                      estilo={torneo.estilo_bracket}
                       fondo={torneo.fondo_bracket}
                       estiloLinea={torneo.estilo_linea_bracket}
                       estructura={torneo.estructura_bracket}

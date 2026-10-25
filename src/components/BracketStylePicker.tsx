@@ -1,9 +1,10 @@
 import { useState } from "react";
 import type { CSSProperties } from "react";
-import { LayoutGrid, Sparkles, Zap, Palette, Type, Baseline, BadgeCheck } from "lucide-react";
+import { LayoutGrid, Sparkles, Zap, Palette, Type, Baseline, BadgeCheck, Shapes } from "lucide-react";
 import { supabase } from "../lib/supabaseClient";
 import {
   FONDO_BRACKET_OPTIONS,
+  ESTILO_BRACKET_OPTIONS,
   ESTILO_LINEA_BRACKET_OPTIONS,
   ESTRUCTURA_BRACKET_OPTIONS,
   PALETA_COLOR_LINEA_BRACKET,
@@ -15,6 +16,7 @@ import {
 } from "../types/tournaments";
 import type {
   FondoBracket,
+  EstiloBracket,
   EstiloLineaBracket,
   EstructuraBracket,
   EstiloTituloBracket,
@@ -23,6 +25,8 @@ import type {
 
 interface BracketStylePickerProps {
   tournamentId: string;
+  /** Migración 217: skin de la llave (la columna existía desde la 040, pero no tenía selector). */
+  estilo: EstiloBracket;
   fondo: FondoBracket;
   estiloLinea: EstiloLineaBracket;
   estructura: EstructuraBracket;
@@ -117,6 +121,31 @@ function MiniLinea({ estiloLinea, colorLinea }: { estiloLinea: EstiloLineaBracke
 // -- mismo patrón que .bracket-style-preview: el CSS real
 // (.bracket-esports-banner[data-estilo-titulo]) aplicado a una caja
 // chica, no una captura.
+// Mini-render real de un skin de llave (migración 217): mismo patrón
+// que PreviewTitulo y PreviewEstructura -- se le aplica a una tarjeta
+// chica el CSS de verdad ([data-estilo-bracket] sobre .bracket-match /
+// .bracket-slot), en vez de una captura. Así la miniatura no puede
+// mentir sobre cómo va a quedar la llave.
+function PreviewSkin({ estilo }: { estilo: EstiloBracket }) {
+  return (
+    <div className="bracket-skin-preview" data-estilo-bracket={estilo}>
+      <div className="bracket-match">
+        {/* Nombres cortos a propósito: el skin "neón" pone el nombre en
+            mayúscula y negrita, y con una palabra larga la miniatura lo
+            cortaba con puntos suspensivos. */}
+        <div className="bracket-slot winner">
+          <span className="bracket-slot-nombre">Gana</span>
+          <span className="bracket-slot-score">2</span>
+        </div>
+        <div className="bracket-slot loser">
+          <span className="bracket-slot-nombre">Rival</span>
+          <span className="bracket-slot-score">0</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PreviewTitulo({
   estiloTitulo,
   tituloAnimado,
@@ -147,6 +176,7 @@ export default function BracketStylePicker({
   tournamentId,
   fondo,
   estiloLinea,
+  estilo,
   estructura,
   colorLinea,
   estiloTitulo,
@@ -167,11 +197,26 @@ export default function BracketStylePicker({
   // larga de grupos, uno debajo del otro) -- mismo patrón que
   // tabsOrganizador en TournamentDetailPage.tsx.
   const [subtab, setSubtab] = useState<
-    "estructura" | "fondo" | "lineas" | "color_linea" | "titulo" | "color_texto" | "insignia"
-  >("estructura");
+    "skin" | "estructura" | "fondo" | "lineas" | "color_linea" | "titulo" | "color_texto" | "insignia"
+  >("skin");
   const [fuenteTextoDraft, setFuenteTextoDraft] = useState(fuenteTexto ?? "");
   const [fuentesLocales, setFuentesLocales] = useState<string[] | null>(null);
   const [buscandoFuentes, setBuscandoFuentes] = useState(false);
+
+  // Migración 217: skin de la llave. Si la migración todavía no se
+  // corrió, el constraint de estilo_bracket rechaza los valores nuevos
+  // y el error se muestra arriba (ver setError) en vez de quedar en un
+  // botón que "no hace nada".
+  const handleCambiarSkin = async (nuevo: EstiloBracket) => {
+    if (nuevo === estilo) return;
+    setError(null);
+    const { error: err } = await supabase
+      .from("tournaments")
+      .update({ estilo_bracket: nuevo })
+      .eq("id", tournamentId);
+    if (err) setError(err.message);
+    else onCambio();
+  };
 
   const handleCambiarFondo = async (nuevoFondo: FondoBracket) => {
     if (nuevoFondo === fondo) return;
@@ -311,6 +356,7 @@ export default function BracketStylePicker({
   };
 
   const SUBTABS: { key: typeof subtab; label: string; icon: JSX.Element }[] = [
+    { key: "skin", label: "Skin de llaves", icon: <Shapes size={15} /> },
     { key: "estructura", label: "Estructura", icon: <LayoutGrid size={15} /> },
     { key: "fondo", label: "Fondo", icon: <Sparkles size={15} /> },
     { key: "lineas", label: "Efectos de líneas", icon: <Zap size={15} /> },
@@ -341,6 +387,29 @@ export default function BracketStylePicker({
           </button>
         ))}
       </div>
+
+      {subtab === "skin" && (
+      <div className="bracket-picker-group">
+        <h3 className="detail-subtitle">Skin de llaves</h3>
+        {/* El skin es solo el aspecto de las CAJAS: se combina con
+            estructura, fondo, líneas y colores, que siguen siendo
+            selectores aparte. */}
+        <div className="bracket-picker-options estructura-picker-options">
+          {ESTILO_BRACKET_OPTIONS.map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              className={`bracket-picker-option estructura-picker-option ${estilo === o.value ? "selected" : ""}`}
+              onClick={() => handleCambiarSkin(o.value)}
+            >
+              <PreviewSkin estilo={o.value} />
+              <span className="bracket-picker-option-label">{o.label}</span>
+              {o.desc && <span className="estructura-picker-desc">{o.desc}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+      )}
 
       {subtab === "estructura" && (
       <div className="bracket-picker-group">

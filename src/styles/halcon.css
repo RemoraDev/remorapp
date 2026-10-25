@@ -4949,6 +4949,172 @@ html.es-escritorio .player-detail-panel-inline {
   box-shadow: 0 0 6px 1px var(--color-accent);
 }
 
+/* ---------- Skins de llave (migración 217) ----------
+
+   A pedido del usuario: la llave "se ve simple" y la app la van a usar
+   streamers, con el juego + OBS + Discord abiertos al mismo tiempo.
+
+   REGLA DE RENDIMIENTO de estos 3 skins: el brillo se pinta UNA sola
+   vez. Nada de animar box-shadow, filter ni backdrop-filter -- eso
+   repinta en cada cuadro, y una llave tiene 15-30 tarjetas, así que el
+   costo se multiplica por tarjeta. Un degradé y una sombra estáticos
+   los resuelve el compositor y cuestan 0 ms por frame.
+   (El efecto de línea "Dorado", más arriba, SÍ anima drop-shadow en
+   bucle: si el stream va justo de CPU, ese es el primero a apagar.)
+
+   Los 3 usan --color-accent / --h-accent-rgb, así que siguen la paleta
+   que el usuario tenga elegida en SkinWeb en vez de clavar un color. */
+
+/* 1) Táctico -- HUD militar. Esquinas rectas (no redondeadas, que es lo
+      que hacía ver "blanda" la caja de siempre), riel de acento a la
+      izquierda y marcas de esquina. */
+[data-estilo-bracket="tactico"] .bracket-match {
+  border-radius: 0;
+  border: 1px solid rgba(var(--h-accent-rgb), 0.3);
+  border-left: 2px solid var(--color-accent);
+  background: linear-gradient(180deg, rgba(var(--h-accent-rgb), 0.07), transparent 65%), var(--color-card);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+/* Las marcas de esquina van en ::before/::after de la tarjeta: estos
+   dos pseudo-elementos están libres acá (los usan "esports" y
+   "starcraft_oficial" para su muñón de conexión, pero bajo su propio
+   selector), así que no hace falta ningún nodo extra en el DOM. */
+[data-estilo-bracket="tactico"] .bracket-match::before,
+[data-estilo-bracket="tactico"] .bracket-match::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--color-accent);
+  pointer-events: none;
+}
+
+[data-estilo-bracket="tactico"] .bracket-match::before {
+  top: -1px;
+  right: -1px;
+  border-left: 0;
+  border-bottom: 0;
+}
+
+[data-estilo-bracket="tactico"] .bracket-match::after {
+  bottom: -1px;
+  right: -1px;
+  border-left: 0;
+  border-top: 0;
+}
+
+[data-estilo-bracket="tactico"] .bracket-slot {
+  border-radius: 0;
+  border-left: 2px solid transparent;
+}
+
+[data-estilo-bracket="tactico"] .bracket-slot.winner {
+  border-left-color: var(--color-accent);
+  background: rgba(var(--h-accent-rgb), 0.1);
+}
+
+/* Números tabulares: en una llave los marcadores quedan en columna, y
+   si cada dígito tiene ancho distinto bailan entre filas. */
+[data-estilo-bracket="tactico"] .bracket-slot-score {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+/* 2) Neón -- pantalla de VS de juego de pelea: fondo mucho más negro
+      que la tarjeta normal, filo encendido y el ganador con el borde
+      interno prendido. El negro se consigue con un degradé ENCIMA de
+      --color-card en vez de un hex fijo, así sigue al tema. */
+[data-estilo-bracket="neon"] .bracket-match {
+  border-radius: 0.2rem;
+  border: 1px solid rgba(var(--h-accent-rgb), 0.45);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.75)), var(--color-card);
+  box-shadow:
+    0 0 0 1px rgba(var(--h-accent-rgb), 0.12),
+    0 0 14px rgba(var(--h-accent-rgb), 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+[data-estilo-bracket="neon"] .bracket-slot {
+  border-radius: 0.15rem;
+}
+
+[data-estilo-bracket="neon"] .bracket-slot.winner {
+  background: linear-gradient(90deg, rgba(var(--h-accent-rgb), 0.3), transparent 72%);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+
+[data-estilo-bracket="neon"] .bracket-slot-nombre {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+[data-estilo-bracket="neon"] .bracket-slot.loser {
+  opacity: 0.45;
+}
+
+/* 3) Cristal -- vidrio esmerilado. El "labio de luz" de arriba es el
+      inset blanco de 1px: es lo que da la lectura de vidrio, mucho más
+      barato que un backdrop-filter (que desenfoca lo que hay detrás en
+      cada cuadro y es carísimo sobre 30 tarjetas). */
+[data-estilo-bracket="cristal"] .bracket-match {
+  border-radius: 0.6rem;
+  /* Borde con degradado de verdad, sin nodo extra: las dos primeras
+     capas se recortan a padding-box (el relleno de la tarjeta) y la
+     última a border-box, así el degradado solo asoma en el 1px del
+     borde. Es lo que le da el canto iridiscente; con un borde liso
+     este skin quedaba casi igual al clásico. */
+  /* 2px, no 1px: con un borde de un píxel el degradado no se llega a
+     ver y el skin quedaba indistinguible del clásico. */
+  border: 2px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.17), rgba(255, 255, 255, 0.05) 55%, rgba(255, 255, 255, 0.02)) padding-box,
+    linear-gradient(var(--color-card), var(--color-card)) padding-box,
+    linear-gradient(135deg, rgba(255, 255, 255, 0.6), rgba(var(--h-accent-rgb), 0.7) 50%, rgba(255, 255, 255, 0.15))
+      border-box;
+  /* El labio de luz de arriba es lo que termina de leerse como vidrio. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 10px 26px rgba(0, 0, 0, 0.55);
+}
+
+[data-estilo-bracket="cristal"] .bracket-slot {
+  border-radius: 0.35rem;
+}
+
+[data-estilo-bracket="cristal"] .bracket-slot.winner {
+  background: linear-gradient(90deg, rgba(var(--h-accent-rgb), 0.32), rgba(255, 255, 255, 0.05) 85%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+[data-estilo-bracket="cristal"] .bracket-slot.loser {
+  opacity: 0.55;
+}
+
+/* Miniatura del selector de skin (migración 217). Le da un ancho fijo a
+   la tarjeta de muestra; todo lo demás lo pinta el CSS real del skin,
+   porque PreviewSkin renderiza un .bracket-match de verdad. */
+.bracket-skin-preview {
+  width: 100%;
+  max-width: 11rem;
+  margin: 0 auto 0.5rem;
+  /* Sitio para las marcas de esquina del skin "táctico", que se salen
+     1px del borde de la tarjeta. */
+  padding: 2px;
+  pointer-events: none;
+}
+
+.bracket-skin-preview .bracket-slot {
+  justify-content: space-between;
+  font-size: 0.7rem;
+  padding: 0.3rem 0.4rem;
+}
+
+.bracket-skin-preview .bracket-slot-nombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------- Selector de estilo/fondo (organizador, /tournaments/:id) ---------- */
 
 /* Migración 187, a pedido del usuario: Panel de control > Apariencia
