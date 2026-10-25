@@ -19,6 +19,7 @@ import {
 } from "three/tsl";
 import { isTauri } from "@tauri-apps/api/core";
 import { crearEscenaBosqueElfico } from "./fondos/bosqueElfico";
+import { crearEscenaTormenta } from "./fondos/tormenta";
 import { IMAGEN_FONDO_WEBGPU } from "../types/tournaments";
 import type { FondoBracketWebgpu } from "../types/tournaments";
 
@@ -635,6 +636,7 @@ const escenaNebulosa = crearEscenaImagen(IMAGEN_FONDO_WEBGPU.nebulosa, {
 
 const ESCENAS: Record<FondoBracketWebgpu, (scene: THREE.Scene) => Promise<ResultadoEscena>> = {
   bosque_elfico: crearEscenaBosqueElfico,
+  tormenta: crearEscenaTormenta,
   nebulosa: escenaNebulosa,
   campo_estelar: escenaCampoEstelar,
   aurora: escenaCampoEstelar,

@@ -1,4 +1,5 @@
 import { crearEscenaBosqueElfico } from "./bosqueElfico";
+import { crearEscenaTormenta } from "./tormenta";
 import type { ConstructorEscena } from "./tipos";
 
 // Registro de las escenas procedurales (las que se dibujan por código,
@@ -27,6 +28,14 @@ export const ESCENAS_PROCEDURALES: EscenaProcedural[] = [
     etiqueta: "Bosque élfico",
     construir: crearEscenaBosqueElfico,
     segundoCaptura: 14,
+  },
+  {
+    id: "tormenta",
+    etiqueta: "Tormenta",
+    construir: crearEscenaTormenta,
+    // Justo sobre un relampago: la miniatura tiene que mostrar lo que
+    // hace especial a la escena, no un cielo gris cualquiera.
+    segundoCaptura: 12.6,
   },
 ];
 

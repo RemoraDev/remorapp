@@ -17,3 +17,8 @@ export interface ResultadoEscena {
 
 // Una escena recibe la Scene vacía y devuelve con qué animarla.
 export type ConstructorEscena = (scene: THREE.Scene) => Promise<ResultadoEscena>;
+
+// El tipo que devuelve uniform() de three/tsl. Se nombra acá para que
+// las primitivas puedan recibir el uniform de aspecto sin que cada
+// archivo tenga que importar los tipos internos de three.
+export type Uniform = ReturnType<typeof import("three/tsl").uniform>;

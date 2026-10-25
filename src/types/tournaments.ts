@@ -51,7 +51,8 @@ export type FondoBracketWebgpu =
   | "aurora"
   | "supernova"
   | "infierno"
-  | "bosque_elfico";
+  | "bosque_elfico"
+  | "tormenta";
 
 export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2" | FondoBracketWebgpu;
 
@@ -210,6 +211,7 @@ export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "campo_estelar", label: "Tierra y luna" },
   { value: "nebulosa", label: "Planeta púrpura" },
   { value: "bosque_elfico", label: "Bosque élfico" },
+  { value: "tormenta", label: "Tormenta" },
 ];
 
 // Foto base de cada fondo WebGPU (AVIF, códec AV1). Única fuente de
@@ -233,6 +235,7 @@ export const IMAGEN_FONDO_WEBGPU: Record<FondoBracketWebgpu, string> = {
   // AVIF (18 KB). Así el selector muestra lo que se va a ver sin pagar
   // un canvas WebGPU vivo por cada opción de la lista.
   bosque_elfico: "/fondos-webgpu/bosque_elfico.avif",
+  tormenta: "/fondos-webgpu/tormenta.avif",
 };
 
 // Para decidir si un valor de FondoBracket/FondoLineup necesita el
