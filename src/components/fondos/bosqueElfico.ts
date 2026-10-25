@@ -43,8 +43,12 @@ const SKYLINE_WGSL = wgslFn(
     // conífera es un triángulo, así que hay que dibujarlo como tal.
     let celda = floor( xx );
     let fx = fract( xx );
-    let alto = 0.30 + 0.70 * hash21( vec2<f32>( celda, 3.7 ) );
-    let ancho = 0.55 + 0.45 * hash21( vec2<f32>( celda, 9.1 ) );
+    let hAlto = hash21( vec2<f32>( celda, 3.7 ) );
+    // Algún árbol suelto bastante más alto que el resto: una hilera de
+    // alturas parejas lee como una sierra de papel, no como un bosque.
+    let destacado = select( 1.0, 1.55, hAlto > 0.86 );
+    let alto = ( 0.25 + 0.75 * hAlto ) * destacado;
+    let ancho = 0.50 + 0.50 * hash21( vec2<f32>( celda, 9.1 ) );
     // El triángulo se estrecha con "ancho": fuera de él, altura 0, así
     // quedan huecos entre árboles en vez de una sierra continua.
     let dentro = clamp( 1.0 - abs( fx * 2.0 - 1.0 ) / ancho, 0.0, 1.0 );
@@ -154,6 +158,40 @@ const BOSQUE_WGSL = wgslFn(
     let haciaLosLados = clamp( smoothstep( 0.12, 0.62, abs( p.x ) ) + 0.18, 0.0, 1.0 );
     let mascaraFollaje = borde * cuelgue * haciaLosLados;
     col = mix( col, vec3<f32>( 0.016, 0.042, 0.038 ), mascaraFollaje );
+
+    // ---------- 6b. Troncos de primer plano ----------
+    // Lo que más le faltaba a la escena: sin esto se ve una postal
+    // MIRADA desde afuera. Tres troncos oscuros pegados a los bordes
+    // alcanzan para que se sienta que la cámara está ADENTRO del
+    // bosque. Van a los costados a propósito, para no taparle el sol
+    // ni el centro a lo que se muestre encima del fondo.
+    var tronco = 0.0;
+    var filoTronco = 0.0;
+    for ( var i = 0; i < 3; i = i + 1 ) {
+      let fi = f32( i );
+      let lado = select( -1.0, 1.0, hash21( vec2<f32>( fi, 31.0 ) ) > 0.45 );
+      let cx = lado * ( 0.54 + hash21( vec2<f32>( fi, 7.0 ) ) * 0.32 );
+      // Inclinación propia: tres postes perfectamente verticales se ven
+      // artificiales, un árbol nunca crece a plomo.
+      let inclina = ( hash21( vec2<f32>( fi, 17.0 ) ) - 0.5 ) * 0.12;
+      // Se mecen apenas, y más arriba que abajo: un tronco no se
+      // desliza entero, se flexiona.
+      let mecer = sin( t * 0.33 + fi * 2.1 ) * 0.010 * uvIn.y * uvIn.y;
+      let cxx = cx + inclina * ( uvIn.y - 0.35 ) + mecer;
+      // Se afina hacia la copa.
+      let ancho = ( 0.028 + hash21( vec2<f32>( fi, 13.0 ) ) * 0.026 ) * ( 1.0 - uvIn.y * 0.28 );
+      let dx = p.x - cxx;
+      let d = abs( dx );
+      let masa = smoothstep( ancho, ancho * 0.82, d );
+      tronco = max( tronco, masa );
+      // Luz de borde: una franja fina sobre el canto que mira al sol.
+      // Es lo que saca al tronco de "mancha negra plana" y le da
+      // volumen sin iluminación de verdad.
+      let haciaElSol = step( 0.0, dx * select( -1.0, 1.0, solPos.x > cxx ) );
+      filoTronco = max( filoTronco, masa * smoothstep( ancho * 0.70, ancho, d ) * haciaElSol );
+    }
+    col = mix( col, vec3<f32>( 0.010, 0.026, 0.024 ), tronco );
+    col = col + vec3<f32>( 1.0, 0.70, 0.38 ) * filoTronco * 0.55;
 
     // ---------- 7. Polen ----------
     // Motas de luz subiendo despacio. Es lo que termina de dar el aire

@@ -40,7 +40,18 @@ export type EstiloBracket = "clasico" | "esports" | "starcraft_oficial" | "tacti
 // Three.js + WebGPURenderer (ver src/components/FondoWebgpu.tsx), sin
 // respaldo a WebGL a propósito -- se suman al catálogo CSS de siempre,
 // no lo reemplazan.
-export type FondoBracketWebgpu = "nebulosa" | "campo_estelar" | "aurora" | "supernova" | "infierno";
+// Migración 218: "bosque_elfico" es el primero que NO es una foto con
+// efectos encima -- se dibuja entero por código (ver
+// src/components/fondos/bosqueElfico.ts). Igual entra en este tipo
+// porque para el resto de la app es lo mismo: un fondo que necesita el
+// motor WebGPU.
+export type FondoBracketWebgpu =
+  | "nebulosa"
+  | "campo_estelar"
+  | "aurora"
+  | "supernova"
+  | "infierno"
+  | "bosque_elfico";
 
 export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2" | FondoBracketWebgpu;
 
@@ -198,6 +209,7 @@ export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "estrellado_2", label: "Estrellado 2" },
   { value: "campo_estelar", label: "Tierra y luna" },
   { value: "nebulosa", label: "Planeta púrpura" },
+  { value: "bosque_elfico", label: "Bosque élfico" },
 ];
 
 // Para decidir si un valor de FondoBracket/FondoLineup necesita el
@@ -220,6 +232,11 @@ export const IMAGEN_FONDO_WEBGPU: Record<FondoBracketWebgpu, string> = {
   aurora: "/fondos-webgpu/campo_estelar.avif",
   supernova: "/fondos-webgpu/campo_estelar.avif",
   infierno: "/fondos-webgpu/campo_estelar.avif",
+  // La miniatura del bosque NO es la escena: es una captura de un
+  // fotograma real, generada rindiendo la escena y guardándola en
+  // AVIF (18 KB). Así el selector muestra lo que se va a ver sin pagar
+  // un canvas WebGPU vivo por cada opción de la lista.
+  bosque_elfico: "/fondos-webgpu/bosque_elfico.avif",
 };
 
 // Migración 183, a pedido del usuario: "modelos" de la tarjeta de
