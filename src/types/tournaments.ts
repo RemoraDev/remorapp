@@ -212,20 +212,16 @@ export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "bosque_elfico", label: "Bosque élfico" },
 ];
 
-// Para decidir si un valor de FondoBracket/FondoLineup necesita el
-// motor WebGPU (FondoWebgpu.tsx, Three.js + WebGPURenderer) en vez de
-// las reglas CSS de siempre.
-export const FONDOS_WEBGPU = ["nebulosa", "campo_estelar", "aurora", "supernova", "infierno"] as const;
-export function esFondoWebgpu(valor: string): valor is FondoBracketWebgpu {
-  return (FONDOS_WEBGPU as readonly string[]).includes(valor);
-}
-
 // Foto base de cada fondo WebGPU (AVIF, códec AV1). Única fuente de
 // verdad: la usa FondoWebgpu.tsx para la escena animada, y también los
 // selectores y el fallback estático para mostrar la misma imagen SIN
 // levantar un WebGPURenderer (ver la nota de rendimiento en
 // FondoWebgpu.tsx -- cada renderer vivo cuesta caro, y una miniatura
 // de selector no necesita animación).
+//
+// El tipo Record<FondoBracketWebgpu, string> es lo que mantiene esto
+// honesto: si mañana se suma un fondo al tipo y se olvida acá, no
+// compila.
 export const IMAGEN_FONDO_WEBGPU: Record<FondoBracketWebgpu, string> = {
   nebulosa: "/fondos-webgpu/nebulosa.avif",
   campo_estelar: "/fondos-webgpu/campo_estelar.avif",
@@ -238,6 +234,23 @@ export const IMAGEN_FONDO_WEBGPU: Record<FondoBracketWebgpu, string> = {
   // un canvas WebGPU vivo por cada opción de la lista.
   bosque_elfico: "/fondos-webgpu/bosque_elfico.avif",
 };
+
+// Para decidir si un valor de FondoBracket/FondoLineup necesita el
+// motor WebGPU (FondoWebgpu.tsx, Three.js + WebGPURenderer) en vez de
+// las reglas CSS de siempre.
+//
+// Se DERIVA de IMAGEN_FONDO_WEBGPU en vez de repetir la lista a mano.
+// Antes era un array hardcodeado aparte, y al sumar "bosque_elfico" al
+// tipo quedó sin actualizar: esFondoWebgpu() devolvía false, así que el
+// selector no dibujaba la miniatura y la página nunca montaba
+// <FondoWebgpu> -- el fondo salía negro. TypeScript no lo podía ver,
+// porque el array se casteaba a readonly string[] para el includes().
+// Derivándolo, el Record de arriba es la única lista que hay que tocar
+// y el compilador ya obliga a completarla.
+export const FONDOS_WEBGPU = Object.keys(IMAGEN_FONDO_WEBGPU) as FondoBracketWebgpu[];
+export function esFondoWebgpu(valor: string): valor is FondoBracketWebgpu {
+  return (FONDOS_WEBGPU as readonly string[]).includes(valor);
+}
 
 // Migración 183, a pedido del usuario: "modelos" de la tarjeta de
 // celebración del campeón ("Ver celebración", ver TournamentDetailPage.tsx)

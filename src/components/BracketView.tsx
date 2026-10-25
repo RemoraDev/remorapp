@@ -326,6 +326,33 @@ export default function BracketView({
         const rFinal = elFinal.getBoundingClientRect();
         const lineasEmbudo: ConectorLinea[] = [];
 
+        // Trazo de la mitad de la llave hacia la Gran Final.
+        //
+        // El escalón de siempre (horizontal, vertical, horizontal) se ve
+        // bien cuando hay un buen desnivel entre las dos cajas. Pero en
+        // el embudo la última ronda de cada mitad y la Final quedan casi
+        // a la MISMA altura y muy cerca en horizontal, así que ese
+        // escalón queda como un diente de unos pocos píxeles: eso es lo
+        // que se lee como zigzag, sobre todo con el guión del láser
+        // corriendo por encima y más todavía al agrandar la llave en
+        // pantalla completa. Acá se elige la forma según la geometría
+        // real en vez de forzar siempre el escalón.
+        const trazoHaciaFinal = (x1: number, y1: number, x2: number, y2: number) => {
+          const desnivel = Math.abs(y2 - y1);
+          // Prácticamente alineadas: una recta y listo.
+          if (desnivel < 2) return `M ${x1} ${y1} H ${x2}`;
+          const hueco = Math.abs(x2 - x1);
+          // Poco espacio horizontal para doblar en ángulo recto: una
+          // curva suave lee como una decisión de diseño, mientras que un
+          // escalón apretado lee como un error.
+          if (hueco < desnivel * 2.5) {
+            const c = (x1 + x2) / 2;
+            return `M ${x1} ${y1} C ${c} ${y1}, ${c} ${y2}, ${x2} ${y2}`;
+          }
+          const xMedio = x1 + (x2 - x1) / 2;
+          return `M ${x1} ${y1} H ${xMedio} V ${y2} H ${x2}`;
+        };
+
         let maxRondaIzq = -1;
         let elIzq: HTMLDivElement | null = null;
         let maxRondaDer = -1;
@@ -349,8 +376,7 @@ export default function BracketView({
           const y1 = r1.top + r1.height / 2 - rectWrap.top;
           const x2 = rFinal.left - rectWrap.left;
           const y2 = rFinal.top + rFinal.height / 2 - rectWrap.top;
-          const xMedio = x1 + (x2 - x1) / 2;
-          lineasEmbudo.push({ key: "embudo-izq-final", d: `M ${x1} ${y1} H ${xMedio} V ${y2} H ${x2}` });
+          lineasEmbudo.push({ key: "embudo-izq-final", d: trazoHaciaFinal(x1, y1, x2, y2) });
         }
 
         if (elDer) {
@@ -359,8 +385,7 @@ export default function BracketView({
           const y1 = r1.top + r1.height / 2 - rectWrap.top;
           const x2 = rFinal.right - rectWrap.left;
           const y2 = rFinal.top + rFinal.height / 2 - rectWrap.top;
-          const xMedio = x1 + (x2 - x1) / 2;
-          lineasEmbudo.push({ key: "embudo-der-final", d: `M ${x1} ${y1} H ${xMedio} V ${y2} H ${x2}` });
+          lineasEmbudo.push({ key: "embudo-der-final", d: trazoHaciaFinal(x1, y1, x2, y2) });
         }
 
         nuevosConectores["embudo-wrap"] = lineasEmbudo;
