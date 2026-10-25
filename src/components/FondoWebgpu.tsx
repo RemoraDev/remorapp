@@ -692,7 +692,8 @@ export default function FondoWebgpu({ variante }: Props) {
     let scene: THREE.Scene | null = null;
     let camera: THREE.PerspectiveCamera | null = null;
     let visible = true;
-    // "conFoco" ya NO mira el foco de la ventana, solo document.hidden.
+    // Se llama "pestanaVisible" y no "conFoco" (como se llamaba antes)
+    // porque ya NO mira el foco de la ventana, solo document.hidden.
     //
     // Antes se pausaba el loop con el evento "blur" de window. Medido:
     // con foco, 92 renders en 4 s; después de un "blur", 1. O sea que
@@ -712,7 +713,7 @@ export default function FondoWebgpu({ variante }: Props) {
     // (Arranca en true a propósito: document.hasFocus() evaluado una
     // sola vez al montar puede dar false y dejar el loop pausado desde
     // antes de dibujar el primer cuadro.)
-    let conFoco = true;
+    let pestanaVisible = true;
     const prefiereMenosMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // performance.now() en vez de THREE.Clock -- la consola lo marca
     // como obsoleto ("Please use THREE.Timer instead"), y Timer no
@@ -765,7 +766,7 @@ export default function FondoWebgpu({ variante }: Props) {
       // Se agenda igual en cada vsync (requestAnimationFrame) pero se
       // saltea el render cuando todavía no pasó el intervalo.
       if (ahora - ultimoFrame < INTERVALO_FRAME) {
-        if (visible && conFoco && !prefiereMenosMovimiento) {
+        if (visible && pestanaVisible && !prefiereMenosMovimiento) {
           rafId = requestAnimationFrame(frame);
         } else {
           rafId = null;
@@ -781,7 +782,7 @@ export default function FondoWebgpu({ variante }: Props) {
       // rAF era la causa más probable de que nunca llegara a presentar
       // un frame (quedaba todo negro).
       renderer.render(scene, camera);
-      if (visible && conFoco && !prefiereMenosMovimiento) {
+      if (visible && pestanaVisible && !prefiereMenosMovimiento) {
         rafId = requestAnimationFrame(frame);
       } else {
         rafId = null;
@@ -793,7 +794,7 @@ export default function FondoWebgpu({ variante }: Props) {
       // programar un frame "gastado" en vano (ver el reset de rafId en
       // frame(), más arriba, que resuelve el caso en que esto se llame
       // de todos modos antes de que termine renderer.init()).
-      if (rafId === null && visible && conFoco && !destruido && renderer && scene && camera) {
+      if (rafId === null && visible && pestanaVisible && !destruido && renderer && scene && camera) {
         rafId = requestAnimationFrame(frame);
       }
     }
@@ -809,12 +810,12 @@ export default function FondoWebgpu({ variante }: Props) {
 
     // Solo visibilitychange: los listeners de "blur"/"focus" de window
     // se sacaron a propósito -- ver la nota larga en la declaración de
-    // conFoco (congelaban el fondo en OBS).
+    // pestanaVisible (congelaban el fondo en OBS).
     const alCambiarVisibilidad = () => {
       if (document.hidden) {
-        conFoco = false;
+        pestanaVisible = false;
       } else {
-        conFoco = true;
+        pestanaVisible = true;
         asegurarLoopCorriendo();
       }
     };
