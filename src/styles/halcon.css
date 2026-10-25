@@ -4455,12 +4455,27 @@ html.es-escritorio .player-detail-panel-inline {
   margin: 0;
   padding: 0;
   border: none;
+  /* Referencia para el título, que sale del flujo justo abajo. */
+  position: relative;
 }
 
 /* Acento dorado propio, a pedido del usuario: se nota de un vistazo
-   que es el partido más importante de la llave (la Gran Final). */
+   que es el partido más importante de la llave (la Gran Final).
+   El position: absolute arregla las líneas que llegaban torcidas a la
+   Gran Final: el contenedor del embudo centra a sus hijos, y mientras
+   el título ocupaba lugar en el flujo, lo que quedaba centrado era el
+   bloque ENTERO (título + tarjeta), así que la TARJETA caía por debajo
+   del centro justo media altura del título. Las semifinales sí están
+   centradas, de ahí el desnivel y el escalón feo del conector. Sacando
+   el título del flujo, la tarjeta queda centrada de verdad y el trazo
+   entra recto. */
 .bracket-embudo-final .bracket-round-title {
   color: #fde047;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  margin-bottom: 0.4rem;
 }
 
 .bracket-embudo-final .bracket-match {

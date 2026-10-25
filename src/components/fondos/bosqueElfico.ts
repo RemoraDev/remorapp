@@ -97,7 +97,10 @@ const BOSQUE_WGSL = wgslFn(
     // Mucho más finas y altas que en la primera versión: con el umbral
     // bajo y la escala grande tapaban el cielo entero y toda la escena
     // quedaba con aspecto de día nublado.
-    let nube = fbm( vec2<f32>( p.x * 3.4 + t * 0.013, uvIn.y * 7.0 ) );
+    // El 0.013 de antes era tan lento que el usuario directamente no
+    // veía moverse las nubes. Además se deforman con el tiempo (el
+    // segundo eje también avanza), así que no es un calco corriéndose.
+    let nube = fbm( vec2<f32>( p.x * 3.4 + t * 0.055, uvIn.y * 7.0 + t * 0.012 ) );
     let altoCielo = smoothstep( 0.52, 0.98, uvIn.y );
     col = mix( col, vec3<f32>( 1.0, 0.86, 0.72 ), smoothstep( 0.60, 0.95, nube ) * altoCielo * 0.35 );
 
@@ -167,6 +170,7 @@ const BOSQUE_WGSL = wgslFn(
     // ni el centro a lo que se muestre encima del fondo.
     var tronco = 0.0;
     var filoTronco = 0.0;
+    var copa = 0.0;
     for ( var i = 0; i < 3; i = i + 1 ) {
       let fi = f32( i );
       let lado = select( -1.0, 1.0, hash21( vec2<f32>( fi, 31.0 ) ) > 0.45 );
@@ -189,9 +193,38 @@ const BOSQUE_WGSL = wgslFn(
       // volumen sin iluminación de verdad.
       let haciaElSol = step( 0.0, dx * select( -1.0, 1.0, solPos.x > cxx ) );
       filoTronco = max( filoTronco, masa * smoothstep( ancho * 0.70, ancho, d ) * haciaElSol );
+
+      // COPA del árbol. Faltaba: los troncos subían rectos hasta salirse
+      // del cuadro y el usuario solo veía postes, sin una sola hoja. La
+      // copa cuelga desde arriba alrededor de la x del tronco, así que
+      // tronco y follaje se leen como un mismo árbol.
+      //
+      // La forma es ruido fractal recortado contra una campana centrada
+      // en el tronco: el ruido da el borde dentado de las hojas y la
+      // campana hace que sea una masa redondeada y no una franja.
+      let vientoCopa = sin( t * 0.62 + fi * 1.7 ) * 0.045 + sin( t * 0.37 + fi * 3.3 ) * 0.025;
+      // El viento mueve MÁS las hojas de los extremos que las del
+      // centro, que es donde la rama es gruesa y no cede.
+      let desvio = vientoCopa * smoothstep( 0.0, 0.30, abs( dx ) );
+      // Copa REDONDA, medida como distancia a un centro que está por
+      // encima del borde superior del cuadro (así la copa entra en
+      // escena colgando). Antes era una campana vertical y el ruido se
+      // escapaba por abajo formando goterones: una copa es una masa
+      // redondeada, así que hay que medirla de forma radial.
+      let centroCopaY = 1.02 + hash21( vec2<f32>( fi, 41.0 ) ) * 0.10;
+      // El 1.45 achata la copa: un círculo perfecto se ve a globo.
+      let rel = vec2<f32>( p.x - cxx + desvio, ( uvIn.y - centroCopaY ) * 1.45 );
+      let radio = 0.30 + hash21( vec2<f32>( fi, 53.0 ) ) * 0.12;
+      // El ruido se le suma al RADIO, no al relleno: así dentella el
+      // borde (que es lo que hace leer "hojas") sin agujerear el centro.
+      let dentado = ( fbm( vec2<f32>( ( p.x - cxx ) * 7.0 + desvio * 2.0, uvIn.y * 7.0 ) ) - 0.5 ) * 0.30;
+      copa = max( copa, smoothstep( 0.012, -0.012, length( rel ) - ( radio + dentado ) ) );
     }
     col = mix( col, vec3<f32>( 0.010, 0.026, 0.024 ), tronco );
     col = col + vec3<f32>( 1.0, 0.70, 0.38 ) * filoTronco * 0.55;
+    // Las hojas van DESPUÉS del tronco: una copa pasa por delante de su
+    // propio tronco, no por detrás.
+    col = mix( col, vec3<f32>( 0.020, 0.052, 0.040 ), copa );
 
     // ---------- 7. Polen ----------
     // Motas de luz subiendo despacio. Es lo que termina de dar el aire
