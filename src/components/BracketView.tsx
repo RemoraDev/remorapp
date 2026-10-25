@@ -404,27 +404,6 @@ export default function BracketView({
   // llave, sin secciones).
   const esEliminacionDoble = matches.some((m) => m.bracket_tipo !== "ganadores" && !m.es_tercer_lugar);
 
-  // Corrección QA/UX: el modo "organizador en vivo" (clic directo
-  // reporta sin confirmar, ver esOrganizadorLive en renderPartido) se
-  // veía visualmente IGUAL al autoreporte normal de jugador -- mismo
-  // riesgo que el aviso de arriba, acá sirve para mostrar un recordatorio
-  // fijo y pintar los recuadros elegibles con un estilo distinto
-  // (ver .bracket-slot-organizador-live en halcon.css). El `some(...)`
-  // evita mostrar el aviso cuando no hay NINGÚN partido al que de
-  // verdad le aplique el modo en vivo (ej. una llave con Clan War
-  // vinculada, o ya completamente jugada) -- mismas condiciones que
-  // esOrganizadorLive más abajo, sin repetirlas partido por partido.
-  const modoOrganizadorLive =
-    userId === organizadorId &&
-    !esEliminacionDoble &&
-    matches.some(
-      (m) =>
-        !m.clan_war_id &&
-        !!m.participant1_id &&
-        !!m.participant2_id &&
-        (m.status === "pendiente" || m.status === "jugado")
-    );
-
   // Migración 189, a pedido del usuario: a partir de 16 participantes
   // (ronda 1 con 8 partidos o más) una sola imagen de llave se vuelve
   // difícil de leer -- se parte en grupos de 8 (Grupo A, Grupo B), cada
@@ -1064,17 +1043,6 @@ export default function BracketView({
       </div>
     );
 
-  // Corrección QA/UX: aviso fijo arriba de la llave mientras el modo
-  // "organizador en vivo" está activo -- antes no había ninguna señal
-  // de que un clic ahí reporta en firme sin confirmar (ver
-  // modoOrganizadorLive y esOrganizadorLive más arriba).
-  const renderAvisoOrganizadorLive = () =>
-    modoOrganizadorLive && (
-      <p className="bracket-organizador-live-aviso">
-        Modo organizador: un clic reporta el resultado al instante, sin confirmar. Volvé a hacer clic para deshacerlo.
-      </p>
-    );
-
   const renderEmbudo = () => {
     const partidosSinTercerLugar = matches.filter((m) => !m.es_tercer_lugar);
     const { izquierda, derecha, final } = partidosParaEmbudo(partidosSinTercerLugar);
@@ -1186,7 +1154,6 @@ export default function BracketView({
     return (
       <>
         {renderBanner()}
-        {renderAvisoOrganizadorLive()}
 
         {/* Migración 199, a pedido del usuario: estos 3 botones quedaban
             adentro de la caja donde se dibuja la llave -- con tabsSlotEl
@@ -1224,7 +1191,6 @@ export default function BracketView({
     return (
       <>
         {renderBanner()}
-        {renderAvisoOrganizadorLive()}
         {renderEmbudo()}
         {partidoTercerLugar && (
           <div className="bracket-tercer-lugar" data-estilo-bracket={estilo}>
@@ -1245,7 +1211,6 @@ export default function BracketView({
     return (
       <>
         {renderBanner()}
-        {renderAvisoOrganizadorLive()}
 
         <div className="bracket-round-title bracket-seccion-titulo">Llave de ganadores</div>
         {renderGrilla(armarGrilla(partidosGanadores, !!nombresRondaPersonalizados, false), "ganadores")}

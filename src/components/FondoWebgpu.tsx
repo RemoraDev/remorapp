@@ -14,8 +14,10 @@ import {
   smoothstep,
   rotateUV,
   uniform,
+  wgslFn,
   min as tslMin,
 } from "three/tsl";
+import { isTauri } from "@tauri-apps/api/core";
 import { IMAGEN_FONDO_WEBGPU } from "../types/tournaments";
 import type { FondoBracketWebgpu } from "../types/tournaments";
 
@@ -326,16 +328,166 @@ function crearCieloDinamico(scene: THREE.Scene): Updater {
   };
 }
 
+// ---------------------------------------------------------------------
+// "Darle vida" a la foto: atmósfera, nubes en movimiento, aurora y luces
+// nocturnas, en WGSL escrito a mano (wgslFn), no componiendo nodos TSL.
+//
+// Por qué WGSL crudo: con nodos TSL cada operación es un objeto y no hay
+// forma de meter una rama; acá puedo saltear por completo el cálculo caro
+// en los píxeles que son espacio vacío (la mayoría), y controlar el costo
+// instrucción por instrucción. wgslFn recibe los parámetros ya evaluados
+// como nodos, así que el muestreo de la textura sigue haciéndose en TSL.
+//
+// Por qué la geometría sale de la FOTO y no de un disco hardcodeado:
+// medí ambas imágenes (scripts/medir-discos-fondos.mjs) ajustando una
+// circunferencia al cuerpo del planeta, y el error dio 28-40% del radio
+// -- con un planeta parcialmente iluminado, un umbral de brillo recorta
+// una MEDIALUNA, y el borde de esa medialuna incluye el terminador, que
+// no está sobre el limbo. Un círculo fijo quedaría desalineado. En
+// cambio, el gradiente de brillo de la propia foto da gratis:
+//   - su MAGNITUD marca el limbo (el borde iluminado del planeta),
+//   - su DIRECCIÓN apunta de la sombra hacia la luz (la normal aparente),
+//   - su PERPENDICULAR da la tangente al limbo, que es por donde corren
+//     las bandas de un planeta real.
+// Eso se auto-alinea con la foto, sobrevive al zoom/balanceo Ken Burns, y
+// sigue funcionando si mañana se cambian las imágenes.
+//
+// El parser de wgslFn toma SOLO la primera función de cada bloque (su
+// regex está anclado con ^), así que los helpers van por "includes".
+//
+// El cast: @types/three tipa `includes` como CodeNodeInclude (un objeto
+// con build()), pero wgslFn() devuelve una función invocable que envuelve
+// al FunctionNode, y pasarla directo es justamente lo que documenta el
+// propio build de three en su ejemplo de wgslFn. Los includes se cachean
+// por nodo al generarse, así que repetir uno no lo duplica en el WGSL.
+type IncludeWgsl = { build(builder: unknown): void };
+const comoInclude = (fn: unknown) => fn as IncludeWgsl;
+const HASH_WGSL = wgslFn(/* wgsl */ `
+  fn hash21( p: vec2<f32> ) -> f32 {
+    var p3 = fract( vec3<f32>( p.x, p.y, p.x ) * 0.1031 );
+    p3 = p3 + dot( p3, p3.yzx + 33.33 );
+    return fract( ( p3.x + p3.y ) * p3.z );
+  }
+`);
+
+const RUIDO_WGSL = wgslFn(
+  /* wgsl */ `
+  fn ruido( p: vec2<f32> ) -> f32 {
+    let i = floor( p );
+    let f = fract( p );
+    let u = f * f * ( 3.0 - 2.0 * f );
+    let a = hash21( i );
+    let b = hash21( i + vec2<f32>( 1.0, 0.0 ) );
+    let c = hash21( i + vec2<f32>( 0.0, 1.0 ) );
+    let d = hash21( i + vec2<f32>( 1.0, 1.0 ) );
+    return mix( mix( a, b, u.x ), mix( c, d, u.x ), u.y );
+  }
+`,
+  [comoInclude(HASH_WGSL)],
+);
+
+const darVida = wgslFn(
+  /* wgsl */ `
+  fn darVida(
+    base: vec3<f32>,
+    lumDer: f32,
+    lumIzq: f32,
+    lumAba: f32,
+    lumArr: f32,
+    rgbAncha: vec3<f32>,
+    uvImg: vec2<f32>,
+    t: f32,
+    vineta: f32,
+    colAtmo: vec3<f32>,
+    ajustes: vec4<f32>
+  ) -> vec4<f32> {
+    let lum = dot( base, vec3<f32>( 0.299, 0.587, 0.114 ) );
+
+    // Geometría derivada de la foto (ver nota larga arriba).
+    let grad = vec2<f32>( lumDer - lumIzq, lumAba - lumArr );
+    let gmag = length( grad );
+    let normal = select( vec2<f32>( 0.0, -1.0 ), grad / max( gmag, 0.00001 ), gmag > 0.00001 );
+    let tang = vec2<f32>( -normal.y, normal.x );
+
+    // (Ojo: estos bloques WGSL viven dentro de un template literal de JS.
+    // Nada de comillas invertidas ni de dólar-llave acá adentro: cortan la
+    // cadena en silencio y el shader se emite truncado, sin que tsc ni vite
+    // se quejen. Lo caza scripts/revisar-wgsl-fondos.mjs.)
+    let limbo = smoothstep( 0.011, 0.10, gmag );
+
+    var col = base * vineta;
+
+    // --- Velo atmosférico: turbulencia lenta, SOLO en la banda del limbo ---
+    // Antes esto estampaba "nubes" sobre toda la cara iluminada, y el
+    // resultado era una luna con clima: un cuerpo sin atmósfera cubierto de
+    // nubes en movimiento. Se ve llamativo y es falso. La atmósfera está
+    // donde está el limbo, así que la turbulencia modula el HALO y no la
+    // roca: las superficies sólidas quedan tal cual las trae la foto.
+    // Además la rama se saltea en el espacio vacío y en el interior de los
+    // cuerpos, que entre los dos son casi todos los píxeles del cuadro.
+    var halo = limbo;
+    if ( ajustes.x > 0.0 && limbo > 0.01 ) {
+      // El flujo corre PARALELO al limbo, como las bandas de latitud.
+      var p = uvImg * 9.0 + tang * t * 0.035;
+      // Warp de dominio: una octava arrastra a la otra -> remolinos en vez
+      // de un patrón plano y repetido.
+      let w = ruido( p * 0.6 + vec2<f32>( t * 0.015, 0.0 ) );
+      p = p + vec2<f32>( w, w * 0.6 ) * 1.1;
+      var n = ruido( p );
+      // La segunda octava (el detalle fino del velo) sólo en escritorio:
+      // es el único efecto caro que queda, así que es lo que define el
+      // escalón de calidad.
+      if ( ajustes.z > 0.5 ) {
+        n = n * 0.65 + ruido( p * 2.4 ) * 0.35;
+      }
+      halo = limbo * mix( 1.0, 0.45 + 1.1 * n, ajustes.x );
+    }
+
+    // --- Atmósfera: dispersión en el limbo, respirando lento ---
+    // El (1 - lum) evita quemar el limbo donde la foto YA está al máximo:
+    // sumar parejo ahí sólo recorta a blanco y se come el detalle que la
+    // foto ya tenía.
+    let respira = 0.85 + 0.15 * sin( t * 0.55 );
+    col = col + colAtmo * halo * respira * 0.30 * ( 1.0 - 0.75 * lum );
+
+    // --- Floración de lente ---
+    // Lo que ya está muy brillante se derrama sobre lo que lo rodea, que es
+    // lo que hace una óptica real y lo que separa un render "plano" de una
+    // foto. Sale casi gratis: rgbAncha es un nivel bajo de mipmap, o sea un
+    // desenfoque de decenas de píxeles por UNA sola lectura de textura.
+    col = col + max( rgbAncha - vec3<f32>( 0.42 ), vec3<f32>( 0.0 ) ) * ajustes.y;
+
+    return vec4<f32>( col, 1.0 );
+  }
+`,
+  [comoInclude(RUIDO_WGSL), comoInclude(HASH_WGSL)],
+);
+
+// Calidad: en escritorio (Tauri) se habilitan los efectos más caros. En
+// web/mobile se bajan, tal como pidió el usuario ("en mobile sí o sí dará
+// lag"). Se evalúa una sola vez al cargar el módulo.
+const CALIDAD = isTauri() ? 1 : 0;
+
+// Parámetros de "vida" por foto. Son estéticos, no geométricos: la
+// geometría la saca el shader de la imagen, así que esto no se desalinea.
+interface AlmaFondo {
+  /** Color de la dispersión atmosférica del limbo. */
+  atmo: [number, number, number];
+  /** Cuánta turbulencia lenta agita el halo (0 = halo liso). */
+  velo: number;
+  /** Fuerza de la floración de lente sobre las zonas ya brillantes. */
+  floracion: number;
+}
+
 // Fábrica de escenas basadas en una foto real (no textura procedural
 // de canvas) -- a pedido del usuario tras ver que las escenas
 // dibujadas a mano se veían "feas y poco modernas". La imagen se sirve
 // pre-convertida a AVIF (códec AV1) desde /public/fondos-webgpu/ y los
-// efectos sobre ella (zoom lento, balanceo, viñeta, destellos, halo de
-// luz en los bordes brillantes) se calculan en GPU vía TSL (three/tsl)
-// con colorNode sobre un MeshBasicNodeMaterial -- NO con CPU por frame,
-// y NO con THREE.ShaderMaterial (ver nota al principio del archivo:
-// ese no funciona con WebGPURenderer).
-function crearEscenaImagen(rutaImagen: string): (scene: THREE.Scene) => Promise<ResultadoEscena> {
+// efectos sobre ella (zoom lento, balanceo, viñeta, y todo lo de
+// darVida()) se calculan en GPU -- NO con CPU por frame, y NO con
+// THREE.ShaderMaterial (ver nota al principio del archivo: ese no
+// funciona con WebGPURenderer).
+function crearEscenaImagen(rutaImagen: string, alma: AlmaFondo): (scene: THREE.Scene) => Promise<ResultadoEscena> {
   return function escena(scene: THREE.Scene): Promise<ResultadoEscena> {
     scene.fog = new THREE.FogExp2("#040611", 0.004);
 
@@ -384,45 +536,49 @@ function crearEscenaImagen(rutaImagen: string): (scene: THREE.Scene) => Promise<
 
           const base = texture(tex, uvFinal);
 
-          // Halo/iluminación en los bordes brillantes (limbo del
-          // planeta): varias muestras alrededor del píxel actual,
-          // promediando cuáles son bastante brillantes -- un bloom
-          // barato sin pasada de post-proceso aparte.
-          // Rendimiento: eran 8 muestras (más las 4 diagonales). Cada una
-          // es un sample completo de textura POR PÍXEL -- con 9 samples en
-          // total (base + halo) y varias instancias a la vez, era una de
-          // las causas del lag. Con 4 en diagonal y el radio un poco más
-          // grande el halo se ve prácticamente igual, a la mitad de costo.
-          const RADIO_HALO = 0.016;
-          const direcciones: [number, number][] = [
-            [0.7, 0.7],
-            [-0.7, 0.7],
-            [0.7, -0.7],
-            [-0.7, -0.7],
-          ];
-          const muestrasHalo = direcciones.map(([dx, dy]) => {
-            const muestra = texture(tex, uvFinal.add(vec2(dx * RADIO_HALO, dy * RADIO_HALO)));
-            const luminancia = muestra.r.mul(0.299).add(muestra.g.mul(0.587)).add(muestra.b.mul(0.114));
-            return smoothstep(float(0.5), float(0.92), luminancia);
-          });
-          const halo = muestrasHalo.reduce((a, b) => a.add(b)).div(direcciones.length);
+          // 4 muestras vecinas en cruz (no en diagonal): además de servir
+          // para el halo, dan el GRADIENTE de brillo de la foto, que es de
+          // donde sale toda la geometría que usa darVida() -- ver la nota
+          // larga arriba de VIDA_WGSL.
+          // Radio chico a propósito: con 0.014 el gradiente se detectaba en
+          // un anillo DESPEGADO del borde real y el halo salía como un arco
+          // flotando al lado del cuerpo.
+          const RADIO_TAP = 0.005;
+          const tap = (dx: number, dy: number) => {
+            const m = texture(tex, uvFinal.add(vec2(dx * RADIO_TAP, dy * RADIO_TAP)));
+            return m.r.mul(0.299).add(m.g.mul(0.587)).add(m.b.mul(0.114));
+          };
 
           // Viñeta suave hacia los bordes del plano (no de la imagen
           // recortada) para que se funda con el resto de la tarjeta.
           const distCentro = length(uv().sub(centro));
           const vineta = smoothstep(float(0.72), float(0.16), distCentro);
-          const brillo = vineta.mul(0.6).add(0.4);
 
-          // Rendimiento: acá había un mx_fractal_noise_float (2 octavas de
-          // ruido de gradiente) evaluado POR PÍXEL para unos destellos
-          // atmosféricos muy sutiles. Era lo más caro del shader y casi no
-          // se notaba -- el parpadeo que sí se ve es el de las estrellas,
-          // que son geometría aparte. Sacado.
-          const colorHalo = vec3(0.55, 0.68, 1.0).mul(halo).mul(0.45);
-          const colorFinal = base.rgb.mul(brillo).add(colorHalo);
+          // Vecindario ANCHO, de un nivel bajo de mipmap: una sola lectura
+          // da un desenfoque real de decenas de píxeles, que es lo que
+          // alimenta la floración de lente. Hacerlo a taps costaría varias
+          // lecturas y aun así sería un vecindario a puntos, no un
+          // promedio.
+          const borroso = texture(tex, uvFinal).level(float(5));
+
+          const colorFinal = darVida({
+            base: base.rgb,
+            lumDer: tap(1, 0),
+            lumIzq: tap(-1, 0),
+            lumAba: tap(0, 1),
+            lumArr: tap(0, -1),
+            rgbAncha: borroso.rgb,
+            uvImg: uvFinal,
+            t: time,
+            vineta: vineta.mul(0.6).add(0.4),
+            colAtmo: vec3(alma.atmo[0], alma.atmo[1], alma.atmo[2]),
+            ajustes: vec4(alma.velo, alma.floracion, CALIDAD, 0),
+          });
 
           const mat = new MeshBasicNodeMaterial({ transparent: false, depthWrite: false });
-          mat.colorNode = vec4(colorFinal, 1);
+          // darVida() devuelve vec4<f32> (ver su firma), pero wgslFn tipa su
+          // retorno como el Node genérico y TS no puede inferir el tipo.
+          mat.colorNode = colorFinal as typeof mat.colorNode;
 
           // Plano unitario (1x1) escalado en cada resize para cubrir
           // exactamente el encuadre de la cámara -- ver
@@ -460,8 +616,21 @@ function crearEscenaImagen(rutaImagen: string): (scene: THREE.Scene) => Promise<
 // se reparten entre las fotos reales aprobadas hasta ahora -- el resto
 // usa "campo_estelar" (Tierra y luna) como default hasta que se sumen
 // más fotos.
-const escenaCampoEstelar = crearEscenaImagen(IMAGEN_FONDO_WEBGPU.campo_estelar);
-const escenaNebulosa = crearEscenaImagen(IMAGEN_FONDO_WEBGPU.nebulosa);
+// Tierra y luna: atmósfera azul de dispersión Rayleigh.
+const escenaCampoEstelar = crearEscenaImagen(IMAGEN_FONDO_WEBGPU.campo_estelar, {
+  atmo: [0.34, 0.6, 1.0],
+  velo: 0.55,
+  floracion: 0.55,
+});
+
+// Planeta púrpura: atmósfera magenta. Velo más agitado (es un mundo con
+// mucha más nubosidad en el limbo) y floración algo menor, porque la foto
+// ya trae una nebulosa brillante de fondo y se empasta.
+const escenaNebulosa = crearEscenaImagen(IMAGEN_FONDO_WEBGPU.nebulosa, {
+  atmo: [0.85, 0.35, 1.0],
+  velo: 0.7,
+  floracion: 0.45,
+});
 
 const ESCENAS: Record<FondoBracketWebgpu, (scene: THREE.Scene) => Promise<ResultadoEscena>> = {
   nebulosa: escenaNebulosa,
@@ -538,6 +707,7 @@ export default function FondoWebgpu({ variante }: Props) {
     const inicio = performance.now();
     let ultimoFrame = 0;
     let resultado: ResultadoEscena | null = null;
+    let canvasCreado: HTMLCanvasElement | null = null;
 
     function redimensionar() {
       if (!renderer || !camera || !container) return;
@@ -642,6 +812,9 @@ export default function FondoWebgpu({ variante }: Props) {
     (async () => {
       try {
         const canvas = document.createElement("canvas");
+        // Se guarda la referencia afuera para poder sacarlo del DOM en el
+        // cleanup -- ver la nota sobre el canvas huérfano, más abajo.
+        canvasCreado = canvas;
         renderer = new WebGPURenderer({ canvas, antialias: true, alpha: false });
         await renderer.init();
         if (destruido) {
@@ -699,6 +872,16 @@ export default function FondoWebgpu({ variante }: Props) {
         else mat?.dispose();
       });
       renderer?.dispose();
+      // Bug real: el canvas se agregaba con appendChild pero nunca se
+      // sacaba. Al cambiar de fondo (cambia "variante" -> corre este
+      // cleanup y después se arma la escena nueva), el canvas viejo
+      // quedaba en el DOM congelado en su último frame, y el nuevo se
+      // agregaba DEBAJO -- como el canvas es display:block al 100% de
+      // alto y el contenedor tiene overflow:hidden, el nuevo quedaba
+      // recortado fuera de vista. Se seguía viendo el fondo anterior y
+      // solo cambiaba recargando la página con F5.
+      canvasCreado?.remove();
+      canvasCreado = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [variante]);
