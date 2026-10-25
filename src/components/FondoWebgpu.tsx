@@ -690,15 +690,26 @@ export default function FondoWebgpu({ variante }: Props) {
     let scene: THREE.Scene | null = null;
     let camera: THREE.PerspectiveCamera | null = null;
     let visible = true;
-    // Corrección QA: arrancar en true (no "!document.hidden &&
-    // document.hasFocus()") -- ese chequeo se evalúa UNA sola vez, al
-    // montar, y document.hasFocus() puede dar false ahí mismo (recién
-    // cargada la página, antes de cualquier click adentro, o con
-    // DevTools con el foco) sin que ningún evento "focus" futuro lo
-    // corrija nunca -- el loop de render quedaba "pausado" desde
-    // antes de arrancar y nunca llegaba a dibujar el primer frame.
-    // Arrancar siempre en true y dejar que blur/visibilitychange lo
-    // pausen más tarde si de verdad corresponde es seguro.
+    // "conFoco" ya NO mira el foco de la ventana, solo document.hidden.
+    //
+    // Antes se pausaba el loop con el evento "blur" de window. Medido:
+    // con foco, 92 renders en 4 s; después de un "blur", 1. O sea que
+    // el fondo quedaba congelado, y solo revivía con un "focus".
+    //
+    // Eso rompe justo el caso para el que se hizo esto: una fuente de
+    // navegador de OBS no tiene foco de ventana, así que el overlay del
+    // streamer se congelaba en un cuadro. Y perder el foco no es razón
+    // para dejar de dibujar: la ventana puede seguir perfectamente a la
+    // vista (o estar siendo capturada) mientras el usuario clickea otra
+    // cosa.
+    //
+    // Los dos casos en que SÍ hay que pausar siguen cubiertos, y mejor:
+    // la pestaña oculta por document.hidden (acá), y el fondo fuera de
+    // la vista por el IntersectionObserver de más abajo.
+    //
+    // (Arranca en true a propósito: document.hasFocus() evaluado una
+    // sola vez al montar puede dar false y dejar el loop pausado desde
+    // antes de dibujar el primer cuadro.)
     let conFoco = true;
     const prefiereMenosMovimiento = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     // performance.now() en vez de THREE.Clock -- la consola lo marca
@@ -794,19 +805,17 @@ export default function FondoWebgpu({ variante }: Props) {
     );
     observer.observe(container);
 
-    const alPerderFoco = () => {
-      conFoco = false;
-    };
-    const alGanarFoco = () => {
-      conFoco = true;
-      asegurarLoopCorriendo();
-    };
+    // Solo visibilitychange: los listeners de "blur"/"focus" de window
+    // se sacaron a propósito -- ver la nota larga en la declaración de
+    // conFoco (congelaban el fondo en OBS).
     const alCambiarVisibilidad = () => {
-      if (document.hidden) alPerderFoco();
-      else alGanarFoco();
+      if (document.hidden) {
+        conFoco = false;
+      } else {
+        conFoco = true;
+        asegurarLoopCorriendo();
+      }
     };
-    window.addEventListener("blur", alPerderFoco);
-    window.addEventListener("focus", alGanarFoco);
     document.addEventListener("visibilitychange", alCambiarVisibilidad);
 
     (async () => {
@@ -861,8 +870,6 @@ export default function FondoWebgpu({ variante }: Props) {
       if (rafId !== null) cancelAnimationFrame(rafId);
       observer.disconnect();
       resizeObserver.disconnect();
-      window.removeEventListener("blur", alPerderFoco);
-      window.removeEventListener("focus", alGanarFoco);
       document.removeEventListener("visibilitychange", alCambiarVisibilidad);
       scene?.traverse((obj) => {
         const mesh = obj as THREE.Mesh;
