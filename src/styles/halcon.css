@@ -1983,12 +1983,15 @@ a.eventos-tab:hover {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Fondo WebGL (ver src/components/FondoWebgl.tsx) -- mismo lugar que
+/* Fondo WebGPU (ver src/components/FondoWebgpu.tsx) -- mismo lugar que
    ocupan los ::before/::after del motor CSS (position:absolute,
-   cubriendo todo el contenedor con position:relative de siempre), acá
-   un <canvas> real en vez de un pseudo-elemento. pointer-events:none
-   para que nunca tape un click al contenido de encima. */
-.fondo-webgl-canvas {
+   cubriendo todo el contenedor con position:relative de siempre). Acá
+   es un <div> contenedor (no directamente el <canvas>, porque
+   WebGPURenderer.init() es async -- el canvas real recién se agrega
+   como hijo una vez que el renderer terminó de inicializar).
+   pointer-events:none para que nunca tape un click al contenido de
+   encima. */
+.fondo-webgl-canvas-wrap {
   position: absolute;
   inset: 0;
   /* -1, no 0: en .overlay-page (y en general) el contenido real son
@@ -2002,6 +2005,26 @@ a.eventos-tab:hover {
   width: 100%;
   height: 100%;
   pointer-events: none;
+  overflow: hidden;
+}
+
+/* Foto estática del fondo WebGPU: misma imagen y mismo encuadre que la
+   escena animada, pero sin renderer. La usan las miniaturas de los
+   selectores y las instancias que exceden MAX_RENDERERS_VIVOS (ver la nota
+   de rendimiento en FondoWebgpu.tsx). */
+.fondo-webgpu-estatico {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+.fondo-webgl-canvas-wrap canvas {
+  width: 100%;
+  height: 100%;
   display: block;
 }
 
@@ -4591,6 +4614,16 @@ html.es-escritorio .player-detail-panel-inline {
 
 .tournament-bracket-wrap {
   position: relative;
+  /* Corrección QA/UX (fondo WebGPU): .fondo-webgl-canvas-wrap usa
+     z-index:-1 para quedar siempre detrás del contenido real sin
+     depender de que ese contenido tenga su propio z-index (ver el
+     comentario en esa clase). Pero position:relative SOLO no alcanza
+     para que el z-index negativo quede contenido ACÁ adentro -- sin
+     un contexto de apilamiento propio, un hijo z-index:-1 puede
+     terminar detrás de TODA la página (otros ancestros), no solo
+     detrás de sus hermanos. isolation:isolate fuerza ese contexto
+     propio, sin tener que tocar el z-index de nada más. */
+  isolation: isolate;
   margin-top: 1rem;
   /* El botón de pantalla completa (acá abajo, .bracket-pantalla-completa-btn)
      es position: absolute DENTRO de esta misma caja -- sin este
@@ -5103,6 +5136,7 @@ html.es-escritorio .player-detail-panel-inline {
    en una caja chica. */
 .bracket-fondo-preview {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   width: 5.5rem;
   height: 3.75rem;
@@ -5911,11 +5945,15 @@ html.es-escritorio .player-detail-panel-inline {
    tarjeta: acá solo viven las sub-pestañas y sus selectores, tiene que
    quedarse legible. */
 .clan-war-lineup-room {
-  /* position:relative para anclar el <canvas> del fondo WebGL (ver
-     .fondo-webgl-canvas) -- sin overflow:hidden a propósito, el canvas
-     usa inset:0 (nunca se sale del borde) y este panel sí necesita
-     que algún contenido propio (ej. un desplegable) pueda sobresalir. */
+  /* position:relative para anclar el <div> del fondo WebGPU (ver
+     .fondo-webgl-canvas-wrap) -- sin overflow:hidden a propósito, el
+     div usa inset:0 (nunca se sale del borde) y este panel sí
+     necesita que algún contenido propio (ej. un desplegable) pueda
+     sobresalir. isolation:isolate sí hace falta (no recorta nada,
+     solo contiene el z-index:-1 del fondo) -- ver el comentario en
+     .tournament-bracket-wrap. */
   position: relative;
+  isolation: isolate;
   padding: 1.25rem 1rem 1rem;
   border-radius: var(--radius-lg);
   border: 1px solid var(--color-border);
@@ -6046,6 +6084,7 @@ html.es-escritorio .player-detail-panel-inline {
    .bracket-fondo-preview, clase propia para no compartir selector. */
 .lineup-fondo-preview {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
   width: 4rem;
   height: 3rem;
@@ -6086,6 +6125,9 @@ html.es-escritorio .player-detail-panel-inline {
    con el resto de su composición. */
 .lineup-card {
   position: relative;
+  /* isolation:isolate -- ver el comentario en .tournament-bracket-wrap,
+     mismo motivo (contener el z-index:-1 del fondo WebGPU). */
+  isolation: isolate;
   overflow: hidden;
   border-radius: var(--radius-xl);
   background-color: #06080c;
@@ -8743,11 +8785,12 @@ body.overlay-obs {
 }
 
 .overlay-page {
-  /* position:relative para anclar el <canvas> del fondo WebGL (ver
-     .fondo-webgl-canvas) cuando el torneo elige uno -- el resto de los
-     fondos (o "ninguno") no se ven afectados, el overlay sigue
-     transparente de siempre en ese caso. */
+  /* position:relative + isolation:isolate para anclar y contener el
+     <div> del fondo WebGPU (ver .fondo-webgl-canvas-wrap) cuando el
+     torneo elige uno -- el resto de los fondos (o "ninguno") no se ven
+     afectados, el overlay sigue transparente de siempre en ese caso. */
   position: relative;
+  isolation: isolate;
   min-height: 100vh;
   padding: 1.5rem;
   display: flex;
@@ -10301,6 +10344,7 @@ body.overlay-obs {
    de abajo; con "ninguno" seleccionado, queda el de siempre. */
 .guerra-razas-page {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
 }
 
@@ -12571,6 +12615,393 @@ html.es-escritorio .escritorio-chat-fijo {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+}
+
+/* ---------- "¿Quién es tu papi?" -- Eventos OSR (migración 214) ---------- */
+
+.osr-header {
+  margin-bottom: 1rem;
+  padding-right: 2rem;
+}
+
+.osr-titulo {
+  margin: 0 0 0.15rem;
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.osr-subtitulo {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+.osr-temporada-activa {
+  margin: 0.35rem 0 0;
+  font-size: 0.85rem;
+  color: var(--color-accent);
+}
+
+.osr-tabs {
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.osr-contenido {
+  min-height: 12rem;
+  animation: osr-fade-in 0.25s ease;
+}
+
+@keyframes osr-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .osr-contenido {
+    animation: none;
+  }
+}
+
+.osr-section-spacer {
+  margin-top: 1.75rem;
+}
+
+.osr-insignia-papi {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #0a0a0f;
+  background: linear-gradient(135deg, #ffd76a, #ff9f43);
+}
+
+.osr-insignia-papi-dios {
+  background: linear-gradient(135deg, #fff2b8, #ffcf3d);
+  box-shadow: 0 0 10px rgba(255, 207, 61, 0.6);
+}
+
+.osr-raza {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid var(--osr-raza-1);
+  color: var(--osr-raza-1);
+  background: color-mix(in srgb, var(--osr-raza-1) 14%, transparent);
+}
+
+.osr-raza-terran {
+  --osr-raza-1: #8fc0ec;
+  --osr-raza-2: #3f6ea5;
+}
+.osr-raza-zerg {
+  --osr-raza-1: #d3a6ec;
+  --osr-raza-2: #7d3fa0;
+}
+.osr-raza-protoss {
+  --osr-raza-1: #f5d68a;
+  --osr-raza-2: #d4af37;
+}
+
+.osr-razas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+
+.osr-raza-card {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--osr-raza-2);
+  background: linear-gradient(160deg, color-mix(in srgb, var(--osr-raza-1) 16%, transparent), transparent 70%), var(--color-card);
+}
+
+.osr-raza-card h4 {
+  margin: 0 0 0.5rem;
+  color: var(--osr-raza-1);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.osr-raza-stat {
+  margin: 0.5rem 0 0;
+  font-size: 1.1rem;
+}
+
+.osr-raza-stat-sec {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+
+.osr-resumen-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+}
+
+.osr-resumen-card {
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  text-align: center;
+}
+
+.osr-resumen-card h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.osr-estado-partida {
+  padding: 0.1rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.osr-estado-pendiente {
+  color: #eab308;
+  background: rgba(234, 179, 8, 0.15);
+}
+.osr-estado-verificada {
+  color: #4ade80;
+  background: rgba(74, 222, 128, 0.15);
+}
+.osr-estado-rechazada {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.15);
+}
+.osr-estado-corregida {
+  color: #60a5fa;
+  background: rgba(96, 165, 250, 0.15);
+}
+
+.osr-reglamento h4 {
+  margin: 1.5rem 0 0.5rem;
+  color: var(--color-accent);
+}
+
+.osr-reglamento p,
+.osr-reglamento li {
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.osr-reglamento ol,
+.osr-reglamento ul {
+  padding-left: 1.25rem;
+}
+
+.osr-tabla-puntos td:not(:first-child) {
+  text-align: center;
+  font-weight: 700;
+}
+
+.osr-panel-moderador-aviso {
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.osr-lista-moderadores {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.osr-lista-moderadores li {
+  padding: 0.4rem 0.75rem;
+  border-radius: var(--radius-sm, 0.375rem);
+  background: var(--color-card);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.osr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 28rem;
+}
+
+.osr-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.osr-form input,
+.osr-form select,
+.osr-form textarea {
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.osr-exito {
+  color: #4ade80;
+  font-size: 0.85rem;
+}
+
+.osr-buscador-jugador {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.osr-buscador-jugador label {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+
+.osr-buscador-input-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.osr-buscador-input-row input {
+  flex: 1;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text);
+}
+
+.osr-buscador-resultados {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.osr-buscador-resultados li button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.65rem;
+  background: var(--color-card);
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.osr-buscador-resultados li button:hover {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-card));
+}
+
+.osr-buscador-seleccionado {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-accent);
+  background: var(--color-card);
+}
+
+.osr-buscador-con-boton {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.osr-acciones-partida {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.osr-filtros-ranking,
+.osr-filtros-historial {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  align-items: flex-end;
+}
+
+.osr-filtros-ranking input,
+.osr-filtros-historial input,
+.osr-filtros-ranking select,
+.osr-filtros-historial select {
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.osr-filtro-fecha {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+
+.osr-subtabs-paternidad {
+  margin-bottom: 1rem;
+}
+
+.osr-accesos-rapidos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.osr-modal-hijos-padres,
+.osr-modal-perfil {
+  position: relative;
+  width: min(90vw, 44rem);
+  max-height: 80vh;
+  overflow-y: auto;
+  border: 1px solid var(--color-accent);
+}
+
+.osr-resultado-victoria {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.osr-resultado-derrota {
+  color: #f87171;
+  font-weight: 600;
 }
 
 .bracket-preview-slot-vacio {

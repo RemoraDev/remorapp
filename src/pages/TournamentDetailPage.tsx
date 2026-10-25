@@ -24,7 +24,7 @@ import { obtenerEquipoDelUsuario } from "../lib/teams";
 import type { EquipoDelUsuario } from "../lib/teams";
 import BracketView from "../components/BracketView";
 import BracketStylePicker from "../components/BracketStylePicker";
-import FondoWebgl from "../components/FondoWebgl";
+import FondoWebgpu from "../components/FondoWebgpu";
 import GroupStage from "../components/GroupStage";
 import Avatar from "../components/Avatar";
 // Performance: @dnd-kit (drag and drop) solo lo usa el organizador al
@@ -38,7 +38,7 @@ import type { ParticipanteParaLlave } from "../components/ArmarLlaveManual";
 // propio archivo, que Vite no incluye en la carga normal de esta
 // página.
 const VisorPdf = lazy(() => import("../components/VisorPdf"));
-import { ESTILO_CELEBRACION_OPTIONS, esFondoWebgl } from "../types/tournaments";
+import { ESTILO_CELEBRACION_OPTIONS, esFondoWebgpu } from "../types/tournaments";
 import type {
   PosicionGrupo,
   TournamentGroupMatchRow,
@@ -2881,7 +2881,7 @@ export default function TournamentDetailPage() {
                         data-fondo-bracket={torneo.fondo_bracket}
                         ref={bracketRef}
                       >
-                        {esFondoWebgl(torneo.fondo_bracket) && <FondoWebgl variante={torneo.fondo_bracket} />}
+                        {esFondoWebgpu(torneo.fondo_bracket) && <FondoWebgpu variante={torneo.fondo_bracket} />}
                         {/* A pedido del usuario: botón de pantalla
                             completa, esquina inferior izquierda. */}
                         <button

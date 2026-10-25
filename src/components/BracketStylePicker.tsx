@@ -10,9 +10,9 @@ import {
   PALETA_COLOR_TEXTO_BRACKET,
   ESTILO_TITULO_BRACKET_OPTIONS,
   INSIGNIA_BRACKET_OPTIONS,
-  esFondoWebgl,
+  esFondoWebgpu,
+  IMAGEN_FONDO_WEBGPU,
 } from "../types/tournaments";
-import FondoWebgl from "./FondoWebgl";
 import type {
   FondoBracket,
   EstiloLineaBracket,
@@ -621,7 +621,13 @@ export default function BracketStylePicker({
               onClick={() => handleCambiarFondo(o.value)}
             >
               <div className="bracket-fondo-preview" data-fondo-bracket={o.value}>
-                {esFondoWebgl(o.value) && <FondoWebgl variante={o.value} />}
+                {/* Rendimiento: antes acá iba un <FondoWebgpu> por opción, y
+                    cada uno levantaba su propio WebGPURenderer solo para una
+                    miniatura. Una imagen estática muestra exactamente la misma
+                    foto a un costo despreciable. */}
+                {esFondoWebgpu(o.value) && (
+                  <img src={IMAGEN_FONDO_WEBGPU[o.value]} alt="" className="fondo-webgpu-estatico" />
+                )}
               </div>
               <span className="bracket-picker-option-label">{o.label}</span>
             </button>

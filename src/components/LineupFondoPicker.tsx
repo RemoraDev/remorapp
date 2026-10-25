@@ -3,9 +3,8 @@ import { supabase } from "../lib/supabaseClient";
 import { FONDO_LINEUP_OPTIONS } from "../types/teams";
 import type { FondoLineup } from "../types/teams";
 import type { FondoLineupImagen } from "../types/clanWars";
-import { esFondoWebgl } from "../types/tournaments";
-import type { FondoBracketWebgl } from "../types/tournaments";
-import FondoWebgl from "./FondoWebgl";
+import { esFondoWebgpu, IMAGEN_FONDO_WEBGPU } from "../types/tournaments";
+import type { FondoBracketWebgpu } from "../types/tournaments";
 
 interface LineupFondoPickerProps {
   fondo: FondoLineup;
@@ -80,7 +79,11 @@ export default function LineupFondoPicker({
             onClick={() => handleCambiarFondoClasico(o.value)}
           >
             <div className="lineup-fondo-preview" data-fondo-lineup={o.value}>
-              {esFondoWebgl(o.value) && <FondoWebgl variante={o.value as FondoBracketWebgl} />}
+              {/* Rendimiento: imagen estática en vez de un WebGPURenderer por
+                  miniatura -- ver la nota en BracketStylePicker.tsx. */}
+              {esFondoWebgpu(o.value) && (
+                <img src={IMAGEN_FONDO_WEBGPU[o.value as FondoBracketWebgpu]} alt="" className="fondo-webgpu-estatico" />
+              )}
             </div>
             <span className="bracket-picker-option-label">{o.label}</span>
           </button>

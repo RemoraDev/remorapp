@@ -30,12 +30,13 @@ export type EstiloBracket = "clasico" | "esports" | "starcraft_oficial";
 // pedido del usuario: se recorta a solo 3 -- el resto "se elimina de
 // RemorApp" (ver migración 179 en supabase/, sigue reseteando
 // cualquier torneo viejo con uno de los valores sacados).
-// Migración 213, a pedido del usuario: 5 fondos WebGL de verdad
-// (shader + bloom real, ver src/components/FondoWebgl.tsx), no el
-// motor CSS de siempre -- se suman al catálogo, no lo reemplazan.
-export type FondoBracketWebgl = "nebulosa" | "campo_estelar" | "aurora" | "supernova" | "infierno";
+// Migración 213/214, a pedido del usuario: 5 fondos animados con
+// Three.js + WebGPURenderer (ver src/components/FondoWebgpu.tsx), sin
+// respaldo a WebGL a propósito -- se suman al catálogo CSS de siempre,
+// no lo reemplazan.
+export type FondoBracketWebgpu = "nebulosa" | "campo_estelar" | "aurora" | "supernova" | "infierno";
 
-export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2" | FondoBracketWebgl;
+export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2" | FondoBracketWebgpu;
 
 // Migración 176, a pedido del usuario: "efectos de líneas" -- antes la
 // línea de conexión entre rondas era un extra fijo de los estilos
@@ -156,23 +157,41 @@ export const ESTILO_LINEA_BRACKET_OPTIONS: { value: EstiloLineaBracket; label: s
   { value: "matrix", label: "Matrix" },
 ];
 
+// Nota: nebulosa/aurora/supernova/infierno se sacaron del selector --
+// eran texturas procedurales y el usuario las rechazó ("no me gustó
+// ninguno"). Solo queda "campo_estelar", que ahora es una foto real
+// con efectos WebGPU (ver FondoWebgpu.tsx). El tipo FondoBracketWebgpu
+// sigue aceptando los 5 valores para no romper selecciones ya
+// guardadas -- simplemente ya no se ofrecen como opción nueva.
 export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
   { value: "estrellas", label: "Estrellas" },
   { value: "estrellado_2", label: "Estrellado 2" },
-  { value: "nebulosa", label: "Nebulosa" },
-  { value: "campo_estelar", label: "Campo estelar profundo" },
-  { value: "aurora", label: "Aurora cósmica" },
-  { value: "supernova", label: "Supernova" },
-  { value: "infierno", label: "Infierno" },
+  { value: "campo_estelar", label: "Tierra y luna" },
+  { value: "nebulosa", label: "Planeta púrpura" },
 ];
 
 // Para decidir si un valor de FondoBracket/FondoLineup necesita el
-// motor WebGL (FondoWebgl) en vez de las reglas CSS de siempre.
-export const FONDOS_WEBGL = ["nebulosa", "campo_estelar", "aurora", "supernova", "infierno"] as const;
-export function esFondoWebgl(valor: string): valor is FondoBracketWebgl {
-  return (FONDOS_WEBGL as readonly string[]).includes(valor);
+// motor WebGPU (FondoWebgpu.tsx, Three.js + WebGPURenderer) en vez de
+// las reglas CSS de siempre.
+export const FONDOS_WEBGPU = ["nebulosa", "campo_estelar", "aurora", "supernova", "infierno"] as const;
+export function esFondoWebgpu(valor: string): valor is FondoBracketWebgpu {
+  return (FONDOS_WEBGPU as readonly string[]).includes(valor);
 }
+
+// Foto base de cada fondo WebGPU (AVIF, códec AV1). Única fuente de
+// verdad: la usa FondoWebgpu.tsx para la escena animada, y también los
+// selectores y el fallback estático para mostrar la misma imagen SIN
+// levantar un WebGPURenderer (ver la nota de rendimiento en
+// FondoWebgpu.tsx -- cada renderer vivo cuesta caro, y una miniatura
+// de selector no necesita animación).
+export const IMAGEN_FONDO_WEBGPU: Record<FondoBracketWebgpu, string> = {
+  nebulosa: "/fondos-webgpu/nebulosa.avif",
+  campo_estelar: "/fondos-webgpu/campo_estelar.avif",
+  aurora: "/fondos-webgpu/campo_estelar.avif",
+  supernova: "/fondos-webgpu/campo_estelar.avif",
+  infierno: "/fondos-webgpu/campo_estelar.avif",
+};
 
 // Migración 183, a pedido del usuario: "modelos" de la tarjeta de
 // celebración del campeón ("Ver celebración", ver TournamentDetailPage.tsx)

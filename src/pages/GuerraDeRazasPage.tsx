@@ -13,9 +13,9 @@ import TarjetaCompartirGuerraDeRazas from "../components/TarjetaCompartirGuerraD
 import TarjetaResumenEnfrentamientos from "../components/TarjetaResumenEnfrentamientos";
 import LineupFondoPicker from "../components/LineupFondoPicker";
 import EfectoClimaOverlay from "../components/EfectoClimaOverlay";
-import FondoWebgl from "../components/FondoWebgl";
-import { esFondoWebgl } from "../types/tournaments";
-import type { FondoBracketWebgl } from "../types/tournaments";
+import FondoWebgpu from "../components/FondoWebgpu";
+import { esFondoWebgpu } from "../types/tournaments";
+import type { FondoBracketWebgpu } from "../types/tournaments";
 import {
   CATEGORIAS_GUERRA,
   EFECTO_CLIMA_OPTIONS,
@@ -648,8 +648,8 @@ export default function GuerraDeRazasPage() {
           : undefined
       }
     >
-      {!guerra.fondo_lineup_imagen_id && esFondoWebgl(guerra.fondo_lineup) && (
-        <FondoWebgl variante={guerra.fondo_lineup as FondoBracketWebgl} />
+      {!guerra.fondo_lineup_imagen_id && esFondoWebgpu(guerra.fondo_lineup) && (
+        <FondoWebgpu variante={guerra.fondo_lineup as FondoBracketWebgpu} />
       )}
       <EfectoClimaOverlay efecto={guerra.efecto_clima} />
 

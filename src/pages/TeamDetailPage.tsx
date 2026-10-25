@@ -34,6 +34,8 @@ import { comprimirImagen } from "../lib/imageCompression";
 import { useAuth } from "../context/AuthContext";
 import { obtenerEquipoDelUsuario } from "../lib/teams";
 import RecortadorImagenModal from "../components/RecortadorImagenModal";
+import EventosOsrModal from "../components/osr/EventosOsrModal";
+import { ID_EQUIPO_OSR } from "../types/osr";
 import { TwitchIcon, DiscordIcon, YoutubeIcon } from "../components/IconosRedes";
 import { COLOR_PLATAFORMA_STREAM, extraerNombreCanal, normalizarUrlStream } from "../lib/streamLinks";
 import type { EquipoDelUsuario } from "../lib/teams";
@@ -71,9 +73,9 @@ import LogrosTorneosList from "../components/LogrosTorneosList";
 import MiniEventosClanList from "../components/MiniEventosClanList";
 import ActividadClanList from "../components/ActividadClanList";
 import useModalEscapeYFoco from "../hooks/useModalEscapeYFoco";
-import FondoWebgl from "../components/FondoWebgl";
-import { esFondoWebgl } from "../types/tournaments";
-import type { FondoBracketWebgl } from "../types/tournaments";
+import FondoWebgpu from "../components/FondoWebgpu";
+import { esFondoWebgpu } from "../types/tournaments";
+import type { FondoBracketWebgpu } from "../types/tournaments";
 
 // Migración 145: el límite subió de 2MB/3MB a 15MB -- comprimirImagen()
 // baja el peso antes de subir, así que acá solo hace falta cubrir una
@@ -627,6 +629,11 @@ export default function TeamDetailPage() {
   const [panelAbierto, setPanelAbierto] = useState(false);
   // Corrección QA/UX: Escape y atrapar el foco dentro del panel.
   const panelControlRef = useModalEscapeYFoco(() => setPanelAbierto(false), panelAbierto);
+  // Migración 214, a pedido del usuario: "Eventos OSR" -- competencia
+  // interna "¿Quién es tu papi?", exclusiva de este equipo puntual.
+  // Visible a cualquier visitante (es contenido público del clan); el
+  // gating de "Panel de moderador" vive adentro de EventosOsrModal.
+  const [eventosOsrAbierto, setEventosOsrAbierto] = useState(false);
   const [seccionPanel, setSeccionPanel] = useState<SeccionPanel | null>(null);
   // Pestañas de Configuración (migración 158, ampliada en la 160): antes
   // Apariencia/Logo/Banner/Franja lateral/Editar equipo/Eliminar equipo
@@ -2014,6 +2021,9 @@ export default function TeamDetailPage() {
   // ver los usos puntuales más abajo.
   const esCapitan = !!user && miembros.some((m) => m.userId === user.id && m.esCapitan);
   const puedeGestionar = esDueño || esCapitan;
+  // Migración 214: "Eventos OSR" solo existe en la ficha de este
+  // equipo puntual (ØLD SCHOOL REBØRN).
+  const esEquipoOsr = equipo.id === ID_EQUIPO_OSR;
 
   // "Solicitudes" (Clan War/Mercenarios/Alianzas/Reprogramar fecha/
   // Unirse al equipo) se entra directo desde su propio botón, sin pasar
@@ -3635,6 +3645,17 @@ export default function TeamDetailPage() {
           </div>
         )}
 
+        {/* Migración 214, a pedido del usuario: botón "Eventos OSR" --
+            visible a cualquiera que visite la ficha de este equipo
+            puntual, abre la competencia interna "¿Quién es tu papi?". */}
+        {esEquipoOsr && (
+          <div className="team-panel-toggle-header">
+            <button type="button" className="btn btn-primary" onClick={() => setEventosOsrAbierto(true)}>
+              Eventos OSR
+            </button>
+          </div>
+        )}
+
         {/* Botón directo para mandarle una solicitud de amistad a ESTE
             equipo, visible en la ficha pública de cualquier clan que no
             sea el propio -- antes solo se podía mandar tipeando el tag a
@@ -4154,6 +4175,8 @@ export default function TeamDetailPage() {
           </button>
         </div>
       )}
+
+      {esEquipoOsr && eventosOsrAbierto && <EventosOsrModal onClose={() => setEventosOsrAbierto(false)} />}
 
       {/* Migración 038: el Panel de control también lo abre un
           capitán, no solo el dueño -- las secciones que siguen siendo
@@ -5471,8 +5494,8 @@ export default function TeamDetailPage() {
                               : undefined
                           }
                         >
-                        {!r.fondoLineupImagenId && esFondoWebgl(r.fondoLineup) && (
-                          <FondoWebgl variante={r.fondoLineup as FondoBracketWebgl} />
+                        {!r.fondoLineupImagenId && esFondoWebgpu(r.fondoLineup) && (
+                          <FondoWebgpu variante={r.fondoLineup as FondoBracketWebgpu} />
                         )}
                         {/* Migración 062: visible para es_admin y para
                             dueño/capitán de cualquiera de los dos equipos
