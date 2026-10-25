@@ -4699,6 +4699,28 @@ html.es-escritorio .player-detail-panel-inline {
    ellos es el background-image. Migración 179: solo quedan
    "estrellas"/"estrellado_2" (tomados del catálogo de lineup, ver más
    abajo); el resto se sacó del catálogo. */
+/* El envoltorio que se agranda en pantalla completa. Fuera de ella no
+   hace nada: sin la variable, scale(1). El origen es el borde superior
+   para que, cuando la llave escalada no entre, siga empezando arriba y
+   se pueda scrollear -- con origen al centro la mitad de arriba queda
+   fuera del área scrolleable y es imposible llegar. */
+.bracket-escalador {
+  transform: scale(var(--bracket-escala, 1));
+  transform-origin: top center;
+  /* Sin esto, el contenedor flex le daría el ancho de la columna y la
+     llave se cortaría al agrandarse. */
+  width: fit-content;
+  max-width: 100%;
+}
+
+/* En pantalla completa manda el contenedor: la regla de fondo de abajo
+   tiene más especificidad y le devolvía el borde y las esquinas
+   redondeadas a un panel que ocupa toda la ventana. */
+.tournament-bracket-wrap.tournament-bracket-wrap-completa[data-fondo-bracket] {
+  border: none;
+  border-radius: 0;
+}
+
 .tournament-bracket-wrap[data-fondo-bracket]:not([data-fondo-bracket="ninguno"]) {
   /* padding-bottom en 3.25rem acá también -- mismo motivo que la
      regla base de .tournament-bracket-wrap (le gana por cascada, es
@@ -4886,14 +4908,14 @@ html.es-escritorio .player-detail-panel-inline {
      (--linea-color, heredado desde .bracket -- ver renderGrilla en
      BracketView.tsx), el filete toma ESE color en vez de quedarse fijo
      en el acento de la marca. */
-  border-left: 3px solid var(--linea-color, var(--color-accent));
+  border-left: 3px solid var(--linea-color-efectiva, var(--color-accent));
 }
 
 /* La Final centrada de "embudo al centro" recibe líneas de AMBAS
    mitades convergiendo, así que el filete de color va en los dos
    lados, no solo a la izquierda como el resto de las tarjetas. */
 .bracket-embudo-final[data-estilo-bracket="esports"] .bracket-match {
-  border-right: 3px solid var(--linea-color, var(--color-accent));
+  border-right: 3px solid var(--linea-color-efectiva, var(--color-accent));
 }
 
 [data-estilo-bracket="esports"] .bracket-slot-logo {
@@ -4939,10 +4961,41 @@ html.es-escritorio .player-detail-panel-inline {
    animación) y una insinuación del mismo glow en el borde de cada
    partida. Los nombres de ronda ya son uppercase en la base. ----- */
 
+/* ---------- Color efectivo de la línea ----------
+   A pedido del usuario: el borde de las tarjetas tiene que tomar el
+   color de la línea (o del láser), no quedarse siempre en el celeste
+   de acento. El problema es que ese color sale de dos lados: el
+   personalizado (--linea-color, que el organizador elige) o, si no hay
+   ninguno, el color propio de cada efecto. Acá se resuelven los dos en
+   una sola variable que las tarjetas heredan.
+   Vive en .bracket, que es el ancestro común del <svg> de las líneas y
+   de los partidos. */
+.bracket[data-estilo-linea="laser"] {
+  --linea-color-efectiva: var(--linea-color, var(--color-accent));
+}
+
+.bracket[data-estilo-linea="dorado"] {
+  --linea-color-efectiva: var(--linea-color, #fde047);
+}
+
+.bracket[data-estilo-linea="matrix"] {
+  --linea-color-efectiva: var(--linea-color, #4ade80);
+}
+
+/* Sin líneas no hay color de línea que seguir: se vuelve al acento. */
+.bracket[data-estilo-linea="ninguno"] {
+  --linea-color-efectiva: var(--color-accent);
+}
+
 [data-estilo-bracket="starcraft_oficial"] .bracket-match {
   position: relative;
+  /* color-mix para poder usar el color de la línea, que llega como un
+     hex suelto, con transparencia. Si el navegador no lo soporta la
+     declaración se descarta y queda la de arriba, con el acento. */
   border-color: rgba(var(--h-accent-rgb), 0.35);
+  border-color: color-mix(in srgb, var(--linea-color-efectiva, var(--color-accent)) 42%, transparent);
   box-shadow: 0 0 10px rgba(var(--h-accent-rgb), 0.12);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--linea-color-efectiva, var(--color-accent)) 16%, transparent);
 }
 
 [data-estilo-bracket="starcraft_oficial"] .bracket-round:not(:last-child) .bracket-match::after {
@@ -4971,7 +5024,7 @@ html.es-escritorio .player-detail-panel-inline {
 [data-estilo-bracket="tactico"] .bracket-match {
   border-radius: 0;
   border: 1px solid rgba(var(--h-accent-rgb), 0.3);
-  border-left: 2px solid var(--color-accent);
+  border-left: 2px solid var(--linea-color-efectiva, var(--color-accent));
   background: linear-gradient(180deg, rgba(var(--h-accent-rgb), 0.07), transparent 65%), var(--color-card);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.45), 0 2px 10px rgba(0, 0, 0, 0.45);
 }
@@ -4986,7 +5039,7 @@ html.es-escritorio .player-detail-panel-inline {
   position: absolute;
   width: 9px;
   height: 9px;
-  border: 2px solid var(--color-accent);
+  border: 2px solid var(--linea-color-efectiva, var(--color-accent));
   pointer-events: none;
 }
 
@@ -5010,7 +5063,7 @@ html.es-escritorio .player-detail-panel-inline {
 }
 
 [data-estilo-bracket="tactico"] .bracket-slot.winner {
-  border-left-color: var(--color-accent);
+  border-left-color: var(--linea-color-efectiva, var(--color-accent));
   background: rgba(var(--h-accent-rgb), 0.1);
 }
 
@@ -5041,7 +5094,7 @@ html.es-escritorio .player-detail-panel-inline {
 
 [data-estilo-bracket="neon"] .bracket-slot.winner {
   background: linear-gradient(90deg, rgba(var(--h-accent-rgb), 0.3), transparent 72%);
-  box-shadow: inset 2px 0 0 var(--color-accent);
+  box-shadow: inset 2px 0 0 var(--linea-color-efectiva, var(--color-accent));
 }
 
 [data-estilo-bracket="neon"] .bracket-slot-nombre {

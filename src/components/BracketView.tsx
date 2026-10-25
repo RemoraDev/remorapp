@@ -551,6 +551,12 @@ export default function BracketView({
       <div
         className={`bracket ${esVertical ? "bracket-vertical" : ""}`}
         data-estilo-bracket={estilo}
+        // También acá, además del <svg>: a pedido del usuario el borde
+        // de las tarjetas toma el color de la línea, y para eso las
+        // tarjetas necesitan saber QUÉ efecto de línea está elegido
+        // (cada uno tiene su color propio cuando no hay uno
+        // personalizado). Ver --linea-color-efectiva en halcon.css.
+        data-estilo-linea={estiloLinea}
         data-estructura={estructura}
         style={estiloTamano}
         ref={(el) => {

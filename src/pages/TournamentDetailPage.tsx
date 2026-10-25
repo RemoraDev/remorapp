@@ -285,6 +285,61 @@ export default function TournamentDetailPage() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [bracketPantallaCompleta]);
 
+  // Pantalla completa: AGRANDAR la llave para ocupar la pantalla.
+  //
+  // Antes el contenedor solo la CENTRABA, así que en un monitor grande
+  // la llave quedaba del mismo tamaño que en la página, flotando en el
+  // medio con todo vacío alrededor -- que es justo lo que el usuario
+  // viene marcando. CSS no puede resolverlo solo (no hay forma de
+  // decir "escalá hasta que entre"), así que se mide y se calcula.
+  //
+  // Se usa transform: scale y no zoom ni cambios de tamaño porque el
+  // transform NO rehace el layout: no mueve ni un píxel de la llave ni
+  // obliga a recalcular los trazos SVG de los conectores, que están
+  // medidos en píxeles con getBoundingClientRect().
+  const escaladorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = escaladorRef.current;
+    if (!el) return;
+    if (!bracketPantallaCompleta) {
+      el.style.removeProperty("--bracket-escala");
+      return;
+    }
+
+    let pendiente = 0;
+    const recalcular = () => {
+      cancelAnimationFrame(pendiente);
+      pendiente = requestAnimationFrame(() => {
+        // Medir SIEMPRE sin escala: con el transform puesto,
+        // getBoundingClientRect() devuelve el tamaño ya escalado y el
+        // cálculo se realimentaría a sí mismo en cada pasada.
+        el.style.setProperty("--bracket-escala", "1");
+        const ancho = el.scrollWidth;
+        const alto = el.scrollHeight;
+        if (ancho < 2 || alto < 2) return;
+        // 2rem de padding por lado en el contenedor, más un respiro.
+        const dispoAncho = window.innerWidth - 96;
+        const dispoAlto = window.innerHeight - 96;
+        // Nunca achicar (si no entra, el contenedor ya permite hacer
+        // scroll) ni pasarse de 2.6x, donde el texto se ve blando.
+        const escala = Math.min(dispoAncho / ancho, dispoAlto / alto, 2.6);
+        el.style.setProperty("--bracket-escala", String(Math.max(1, escala)));
+      });
+    };
+
+    recalcular();
+    // La llave cambia de tamaño sola: al cargar partidas, al cambiar de
+    // grupo, al alternar la vista panorámica.
+    const ro = new ResizeObserver(recalcular);
+    ro.observe(el);
+    window.addEventListener("resize", recalcular);
+    return () => {
+      cancelAnimationFrame(pendiente);
+      ro.disconnect();
+      window.removeEventListener("resize", recalcular);
+    };
+  }, [bracketPantallaCompleta]);
+
   // Suizo (migración 069).
   const [iniciandoSuizo, setIniciandoSuizo] = useState(false);
   const [errorSuizo, setErrorSuizo] = useState<string | null>(null);
@@ -2893,6 +2948,11 @@ export default function TournamentDetailPage() {
                         >
                           {bracketPantallaCompleta ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                         </button>
+                        {/* Envoltorio solo para poder escalar la llave en
+                            pantalla completa -- ver el useEffect de
+                            escaladorRef. Fuera de pantalla completa no
+                            aplica ningún transform. */}
+                        <div className="bracket-escalador" ref={escaladorRef}>
                         <BracketView
                           matches={partidas}
                           nombresPorParticipante={Object.fromEntries(
@@ -2930,6 +2990,7 @@ export default function TournamentDetailPage() {
                           campeonParticipantId={torneo.campeon_participant_id}
                           onClickCampeon={handleVerCelebracion}
                         />
+                        </div>
                       </div>
                     </>
                   )}
