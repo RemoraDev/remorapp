@@ -8,6 +8,7 @@ import { crearEscenaHumanos } from "./humanos";
 import { crearEscenaElfos } from "./elfos";
 import { crearEscenaProtoss } from "./protoss";
 import { crearEscenaZerg } from "./zerg";
+import { crearEscenaTerran } from "./terran";
 import type { ConstructorEscena } from "./tipos";
 
 // Registro de las escenas procedurales (las que se dibujan por código,
@@ -92,6 +93,12 @@ export const ESCENAS_PROCEDURALES: EscenaProcedural[] = [
     etiqueta: "Char",
     construir: crearEscenaZerg,
     segundoCaptura: 13,
+  },
+  {
+    id: "terran",
+    etiqueta: "Colonia terran",
+    construir: crearEscenaTerran,
+    segundoCaptura: 11,
   },
 ];
 

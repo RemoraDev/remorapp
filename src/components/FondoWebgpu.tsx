@@ -28,6 +28,7 @@ import { crearEscenaHumanos } from "./fondos/humanos";
 import { crearEscenaElfos } from "./fondos/elfos";
 import { crearEscenaProtoss } from "./fondos/protoss";
 import { crearEscenaZerg } from "./fondos/zerg";
+import { crearEscenaTerran } from "./fondos/terran";
 import { IMAGEN_FONDO_WEBGPU } from "../types/tournaments";
 import type { FondoBracketWebgpu } from "../types/tournaments";
 
@@ -653,6 +654,7 @@ const ESCENAS: Record<FondoBracketWebgpu, (scene: THREE.Scene) => Promise<Result
   elfos: crearEscenaElfos,
   protoss: crearEscenaProtoss,
   zerg: crearEscenaZerg,
+  terran: crearEscenaTerran,
   nebulosa: escenaNebulosa,
   campo_estelar: escenaCampoEstelar,
   aurora: escenaCampoEstelar,

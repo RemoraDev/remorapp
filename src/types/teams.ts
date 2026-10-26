@@ -1,4 +1,6 @@
 import type { LinkTransmision, Sc2Region } from "./profile";
+import { FONDO_BRACKET_OPTIONS, esFondoWebgpu } from "./tournaments";
+import type { FondoBracketWebgpu } from "./tournaments";
 
 export interface TeamRow {
   id: string;
@@ -220,7 +222,10 @@ export interface ClanWarRow {
 // sumaron al catálogo de bracket (ver FondoBracketWebgpu en
 // types/tournaments.ts) -- se usa el mismo nombre de tipo para los 5
 // valores, compartido entre ambos catálogos.
-export type FondoLineup =
+// Los fondos de lineup que son CSS puro. Los que necesitan el motor
+// WebGPU no se repiten acá: se derivan del catálogo de bracket, más
+// abajo.
+type FondoLineupCss =
   | "ninguno"
   | "estrellas"
   | "estrellado"
@@ -228,20 +233,20 @@ export type FondoLineup =
   | "nova"
   | "planeta"
   | "viaje"
-  | "fuego"
-  | "nebulosa"
-  | "campo_estelar"
-  | "aurora"
-  | "supernova"
-  | "infierno";
+  | "fuego";
 
-// Nota: nebulosa/aurora/supernova/infierno se sacaron del selector --
-// eran texturas procedurales y el usuario las rechazó ("no me gustó
-// ninguno"). Solo queda "campo_estelar", que ahora es una foto real
-// con efectos WebGPU (ver FondoWebgpu.tsx). El tipo FondoLineup sigue
-// aceptando los 5 valores para no romper selecciones ya guardadas --
-// simplemente ya no se ofrecen como opción nueva.
-export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
+// La parte WebGPU se TOMA de FondoBracketWebgpu en vez de repetirse.
+//
+// Antes era una lista escrita a mano, y al sumar diez escenas nuevas
+// quedó desactualizada: los fondos existían, la base los aceptaba (las
+// migraciones tocan clan_wars y guerra_razas) pero el selector de
+// lineup no los ofrecía. Es la misma clase de bug que ya hizo que un
+// fondo no se mostrara nunca por culpa de FONDOS_WEBGPU. Derivándolo,
+// agregar una escena al catálogo de bracket la deja disponible en los
+// lineups sola.
+export type FondoLineup = FondoLineupCss | FondoBracketWebgpu;
+
+const FONDOS_LINEUP_CSS: { value: FondoLineup; label: string }[] = [
   { value: "ninguno", label: "Ninguno" },
   { value: "estrellas", label: "Estrellas" },
   { value: "estrellado", label: "Estrellado" },
@@ -250,8 +255,16 @@ export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
   { value: "planeta", label: "Planeta" },
   { value: "viaje", label: "Viaje" },
   { value: "fuego", label: "Fuego" },
-  { value: "campo_estelar", label: "Tierra y luna" },
-  { value: "nebulosa", label: "Planeta púrpura" },
+];
+
+export const FONDO_LINEUP_OPTIONS: { value: FondoLineup; label: string }[] = [
+  ...FONDOS_LINEUP_CSS,
+  // Las escenas WebGPU, con la misma etiqueta que en el bracket para
+  // que el usuario no tenga que aprender dos nombres para lo mismo.
+  ...FONDO_BRACKET_OPTIONS.filter((o) => esFondoWebgpu(o.value)).map((o) => ({
+    value: o.value as FondoLineup,
+    label: o.label,
+  })),
 ];
 
 // Temporadas (migración 047): contenedor mínimo para torneos/ligas,
