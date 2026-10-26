@@ -4,6 +4,7 @@ import { crearEscenaNavidad } from "./navidad";
 import { crearEscenaHalloween } from "./halloween";
 import { crearEscenaNoMuertos } from "./noMuertos";
 import { crearEscenaOrcos } from "./orcos";
+import { crearEscenaHumanos } from "./humanos";
 import type { ConstructorEscena } from "./tipos";
 
 // Registro de las escenas procedurales (las que se dibujan por código,
@@ -64,6 +65,12 @@ export const ESCENAS_PROCEDURALES: EscenaProcedural[] = [
     etiqueta: "Durotar",
     construir: crearEscenaOrcos,
     segundoCaptura: 15,
+  },
+  {
+    id: "humanos",
+    etiqueta: "Lordaeron",
+    construir: crearEscenaHumanos,
+    segundoCaptura: 17,
   },
 ];
 

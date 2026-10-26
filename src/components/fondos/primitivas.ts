@@ -230,3 +230,133 @@ export function crearParticulas(
 // Se reexporta para que las escenas no tengan que importar uv() solo
 // para el degradé vertical de una partícula alargada.
 export { uv };
+
+// Posición de cada vértice de una brizna de pasto.
+//
+// Esto corre en el VERTEX shader, una vez por vértice, no por píxel.
+// Por eso miles de briznas no cuestan prácticamente nada: es como lo
+// resuelven los juegos, y es lo que da el movimiento fluido sin
+// pagarlo en latencia.
+const BRIZNA_POS_WGSL = wgslFn(
+  /* wgsl */ `
+  fn briznaPos( local: vec3<f32>, idx: f32, t: f32, rango: vec4<f32>, viento: f32 ) -> vec3<f32> {
+    let h1 = hash21( vec2<f32>( idx, 1.7 ) );
+    let h2 = hash21( vec2<f32>( idx, 5.3 ) );
+    let h3 = hash21( vec2<f32>( idx, 9.1 ) );
+
+    // "prof" reparte las briznas en profundidad: 0 es el fondo del
+    // pastizal (arriba y chiquito), 1 es el borde inferior. Al cuadrado
+    // para amontonar más cerca del horizonte, como se ve un pastizal en
+    // perspectiva.
+    let prof = h2 * h2;
+
+    let x = ( h1 - 0.5 ) * 1.04;
+    let baseY = mix( rango.x, rango.y, prof );
+    let altura = mix( rango.z, rango.w, prof ) * ( 0.6 + 0.8 * h3 );
+
+    // La geometría del plano va de -0.5 a 0.5; "a" es 0 en la base de
+    // la brizna y 1 en la punta.
+    let a = local.y + 0.5;
+
+    // Dos ondas que VIAJAN a lo largo de x, más la fase propia de cada
+    // brizna. Sin ese desfase el pastizal se mueve en bloque, como una
+    // alfombra, en vez de ondular.
+    let v = ( sin( t * 0.72 * viento + x * 5.2 + h1 * 6.28 ) * 0.55
+      + sin( t * 0.41 * viento + x * 11.0 + h3 * 6.28 ) * 0.28 );
+    // El doblez va con a*a: la base queda clavada en el suelo y solo la
+    // punta se mueve. Con un doblez lineal la brizna se desliza entera
+    // y parece flotar.
+    let doblez = v * a * a * mix( 0.012, 0.045, prof );
+
+    // Ancha a propósito: una brizna de 3 px es una astilla, y la GPU
+    // sombrea en bloques de 2x2 píxeles, así que se desperdician casi
+    // todos los carriles. Pocas y anchas rinden mucho más que muchas
+    // finitas, y a esta escala se ven igual.
+    let ancho = mix( 0.0026, 0.0072, prof ) * ( 1.0 - a * 0.85 );
+
+    // La profundidad va en z: así las de adelante tapan a las de atrás
+    // en el orden correcto Y el test de profundidad puede descartar
+    // temprano los píxeles ocultos, que es de donde salía casi todo el
+    // costo.
+    return vec3<f32>( x + local.x * ancho * 2.0 + doblez, baseY + a * altura, prof * 0.6 );
+  }
+`,
+  [comoInclude(HASH_WGSL)],
+);
+
+// Tono de cada brizna. Va aparte porque se consume como varying.
+const TONO_BRIZNA_WGSL = wgslFn(
+  /* wgsl */ `
+  fn tonoBrizna( idx: f32 ) -> f32 {
+    let h = hash21( vec2<f32>( idx, 21.3 ) );
+    // Sesgado hacia abajo: unas pocas briznas encendidas entre muchas
+    // apagadas se ve mucho mejor que un pastizal parejo.
+    return h * h;
+  }
+`,
+  [comoInclude(HASH_WGSL)],
+);
+
+export interface OpcionesPasto {
+  cantidad: number;
+  /** Altura de la base de las briznas: [las del fondo, las de adelante]. */
+  base: [number, number];
+  /** Largo de las briznas: [las del fondo, las de adelante]. */
+  altura: [number, number];
+  colorBase: [number, number, number];
+  colorMedio: [number, number, number];
+  colorPunta: [number, number, number];
+  /** Multiplicador de la velocidad del viento. */
+  viento?: number;
+  profundidad: number;
+  orden: number;
+}
+
+/** Pastizal instanciado con viento en el vertex shader. */
+export function crearPasto(scene: THREE.Scene, o: OpcionesPasto): CapaInstanciada {
+  // 5 segmentos de alto para que la brizna se CURVE al doblarse; con un
+  // solo segmento se inclinaría recta, como un palito.
+  const geo = new THREE.PlaneGeometry(1, 1, 1, 5);
+  // A diferencia del telón, el pastizal SÍ usa profundidad: es lo que
+  // deja a la GPU descartar los píxeles de las briznas tapadas antes de
+  // sombrearlos.
+  const mat = new MeshBasicNodeMaterial({ transparent: false, depthWrite: true, depthTest: true });
+
+  mat.positionNode = BRIZNA_POS_WGSL({
+    local: positionLocal,
+    idx: instanceIndex.toFloat(),
+    t: time,
+    rango: vec4(o.base[0], o.base[1], o.altura[0], o.altura[1]),
+    viento: float(o.viento ?? 1),
+  }) as typeof mat.positionNode;
+
+  const tono = varying(TONO_BRIZNA_WGSL({ idx: instanceIndex.toFloat() })) as unknown as ReturnType<typeof float>;
+
+  // Oscura en la base (donde no llega la luz entre las briznas) y
+  // cálida en la punta, que es donde pega el sol.
+  const alturaBrizna = uv().y;
+  mat.colorNode = mix(
+    vec3(o.colorBase[0], o.colorBase[1], o.colorBase[2]),
+    mix(
+      vec3(o.colorMedio[0], o.colorMedio[1], o.colorMedio[2]),
+      vec3(o.colorPunta[0], o.colorPunta[1], o.colorPunta[2]),
+      tono,
+    ),
+    alturaBrizna.mul(alturaBrizna),
+  ) as typeof mat.colorNode;
+
+  const mesh = new THREE.InstancedMesh(geo, mat, o.cantidad);
+  mesh.frustumCulled = false;
+  mesh.position.set(0, 0, o.profundidad);
+  mesh.renderOrder = o.orden;
+  scene.add(mesh);
+
+  return {
+    mesh,
+    ajustarA: (camera) => {
+      const distancia = camera.position.z - mesh.position.z;
+      const alto = 2 * distancia * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+      mesh.scale.set(alto * camera.aspect, alto, 1);
+    },
+  };
+}

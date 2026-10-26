@@ -3,6 +3,7 @@ import { MeshBasicNodeMaterial } from "three/webgpu";
 import { uv, time, uniform, wgslFn, positionLocal, instanceIndex, mix, vec3, varying, float } from "three/tsl";
 import { comoInclude, FBM_WGSL, FBM2_WGSL, RUIDO_WGSL, HASH_WGSL } from "./wgslComun";
 import { SKYLINE_WGSL } from "./siluetas";
+import { crearPasto } from "./primitivas";
 import type { ResultadoEscena } from "./tipos";
 
 // Bosque élfico al atardecer, 100% procedural (no hay ninguna imagen
@@ -339,83 +340,7 @@ const TONO_HOJA_WGSL = wgslFn(
   [comoInclude(HASH_WGSL)],
 );
 
-// Posición de cada vértice de una brizna de pasto.
-//
-// Esto corre en el VERTEX shader, una vez por vértice (6 vértices por
-// brizna), no por píxel. Por eso miles de briznas no cuestan
-// prácticamente nada: es exactamente como lo resuelven los juegos, y
-// es lo que da el movimiento fluido que pidió el usuario sin pagarlo
-// en latencia.
-const BRIZNA_POS_WGSL = wgslFn(
-  /* wgsl */ `
-  fn briznaPos( local: vec3<f32>, idx: f32, t: f32 ) -> vec3<f32> {
-    let h1 = hash21( vec2<f32>( idx, 1.7 ) );
-    let h2 = hash21( vec2<f32>( idx, 5.3 ) );
-    let h3 = hash21( vec2<f32>( idx, 9.1 ) );
-
-    // "prof" reparte las briznas en profundidad: 0 es el fondo del
-    // pastizal (arriba y chiquito), 1 es el borde inferior de la
-    // pantalla (abajo y grande). Se eleva al cuadrado para amontonar
-    // más briznas cerca del horizonte, que es como se ve un pastizal
-    // en perspectiva.
-    let prof = h2 * h2;
-
-    let x = ( h1 - 0.5 ) * 1.04;
-    let baseY = mix( -0.38, -0.54, prof );
-    let altura = mix( 0.05, 0.18, prof ) * ( 0.6 + 0.8 * h3 );
-
-    // La geometría del plano va de -0.5 a 0.5; "a" es 0 en la base de
-    // la brizna y 1 en la punta.
-    let a = local.y + 0.5;
-
-    // Viento: dos ondas que VIAJAN a lo largo de x (por el término
-    // x * k dentro del seno), más la fase propia de cada brizna. Sin
-    // ese desfase por brizna el pastizal se mueve en bloque, como una
-    // alfombra, en vez de ondular.
-    // Más lento que antes (era 1.15 / 0.63). A 30 FPS la brizna
-    // avanzaba un tramo visible entre cuadro y cuadro y eso es lo que
-    // se leía como tirón: no faltaban cuadros, sobraba velocidad.
-    let viento = sin( t * 0.72 + x * 5.2 + h1 * 6.28 ) * 0.55
-      + sin( t * 0.41 + x * 11.0 + h3 * 6.28 ) * 0.28;
-    // El doblez va con a*a: la base queda clavada en el suelo y solo
-    // la punta se mueve. Con un doblez lineal las briznas se deslizan
-    // enteras y parecen flotar.
-    let doblez = viento * a * a * mix( 0.012, 0.045, prof );
-
-    // La brizna se afina hacia la punta. Más ancha que en la primera
-    // versión: una brizna de 3 px es un triángulo-astilla, y la GPU
-    // sombrea en bloques de 2x2 píxeles, así que la mayoría de los
-    // carriles se desperdiciaban. Pocas briznas anchas rinden mucho
-    // más que muchas finitas, y a esta escala se ven igual.
-    let ancho = mix( 0.0026, 0.0072, prof ) * ( 1.0 - a * 0.85 );
-
-    // La profundidad va en z: así las briznas de adelante tapan a las
-    // de atrás en el orden correcto Y el test de profundidad puede
-    // descartar temprano los píxeles ocultos, que es de donde salía
-    // casi todo el costo (el pastizal se pintaba varias veces encima
-    // de sí mismo).
-    return vec3<f32>( x + local.x * ancho * 2.0 + doblez, baseY + a * altura, prof * 0.6 );
-  }
-`,
-  [comoInclude(HASH_WGSL)],
-);
-
-// Tono de cada brizna, 0 a 1. Va aparte de briznaPos() porque se
-// consume como varying hacia el fragment shader.
-const TONO_BRIZNA_WGSL = wgslFn(
-  /* wgsl */ `
-  fn tonoBrizna( idx: f32 ) -> f32 {
-    let h = hash21( vec2<f32>( idx, 21.3 ) );
-    // Sesgado hacia abajo: unas pocas briznas encendidas entre muchas
-    // apagadas se ve mucho mejor que un pastizal parejo.
-    return h * h;
-  }
-`,
-  [comoInclude(HASH_WGSL)],
-);
-
 const PROFUNDIDAD_PLANO = -80;
-const BRIZNAS = 1400;
 const HOJAS = 6500;
 
 export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEscena> {
@@ -441,40 +366,17 @@ export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEs
   scene.add(plano);
 
   // ---------- Pastizal ----------
-  // 5 segmentos de alto para que la brizna se CURVE al doblarse; con un
-  // solo segmento se inclinaría recta, como un palito.
-  const geoBrizna = new THREE.PlaneGeometry(1, 1, 1, 5);
-  // A diferencia del telón de fondo, el pastizal SÍ usa profundidad: es
-  // lo que deja que la GPU descarte los píxeles de las briznas tapadas
-  // por otras antes de sombrearlos. El telón no escribe profundidad, así
-  // que no interfiere, y el renderOrder garantiza que se pinte primero.
-  const matPasto = new MeshBasicNodeMaterial({ transparent: false, depthWrite: true, depthTest: true });
-  matPasto.positionNode = BRIZNA_POS_WGSL({
-    local: positionLocal,
-    idx: instanceIndex.toFloat(),
-    t: time,
-  }) as typeof matPasto.positionNode;
-
-  // Tono propio de cada brizna. varying() obliga a calcularlo en el
-  // vertex shader (una vez por brizna) y lo interpola hasta el
-  // fragment: sin esto no hay forma de que el fragment sepa QUÉ brizna
-  // está pintando, y todo el pastizal sale de un color plano.
-  // El cast: wgslFn no tipa su retorno, así que varying() hereda
-  // "unknown". Acá sabemos que tonoBrizna() devuelve f32 (ver su firma).
-  const tonoBrizna = varying(TONO_BRIZNA_WGSL({ idx: instanceIndex.toFloat() })) as unknown as ReturnType<
-    typeof float
-  >;
-
-  // Está a contraluz: el sol se pone detrás del bosque, así que la
-  // brizna es casi silueta en la base y solo la punta recibe luz
-  // cálida. La primera versión era verde brillante parejo y se veía
-  // como una capa pegada encima, no como parte de la escena.
-  const alturaBrizna = uv().y;
-  matPasto.colorNode = mix(
-    vec3(0.014, 0.040, 0.034),
-    mix(vec3(0.10, 0.20, 0.09), vec3(0.46, 0.42, 0.15), tonoBrizna),
-    alturaBrizna.mul(alturaBrizna),
-  ) as typeof matPasto.colorNode;
+  const pasto = crearPasto(scene, {
+    cantidad: 1400,
+    base: [-0.38, -0.54],
+    altura: [0.05, 0.18],
+    colorBase: [0.014, 0.04, 0.034],
+    colorMedio: [0.1, 0.2, 0.09],
+    colorPunta: [0.46, 0.42, 0.15],
+    viento: 1.0,
+    profundidad: PROFUNDIDAD_PLANO + 1,
+    orden: 1,
+  });
 
   // ---------- Hojas ----------
   const matHoja = new MeshBasicNodeMaterial({ transparent: false, depthWrite: true, depthTest: true });
@@ -508,15 +410,6 @@ export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEs
   hojas.renderOrder = 2;
   scene.add(hojas);
 
-  const pasto = new THREE.InstancedMesh(geoBrizna, matPasto, BRIZNAS);
-  // Las posiciones salen del shader a partir de instanceIndex, así que
-  // las matrices por instancia no se usan: se deja la identidad y se
-  // evita subir 2600 matrices a la GPU.
-  pasto.frustumCulled = false;
-  pasto.position.set(0, 0, PROFUNDIDAD_PLANO + 1);
-  pasto.renderOrder = 1;
-  scene.add(pasto);
-
   return Promise.resolve({
     updater: () => {
       // Todo el movimiento lo lleva el uniform "time" dentro del
@@ -532,9 +425,7 @@ export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEs
       // El pastizal usa el mismo encuadre: así las coordenadas
       // normalizadas que devuelve briznaPos() (de -0.5 a 0.5) caen
       // justo sobre la pantalla, sea cual sea el tamaño.
-      const distanciaPasto = camera.position.z - pasto.position.z;
-      const altoPasto = 2 * distanciaPasto * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-      pasto.scale.set(altoPasto * camera.aspect, altoPasto, 1);
+      pasto.ajustarA(camera);
       const distanciaHojas = camera.position.z - hojas.position.z;
       const altoHojas = 2 * distanciaHojas * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
       hojas.scale.set(altoHojas * camera.aspect, altoHojas, 1);

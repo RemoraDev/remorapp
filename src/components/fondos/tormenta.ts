@@ -106,35 +106,87 @@ const TORMENTA_WGSL = wgslFn(
     col = mix( col, vec3<f32>( 0.040, 0.048, 0.065 ), mColinas );
     col = col + vec3<f32>( 0.30, 0.34, 0.48 ) * mColinas * rayo * 0.40;
 
-    // El agua arranca en una línea RECTA y nítida: un horizonte de agua
-    // es horizontal, y ese corte limpio es lo que lo hace leer como
-    // agua y no como más terreno.
+    // ---------- EL AGUA ----------
+    // Antes eran bandas de seno pintadas sobre una franja: se veía como
+    // una cortina rayada, no como agua. Un mar se lee por tres cosas, y
+    // ninguna es la forma de la onda:
+    //
+    //   1. la PERSPECTIVA -- las olas se achican y se juntan hacia el
+    //      horizonte, porque están más lejos;
+    //   2. la NORMAL de cada ola, que es lo que hace que una cara mire
+    //      al cielo y la de al lado no;
+    //   3. el FRESNEL -- el agua refleja casi como un espejo cuando se
+    //      la mira de canto, y deja ver su propio color cuando se la
+    //      mira desde arriba. Ese cambio a lo largo del plano es la
+    //      señal más fuerte de que hay una superficie horizontal.
     let lineaAgua = 0.175;
     let mAgua = smoothstep( lineaAgua + 0.002, lineaAgua - 0.002, uvIn.y );
-    // Más oscura al fondo y algo más clara cerca, como una superficie
-    // mojada que refleja el cielo.
-    let profundidad = smoothstep( lineaAgua, 0.0, uvIn.y );
-    let agua = mix( vec3<f32>( 0.045, 0.058, 0.080 ), vec3<f32>( 0.090, 0.105, 0.140 ), profundidad );
-    col = mix( col, agua, mAgua );
 
-    // Ondas: bandas horizontales comprimidas hacia el horizonte, que es
-    // lo que da la perspectiva de una superficie plana vista de canto.
-    let ondas = sin( ( lineaAgua - uvIn.y ) * 190.0 + sin( p.x * 5.0 + t * 0.7 ) * 1.6 + t * 1.8 );
-    col = col + vec3<f32>( 0.12, 0.15, 0.22 ) * mAgua * smoothstep( 0.4, 1.0, ondas ) * profundidad * 0.55;
+    // Reproyección: cada píxel bajo el horizonte corresponde a un punto
+    // del plano del agua. La profundidad crece como 1/altura, que es la
+    // perspectiva de un plano visto de canto.
+    let bajoHorizonte = max( lineaAgua - uvIn.y, 0.0012 );
+    let prof = 0.085 / bajoHorizonte;
+    let mundo = vec2<f32>( p.x * prof * 2.4, prof );
 
-    // El reflejo del rayo: una franja vertical borrosa bajo el
-    // horizonte. Es lo que conecta el cielo con el suelo.
-    let reflejo = mAgua * smoothstep( 0.9, 0.0, abs( p.x + 0.15 ) ) * smoothstep( 0.0, lineaAgua, uvIn.y );
-    col = col + vec3<f32>( 0.55, 0.62, 0.85 ) * reflejo * rayo * 0.85;
+    // Cinco trenes de olas en distintas direcciones. Con uno solo queda
+    // un corrugado regular; lo que rompe el patrón es que se crucen.
+    var altura = 0.0;
+    var pendX = 0.0;
+    var pendZ = 0.0;
+    for ( var i = 0; i < 5; i = i + 1 ) {
+      let fi = f32( i );
+      let ang = 1.1 + fi * 1.37;
+      let dir = vec2<f32>( cos( ang ), sin( ang ) );
+      let k = 2.6 * pow( 1.75, fi );
+      let amp = 0.085 / pow( 1.75, fi );
+      let fase = dot( dir, mundo ) * k + t * ( 1.1 + fi * 0.45 );
+      altura = altura + sin( fase ) * amp;
+      let d = cos( fase ) * amp * k;
+      pendX = pendX + d * dir.x;
+      pendZ = pendZ + d * dir.y;
+    }
+    // Lejos las olas se aplanan: a esa distancia no se resuelve el
+    // detalle, y sin esto el horizonte queda hirviendo de ruido.
+    let detalle = smoothstep( 0.0, 0.055, bajoHorizonte );
+    let normal = normalize( vec3<f32>( -pendX * detalle, 1.0, -pendZ * detalle ) );
 
-    // Repique de la lluvia sobre el agua: puntitos brillantes que
-    // aparecen y se apagan donde cae cada gota.
+    // Fresnel: 1 pegado al horizonte (se mira de canto, espeja) y bajo
+    // en el borde inferior (se mira desde arriba, se ve el agua).
+    let canto = 1.0 - smoothstep( 0.0, lineaAgua * 0.95, bajoHorizonte );
+    let fresnel = clamp( mix( 0.05, 1.0, pow( canto, 1.7 ) ) + normal.z * 0.25, 0.0, 1.0 );
+
+    // Lo que refleja: el mismo cielo de la escena, que es lo que ata el
+    // agua al resto del cuadro. Si reflejara un color fijo, parecería
+    // pintada aparte.
+    let cieloReflejado = mix(
+      vec3<f32>( 0.060, 0.070, 0.095 ),
+      vec3<f32>( 0.105, 0.120, 0.150 ),
+      canto
+    ) + vec3<f32>( 0.38, 0.42, 0.58 ) * rayo * ( 0.35 + 0.65 * canto );
+    let aguaProfunda = vec3<f32>( 0.016, 0.026, 0.038 );
+    var colAgua = mix( aguaProfunda, cieloReflejado, fresnel );
+
+    // Brillo especular en las caras que miran al relámpago: es lo que
+    // convierte el fogonazo en un camino de luz sobre el agua.
+    let haciaLuz = normalize( vec3<f32>( -0.25, 0.55, -0.8 ) );
+    let brillo = pow( max( dot( normal, haciaLuz ), 0.0 ), 48.0 );
+    colAgua = colAgua + vec3<f32>( 0.85, 0.90, 1.0 ) * brillo * ( 0.05 + rayo * 1.6 );
+
+    // Espuma en las crestas, solo cerca, donde se resuelve.
+    let espuma = smoothstep( 0.045, 0.075, altura ) * smoothstep( 0.0, 0.09, bajoHorizonte );
+    colAgua = colAgua + vec3<f32>( 0.16, 0.18, 0.22 ) * espuma;
+
+    col = mix( col, colAgua, mAgua );
+
+    // Repique de la lluvia sobre el agua: puntitos que aparecen y se
+    // apagan donde cae cada gota.
     let gp = vec2<f32>( p.x * 55.0, uvIn.y * 120.0 );
     let celdaG = floor( gp );
     let hg = hash21( celdaG );
     let vida = fract( hg * 7.0 + t * 1.6 );
-    let repique = step( 0.985, hg ) * smoothstep( 0.35, 0.0, length( fract( gp ) - 0.5 ) ) * smoothstep( 1.0, 0.3, vida );
-    col = col + vec3<f32>( 0.45, 0.52, 0.68 ) * repique * mAgua;
+    let repique = step( 0.988, hg ) * smoothstep( 0.35, 0.0, length( fract( gp ) - 0.5 ) ) * smoothstep( 1.0, 0.3, vida );
+    col = col + vec3<f32>( 0.30, 0.35, 0.46 ) * repique * mAgua;
 
     // ---------- El fogonazo sobre todo el cuadro ----------
     // Más fuerte arriba que abajo, porque la descarga está en el cielo.
