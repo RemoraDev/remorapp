@@ -93,14 +93,48 @@ const TORMENTA_WGSL = wgslFn(
     let velo = fbm2( vec2<f32>( p.x * 3.0 + t * 0.55, uvIn.y * 0.7 ) );
     col = mix( col, vec3<f32>( 0.22, 0.25, 0.32 ), smoothstep( 0.55, 0.95, velo ) * 0.30 );
 
-    // ---------- Horizonte ----------
-    // Una línea de terreno baja y casi negra: da escala y evita que el
-    // cuadro sea solo cielo.
-    let cerro = 0.165 + fbm2( vec2<f32>( p.x * 1.5, 5.0 ) ) * 0.055;
-    let mCerro = smoothstep( cerro + 0.004, cerro - 0.004, uvIn.y );
-    col = mix( col, vec3<f32>( 0.022, 0.028, 0.038 ), mCerro );
-    // El terreno también se ilumina con el rayo, un poco menos.
-    col = col + vec3<f32>( 0.35, 0.40, 0.55 ) * mCerro * rayo * 0.45;
+    // ---------- Tierra y agua ----------
+    // Antes acá había un cerro casi negro y sin forma, y no se entendía
+    // qué era. Ahora son dos cosas distintas y legibles: una línea de
+    // colinas al fondo y, delante, una llanura inundada.
+    //
+    // El agua no es decoración: le da al relámpago algo que hacer. Un
+    // rayo que no se refleja en nada se siente pegado encima de la
+    // imagen.
+    let colinas = 0.215 + fbm2( vec2<f32>( p.x * 1.1, 5.0 ) ) * 0.045;
+    let mColinas = smoothstep( colinas + 0.003, colinas - 0.003, uvIn.y );
+    col = mix( col, vec3<f32>( 0.040, 0.048, 0.065 ), mColinas );
+    col = col + vec3<f32>( 0.30, 0.34, 0.48 ) * mColinas * rayo * 0.40;
+
+    // El agua arranca en una línea RECTA y nítida: un horizonte de agua
+    // es horizontal, y ese corte limpio es lo que lo hace leer como
+    // agua y no como más terreno.
+    let lineaAgua = 0.175;
+    let mAgua = smoothstep( lineaAgua + 0.002, lineaAgua - 0.002, uvIn.y );
+    // Más oscura al fondo y algo más clara cerca, como una superficie
+    // mojada que refleja el cielo.
+    let profundidad = smoothstep( lineaAgua, 0.0, uvIn.y );
+    let agua = mix( vec3<f32>( 0.045, 0.058, 0.080 ), vec3<f32>( 0.090, 0.105, 0.140 ), profundidad );
+    col = mix( col, agua, mAgua );
+
+    // Ondas: bandas horizontales comprimidas hacia el horizonte, que es
+    // lo que da la perspectiva de una superficie plana vista de canto.
+    let ondas = sin( ( lineaAgua - uvIn.y ) * 190.0 + sin( p.x * 5.0 + t * 0.7 ) * 1.6 + t * 1.8 );
+    col = col + vec3<f32>( 0.12, 0.15, 0.22 ) * mAgua * smoothstep( 0.4, 1.0, ondas ) * profundidad * 0.55;
+
+    // El reflejo del rayo: una franja vertical borrosa bajo el
+    // horizonte. Es lo que conecta el cielo con el suelo.
+    let reflejo = mAgua * smoothstep( 0.9, 0.0, abs( p.x + 0.15 ) ) * smoothstep( 0.0, lineaAgua, uvIn.y );
+    col = col + vec3<f32>( 0.55, 0.62, 0.85 ) * reflejo * rayo * 0.85;
+
+    // Repique de la lluvia sobre el agua: puntitos brillantes que
+    // aparecen y se apagan donde cae cada gota.
+    let gp = vec2<f32>( p.x * 55.0, uvIn.y * 120.0 );
+    let celdaG = floor( gp );
+    let hg = hash21( celdaG );
+    let vida = fract( hg * 7.0 + t * 1.6 );
+    let repique = step( 0.985, hg ) * smoothstep( 0.35, 0.0, length( fract( gp ) - 0.5 ) ) * smoothstep( 1.0, 0.3, vida );
+    col = col + vec3<f32>( 0.45, 0.52, 0.68 ) * repique * mAgua;
 
     // ---------- El fogonazo sobre todo el cuadro ----------
     // Más fuerte arriba que abajo, porque la descarga está en el cielo.
@@ -137,14 +171,15 @@ export function crearEscenaTormenta(scene: THREE.Scene): Promise<ResultadoEscena
 
   // Lluvia lejana: finita, lenta y tenue.
   const lluviaLejos = crearParticulas(scene, aspectoUniform, {
-    cantidad: 900,
+    cantidad: 1500,
     caida: 0.55,
     deriva: -0.17,
     tamano: [0.0009, 0.0015],
     estirado: 20,
-    color: [0.30, 0.34, 0.42],
-    colorVivo: [0.46, 0.52, 0.62],
-    sesgoBrillo: 2,
+    forma: "gota",
+    color: [0.19, 0.22, 0.29],
+    colorVivo: [0.32, 0.37, 0.46],
+    sesgoBrillo: 2.6,
     profundidad: PROFUNDIDAD_PLANO + 1,
     orden: 1,
   });
@@ -153,14 +188,15 @@ export function crearEscenaTormenta(scene: THREE.Scene): Promise<ResultadoEscena
   // capas a distinta velocidad son las que dan sensación de
   // profundidad; con una sola la lluvia parece una cortina plana.
   const lluviaCerca = crearParticulas(scene, aspectoUniform, {
-    cantidad: 500,
+    cantidad: 800,
     caida: 1.15,
     deriva: -0.30,
     tamano: [0.0015, 0.0026],
     estirado: 26,
-    color: [0.46, 0.52, 0.62],
-    colorVivo: [0.72, 0.78, 0.90],
-    sesgoBrillo: 1.5,
+    forma: "gota",
+    color: [0.30, 0.35, 0.44],
+    colorVivo: [0.52, 0.58, 0.70],
+    sesgoBrillo: 2.2,
     profundidad: PROFUNDIDAD_PLANO + 2,
     orden: 2,
   });

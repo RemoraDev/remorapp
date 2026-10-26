@@ -143,6 +143,7 @@ export function crearEscenaHalloween(scene: THREE.Scene): Promise<ResultadoEscen
     tamano: [0.0016, 0.0032],
     estirado: 1.6,
     giro: 5,
+    forma: "redonda",
     color: [0.55, 0.18, 0.04],
     colorVivo: [1.0, 0.58, 0.16],
     sesgoBrillo: 2.4,

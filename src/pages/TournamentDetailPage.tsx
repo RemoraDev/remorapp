@@ -320,10 +320,18 @@ export default function TournamentDetailPage() {
         // 2rem de padding por lado en el contenedor, más un respiro.
         const dispoAncho = window.innerWidth - 96;
         const dispoAlto = window.innerHeight - 96;
-        // Nunca achicar (si no entra, el contenedor ya permite hacer
-        // scroll) ni pasarse de 2.6x, donde el texto se ve blando.
+        // Se permite ACHICAR, no solo agrandar. La primera versión
+        // tenía un piso en 1x pensando "nunca empeorar el tamaño", y el
+        // resultado fue peor: cuando la llave no entraba, se quedaba
+        // grande y se cortaba por abajo -- el usuario veía el último
+        // partido mitad fuera de la pantalla. Ver todo chico es mejor
+        // que ver la mitad grande, sobre todo en una vista pensada para
+        // transmitir.
+        //
+        // El piso de 0.45 es donde los nombres dejan de leerse; por
+        // debajo de eso conviene que se corte y se pueda scrollear.
         const escala = Math.min(dispoAncho / ancho, dispoAlto / alto, 2.6);
-        el.style.setProperty("--bracket-escala", String(Math.max(1, escala)));
+        el.style.setProperty("--bracket-escala", String(Math.max(0.45, escala)));
       });
     };
 

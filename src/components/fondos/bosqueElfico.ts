@@ -256,6 +256,19 @@ const BOSQUE_WGSL = wgslFn(
   [comoInclude(SKYLINE_WGSL), comoInclude(ARBOL_WGSL), comoInclude(FBM2_WGSL), comoInclude(FBM_WGSL), comoInclude(RUIDO_WGSL), comoInclude(HASH_WGSL)],
 );
 
+// Recorte con forma de hoja: puntiaguda en los dos extremos.
+const FORMA_HOJA_WGSL = wgslFn(
+  /* wgsl */ `
+  fn formaHoja( coord: vec2<f32> ) -> f32 {
+    let q = coord - vec2<f32>( 0.5, 0.5 );
+    // El exponente 1.7 da la punta: con 2.0 sería una elipse y con 1.0
+    // un rombo.
+    let ancho = 0.5 * ( 1.0 - pow( abs( q.y * 2.0 ), 1.7 ) );
+    return select( 0.0, 1.0, abs( q.x ) < ancho );
+  }
+`,
+);
+
 // Posición de cada vértice de una HOJA.
 //
 // El usuario dijo que los árboles "solo parecen manchas verdes", y
@@ -403,7 +416,7 @@ const TONO_BRIZNA_WGSL = wgslFn(
 
 const PROFUNDIDAD_PLANO = -80;
 const BRIZNAS = 1400;
-const HOJAS = 4200;
+const HOJAS = 6500;
 
 export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEscena> {
   // Valor inicial cualquiera: lo corrige el primer alRedimensionar(),
@@ -465,6 +478,13 @@ export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEs
 
   // ---------- Hojas ----------
   const matHoja = new MeshBasicNodeMaterial({ transparent: false, depthWrite: true, depthTest: true });
+  // El recorte con forma de hoja. Sin esto cada hoja es un cuadrado, y
+  // a pantalla completa el follaje se lee como confeti -- fue
+  // exactamente lo que marcó el usuario. alphaTest descarta lo de
+  // afuera sin activar transparencia, así que no hay orden que
+  // resolver.
+  matHoja.alphaTest = 0.5;
+  matHoja.opacityNode = FORMA_HOJA_WGSL({ coord: uv() }) as typeof matHoja.opacityNode;
   matHoja.positionNode = HOJA_POS_WGSL({
     local: positionLocal,
     idx: instanceIndex.toFloat(),
@@ -478,7 +498,7 @@ export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEs
   // como miles de hojas y no como una mancha plana.
   matHoja.colorNode = mix(
     vec3(0.028, 0.072, 0.050),
-    vec3(0.34, 0.40, 0.14),
+    vec3(0.24, 0.30, 0.11),
     tonoHoja,
   ) as typeof matHoja.colorNode;
 

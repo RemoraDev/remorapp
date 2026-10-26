@@ -90,6 +90,47 @@ const TONO_PARTICULA_WGSL = wgslFn(
   [comoInclude(HASH_WGSL)],
 );
 
+
+// Recorte de forma de la partícula.
+//
+// EL problema de todas las escenas hasta acá: una partícula es un
+// cuadrado, y un cuadrado opaco se ve como un cuadrado. A tamaño
+// miniatura pasa, a pantalla completa se lee como confeti. Nieve,
+// ceniza, brasas, espíritus y hojas tenían todos el mismo defecto.
+//
+// Se resuelve recortando el cuadrado con alphaTest: los píxeles que
+// caen fuera de la forma se descartan. No usa transparencia, así que
+// no hay que ordenar nada y sigue escribiendo profundidad -- o sea que
+// el rechazo temprano que hace barato el pastizal sigue funcionando.
+//
+// tipo: 0 = redonda (nieve, ceniza, motas)
+//       1 = hoja (puntiaguda en los dos extremos)
+//       2 = gota (redondeada arriba, afinada abajo)
+const FORMA_PARTICULA_WGSL = wgslFn(
+  /* wgsl */ `
+  fn formaParticula( coord: vec2<f32>, tipo: f32 ) -> f32 {
+    let q = coord - vec2<f32>( 0.5, 0.5 );
+
+    if ( tipo < 0.5 ) {
+      // Disco.
+      return select( 0.0, 1.0, length( q * 2.0 ) < 1.0 );
+    }
+
+    if ( tipo < 1.5 ) {
+      // Hoja: el ancho se cierra hacia los dos extremos. El exponente
+      // 1.7 es lo que le da la punta; con 2.0 sería una elipse y con
+      // 1.0 un rombo.
+      let ancho = 0.5 * ( 1.0 - pow( abs( q.y * 2.0 ), 1.7 ) );
+      return select( 0.0, 1.0, abs( q.x ) < ancho );
+    }
+
+    // Gota: redondeada arriba y afinada hacia abajo.
+    let cierre = 0.5 * ( 1.0 - pow( clamp( q.y * 2.0 + 0.5, 0.0, 1.0 ), 2.2 ) );
+    return select( 0.0, 1.0, abs( q.x ) < cierre );
+  }
+`,
+);
+
 export interface OpcionesParticulas {
   cantidad: number;
   /** Velocidad de caída en pantallas por segundo. Negativa = sube. */
@@ -114,6 +155,8 @@ export interface OpcionesParticulas {
    * unas pocas encendidas.
    */
   sesgoBrillo?: number;
+  /** Forma recortada: redonda, hoja o gota. */
+  forma?: "redonda" | "hoja" | "gota";
   /** Z relativo a la escena, para ordenar las capas. */
   profundidad: number;
   orden: number;
@@ -156,6 +199,14 @@ export function crearParticulas(
     vec3(o.colorVivo[0], o.colorVivo[1], o.colorVivo[2]),
     tono,
   ) as typeof mat.colorNode;
+
+  // El recorte: sin esto cada partícula es un cuadrado visible.
+  // alphaTest descarta los píxeles de afuera SIN activar transparencia,
+  // así que no hay orden que resolver y se sigue escribiendo
+  // profundidad.
+  const tipoForma = o.forma === "hoja" ? 1 : o.forma === "gota" ? 2 : 0;
+  mat.alphaTest = 0.5;
+  mat.opacityNode = FORMA_PARTICULA_WGSL({ coord: uv(), tipo: float(tipoForma) }) as typeof mat.opacityNode;
 
   const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), mat, o.cantidad);
   // Las posiciones salen del shader a partir de instanceIndex, así que
