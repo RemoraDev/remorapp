@@ -60,51 +60,77 @@ const HUMANOS_WGSL = wgslFn(
     }
 
     // ---------- La ciudadela ----------
-    // Tres torres de distinta altura sobre una muralla. Silueta de
-    // piedra clara contra el cielo.
-    let hMuralla = 0.225;
+    // Rehecha: la primera versión eran tres torres chicas y grises
+    // perdidas en el horizonte. Lo que hace reconocible a una fortaleza
+    // humana de Warcraft no es el tamaño sino DOS cosas: la piedra
+    // clara y, sobre todo, los TECHOS AZULES en punta. Ese par de
+    // colores es la firma; sin él una torre es una torre cualquiera.
+    let hMuralla = 0.300;
+    let baseCiudad = 0.168;
     var piedra = 0.0;
-    // Muralla con almenas: dientes regulares en la cima.
-    let enMuralla = step( abs( p.x + 0.42 ), 0.30 );
-    let almena = step( 0.5, fract( ( p.x + 0.42 ) * 26.0 ) );
-    let techoMuralla = hMuralla + almena * 0.011;
-    piedra = max( piedra, enMuralla * step( uvIn.y, techoMuralla ) * step( 0.175, uvIn.y ) );
+    var techo = 0.0;
 
-    for ( var i = 0; i < 3; i = i + 1 ) {
+    // Muralla ancha con almenas.
+    let enMuralla = step( abs( p.x + 0.10 ), 0.62 );
+    let almena = step( 0.5, fract( ( p.x + 0.10 ) * 34.0 ) );
+    piedra = max( piedra, enMuralla * step( baseCiudad, uvIn.y ) * step( uvIn.y, hMuralla + almena * 0.013 ) );
+
+    // Arco de la puerta: un hueco redondeado en el medio de la muralla.
+    let dPuerta = length( vec2<f32>( ( p.x + 0.10 ) * 1.5, ( uvIn.y - baseCiudad ) * 0.85 ) );
+    piedra = piedra * ( 1.0 - step( dPuerta, 0.052 ) * step( uvIn.y, hMuralla - 0.04 ) );
+
+    // Cinco torres: bajas en los extremos, la central la más alta. Esa
+    // progresión es lo que da sensación de ciudadela y no de fila de
+    // postes.
+    for ( var i = 0; i < 5; i = i + 1 ) {
       let fi = f32( i );
-      let tx = -0.42 + ( fi - 1.0 ) * 0.24;
-      let ancho = 0.030 + hash21( vec2<f32>( fi, 61.0 ) ) * 0.012;
-      let alto = 0.085 + hash21( vec2<f32>( fi, 67.0 ) ) * 0.065;
+      let centrado = 1.0 - abs( fi - 2.0 ) / 2.0;
+      let tx = -0.10 + ( fi - 2.0 ) * 0.255;
+      let ancho = 0.031 + centrado * 0.020;
+      let alto = 0.085 + centrado * 0.165 + hash21( vec2<f32>( fi, 67.0 ) ) * 0.022;
       let dx = abs( p.x - tx );
       let cima = hMuralla + alto;
-      // Cuerpo de la torre.
-      piedra = max( piedra, step( dx, ancho ) * step( 0.175, uvIn.y ) * step( uvIn.y, cima ) );
-      // Almenas propias de la torre, un poco más anchas que el cuerpo.
-      let almenaT = step( 0.5, fract( ( p.x - tx ) * 42.0 ) );
-      piedra = max( piedra, step( dx, ancho * 1.22 ) * step( cima - 0.004, uvIn.y ) * step( uvIn.y, cima + 0.009 + almenaT * 0.008 ) );
-      // Techo cónico encima: el remate que vuelve "humana" la torre.
-      let relTecho = uvIn.y - ( cima + 0.012 );
-      let anchoCono = ancho * 1.25 * ( 1.0 - clamp( relTecho / 0.055, 0.0, 1.0 ) );
-      piedra = max( piedra, step( dx, anchoCono ) * step( 0.0, relTecho ) * step( relTecho, 0.055 ) );
+      piedra = max( piedra, step( dx, ancho ) * step( baseCiudad, uvIn.y ) * step( uvIn.y, cima ) );
+      // Balcón saliente justo bajo el techo.
+      piedra = max( piedra, step( dx, ancho * 1.30 ) * step( cima - 0.012, uvIn.y ) * step( uvIn.y, cima ) );
+
+      // Techo cónico AZUL, alto y afilado: un cono chato se lee como
+      // sombrero, uno alto como aguja.
+      let altoCono = 0.055 + centrado * 0.055;
+      let relTecho = uvIn.y - cima;
+      let anchoCono = ancho * 1.32 * ( 1.0 - clamp( relTecho / altoCono, 0.0, 1.0 ) );
+      techo = max( techo, step( dx, anchoCono ) * step( 0.0, relTecho ) * step( relTecho, altoCono ) );
     }
-    col = mix( col, vec3<f32>( 0.105, 0.115, 0.135 ), piedra );
+
+    col = mix( col, vec3<f32>( 0.195, 0.205, 0.225 ), piedra );
+    // Dos azules, cara iluminada y cara en sombra: sin ese corte el
+    // cono se ve plano.
+    let ladoLuz = step( 0.0, sin( ( p.x + 0.10 ) * 12.3 ) );
+    col = mix( col, mix( vec3<f32>( 0.040, 0.085, 0.26 ), vec3<f32>( 0.075, 0.150, 0.42 ), ladoLuz ), techo );
+
+    // Ventanas encendidas, chiquitas y cálidas.
+    let gw = vec2<f32>( ( p.x + 0.10 ) * 46.0, uvIn.y * 150.0 );
+    let celdaW = floor( gw );
+    let hw = hash21( celdaW );
+    let ventana = step( 0.90, hw ) * smoothstep( 0.42, 0.12, length( fract( gw ) - 0.5 ) );
+    col = col + vec3<f32>( 1.0, 0.72, 0.30 ) * ventana * piedra * 0.75;
 
     // ---------- Estandartes ----------
-    // Paños azules colgando de las torres, ondeando. El azul de la
-    // Alianza es la última pieza del reconocimiento.
     var pano = 0.0;
-    for ( var i = 0; i < 3; i = i + 1 ) {
+    for ( var i = 0; i < 5; i = i + 1 ) {
       let fi = f32( i );
-      let tx = -0.42 + ( fi - 1.0 ) * 0.24;
-      let alto = 0.085 + hash21( vec2<f32>( fi, 67.0 ) ) * 0.065;
-      let topeP = hMuralla + alto - 0.012;
+      let centrado = 1.0 - abs( fi - 2.0 ) / 2.0;
+      let tx = -0.10 + ( fi - 2.0 ) * 0.255;
+      let ancho = 0.031 + centrado * 0.020;
+      let alto = 0.085 + centrado * 0.165 + hash21( vec2<f32>( fi, 67.0 ) ) * 0.022;
+      let topeP = hMuralla + alto - 0.016;
       let rel = topeP - uvIn.y;
       // La onda crece hacia el borde suelto: arriba está atado al asta.
-      let onda = sin( t * 1.9 + fi * 2.0 + rel * 26.0 ) * 0.008 * smoothstep( 0.0, 0.050, rel );
-      let dx = p.x - ( tx + 0.034 ) - onda;
-      pano = max( pano, step( 0.0, dx ) * step( dx, 0.040 ) * step( 0.0, rel ) * step( rel, 0.058 ) );
+      let onda = sin( t * 1.9 + fi * 2.0 + rel * 24.0 ) * 0.009 * smoothstep( 0.0, 0.050, rel );
+      let dxp = p.x - ( tx + ancho * 1.35 ) - onda;
+      pano = max( pano, step( 0.0, dxp ) * step( dxp, 0.040 ) * step( 0.0, rel ) * step( rel, 0.062 ) );
     }
-    col = mix( col, vec3<f32>( 0.055, 0.105, 0.30 ), pano );
+    col = mix( col, vec3<f32>( 0.050, 0.095, 0.30 ), pano );
 
     // ---------- Campos ----------
     let hCampo = 0.175;

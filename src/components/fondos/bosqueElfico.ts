@@ -67,12 +67,16 @@ const BOSQUE_WGSL = wgslFn(
     let dSol = length( p - solPos );
     // Disco nítido + dos halos de radios distintos: el disco es lo que
     // faltaba para que se leyera un sol y no una mancha.
-    col = mix( col, vec3<f32>( 1.0, 0.97, 0.88 ), smoothstep( 0.055, 0.040, dSol ) );
-    // Halos CORTOS. Antes el segundo llegaba hasta dSol = 1.0, o sea
-    // casi todo el cuadro: eso sumaba luz cálida en cada píxel y era lo
-    // que lavaba el cielo entero y mataba la saturación.
-    col = col + vec3<f32>( 1.0, 0.82, 0.48 ) * smoothstep( 0.17, 0.05, dSol ) * 0.45;
-    col = col + vec3<f32>( 1.0, 0.68, 0.34 ) * smoothstep( 0.42, 0.05, dSol ) * 0.16;
+    // El disco va DESPUÉS de los halos y con borde duro. Antes los
+    // halos se sumaban encima y le comían el contorno: el usuario vio
+    // una mancha, no un sol.
+    col = col + vec3<f32>( 1.0, 0.62, 0.26 ) * smoothstep( 0.34, 0.06, dSol ) * 0.17;
+    col = col + vec3<f32>( 1.0, 0.76, 0.40 ) * smoothstep( 0.145, 0.06, dSol ) * 0.30;
+    // Por ENCIMA de 1: el renderer aplica mapeo de tonos, que comprime
+    // los valores altos. Con 1.0 el disco quedaba al mismo nivel que su
+    // propio halo y desaparecía; con 2.4 sigue siendo lo más brillante
+    // del cuadro después de comprimir.
+    col = mix( col, vec3<f32>( 2.4, 2.2, 1.75 ), smoothstep( 0.060, 0.054, dSol ) );
 
     // ---------- 3. Nubes ----------
     // Mucho más finas y altas que en la primera versión: con el umbral
@@ -90,8 +94,9 @@ const BOSQUE_WGSL = wgslFn(
     let nube = fbm( qn );
     let nubeArriba = fbm( qn + vec2<f32>( 0.0, 0.16 ) );
     let altoCielo = smoothstep( 0.46, 0.99, uvIn.y );
-    // Borde más duro que antes (0.60-0.95 era un degradé largo).
-    let cuerpo = smoothstep( 0.52, 0.63, nube ) * altoCielo;
+    // Borde DURO: el rango 0.52-0.63 todavía era un degradé largo y las
+    // nubes se leían como manchas difusas. Un cúmulo tiene contorno.
+    let cuerpo = smoothstep( 0.545, 0.575, nube ) * altoCielo;
     let filo = clamp( ( nubeArriba - nube ) * 7.0, 0.0, 1.0 );
     col = mix( col, vec3<f32>( 0.80, 0.78, 0.82 ), cuerpo * 0.78 );
     col = col + vec3<f32>( 1.0, 0.94, 0.82 ) * cuerpo * filo * 0.75;
@@ -106,7 +111,7 @@ const BOSQUE_WGSL = wgslFn(
     let fuerzaRayo = smoothstep( 0.46, 1.0, rayo )
       * smoothstep( 1.5, 0.05, length( dir ) )
       * smoothstep( 0.08, 0.5, uvIn.y );
-    col = col + vec3<f32>( 1.0, 0.85, 0.58 ) * fuerzaRayo * 0.30;
+    col = col + vec3<f32>( 1.0, 0.85, 0.58 ) * fuerzaRayo * 0.20;
 
     // ---------- 5. Capas de bosque ----------
     // Cada capa: su propia escala (más chica = más lejos), su altura,
@@ -368,8 +373,10 @@ export function crearEscenaBosqueElfico(scene: THREE.Scene): Promise<ResultadoEs
   // ---------- Pastizal ----------
   const pasto = crearPasto(scene, {
     cantidad: 1400,
-    base: [-0.38, -0.54],
-    altura: [0.05, 0.18],
+    base: [-0.42, -0.54],
+    // Más corto que antes (era hasta 0.18): tapaba un tercio del
+    // cuadro y el movimiento de tanta brizna junta se leía pesado.
+    altura: [0.035, 0.115],
     colorBase: [0.014, 0.04, 0.034],
     colorMedio: [0.1, 0.2, 0.09],
     colorPunta: [0.46, 0.42, 0.15],

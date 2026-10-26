@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { MeshBasicNodeMaterial } from "three/webgpu";
 import { uv, time, uniform, wgslFn } from "three/tsl";
 import { comoInclude, FBM_WGSL, FBM2_WGSL, RUIDO_WGSL, HASH_WGSL } from "./wgslComun";
-import { SKYLINE_WGSL } from "./siluetas";
+import { SKYLINE_WGSL, SEGMENTO_WGSL } from "./siluetas";
 import { crearParticulas } from "./primitivas";
 import type { ResultadoEscena } from "./tipos";
 
@@ -89,6 +89,81 @@ const NAVIDAD_WGSL = wgslFn(
     let chispa = smoothstep( 0.06, 0.0, length( fract( p * 70.0 ) - 0.5 ) ) * step( 0.988, hash21( floor( p * 70.0 ) ) );
     col = col + vec3<f32>( 1.0, 1.0, 1.0 ) * chispa * mNieve * ( 0.5 + 0.5 * sin( t * 2.0 + hash21( floor( p * 70.0 ) ) * 30.0 ) ) * 0.5;
 
+    // ---------- Pinos de primer plano ----------
+    // Los de la línea del fondo quedaban diminutos y no se leían como
+    // pinos. Estos son tres árboles cercanos, armados como pisos de
+    // triángulos -- la silueta escalonada es LA forma del pino, y se
+    // reconoce aunque esté en negro.
+    var pino = 0.0;
+    var nievePino = 0.0;
+    for ( var i = 0; i < 3; i = i + 1 ) {
+      let fi = f32( i );
+      let px = ( hash21( vec2<f32>( fi, 201.0 ) ) - 0.5 ) * 1.75;
+      let alto = 0.26 + hash21( vec2<f32>( fi, 211.0 ) ) * 0.16;
+      let pie = hNieve - 0.02;
+      // Tronco.
+      pino = max( pino, step( abs( p.x - px ), alto * 0.022 ) * step( pie, uvIn.y ) * step( uvIn.y, pie + alto * 0.22 ) );
+      // Cuatro pisos de ramas, cada uno más chico que el de abajo.
+      for ( var k = 0; k < 4; k = k + 1 ) {
+        let fk = f32( k );
+        let yBase = pie + alto * ( 0.14 + fk * 0.21 );
+        let yTope = yBase + alto * 0.30;
+        let anchoPiso = alto * ( 0.30 - fk * 0.062 );
+        let rel = clamp( ( uvIn.y - yBase ) / ( yTope - yBase ), 0.0, 1.0 );
+        let dentro = step( abs( p.x - px ), anchoPiso * ( 1.0 - rel ) ) * step( yBase, uvIn.y ) * step( uvIn.y, yTope );
+        pino = max( pino, dentro );
+        // La nieve se posa en el borde de arriba de cada piso.
+        nievePino = max( nievePino, dentro * smoothstep( 0.55, 0.95, rel ) );
+      }
+    }
+    col = mix( col, vec3<f32>( 0.016, 0.030, 0.034 ), pino );
+    col = mix( col, vec3<f32>( 0.55, 0.62, 0.78 ), nievePino * 0.85 );
+
+    // ---------- El muñeco de nieve ----------
+    // Lo que convierte un paisaje nevado en una POSTAL de Navidad. Sin
+    // él es invierno; con él, es Navidad.
+    let mx = -0.46;
+    let pieM = hNieve - 0.012;
+    let r1 = 0.050;
+    let r2 = 0.036;
+    let r3 = 0.026;
+    let c1 = vec2<f32>( mx, pieM + r1 * 0.80 );
+    let c2 = vec2<f32>( mx, c1.y + r1 * 0.78 + r2 * 0.52 );
+    let c3 = vec2<f32>( mx, c2.y + r2 * 0.76 + r3 * 0.50 );
+    var cuerpo = 0.0;
+    cuerpo = max( cuerpo, step( length( p - c1 ), r1 ) );
+    cuerpo = max( cuerpo, step( length( p - c2 ), r2 ) );
+    cuerpo = max( cuerpo, step( length( p - c3 ), r3 ) );
+    // Brazos de rama, uno a cada lado, hacia arriba.
+    let brazoIzq = smoothstep( 0.0048, 0.0, distSegmento( p, c2 + vec2<f32>( -r2 * 0.7, 0.004 ), c2 + vec2<f32>( -r2 * 2.3, r2 * 1.0 ) ) );
+    let brazoDer = smoothstep( 0.0048, 0.0, distSegmento( p, c2 + vec2<f32>( r2 * 0.7, 0.004 ), c2 + vec2<f32>( r2 * 2.3, r2 * 1.1 ) ) );
+    // La nieve del muñeco es más clara que la del suelo, para que se
+    // despegue del fondo.
+    col = mix( col, vec3<f32>( 0.80, 0.86, 1.0 ), cuerpo );
+    col = mix( col, vec3<f32>( 0.14, 0.085, 0.045 ), max( brazoIzq, brazoDer ) );
+    // Ojos y botones de carbón.
+    var carbon = 0.0;
+    carbon = max( carbon, step( length( p - ( c3 + vec2<f32>( -r3 * 0.34, r3 * 0.26 ) ) ), r3 * 0.15 ) );
+    carbon = max( carbon, step( length( p - ( c3 + vec2<f32>( r3 * 0.34, r3 * 0.26 ) ) ), r3 * 0.15 ) );
+    for ( var b = 0; b < 3; b = b + 1 ) {
+      let fb = f32( b );
+      carbon = max( carbon, step( length( p - ( c2 + vec2<f32>( 0.0, r2 * ( 0.45 - fb * 0.45 ) ) ) ), r2 * 0.11 ) );
+    }
+    col = mix( col, vec3<f32>( 0.020, 0.022, 0.028 ), carbon );
+    // LA NARIZ DE ZANAHORIA: un triángulo naranja que sale del medio de
+    // la cara. Es el detalle que nombra al objeto.
+    let rel = p - c3;
+    let largoNariz = r3 * 1.15;
+    let avance = clamp( rel.x / largoNariz, 0.0, 1.0 );
+    let nariz = step( 0.0, rel.x ) * step( rel.x, largoNariz )
+      * step( abs( rel.y + r3 * 0.02 ), r3 * 0.20 * ( 1.0 - avance ) );
+    col = mix( col, vec3<f32>( 0.78, 0.22, 0.030 ), nariz );
+    // Sombrero de copa.
+    let hy = c3.y + r3 * 0.72;
+    let ala = step( abs( p.x - mx ), r3 * 1.30 ) * step( hy, uvIn.y ) * step( uvIn.y, hy + r3 * 0.14 );
+    let copa = step( abs( p.x - mx ), r3 * 0.78 ) * step( hy + r3 * 0.10, uvIn.y ) * step( uvIn.y, hy + r3 * 0.95 );
+    col = mix( col, vec3<f32>( 0.030, 0.032, 0.040 ), max( ala, copa ) );
+
     // ---------- Viñeta ----------
     let dv = length( vec2<f32>( ( uvIn.x - 0.5 ) * 1.1, ( uvIn.y - 0.5 ) * 1.1 ) );
     col = col * mix( 1.0, smoothstep( 1.15, 0.30, dv ), 0.55 );
@@ -98,6 +173,7 @@ const NAVIDAD_WGSL = wgslFn(
 `,
   [
     comoInclude(SKYLINE_WGSL),
+    comoInclude(SEGMENTO_WGSL),
     comoInclude(FBM_WGSL),
     comoInclude(FBM2_WGSL),
     comoInclude(RUIDO_WGSL),
