@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { MeshBasicNodeMaterial } from "three/webgpu";
 import { uv, time, uniform, wgslFn } from "three/tsl";
 import { comoInclude, FBM_WGSL, FBM2_WGSL, RUIDO_WGSL, HASH_WGSL } from "./wgslComun";
-import { SEGMENTO_WGSL } from "./siluetas";
+import { SEGMENTO_WGSL, SKYLINE_WGSL } from "./siluetas";
 import { crearParticulas, crearPasto } from "./primitivas";
 import type { ResultadoEscena } from "./tipos";
 
@@ -59,78 +59,133 @@ const HUMANOS_WGSL = wgslFn(
       col = mix( col, mix( verde, col, 0.10 + fc * 0.22 ), m );
     }
 
+    // ---------- El bosque del que sale la ciudadela ----------
+    // El usuario lo marcó: estos castillos siempre asoman DESDE un
+    // bosque. Sin él, la fortaleza flota en un campo vacío y se ve como
+    // un recorte pegado encima.
+    let hBosque = 0.255 + fbm2( vec2<f32>( p.x * 1.6 + 31.0, 9.0 ) ) * 0.030;
+    let hArboles = skyline( p.x + 44.0, 5.2, 0.215, 0.075, 0.006, t );
+    let mBosque = smoothstep( hArboles + 0.003, hArboles - 0.003, uvIn.y );
+    col = mix( col, vec3<f32>( 0.022, 0.055, 0.030 ), mBosque );
+
     // ---------- La ciudadela ----------
-    // Rehecha: la primera versión eran tres torres chicas y grises
-    // perdidas en el horizonte. Lo que hace reconocible a una fortaleza
-    // humana de Warcraft no es el tamaño sino DOS cosas: la piedra
-    // clara y, sobre todo, los TECHOS AZULES en punta. Ese par de
-    // colores es la firma; sin él una torre es una torre cualquiera.
+    // Rehecha otra vez: la versión anterior eran chapas grises planas.
+    // Lo que le faltaba no era tamaño sino VOLUMEN. Una torre es un
+    // cilindro, y un cilindro tiene un lado iluminado y otro en sombra;
+    // sin ese degradé, por más almenas que tenga, se lee como cartón.
     let hMuralla = 0.300;
-    let baseCiudad = 0.168;
+    let baseCiudad = 0.185;
     var piedra = 0.0;
+    // "luz" acumula cuánta luz recibe el punto: 0 en sombra, 1 de cara
+    // al sol. Se lleva aparte de la máscara para poder sombrear cada
+    // cuerpo según su propia curvatura.
+    var luz = 0.0;
     var techo = 0.0;
+    var luzTecho = 0.0;
 
-    // Muralla ancha con almenas.
-    let enMuralla = step( abs( p.x + 0.10 ), 0.62 );
+    // Muralla con almenas. Incluso una pared plana recibe algo de
+    // degradé, para que no sea un bloque de un solo gris.
+    let enMuralla = step( abs( p.x + 0.10 ), 0.58 );
     let almena = step( 0.5, fract( ( p.x + 0.10 ) * 34.0 ) );
-    piedra = max( piedra, enMuralla * step( baseCiudad, uvIn.y ) * step( uvIn.y, hMuralla + almena * 0.013 ) );
+    let mMuralla = enMuralla * step( baseCiudad, uvIn.y ) * step( uvIn.y, hMuralla + almena * 0.013 );
+    piedra = max( piedra, mMuralla );
+    luz = max( luz, mMuralla * ( 0.78 - smoothstep( baseCiudad, hMuralla, uvIn.y ) * 0.22 ) );
 
-    // Arco de la puerta: un hueco redondeado en el medio de la muralla.
+    // Arco de la puerta.
     let dPuerta = length( vec2<f32>( ( p.x + 0.10 ) * 1.5, ( uvIn.y - baseCiudad ) * 0.85 ) );
-    piedra = piedra * ( 1.0 - step( dPuerta, 0.052 ) * step( uvIn.y, hMuralla - 0.04 ) );
+    let hueco = step( dPuerta, 0.048 ) * step( uvIn.y, hMuralla - 0.04 );
+    piedra = piedra * ( 1.0 - hueco );
+    luz = luz * ( 1.0 - hueco );
 
-    // Cinco torres: bajas en los extremos, la central la más alta. Esa
-    // progresión es lo que da sensación de ciudadela y no de fila de
-    // postes.
     for ( var i = 0; i < 5; i = i + 1 ) {
       let fi = f32( i );
       let centrado = 1.0 - abs( fi - 2.0 ) / 2.0;
-      let tx = -0.10 + ( fi - 2.0 ) * 0.255;
-      let ancho = 0.031 + centrado * 0.020;
+      let tx = -0.10 + ( fi - 2.0 ) * 0.245;
+      let ancho = 0.030 + centrado * 0.020;
       let alto = 0.085 + centrado * 0.165 + hash21( vec2<f32>( fi, 67.0 ) ) * 0.022;
-      let dx = abs( p.x - tx );
+      let dx = p.x - tx;
+      let n = dx / ancho;
       let cima = hMuralla + alto;
-      piedra = max( piedra, step( dx, ancho ) * step( baseCiudad, uvIn.y ) * step( uvIn.y, cima ) );
-      // Balcón saliente justo bajo el techo.
-      piedra = max( piedra, step( dx, ancho * 1.30 ) * step( cima - 0.012, uvIn.y ) * step( uvIn.y, cima ) );
+      let mT = step( abs( n ), 1.0 ) * step( baseCiudad, uvIn.y ) * step( uvIn.y, cima );
+      piedra = max( piedra, mT );
+      // Redondez del cilindro: el sol viene de la izquierda, así que el
+      // canto izquierdo se enciende y el derecho cae a sombra. Es un
+      // degradé, no dos tonos planos.
+      let luzCil = clamp( 0.30 + 0.70 * ( 0.5 - n * 0.55 ), 0.14, 1.0 );
+      luz = max( luz, mT * luzCil );
 
-      // Techo cónico AZUL, alto y afilado: un cono chato se lee como
-      // sombrero, uno alto como aguja.
+      // Balcón saliente bajo el techo, más oscuro para que se despegue.
+      let mBalcon = step( abs( dx ), ancho * 1.28 ) * step( cima - 0.013, uvIn.y ) * step( uvIn.y, cima );
+      piedra = max( piedra, mBalcon );
+      luz = mix( luz, luz * 0.55, mBalcon );
+
+      // Techo cónico: mismo criterio de redondez.
       let altoCono = 0.055 + centrado * 0.055;
       let relTecho = uvIn.y - cima;
-      let anchoCono = ancho * 1.32 * ( 1.0 - clamp( relTecho / altoCono, 0.0, 1.0 ) );
-      techo = max( techo, step( dx, anchoCono ) * step( 0.0, relTecho ) * step( relTecho, altoCono ) );
+      let anchoCono = ancho * 1.30 * ( 1.0 - clamp( relTecho / altoCono, 0.0, 1.0 ) );
+      let mTecho = step( abs( dx ), anchoCono ) * step( 0.0, relTecho ) * step( relTecho, altoCono );
+      techo = max( techo, mTecho );
+      luzTecho = max( luzTecho, mTecho * clamp( 0.26 + 0.74 * ( 0.5 - ( dx / max( anchoCono, 0.0001 ) ) * 0.55 ), 0.12, 1.0 ) );
     }
 
-    col = mix( col, vec3<f32>( 0.195, 0.205, 0.225 ), piedra );
-    // Dos azules, cara iluminada y cara en sombra: sin ese corte el
-    // cono se ve plano.
-    let ladoLuz = step( 0.0, sin( ( p.x + 0.10 ) * 12.3 ) );
-    col = mix( col, mix( vec3<f32>( 0.040, 0.085, 0.26 ), vec3<f32>( 0.075, 0.150, 0.42 ), ladoLuz ), techo );
+    // Hiladas de piedra: líneas finas horizontales. Es lo que convierte
+    // una superficie lisa en mampostería.
+    let hilada = smoothstep( 0.30, 0.0, abs( fract( uvIn.y * 210.0 ) - 0.5 ) - 0.30 );
+    let piedraBase = mix( vec3<f32>( 0.055, 0.058, 0.070 ), vec3<f32>( 0.255, 0.262, 0.290 ), luz );
+    col = mix( col, piedraBase * ( 1.0 - hilada * 0.22 ), piedra );
 
-    // Ventanas encendidas, chiquitas y cálidas.
+    // El techo azul, también con degradé de cilindro.
+    col = mix( col, mix( vec3<f32>( 0.022, 0.048, 0.155 ), vec3<f32>( 0.105, 0.210, 0.520 ), luzTecho ), techo );
+
+    // Ventanas encendidas.
     let gw = vec2<f32>( ( p.x + 0.10 ) * 46.0, uvIn.y * 150.0 );
     let celdaW = floor( gw );
     let hw = hash21( celdaW );
-    let ventana = step( 0.90, hw ) * smoothstep( 0.42, 0.12, length( fract( gw ) - 0.5 ) );
-    col = col + vec3<f32>( 1.0, 0.72, 0.30 ) * ventana * piedra * 0.75;
+    let ventana = step( 0.92, hw ) * smoothstep( 0.42, 0.12, length( fract( gw ) - 0.5 ) );
+    col = col + vec3<f32>( 1.0, 0.72, 0.30 ) * ventana * piedra * 0.70;
+
+    // Bruma entre la ciudadela y el primer plano: sin esto la piedra
+    // tiene el mismo contraste que el pasto de adelante y todo queda
+    // aplastado en un solo plano.
+    col = mix( col, vec3<f32>( 0.42, 0.52, 0.62 ), ( piedra + techo + mBosque ) * smoothstep( 0.30, 0.17, uvIn.y ) * 0.22 );
 
     // ---------- Estandartes ----------
     var pano = 0.0;
     for ( var i = 0; i < 5; i = i + 1 ) {
       let fi = f32( i );
       let centrado = 1.0 - abs( fi - 2.0 ) / 2.0;
-      let tx = -0.10 + ( fi - 2.0 ) * 0.255;
-      let ancho = 0.031 + centrado * 0.020;
+      let tx = -0.10 + ( fi - 2.0 ) * 0.245;
+      let ancho = 0.030 + centrado * 0.020;
       let alto = 0.085 + centrado * 0.165 + hash21( vec2<f32>( fi, 67.0 ) ) * 0.022;
-      let topeP = hMuralla + alto - 0.016;
+      let topeP = hMuralla + alto - 0.018;
       let rel = topeP - uvIn.y;
-      // La onda crece hacia el borde suelto: arriba está atado al asta.
       let onda = sin( t * 1.9 + fi * 2.0 + rel * 24.0 ) * 0.009 * smoothstep( 0.0, 0.050, rel );
-      let dxp = p.x - ( tx + ancho * 1.35 ) - onda;
-      pano = max( pano, step( 0.0, dxp ) * step( dxp, 0.040 ) * step( 0.0, rel ) * step( rel, 0.062 ) );
+      let dxp = p.x - ( tx + ancho * 1.32 ) - onda;
+      pano = max( pano, step( 0.0, dxp ) * step( dxp, 0.038 ) * step( 0.0, rel ) * step( rel, 0.060 ) );
     }
-    col = mix( col, vec3<f32>( 0.050, 0.095, 0.30 ), pano );
+    col = mix( col, vec3<f32>( 0.045, 0.085, 0.27 ), pano );
+
+    // ---------- Pinos de primer plano ----------
+    // A los costados, enmarcando: es lo que termina de meter la
+    // fortaleza DENTRO de un bosque en vez de dejarla sola en un campo.
+    var pino = 0.0;
+    for ( var i = 0; i < 4; i = i + 1 ) {
+      let fi = f32( i );
+      let lado = select( -1.0, 1.0, hash21( vec2<f32>( fi, 301.0 ) ) > 0.5 );
+      let px = lado * ( 0.60 + hash21( vec2<f32>( fi, 307.0 ) ) * 0.30 );
+      let alto = 0.34 + hash21( vec2<f32>( fi, 311.0 ) ) * 0.22;
+      let pie = 0.120;
+      pino = max( pino, step( abs( p.x - px ), alto * 0.020 ) * step( pie, uvIn.y ) * step( uvIn.y, pie + alto * 0.25 ) );
+      for ( var k = 0; k < 4; k = k + 1 ) {
+        let fk = f32( k );
+        let yB = pie + alto * ( 0.16 + fk * 0.21 );
+        let yT = yB + alto * 0.30;
+        let anchoPiso = alto * ( 0.26 - fk * 0.054 );
+        let relp = clamp( ( uvIn.y - yB ) / ( yT - yB ), 0.0, 1.0 );
+        pino = max( pino, step( abs( p.x - px ), anchoPiso * ( 1.0 - relp ) ) * step( yB, uvIn.y ) * step( uvIn.y, yT ) );
+      }
+    }
+    col = mix( col, vec3<f32>( 0.012, 0.034, 0.018 ), pino );
 
     // ---------- Campos ----------
     let hCampo = 0.175;
@@ -151,6 +206,7 @@ const HUMANOS_WGSL = wgslFn(
 `,
   [
     comoInclude(SEGMENTO_WGSL),
+    comoInclude(SKYLINE_WGSL),
     comoInclude(FBM_WGSL),
     comoInclude(FBM2_WGSL),
     comoInclude(RUIDO_WGSL),
