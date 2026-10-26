@@ -151,31 +151,58 @@ const TORMENTA_WGSL = wgslFn(
     let detalle = smoothstep( 0.0, 0.055, bajoHorizonte );
     let normal = normalize( vec3<f32>( -pendX * detalle, 1.0, -pendZ * detalle ) );
 
-    // Fresnel: 1 pegado al horizonte (se mira de canto, espeja) y bajo
-    // en el borde inferior (se mira desde arriba, se ve el agua).
-    let canto = 1.0 - smoothstep( 0.0, lineaAgua * 0.95, bajoHorizonte );
-    let fresnel = clamp( mix( 0.05, 1.0, pow( canto, 1.7 ) ) + normal.z * 0.25, 0.0, 1.0 );
+    // Dirección de la vista hacia ese punto del agua. Antes el Fresnel
+    // salía de la distancia al horizonte, que es un truco que aproxima
+    // el promedio pero ignora la ola: todas las caras reflejaban lo
+    // mismo y el agua quedaba plana y gris.
+    let vista = normalize( vec3<f32>( p.x * 0.75, -0.30 - bajoHorizonte * 2.6, -1.0 ) );
 
-    // Lo que refleja: el mismo cielo de la escena, que es lo que ata el
-    // agua al resto del cuadro. Si reflejara un color fijo, parecería
-    // pintada aparte.
+    // FRESNEL DE VERDAD (aproximación de Schlick). Depende del ángulo
+    // entre la vista y la normal de CADA ola, así que una cara que se
+    // inclina hacia el ojo refleja poco y la de al lado refleja mucho.
+    // Ese contraste cara a cara es lo que hace brillar al agua.
+    let cosV = max( dot( normal, -vista ), 0.0 );
+    let fresnel = clamp( 0.02 + 0.98 * pow( 1.0 - cosV, 5.0 ), 0.0, 1.0 );
+
+    // Qué parte del cielo ve cada ola. La dirección reflejada decide la
+    // altura del cielo que se refleja: las caras que miran arriba traen
+    // el cielo alto (oscuro) y las que miran al horizonte traen el
+    // claro. Con un color fijo, el agua parecía pintada aparte.
+    let refl = reflect( vista, normal );
+    let alturaRefl = clamp( refl.y * 0.5 + 0.5, 0.0, 1.0 );
     let cieloReflejado = mix(
-      vec3<f32>( 0.060, 0.070, 0.095 ),
-      vec3<f32>( 0.105, 0.120, 0.150 ),
-      canto
-    ) + vec3<f32>( 0.38, 0.42, 0.58 ) * rayo * ( 0.35 + 0.65 * canto );
-    let aguaProfunda = vec3<f32>( 0.016, 0.026, 0.038 );
+      vec3<f32>( 0.105, 0.120, 0.155 ),
+      vec3<f32>( 0.030, 0.038, 0.058 ),
+      smoothstep( 0.45, 0.95, alturaRefl )
+    ) + vec3<f32>( 0.42, 0.46, 0.62 ) * rayo * ( 0.30 + 0.70 * ( 1.0 - alturaRefl ) );
+
+    // El color propio del agua: más verdoso y claro en la cresta, más
+    // oscuro y azul en el valle. Es la luz que atraviesa la ola, y es
+    // lo que la saca del gris.
+    let enCresta = smoothstep( -0.04, 0.05, altura );
+    let aguaProfunda = mix(
+      vec3<f32>( 0.008, 0.016, 0.026 ),
+      vec3<f32>( 0.022, 0.052, 0.055 ),
+      enCresta
+    );
     var colAgua = mix( aguaProfunda, cieloReflejado, fresnel );
 
     // Brillo especular en las caras que miran al relámpago: es lo que
     // convierte el fogonazo en un camino de luz sobre el agua.
     let haciaLuz = normalize( vec3<f32>( -0.25, 0.55, -0.8 ) );
-    let brillo = pow( max( dot( normal, haciaLuz ), 0.0 ), 48.0 );
-    colAgua = colAgua + vec3<f32>( 0.85, 0.90, 1.0 ) * brillo * ( 0.05 + rayo * 1.6 );
+    let medio = normalize( haciaLuz - vista );
+    let brillo = pow( max( dot( normal, medio ), 0.0 ), 90.0 );
+    colAgua = colAgua + vec3<f32>( 0.85, 0.90, 1.0 ) * brillo * ( 0.08 + rayo * 2.2 );
 
     // Espuma en las crestas, solo cerca, donde se resuelve.
-    let espuma = smoothstep( 0.045, 0.075, altura ) * smoothstep( 0.0, 0.09, bajoHorizonte );
-    colAgua = colAgua + vec3<f32>( 0.16, 0.18, 0.22 ) * espuma;
+    // La espuma se rompe con ruido: un degradé liso sobre la cresta se
+    // lee como un reflejo, no como espuma. Lo que la delata es el
+    // borde irregular.
+    let texturaEspuma = fbm2( mundo * 7.0 + vec2<f32>( t * 0.25, 0.0 ) );
+    let espuma = smoothstep( 0.030, 0.062, altura )
+      * smoothstep( 0.42, 0.68, texturaEspuma )
+      * smoothstep( 0.0, 0.07, bajoHorizonte );
+    colAgua = colAgua + vec3<f32>( 0.22, 0.25, 0.30 ) * espuma;
 
     col = mix( col, colAgua, mAgua );
 
