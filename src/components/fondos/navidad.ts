@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { MeshBasicNodeMaterial } from "three/webgpu";
 import { uv, time, uniform, wgslFn } from "three/tsl";
 import { comoInclude, FBM_WGSL, FBM2_WGSL, RUIDO_WGSL, HASH_WGSL } from "./wgslComun";
-import { SKYLINE_WGSL, SEGMENTO_WGSL } from "./siluetas";
+import { SKYLINE_WGSL, SEGMENTO_WGSL, PINO_WGSL } from "./siluetas";
 import { crearParticulas } from "./primitivas";
 import type { ResultadoEscena } from "./tipos";
 
@@ -90,39 +90,33 @@ const NAVIDAD_WGSL = wgslFn(
     col = col + vec3<f32>( 1.0, 1.0, 1.0 ) * chispa * mNieve * ( 0.5 + 0.5 * sin( t * 2.0 + hash21( floor( p * 70.0 ) ) * 30.0 ) ) * 0.5;
 
     // ---------- Pinos de primer plano ----------
-    // Los de la línea del fondo quedaban diminutos y no se leían como
-    // pinos. Estos son tres árboles cercanos, armados como pisos de
-    // triángulos -- la silueta escalonada es LA forma del pino, y se
-    // reconoce aunque esté en negro.
-    var pino = 0.0;
+    // Se llama "masaPino" y no "pino" porque una variable con el
+    // mismo nombre que la función la TAPA: WGSL no deja invocarla.
+    var masaPino = 0.0;
+    var luzPino = 0.0;
     var nievePino = 0.0;
-    for ( var i = 0; i < 3; i = i + 1 ) {
+    for ( var i = 0; i < 4; i = i + 1 ) {
       let fi = f32( i );
-      let px = ( hash21( vec2<f32>( fi, 201.0 ) ) - 0.5 ) * 1.75;
-      let alto = 0.26 + hash21( vec2<f32>( fi, 211.0 ) ) * 0.16;
-      let pie = hNieve - 0.02;
-      // Tronco.
-      pino = max( pino, step( abs( p.x - px ), alto * 0.022 ) * step( pie, uvIn.y ) * step( uvIn.y, pie + alto * 0.22 ) );
-      // Cuatro pisos de ramas, cada uno más chico que el de abajo.
-      for ( var k = 0; k < 4; k = k + 1 ) {
-        let fk = f32( k );
-        let yBase = pie + alto * ( 0.14 + fk * 0.21 );
-        let yTope = yBase + alto * 0.30;
-        let anchoPiso = alto * ( 0.30 - fk * 0.062 );
-        let rel = clamp( ( uvIn.y - yBase ) / ( yTope - yBase ), 0.0, 1.0 );
-        let dentro = step( abs( p.x - px ), anchoPiso * ( 1.0 - rel ) ) * step( yBase, uvIn.y ) * step( uvIn.y, yTope );
-        pino = max( pino, dentro );
-        // La nieve se posa en el borde de arriba de cada piso.
-        nievePino = max( nievePino, dentro * smoothstep( 0.55, 0.95, rel ) );
+      // Repartidos hacia los costados: el centro queda para el muñeco.
+      let lado = select( -1.0, 1.0, hash21( vec2<f32>( fi, 201.0 ) ) > 0.5 );
+      let px = lado * ( 0.50 + hash21( vec2<f32>( fi, 203.0 ) ) * 0.40 );
+      let alto = 0.28 + hash21( vec2<f32>( fi, 211.0 ) ) * 0.20;
+      let r = pino( vec2<f32>( p.x, uvIn.y ), vec2<f32>( px, hNieve - 0.02 ), alto, fi + 1.0, sin( t * 0.5 + fi ) * 0.006 );
+      if ( r.x > 0.5 ) {
+        masaPino = 1.0;
+        luzPino = r.y;
+        nievePino = r.z;
       }
     }
-    col = mix( col, vec3<f32>( 0.016, 0.030, 0.034 ), pino );
-    col = mix( col, vec3<f32>( 0.55, 0.62, 0.78 ), nievePino * 0.85 );
+    col = mix( col, mix( vec3<f32>( 0.006, 0.016, 0.018 ), vec3<f32>( 0.030, 0.070, 0.060 ), luzPino ), masaPino );
+    col = mix( col, vec3<f32>( 0.52, 0.60, 0.78 ), nievePino * masaPino * 0.9 );
 
     // ---------- El muñeco de nieve ----------
     // Lo que convierte un paisaje nevado en una POSTAL de Navidad. Sin
     // él es invierno; con él, es Navidad.
-    let mx = -0.46;
+    // Al centro: en -0.46 quedaba debajo de las tarjetas de la llave,
+    // que ocupan el lado izquierdo. Acá se ve siempre.
+    let mx = 0.06;
     let pieM = hNieve - 0.012;
     let r1 = 0.050;
     let r2 = 0.036;
@@ -174,6 +168,7 @@ const NAVIDAD_WGSL = wgslFn(
   [
     comoInclude(SKYLINE_WGSL),
     comoInclude(SEGMENTO_WGSL),
+    comoInclude(PINO_WGSL),
     comoInclude(FBM_WGSL),
     comoInclude(FBM2_WGSL),
     comoInclude(RUIDO_WGSL),

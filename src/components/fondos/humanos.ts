@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { MeshBasicNodeMaterial } from "three/webgpu";
 import { uv, time, uniform, wgslFn } from "three/tsl";
 import { comoInclude, FBM_WGSL, FBM2_WGSL, RUIDO_WGSL, HASH_WGSL } from "./wgslComun";
-import { SEGMENTO_WGSL, SKYLINE_WGSL } from "./siluetas";
+import { SEGMENTO_WGSL, SKYLINE_WGSL, PINO_WGSL } from "./siluetas";
 import { crearParticulas, crearPasto } from "./primitivas";
 import type { ResultadoEscena } from "./tipos";
 
@@ -168,24 +168,22 @@ const HUMANOS_WGSL = wgslFn(
     // ---------- Pinos de primer plano ----------
     // A los costados, enmarcando: es lo que termina de meter la
     // fortaleza DENTRO de un bosque en vez de dejarla sola en un campo.
-    var pino = 0.0;
+    // Se llama "masaPino" y no "pino" porque una variable con el
+    // mismo nombre que la función la TAPA: WGSL no deja invocarla.
+    var masaPino = 0.0;
+    var luzPino = 0.0;
     for ( var i = 0; i < 4; i = i + 1 ) {
       let fi = f32( i );
       let lado = select( -1.0, 1.0, hash21( vec2<f32>( fi, 301.0 ) ) > 0.5 );
-      let px = lado * ( 0.60 + hash21( vec2<f32>( fi, 307.0 ) ) * 0.30 );
-      let alto = 0.34 + hash21( vec2<f32>( fi, 311.0 ) ) * 0.22;
-      let pie = 0.120;
-      pino = max( pino, step( abs( p.x - px ), alto * 0.020 ) * step( pie, uvIn.y ) * step( uvIn.y, pie + alto * 0.25 ) );
-      for ( var k = 0; k < 4; k = k + 1 ) {
-        let fk = f32( k );
-        let yB = pie + alto * ( 0.16 + fk * 0.21 );
-        let yT = yB + alto * 0.30;
-        let anchoPiso = alto * ( 0.26 - fk * 0.054 );
-        let relp = clamp( ( uvIn.y - yB ) / ( yT - yB ), 0.0, 1.0 );
-        pino = max( pino, step( abs( p.x - px ), anchoPiso * ( 1.0 - relp ) ) * step( yB, uvIn.y ) * step( uvIn.y, yT ) );
+      let px = lado * ( 0.58 + hash21( vec2<f32>( fi, 307.0 ) ) * 0.32 );
+      let alto = 0.32 + hash21( vec2<f32>( fi, 311.0 ) ) * 0.22;
+      let r = pino( vec2<f32>( p.x, uvIn.y ), vec2<f32>( px, 0.120 ), alto, fi + 9.0, sin( t * 0.45 + fi ) * 0.005 );
+      if ( r.x > 0.5 ) {
+        masaPino = 1.0;
+        luzPino = r.y;
       }
     }
-    col = mix( col, vec3<f32>( 0.012, 0.034, 0.018 ), pino );
+    col = mix( col, mix( vec3<f32>( 0.005, 0.016, 0.008 ), vec3<f32>( 0.028, 0.070, 0.030 ), luzPino ), masaPino );
 
     // ---------- Campos ----------
     let hCampo = 0.175;
@@ -207,6 +205,7 @@ const HUMANOS_WGSL = wgslFn(
   [
     comoInclude(SEGMENTO_WGSL),
     comoInclude(SKYLINE_WGSL),
+    comoInclude(PINO_WGSL),
     comoInclude(FBM_WGSL),
     comoInclude(FBM2_WGSL),
     comoInclude(RUIDO_WGSL),

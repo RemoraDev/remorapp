@@ -123,3 +123,67 @@ export const ARBOL_PELADO_WGSL = wgslFn(
 `,
   [comoInclude(SEGMENTO_WGSL), comoInclude(HASH_WGSL)],
 );
+
+// Un pino, devuelto como vec3: ( cobertura, luz, nieve ).
+//
+// La primera versión eran triángulos planos apilados y el usuario dijo
+// que "no parecen reales". Le faltaban tres cosas, y ninguna es
+// detalle:
+//
+//   1. VOLUMEN. Un pino es cónico, así que cada piso tiene un lado
+//      iluminado y otro en sombra. Sin ese degradé es una chapa.
+//   2. IRREGULARIDAD. Los pisos iguales y centrados leen como un
+//      adorno de cartón; en un árbol real cada rama sale distinta.
+//   3. CAÍDA. Las ramas de un pino caen hacia abajo en los extremos,
+//      no son horizontales.
+export const PINO_WGSL = wgslFn(
+  /* wgsl */ `
+  fn pino( p: vec2<f32>, base: vec2<f32>, altura: f32, semilla: f32, viento: f32 ) -> vec3<f32> {
+    var cobertura = 0.0;
+    var luz = 0.0;
+    var nieve = 0.0;
+
+    // Tronco, apenas visible bajo el primer piso.
+    let anchoTronco = altura * 0.022;
+    if ( abs( p.x - base.x ) < anchoTronco && p.y > base.y && p.y < base.y + altura * 0.26 ) {
+      cobertura = 1.0;
+      luz = 0.30;
+    }
+
+    for ( var k = 0; k < 5; k = k + 1 ) {
+      let fk = f32( k );
+      let s = semilla * 13.0 + fk;
+      // Los pisos se solapan: sin solape se ven los escalones y el
+      // árbol parece una torre de conos sueltos.
+      let yBase = base.y + altura * ( 0.13 + fk * 0.175 );
+      let yTope = yBase + altura * 0.30;
+      // Cada piso con su propio ancho y su propio desvío lateral.
+      let anchoPiso = altura * ( 0.30 - fk * 0.048 ) * ( 0.86 + hash21( vec2<f32>( s, 3.0 ) ) * 0.28 );
+      let desvio = ( hash21( vec2<f32>( s, 7.0 ) ) - 0.5 ) * altura * 0.030;
+      // El viento mueve más la copa que la base.
+      let cx = base.x + desvio + viento * ( yBase - base.y ) / max( altura, 0.0001 );
+
+      if ( p.y >= yBase && p.y <= yTope ) {
+        let rel = ( p.y - yBase ) / ( yTope - yBase );
+        // La rama CAE: el borde baja hacia afuera en vez de ir recto.
+        // Es lo que separa un pino de un triángulo.
+        let medio = anchoPiso * ( 1.0 - rel );
+        let caida = pow( clamp( abs( p.x - cx ) / max( medio, 0.0001 ), 0.0, 1.0 ), 2.0 ) * altura * 0.055;
+        if ( abs( p.x - cx ) < medio && p.y + caida <= yTope ) {
+          cobertura = 1.0;
+          // Volumen cónico: el sol entra desde la izquierda.
+          let n = ( p.x - cx ) / max( medio, 0.0001 );
+          luz = clamp( 0.26 + 0.74 * ( 0.5 - n * 0.55 ), 0.10, 1.0 );
+          // La nieve se posa en el borde de ARRIBA de cada piso, con
+          // borde irregular -- la nieve no se acumula en línea recta.
+          let bordeNieve = 0.62 + ( hash21( vec2<f32>( floor( p.x * 240.0 ), s ) ) - 0.5 ) * 0.22;
+          nieve = smoothstep( bordeNieve, bordeNieve + 0.16, rel );
+        }
+      }
+    }
+
+    return vec3<f32>( cobertura, luz, nieve );
+  }
+`,
+  [comoInclude(HASH_WGSL)],
+);
