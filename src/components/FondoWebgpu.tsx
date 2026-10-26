@@ -22,6 +22,7 @@ import { crearEscenaBosqueElfico } from "./fondos/bosqueElfico";
 import { crearEscenaTormenta } from "./fondos/tormenta";
 import { crearEscenaNavidad } from "./fondos/navidad";
 import { crearEscenaHalloween } from "./fondos/halloween";
+import { crearEscenaNoMuertos } from "./fondos/noMuertos";
 import { IMAGEN_FONDO_WEBGPU } from "../types/tournaments";
 import type { FondoBracketWebgpu } from "../types/tournaments";
 
@@ -641,6 +642,7 @@ const ESCENAS: Record<FondoBracketWebgpu, (scene: THREE.Scene) => Promise<Result
   tormenta: crearEscenaTormenta,
   navidad: crearEscenaNavidad,
   halloween: crearEscenaHalloween,
+  no_muertos: crearEscenaNoMuertos,
   nebulosa: escenaNebulosa,
   campo_estelar: escenaCampoEstelar,
   aurora: escenaCampoEstelar,

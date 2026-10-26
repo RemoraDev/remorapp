@@ -2,6 +2,7 @@ import { crearEscenaBosqueElfico } from "./bosqueElfico";
 import { crearEscenaTormenta } from "./tormenta";
 import { crearEscenaNavidad } from "./navidad";
 import { crearEscenaHalloween } from "./halloween";
+import { crearEscenaNoMuertos } from "./noMuertos";
 import type { ConstructorEscena } from "./tipos";
 
 // Registro de las escenas procedurales (las que se dibujan por código,
@@ -50,6 +51,12 @@ export const ESCENAS_PROCEDURALES: EscenaProcedural[] = [
     etiqueta: "Noche de brujas",
     construir: crearEscenaHalloween,
     segundoCaptura: 16,
+  },
+  {
+    id: "no_muertos",
+    etiqueta: "Tierras malditas",
+    construir: crearEscenaNoMuertos,
+    segundoCaptura: 20,
   },
 ];
 
