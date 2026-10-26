@@ -3,6 +3,9 @@
     "target": "ES2020",
     "useDefineForClassFields": true,
     "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    // El motor usa WebGPU directamente, sin Three: sus tipos no vienen
+    // en lib.dom todavía.
+    "types": ["@webgpu/types", "vite/client"],
     "module": "ESNext",
     "skipLibCheck": true,
     "moduleResolution": "bundler",

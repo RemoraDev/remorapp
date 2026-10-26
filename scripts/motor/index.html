@@ -1,0 +1,28 @@
+<!doctype html>
+<!-- Página de desarrollo del motor WebGPU. No se despacha con la app:
+     Vite solo empaqueta index.html. El script va APARTE y no en línea,
+     porque el "módulo proxy" que Vite genera para scripts en línea de
+     un HTML secundario se pierde al reiniciar el servidor. -->
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>motor-fondos</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font-family: system-ui, sans-serif; }
+      #lienzo { display: block; width: 100vw; height: 100vh; }
+      #hud {
+        position: fixed; left: 12px; top: 12px; z-index: 10;
+        color: #cfe; background: rgba(0,0,0,.55); padding: 8px 12px;
+        border-radius: 6px; font-size: 12px; line-height: 1.6;
+        font-variant-numeric: tabular-nums; pointer-events: none;
+      }
+      #error { position: fixed; inset: 20px; color: #f88; font-size: 14px; white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <canvas id="lienzo"></canvas>
+    <div id="hud"></div>
+    <div id="error"></div>
+    <script type="module" src="./motor.js"></script>
+  </body>
+</html>
