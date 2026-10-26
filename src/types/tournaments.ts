@@ -55,7 +55,8 @@ export type FondoBracketWebgpu =
   | "tormenta"
   | "navidad"
   | "halloween"
-  | "no_muertos";
+  | "no_muertos"
+  | "orcos";
 
 export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2" | FondoBracketWebgpu;
 
@@ -218,6 +219,7 @@ export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "navidad", label: "Noche de nieve" },
   { value: "halloween", label: "Noche de brujas" },
   { value: "no_muertos", label: "Tierras malditas" },
+  { value: "orcos", label: "Durotar" },
 ];
 
 // Foto base de cada fondo WebGPU (AVIF, códec AV1). Única fuente de
@@ -245,6 +247,7 @@ export const IMAGEN_FONDO_WEBGPU: Record<FondoBracketWebgpu, string> = {
   navidad: "/fondos-webgpu/navidad.avif",
   halloween: "/fondos-webgpu/halloween.avif",
   no_muertos: "/fondos-webgpu/no_muertos.avif",
+  orcos: "/fondos-webgpu/orcos.avif",
 };
 
 // Para decidir si un valor de FondoBracket/FondoLineup necesita el
