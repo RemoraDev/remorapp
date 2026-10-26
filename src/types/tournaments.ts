@@ -58,7 +58,8 @@ export type FondoBracketWebgpu =
   | "no_muertos"
   | "orcos"
   | "humanos"
-  | "elfos";
+  | "elfos"
+  | "protoss";
 
 export type FondoBracket = "ninguno" | "estrellas" | "estrellado_2" | FondoBracketWebgpu;
 
@@ -224,6 +225,7 @@ export const FONDO_BRACKET_OPTIONS: { value: FondoBracket; label: string }[] = [
   { value: "orcos", label: "Durotar" },
   { value: "humanos", label: "Lordaeron" },
   { value: "elfos", label: "Ashenvale" },
+  { value: "protoss", label: "Aiur" },
 ];
 
 // Foto base de cada fondo WebGPU (AVIF, códec AV1). Única fuente de
@@ -254,6 +256,7 @@ export const IMAGEN_FONDO_WEBGPU: Record<FondoBracketWebgpu, string> = {
   orcos: "/fondos-webgpu/orcos.avif",
   humanos: "/fondos-webgpu/humanos.avif",
   elfos: "/fondos-webgpu/elfos.avif",
+  protoss: "/fondos-webgpu/protoss.avif",
 };
 
 // Para decidir si un valor de FondoBracket/FondoLineup necesita el
