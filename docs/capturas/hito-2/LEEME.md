@@ -49,11 +49,21 @@ vivo: `http://localhost:5173/scripts/motor/index.html?<parametros>`.
   cuadratura de una sola muestra por píxel. Se redujo mucho acotando el
   error del punto de entrada a la nube, pero lo que lo elimina de verdad
   es el TAA, que entra en el hito 4.
-- **El tiempo de GPU de este hito no está medido de forma confiable.**
-  Durante toda la sesión la GPU estuvo entre 89 y 92 °C con el reloj
-  frenado por temperatura en 300-360 MHz de 2100 (razón de freno 0x20),
-  incluso en reposo y a 18 W. Las cifras tomadas en ese estado van de
-  2,6 a 28 ms para escenas equivalentes, o sea que no miden el shader
-  sino el freno. Lo mejor observado fue 3,6 ms a 1600x900. La medición
-  buena hay que rehacerla dentro de Tauri con la GPU fría, como se hizo
-  en el hito 1.
+- **El tiempo de GPU está medido, pero con la placa frenada.**
+  Durante toda la sesión la GTX 1660 Ti Max-Q estuvo entre 85 y 92 °C
+  con freno térmico activo (razón 0x20), incluso en reposo a 18 W. En
+  ese estado las cifras para escenas equivalentes iban de 2,6 a 28 ms:
+  no medían el shader sino el freno.
+
+  La mejor medición conseguida, registrando el reloj en paralelo, fue:
+
+  | Resolución | Tiempo de GPU | Reloj durante la medición |
+  |---|---|---|
+  | 2560x1440 | **6,57 ms** | 1140 MHz de 2100 máx, freno 0x20 activo |
+  | 1600x900 | 3,71 ms | igual |
+
+  O sea que **a 1440p ya entra en el presupuesto de 8 ms corriendo a
+  poco más de la mitad del reloj**. Con la placa sana el margen sería
+  bastante mayor, pero eso es una extrapolación, no una medición: el
+  número bueno hay que rehacerlo dentro de Tauri con la GPU fría, como
+  se hizo en el hito 1.
