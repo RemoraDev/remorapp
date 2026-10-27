@@ -44,11 +44,23 @@ const OZONO_ANCHO: f32 = 15.0;
 struct Comun {
   // xyz: dirección hacia el sol (normalizada). w: intensidad.
   sol: vec4<f32>,
+  // LA LUNA ES UNA LUZ DEL MOTOR, no un disco dibujado.
+  // xyz: dirección hacia la luna (normalizada). w: intensidad radiante,
+  // ya escalada por la fase desde la CPU.
+  luna: vec4<f32>,
+  // rgb: color de la luz lunar (levemente frío). w: fase, 0 = luna
+  // nueva, 1 = llena. La fase se usa acá solo para tallar el
+  // terminador del disco; su efecto sobre la INTENSIDAD ya viene
+  // aplicado en luna.w.
+  lunaColor: vec4<f32>,
   // xyz: posición de la cámara en km desde el centro del planeta.
   // w: tiempo en segundos.
   camara: vec4<f32>,
   // x: ancho, y: alto, z: aspecto, w: exposición.
   pantalla: vec4<f32>,
+  // x: cobertura 0..1, y: densidad, z: velocidad de viento, w: altura
+  // relativa de la capa.
+  nubes: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> comun: Comun;
@@ -56,6 +68,9 @@ struct Comun {
 @group(0) @binding(2) var lutTransmitancia: texture_2d<f32>;
 @group(0) @binding(3) var lutMultiple: texture_2d<f32>;
 @group(0) @binding(4) var lutVista: texture_2d<f32>;
+// Capa de nubes resuelta en una pasada aparte y a media resolución.
+// rgb: luz dispersada por la nube. a: transmitancia (1 = cielo limpio).
+@group(0) @binding(5) var texNubes: texture_2d<f32>;
 
 // ---------- Vértice común ----------
 // Triángulo que cubre la pantalla, generado sin buffer: tres vértices
@@ -262,19 +277,16 @@ fn uvADireccion( uv: vec2<f32>, alturaCam: f32 ) -> vec3<f32> {
   return vec3<f32>( cosE * sin( azim ), sin( elev ), cosE * cos( azim ) );
 }
 
-@fragment
-fn fsVistaCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
-  let alturaCam = comun.camara.y - RADIO_SUELO;
-  let origen = vec3<f32>( 0.0, comun.camara.y, 0.0 );
-  let dir = uvADireccion( e.uv, alturaCam );
-  let dirSol = normalize( comun.sol.xyz );
-
-  var largo = interseccionEsfera( origen, dir, RADIO_CIELO );
-  let suelo = interseccionEsfera( origen, dir, RADIO_SUELO );
-  if ( suelo > 0.0 ) { largo = suelo; }
-  if ( largo <= 0.0 ) { return vec4<f32>( 0.0, 0.0, 0.0, 1.0 ); }
-
-  let cosA = dot( dir, dirSol );
+// Integra la dispersión a lo largo de un rayo para UNA fuente de luz.
+//
+// Antes esto estaba escrito a mano dentro de fsVistaCielo con el sol
+// metido adentro. Sacarlo a una función que recibe la dirección de la
+// luz es lo que permite que la luna sea una luz de verdad: el mismo
+// código físico se evalúa dos veces, una por fuente, y se suman. Un
+// cielo iluminado por la luna tiene su propio halo y su propio azul
+// dispersado, y eso no se puede fingir con un disco.
+fn integrarCielo( origen: vec3<f32>, dir: vec3<f32>, largo: f32, dirLuz: vec3<f32> ) -> vec3<f32> {
+  let cosA = dot( dir, dirLuz );
   let fR = faseRayleigh( cosA );
   let fM = faseMie( cosA );
 
@@ -307,19 +319,44 @@ fn fsVistaCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
     let ext = extincion( h );
     let paso = exp( -ext * dt );
 
-    let cosSolLocal = dot( normalize( pos ), dirSol );
-    let transSol = transmitancia( h, cosSolLocal );
-    let ms = multiple( h, cosSolLocal );
+    let cosLuzLocal = dot( normalize( pos ), dirLuz );
+    let transLuz = transmitancia( h, cosLuzLocal );
+    let ms = multiple( h, cosLuzLocal );
 
     // Dispersión simple (con su fase) más la múltiple (sin fase: ya
     // viene de todas direcciones).
-    let aporte = ( dispR * fR + dispM * fM ) * transSol + ( dispR + dispM ) * ms;
+    let aporte = ( dispR * fR + dispM * fM ) * transLuz + ( dispR + dispM ) * ms;
     let integrado = ( aporte - aporte * paso ) / max( ext.x + ext.y + ext.z, 0.0001 );
     luz = luz + trans * integrado;
     trans = trans * paso;
   }
+  return luz;
+}
 
-  return vec4<f32>( luz * comun.sol.w, 1.0 );
+@fragment
+fn fsVistaCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
+  let alturaCam = comun.camara.y - RADIO_SUELO;
+  let origen = vec3<f32>( 0.0, comun.camara.y, 0.0 );
+  let dir = uvADireccion( e.uv, alturaCam );
+
+  var largo = interseccionEsfera( origen, dir, RADIO_CIELO );
+  let suelo = interseccionEsfera( origen, dir, RADIO_SUELO );
+  if ( suelo > 0.0 ) { largo = suelo; }
+  if ( largo <= 0.0 ) { return vec4<f32>( 0.0, 0.0, 0.0, 1.0 ); }
+
+  var luz = vec3<f32>( 0.0 );
+  if ( comun.sol.w > 0.0005 ) {
+    luz = luz + integrarCielo( origen, dir, largo, normalize( comun.sol.xyz ) ) * comun.sol.w;
+  }
+  // La segunda integración solo se paga cuando hay luz de luna que
+  // valga la pena. De día la rama no se toma, así que el mediodía
+  // cuesta exactamente lo mismo que antes.
+  if ( comun.luna.w > 0.0005 ) {
+    luz = luz + integrarCielo( origen, dir, largo, normalize( comun.luna.xyz ) )
+      * comun.luna.w * comun.lunaColor.rgb;
+  }
+
+  return vec4<f32>( luz, 1.0 );
 }
 
 // ---------- 4. Composición final ----------
@@ -332,12 +369,17 @@ fn direccionAUv( dir: vec3<f32> ) -> vec2<f32> {
   return vec2<f32>( ( azim / ( 2.0 * 3.14159265 ) ) + 0.5, v * 0.5 + 0.5 );
 }
 
-@fragment
-fn fsCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
+// Dirección de cámara para un uv de pantalla.
+//
+// Vive en una función porque la pasada de nubes TIENE que usar
+// exactamente el mismo encuadre que la composición; si se escribiera
+// dos veces, cualquier retoque del campo de visión en un lado haría
+// que las nubes quedaran corridas respecto del cielo.
+fn direccionCamara( uv: vec2<f32> ) -> vec3<f32> {
   // Cámara fija y cinematográfica, como pidió el usuario: no hay
   // control libre. Un campo de visión angosto (unos 45 grados) achata
   // la perspectiva y da el aire de teleobjetivo de un plano de cine.
-  let ndc = vec2<f32>( e.uv.x * 2.0 - 1.0, 1.0 - e.uv.y * 2.0 );
+  let ndc = vec2<f32>( uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0 );
   let escala = tan( 0.3926991 );
   var dir = normalize( vec3<f32>( ndc.x * escala * comun.pantalla.z, ndc.y * escala, -1.0 ) );
   // Inclinación de la cámara hacia arriba. Encuadrada al horizonte, la
@@ -347,9 +389,76 @@ fn fsCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
   let incl = 0.20;
   let c = cos( incl );
   let sn = sin( incl );
-  dir = normalize( vec3<f32>( dir.x, dir.y * c - dir.z * sn, dir.y * sn + dir.z * c ) );
+  return normalize( vec3<f32>( dir.x, dir.y * c - dir.z * sn, dir.y * sn + dir.z * c ) );
+}
 
-  let color = textureSampleLevel( lutVista, muestreador, direccionAUv( dir ), 0.0 ).rgb;
+// Disco lunar con relieve y FASE REAL.
+//
+// El truco para el terminador: dentro del disco se reconstruye la
+// normal de una esfera y se la ilumina con una dirección derivada de la
+// fase. Eso da el borde curvo de una luna creciente de verdad, con su
+// sombra propia, en vez del recorte recto que deja mezclar dos
+// círculos. Cuesta unas pocas operaciones y solo dentro del disco.
+fn discoLuna( dir: vec3<f32>, dirLuna: vec3<f32> ) -> vec3<f32> {
+  let cosA = dot( dir, dirLuna );
+  // LA LUNA SE DIBUJA MAS GRANDE QUE EN LA REALIDAD, a proposito.
+  //
+  // El diametro real es de medio grado: a 900 pixeles de alto con un
+  // campo de 45 grados eso son 10 pixeles, un puntito sin presencia
+  // donde no se distingue ni la fase ni los mares. Esto es un fondo
+  // cinematografico, y una luna grande es parte del lenguaje visual que
+  // el usuario pidio (hace falta para Ashenvale). Se queda en unos 2,2
+  // grados: suficiente para leerla, lejos de la caricatura.
+  if ( cosA < 0.99968 ) { return vec3<f32>( 0.0 ); }
+
+  // Coordenadas dentro del disco. Se arma una base perpendicular a la
+  // dirección de la luna y se proyecta el rayo sobre ella.
+  let arriba = select( vec3<f32>( 0.0, 1.0, 0.0 ), vec3<f32>( 1.0, 0.0, 0.0 ), abs( dirLuna.y ) > 0.99 );
+  let ejeX = normalize( cross( arriba, dirLuna ) );
+  let ejeY = cross( dirLuna, ejeX );
+  let radio = 0.0193;
+  let d = dir - dirLuna * cosA;
+  var uv = vec2<f32>( dot( d, ejeX ), dot( d, ejeY ) ) / radio;
+  let r2 = dot( uv, uv );
+  if ( r2 > 1.0 ) { return vec3<f32>( 0.0 ); }
+
+  // Normal de la esfera lunar reconstruida.
+  let n = vec3<f32>( uv, sqrt( max( 1.0 - r2, 0.0 ) ) );
+
+  // Dirección del sol VISTA DESDE LA LUNA, deducida de la fase:
+  // fase 1 (llena) la ilumina de frente, fase 0 (nueva) por detrás.
+  let ang = ( 1.0 - comun.lunaColor.w ) * 3.14159265;
+  let dirSolLuna = vec3<f32>( sin( ang ), 0.0, cos( ang ) );
+  // El borde del terminador en la Luna no es perfectamente nítido: el
+  // relieve lo desdibuja. smoothstep en vez de max() evita el escalón
+  // aliaseado que delataría el truco.
+  let lit = smoothstep( -0.06, 0.10, dot( n, dirSolLuna ) );
+
+  // Mares: manchas oscuras de basalto. Sin esto el disco se lee como
+  // una pelota de ping-pong, y es lo primero que el ojo nota mal.
+  let mares = 0.80 + 0.20 * clamp(
+    sin( uv.x * 7.3 + 1.7 ) * sin( uv.y * 5.9 - 0.4 ) * 0.5 + 0.55, 0.0, 1.0 );
+  // El limbo se oscurece poco: la Luna es casi lambertiana pero con
+  // retrodispersión fuerte, de ahí que la llena se vea como un disco
+  // plano y no como una esfera sombreada.
+  let limbo = 0.72 + 0.28 * n.z;
+
+  let albedo = comun.lunaColor.rgb * mares * limbo;
+  // Luz cenicienta: la cara oscura recibe el reflejo de la Tierra. Es
+  // tenuísima pero es la diferencia entre un creciente flotando en la
+  // nada y un disco completo apenas insinuado.
+  let ceniza = 0.018 * comun.lunaColor.w;
+  let borde = 1.0 - smoothstep( 0.93, 1.0, sqrt( r2 ) );
+  return albedo * ( lit + ceniza ) * borde * 1.9;
+}
+
+@fragment
+fn fsCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
+  let dir = direccionCamara( e.uv );
+
+  var color = textureSampleLevel( lutVista, muestreador, direccionAUv( dir ), 0.0 ).rgb;
+
+  let alturaCam = comun.camara.y - RADIO_SUELO;
 
   // El disco solar se dibuja aparte: la tabla de vista no tiene
   // resolución para algo tan chico, y si se dejara ahí se vería como un
@@ -359,11 +468,44 @@ fn fsCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
   // 0.9995 equivale a un radio de medio grado, el tamaño real del sol
   // visto desde la Tierra.
   let disco = smoothstep( 0.99985, 0.99995, cosA );
-  let alturaCam = comun.camara.y - RADIO_SUELO;
   let transSol = transmitancia( alturaCam, dirSol.y );
   // Valor alto a propósito: esto es HDR, y el mapeo de tonos del final
   // se encarga de comprimirlo. En un buffer de 8 bits esto recortaría.
-  let sol = transSol * disco * 22.0 * comun.sol.w;
+  var fuentes = transSol * disco * 22.0 * comun.sol.w;
 
-  return vec4<f32>( color + sol, 1.0 );
+  // La luna, atenuada por la misma atmósfera que el sol: baja en el
+  // horizonte se pone anaranjada y pierde brillo, como en la realidad.
+  let dirLuna = normalize( comun.luna.xyz );
+  if ( dirLuna.y > -0.02 ) {
+    let transLuna = transmitancia( alturaCam, dirLuna.y );
+    fuentes = fuentes + discoLuna( dir, dirLuna ) * transLuna;
+  }
+
+  color = color + fuentes;
+
+  // NUBES. Vienen de su propia pasada a media resolución; acá solo se
+  // componen. El muestreo bilineal del upsample alcanza porque la capa
+  // es de baja frecuencia por naturaleza, y el disco del sol se dibuja
+  // a resolución completa así que no pierde nitidez.
+  //
+  // Todo lo que está detrás se multiplica por la transmitancia de la
+  // nube y se le suma la luz que la nube dispersa. Es composición de
+  // transparencia estándar: el sol queda tapado por una nube espesa,
+  // que es justo lo que hace que la escena se lea como volumen.
+  // Cuatro muestras en rejilla rotada en vez de una. El desfase de
+  // arranque de los rayos usa ruido entrelazado, que es un patron
+  // ORDENADO: a una sola muestra deja una trama diagonal fina visible
+  // sobre el cuerpo de la nube. Promediar 2x2 a un pixel de distancia
+  // la borra, y como la capa es de baja frecuencia no se pierde nada
+  // que el ojo pueda extrañar. Cuatro lecturas de una textura a media
+  // resolucion son de lo mas barato que hay en esta pasada.
+  let px = vec2<f32>( 1.0 / max( comun.pantalla.x, 1.0 ), 1.0 / max( comun.pantalla.y, 1.0 ) );
+  let nube = 0.25 * (
+      textureSampleLevel( texNubes, muestreador, e.uv + vec2<f32>(  px.x,  px.y ), 0.0 )
+    + textureSampleLevel( texNubes, muestreador, e.uv + vec2<f32>( -px.x,  px.y ), 0.0 )
+    + textureSampleLevel( texNubes, muestreador, e.uv + vec2<f32>(  px.x, -px.y ), 0.0 )
+    + textureSampleLevel( texNubes, muestreador, e.uv + vec2<f32>( -px.x, -px.y ), 0.0 ) );
+  color = color * nube.a + nube.rgb;
+
+  return vec4<f32>( color, 1.0 );
 }

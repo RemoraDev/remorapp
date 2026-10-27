@@ -14,6 +14,25 @@ const params = new URLSearchParams(location.search);
 // parámetro que conviene poder barrer para evaluar la atmósfera.
 const hora = Number(params.get("hora") ?? 7.5);
 const anchoPedido = Number(params.get("ancho") ?? 0);
+// Luna y nubes: lo que se afina en el hito 2.
+//
+// SOLO se pasan las opciones que vengan en la URL. Tener valores por
+// omision aca parecia comodo y costo un rato de confusion: la pagina
+// mandaba siempre su propio intensidadLuna, asi que bajar el valor por
+// omision del motor no cambiaba nada en las capturas y la medicion
+// decia que la calibracion "no hacia efecto". El banco de pruebas
+// tiene que medir el motor, no sus propios valores.
+const opciones = { hora };
+const num = (clave, campo) => {
+  if (params.has(clave)) opciones[campo] = Number(params.get(clave));
+};
+num("fase", "faseLuna");
+num("horaLuna", "horaLuna");
+num("intLuna", "intensidadLuna");
+num("nubes", "nubes");
+num("densidad", "densidadNubes");
+num("viento", "viento");
+num("vol", "depurarVolumen");
 
 const lienzo = document.getElementById("lienzo");
 const hud = document.getElementById("hud");
@@ -33,8 +52,11 @@ try {
   d.device.onuncapturederror = (ev) => res.errores.push("WebGPU: " + ev.error.message);
   d.device.lost.then((info) => res.errores.push("device lost: " + info.message));
 
-  const cielo = new Cielo(d, { hora });
-  paso(`escena armada, hora ${hora}`);
+  const cielo = new Cielo(d, opciones);
+  // Se informan las opciones EFECTIVAS, no las pedidas: asi la captura
+  // deja constancia de con que valores se rindio de verdad.
+  res.opciones = cielo.opciones;
+  paso(`escena armada: ${JSON.stringify(cielo.opciones)}`);
 
   const t0 = performance.now();
   let cuadros = 0;
@@ -57,10 +79,25 @@ try {
       console.log("MEDICION " + linea);
       // Dentro de Tauri no hay consola que leer ni protocolo de
       // depuración: la única salida es mandar el dato por la red.
-      if (params.has("beacon")) fetch("http://127.0.0.1:9777/", { method: "POST", body: linea }).catch(() => {});
+      // DOBLE GUARDA, a propósito. Esta página no entra al build (Vite
+      // solo empaqueta index.html), pero depender de ese detalle es
+      // frágil: si algún día se agrega una entrada más, el colector no
+      // puede colarse. import.meta.env.DEV se reemplaza por false al
+      // construir, así que el fetch se elimina en el sacudido de árbol.
+      if (import.meta.env.DEV && params.has("beacon")) {
+        fetch("http://127.0.0.1:9777/", { method: "POST", body: linea }).catch(() => {});
+      }
+      const o = cielo.opciones;
       hud.textContent =
-        `${d.info}\n${ancho}x${alto}\nhora ${hora.toFixed(1)}\n` +
-        `GPU: ${ms === null ? "midiendo..." : ms.toFixed(2) + " ms"}\ncuadros: ${cuadros}`;
+        `${d.info}
+${ancho}x${alto}
+` +
+        `hora ${o.hora.toFixed(1)}  luna ${o.faseLuna.toFixed(2)} x${o.intensidadLuna.toFixed(3)}
+` +
+        `nubes ${o.nubes.toFixed(2)} x${o.densidadNubes.toFixed(2)}
+` +
+        `GPU: ${ms === null ? "midiendo..." : ms.toFixed(2) + " ms"}
+cuadros: ${cuadros}`;
     }
     requestAnimationFrame(bucle);
   }
@@ -87,7 +124,7 @@ try {
   setTimeout(() => {
     res.estado = res.errores.length === 0 ? "OK" : "FALLO";
     document.title = "resultado:" + res.estado;
-  }, 3000);
+  }, 5000);
 } catch (e) {
   res.estado = "EXCEPCION";
   res.errores.push(String(e && e.stack ? e.stack : e));
