@@ -50,6 +50,14 @@ try {
       const ms = cielo.medidor.promedioMs;
       res.msGpu = ms;
       res.cuadros = cuadros;
+      // En Tauri no hay protocolo de depuracion para leer el HUD, pero
+      // la consola del webview SI se reenvia a la terminal en modo
+      // desarrollo. Es la unica via para sacar la medicion de adentro.
+      const linea = `gpu=${ms === null ? "n/d" : ms.toFixed(3)}ms cuadros=${cuadros} res=${ancho}x${alto} adaptador=${d.info}`;
+      console.log("MEDICION " + linea);
+      // Dentro de Tauri no hay consola que leer ni protocolo de
+      // depuración: la única salida es mandar el dato por la red.
+      if (params.has("beacon")) fetch("http://127.0.0.1:9777/", { method: "POST", body: linea }).catch(() => {});
       hud.textContent =
         `${d.info}\n${ancho}x${alto}\nhora ${hora.toFixed(1)}\n` +
         `GPU: ${ms === null ? "midiendo..." : ms.toFixed(2) + " ms"}\ncuadros: ${cuadros}`;

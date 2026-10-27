@@ -192,7 +192,25 @@ export class Cielo {
     datos.set([ancho, alto, ancho / Math.max(alto, 1), this.opciones.exposicion], 8);
     this.d.device.queue.writeBuffer(this.uniforme, 0, datos);
 
-    const post = new Float32Array([this.opciones.exposicion, ancho, alto, tiempo]);
+    // EXPOSICIÓN ADAPTATIVA.
+    //
+    // La atmósfera es físicamente correcta, pero el rango real entre
+    // mediodía y crepúsculo es brutal: medido, el cielo pasa de 51 de
+    // brillo medio al atardecer a 0,8 siete minutos después. Con una
+    // exposición fija calibrada para el día, la noche queda negra -- no
+    // porque el modelo falle sino porque una cámara real abre el
+    // diafragma, y el ojo se adapta.
+    //
+    // Se calcula de la altura del sol en vez de medir el cuadro
+    // anterior: es estable (nada de pulsos al pasar una nube), no
+    // cuesta una pasada de reducción, y para una cámara fija alcanza.
+    const alturaSol = this.direccionSol()[1];
+    // De 1x con el sol alto a 18x de noche cerrada. El smoothstep evita
+    // el salto justo en el horizonte, que es donde más se notaría.
+    const t01 = Math.min(Math.max((alturaSol + 0.22) / 0.42, 0), 1);
+    const suave = t01 * t01 * (3 - 2 * t01);
+    const expoAuto = 18 - 17 * suave;
+    const post = new Float32Array([this.opciones.exposicion * expoAuto, ancho, alto, tiempo]);
     this.d.device.queue.writeBuffer(this.uniformePost, 0, post);
   }
 

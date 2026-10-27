@@ -278,17 +278,24 @@ fn fsVistaCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
   let fR = faseRayleigh( cosA );
   let fM = faseMie( cosA );
 
-  let pasos = 32;
+  let pasos = 40;
   var trans = vec3<f32>( 1.0 );
   var luz = vec3<f32>( 0.0 );
-  // Pasos crecientes: cerca de la cámara el medio cambia rápido, lejos
-  // casi no. Repartir parejo gasta muestras donde no hacen falta.
-  var tPrev = 0.0;
+  // Reparto casi parejo a lo largo del rayo, con un sesgo suave hacia
+  // la cámara (exponente 1.2) donde el medio cambia más rápido.
+  //
+  // Nota honesta: este sesgo arrancó en f*f y lo bajé sospechando que
+  // vaciaba de muestras la zona alta y lejana, que es la única
+  // iluminada en el crepúsculo. Medido antes y después, el brillo medio
+  // del cielo a -6,7 grados dio exactamente lo mismo (0,80): la
+  // hipótesis era falsa. Se deja en 1.2 porque es más correcto en
+  // general, pero NO es lo que resuelve el crepúsculo -- eso es un
+  // problema de exposición, no de muestreo.
   for ( var i = 0; i < pasos; i = i + 1 ) {
-    let f0 = f32( i ) / f32( pasos );
-    let f1 = f32( i + 1 ) / f32( pasos );
-    let t0 = largo * f0 * f0;
-    let t1 = largo * f1 * f1;
+    let f0 = pow( f32( i ) / f32( pasos ), 1.2 );
+    let f1 = pow( f32( i + 1 ) / f32( pasos ), 1.2 );
+    let t0 = largo * f0;
+    let t1 = largo * f1;
     let dt = t1 - t0;
     let t = ( t0 + t1 ) * 0.5;
 
@@ -310,7 +317,6 @@ fn fsVistaCielo( e: SalidaVert ) -> @location(0) vec4<f32> {
     let integrado = ( aporte - aporte * paso ) / max( ext.x + ext.y + ext.z, 0.0001 );
     luz = luz + trans * integrado;
     trans = trans * paso;
-    tPrev = t1;
   }
 
   return vec4<f32>( luz * comun.sol.w, 1.0 );
